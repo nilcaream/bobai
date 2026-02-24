@@ -4,7 +4,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "jsx": "react-jsx",
-    "types": ["bun-types"]
+    "noEmit": true
   },
   "include": ["src"]
 }

@@ -1,12 +1,15 @@
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createServer } from "../src/server";
+
+const uiDist = path.resolve(import.meta.dir, "../../ui/dist");
 
 describe("HTTP server", () => {
 	let server: ReturnType<typeof Bun.serve>;
 	let baseUrl: string;
 
 	beforeAll(() => {
-		server = createServer({ port: 0 });
+		server = createServer({ port: 0, staticDir: uiDist });
 		baseUrl = `http://localhost:${server.port}`;
 	});
 
@@ -24,6 +27,21 @@ describe("HTTP server", () => {
 	test("GET /unknown returns 404", async () => {
 		const res = await fetch(`${baseUrl}/unknown`);
 		expect(res.status).toBe(404);
+	});
+
+	test("GET /bobai serves index.html from static directory", async () => {
+		const res = await fetch(`${baseUrl}/bobai`);
+		expect(res.status).toBe(200);
+		const body = await res.text();
+		expect(body).toContain("Bob AI");
+		expect(body).toContain('<div id="root">');
+	});
+
+	test("GET /bobai/ serves index.html from static directory", async () => {
+		const res = await fetch(`${baseUrl}/bobai/`);
+		expect(res.status).toBe(200);
+		const body = await res.text();
+		expect(body).toContain("Bob AI");
 	});
 });
 
