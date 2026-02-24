@@ -1,8 +1,13 @@
+import path from "node:path";
+
 export interface ServerOptions {
 	port: number;
+	staticDir?: string;
 }
 
 export function createServer(options: ServerOptions) {
+	const staticDir = options.staticDir;
+
 	return Bun.serve({
 		port: options.port,
 		fetch(req, server) {
@@ -16,6 +21,16 @@ export function createServer(options: ServerOptions) {
 
 			if (url.pathname === "/bobai/health") {
 				return Response.json({ status: "ok" });
+			}
+
+			if (staticDir && url.pathname.startsWith("/bobai")) {
+				const relative = url.pathname.replace(/^\/bobai\/?/, "");
+				const filePath = path.join(staticDir, relative || "index.html");
+				const file = Bun.file(filePath);
+				return file.exists().then((exists) => {
+					if (exists) return new Response(file);
+					return new Response("Not Found", { status: 404 });
+				});
 			}
 
 			return new Response("Not Found", { status: 404 });
