@@ -2,8 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { Database } from "bun:sqlite";
 
+export interface BobaiConfig {
+	id?: string;
+	port?: number;
+}
+
 export interface Project {
 	id: string;
+	port?: number;
 	dir: string;
 	db: Database;
 }
@@ -15,19 +21,18 @@ export async function initProject(projectRoot: string): Promise<Project> {
 
 	fs.mkdirSync(bobaiDir, { recursive: true });
 
-	let id: string;
+	let config: BobaiConfig = {};
 	if (fs.existsSync(projectFile)) {
-		const existing = JSON.parse(fs.readFileSync(projectFile, "utf8")) as { id?: string };
-		id = existing.id ?? crypto.randomUUID();
-		if (!existing.id) {
-			fs.writeFileSync(projectFile, JSON.stringify({ ...existing, id }, null, 2));
-		}
-	} else {
-		id = crypto.randomUUID();
-		fs.writeFileSync(projectFile, JSON.stringify({ id }, null, 2));
+		config = JSON.parse(fs.readFileSync(projectFile, "utf8")) as BobaiConfig;
+	}
+
+	const id = config.id ?? crypto.randomUUID();
+	if (!config.id) {
+		config = { ...config, id };
+		fs.writeFileSync(projectFile, JSON.stringify(config, null, 2));
 	}
 
 	const db = new Database(dbFile, { create: true });
 
-	return { id, dir: bobaiDir, db };
+	return { id, port: config.port, dir: bobaiDir, db };
 }
