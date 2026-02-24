@@ -1,0 +1,5 @@
+{
+  "name": "bobai",
+  "private": true,
+  "workspaces": ["packages/*"]
+}
