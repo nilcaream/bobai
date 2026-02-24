@@ -1,4 +1,7 @@
 import path from "node:path";
+import { handlePrompt } from "./handler";
+import type { ClientMessage } from "./protocol";
+import { send } from "./protocol";
 
 export interface ServerOptions {
 	port: number;
@@ -36,8 +39,21 @@ export function createServer(options: ServerOptions) {
 			return new Response("Not Found", { status: 404 });
 		},
 		websocket: {
-			message(ws, message) {
-				ws.send(message);
+			message(ws, raw) {
+				let msg: ClientMessage;
+				try {
+					msg = JSON.parse(raw as string) as ClientMessage;
+				} catch {
+					send(ws, { type: "error", message: "Invalid JSON" });
+					return;
+				}
+
+				if (msg.type === "prompt") {
+					handlePrompt(ws, msg);
+					return;
+				}
+
+				send(ws, { type: "error", message: `Unknown message type: ${msg.type}` });
 			},
 		},
 	});

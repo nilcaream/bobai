@@ -58,23 +58,18 @@ describe("WebSocket server", () => {
 		server.stop(true);
 	});
 
-	test("echoes messages back to the client", async () => {
-		const received: string[] = [];
-
+	test("accepts WebSocket connection on /bobai/ws", async () => {
 		const ws = new WebSocket(wsUrl);
 
-		const done = new Promise<void>((resolve, reject) => {
-			ws.onopen = () => ws.send("hello");
-			ws.onmessage = (event) => {
-				received.push(event.data as string);
+		const connected = new Promise<void>((resolve, reject) => {
+			ws.onopen = () => {
 				ws.close();
+				resolve();
 			};
-			ws.onclose = () => resolve();
 			ws.onerror = (err) => reject(err);
 		});
 
-		await done;
-		expect(received).toEqual(["hello"]);
+		await connected;
 	});
 
 	test("rejects WebSocket upgrade on non-ws path", async () => {
