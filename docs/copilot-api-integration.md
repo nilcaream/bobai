@@ -84,12 +84,44 @@ Subagent sessions (where the tool spawns a child session) should always send `x-
 
 ## Billing
 
-GitHub Copilot bills user-initiated and agent-initiated requests differently:
+### Premium Requests
 
-| x-initiator | Billing Impact |
-|--------------|----------------|
-| `user` | Counts as a premium request against the user's quota |
-| `agent` | Costs zero premium requests — free regardless of model |
+GitHub Copilot uses a **premium request** quota system. Each paid plan includes a fixed monthly allowance (e.g., Copilot Pro: 300 premium requests). Counters reset on the 1st of each month at 00:00:00 UTC. Unused requests do not carry over.
+
+Each user prompt consumes premium requests equal to the model's **multiplier**. Context window size and token count are irrelevant — billing is per-prompt, not per-token.
+
+### Model Multipliers (Paid Plans)
+
+Models with a multiplier of **0** are included — unlimited prompts at no premium request cost. All other models deduct from the monthly quota.
+
+| Model | Multiplier | Notes |
+|-------|-----------|-------|
+| GPT-4o | 0 | Included |
+| GPT-4.1 | 0 | Included |
+| GPT-5 mini | 0 | Included |
+| Grok Code Fast 1 | 0.25 | |
+| Claude Haiku 4.5 | 0.33 | |
+| Gemini 3 Flash | 0.33 | |
+| GPT-5.1-Codex-Mini | 0.33 | |
+| Claude Sonnet 4 | 1 | |
+| Claude Sonnet 4.5 | 1 | |
+| Claude Sonnet 4.6 | 1 | |
+| Gemini 2.5 Pro | 1 | |
+| Gemini 3 Pro | 1 | |
+| GPT-5.1 | 1 | |
+| GPT-5.1-Codex | 1 | |
+| GPT-5.2 | 1 | |
+| GPT-5.2-Codex | 1 | |
+| Claude Opus 4.5 | 3 | |
+| Claude Opus 4.6 | 3 | |
+
+Source: https://docs.github.com/en/copilot/concepts/billing/copilot-requests
+
+When the monthly allowance runs out, the API continues to work for included models (multiplier 0) but rejects premium models until the next reset.
+
+### x-initiator and Billing
+
+Only prompts with `x-initiator: user` consume premium requests. Agent-initiated requests (`x-initiator: agent`) cost zero, regardless of model.
 
 A single user prompt may trigger many agent follow-up calls (tool use loops, retries, subagent work). Charging for each would be prohibitive.
 
@@ -123,15 +155,13 @@ Standard OpenAI Chat Completions format:
 
 ### Available Models
 
-The Copilot API exposes models from multiple providers. Use model names directly (no provider prefix). Known free-tier models:
+The Copilot API exposes models from multiple providers. Use model names directly (no provider prefix).
 
-- `gpt-4o`, `gpt-4o-mini` — OpenAI
-- `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` — OpenAI
-- `o3-mini`, `o4-mini` — OpenAI reasoning models
-- `claude-sonnet-4`, `claude-3.5-sonnet` — Anthropic (via Copilot)
-- `gemini-2.0-flash-001` — Google (via Copilot)
+**Model availability depends on the OAuth App `client_id` used during authentication.** The access token returned by the device flow is bound to the OAuth App that requested it. GitHub grants each registered OAuth App its own set of allowed models. Two apps using the same user account and the same OAuth scope can receive different model entitlements.
 
-Model availability changes. If a model returns `400 model_not_supported`, verify it against the current Copilot model list.
+If a model returns `400 model_not_supported`, the token's associated OAuth App may lack access to that model. There is no API endpoint to list which models an app can use — the only way to verify is to send a request and check the response status.
+
+See the test procedure in [Verifying Model Access](#verifying-model-access) below.
 
 ---
 
@@ -172,13 +202,53 @@ This prevents consuming the response body before the caller reads it.
 
 ---
 
+## Verifying Model Access
+
+The following script tests which models an OAuth App token can access. Replace `gho_xxxx` with the token obtained through the device flow for the `client_id` under test. The token is bound to the OAuth App that issued it — results reflect that app's entitlements, not the user's Copilot plan.
+
+```bash
+TOKEN="gho_xxxx"
+
+for model in "gpt-4o" "gpt-4o-mini" "gpt-5-mini" "gpt-4.1" \
+             "claude-haiku-4.5" "claude-sonnet-4" "grok-code-fast-1" \
+             "gemini-2.5-pro" "gpt-5.1"; do
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    https://api.githubcopilot.com/chat/completions \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "User-Agent: bobai/0.0.1" \
+    -H "Openai-Intent: conversation-edits" \
+    -H "x-initiator: user" \
+    -d "{\"model\":\"$model\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hi\"}],\"stream\":false,\"max_tokens\":10}")
+  echo "$model: $STATUS"
+done
+```
+
+**Expected results for included models (multiplier 0) with a correctly provisioned app:**
+
+```
+gpt-4o: 200
+gpt-4o-mini: 200
+gpt-5-mini: 200
+gpt-4.1: 200
+claude-haiku-4.5: 200
+claude-sonnet-4: 200
+grok-code-fast-1: 200
+gemini-2.5-pro: 200
+gpt-5.1: 200
+```
+
+A `400` response for a model that should work indicates the OAuth App lacks access to that model. A `401` indicates an expired or invalid token. Models with a non-zero multiplier (e.g., `claude-sonnet-4`, `gpt-5.1`) consume premium requests on each `200` response — use them sparingly in automated tests.
+
+---
+
 ## Error Handling
 
 Common error responses from the Copilot API:
 
 | Status | Meaning | Action |
 |--------|---------|--------|
-| 400 | Bad request — often `model_not_supported` | Check model name |
+| 400 | Bad request — often `model_not_supported` | Check model name; verify the OAuth App has access to that model |
 | 401 | Invalid or expired token | Re-run the OAuth device flow |
 | 403 | Copilot not enabled for the user/org | Check Copilot subscription |
 | 429 | Rate limited | Back off and retry |
