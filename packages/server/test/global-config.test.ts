@@ -17,14 +17,7 @@ describe("loadGlobalConfig", () => {
 
 	test("returns empty config when directory does not exist", () => {
 		const config = loadGlobalConfig(path.join(tmpDir, "nonexistent"));
-		expect(config).toEqual({ auth: {}, preferences: {} });
-	});
-
-	test("reads auth.json keyed by provider id", () => {
-		fs.mkdirSync(tmpDir, { recursive: true });
-		fs.writeFileSync(path.join(tmpDir, "auth.json"), JSON.stringify({ "github-copilot": { token: "ghp_test" } }));
-		const config = loadGlobalConfig(tmpDir);
-		expect(config.auth["github-copilot"]?.token).toBe("ghp_test");
+		expect(config).toEqual({ preferences: {} });
 	});
 
 	test("reads bobai.json preferences", () => {
@@ -35,10 +28,9 @@ describe("loadGlobalConfig", () => {
 		expect(config.preferences.model).toBe("gpt-5-mini");
 	});
 
-	test("returns empty objects when files are missing", () => {
+	test("returns empty preferences when files are missing", () => {
 		fs.mkdirSync(tmpDir, { recursive: true });
 		const config = loadGlobalConfig(tmpDir);
-		expect(config.auth).toEqual({});
 		expect(config.preferences).toEqual({});
 	});
 });
