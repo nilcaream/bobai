@@ -2,10 +2,13 @@ import path from "node:path";
 import { handlePrompt } from "./handler";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
+import type { Provider } from "./provider/provider";
 
 export interface ServerOptions {
 	port: number;
 	staticDir?: string;
+	provider?: Provider;
+	model?: string;
 }
 
 export function createServer(options: ServerOptions) {
@@ -49,7 +52,11 @@ export function createServer(options: ServerOptions) {
 				}
 
 				if (msg.type === "prompt") {
-					handlePrompt(ws, msg);
+					if (options.provider && options.model) {
+						handlePrompt(ws, msg, options.provider, options.model);
+					} else {
+						send(ws, { type: "error", message: "No provider configured" });
+					}
 					return;
 				}
 

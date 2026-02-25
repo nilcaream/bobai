@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import type { Provider } from "../src/provider/provider";
 import { createServer } from "../src/server";
 
 describe("prompt session", () => {
@@ -6,7 +7,14 @@ describe("prompt session", () => {
 	let wsUrl: string;
 
 	beforeAll(() => {
-		server = createServer({ port: 0 });
+		const provider: Provider = {
+			id: "test",
+			async *stream() {
+				yield "test ";
+				yield "response";
+			},
+		};
+		server = createServer({ port: 0, provider, model: "test-model" });
 		wsUrl = `ws://localhost:${server.port}/bobai/ws`;
 	});
 
