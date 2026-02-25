@@ -1,5 +1,7 @@
 import os from "node:os";
 import path from "node:path";
+import { authorize } from "./auth/authorize";
+import { loadToken } from "./auth/store";
 import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
 import { resolvePort } from "./port";
@@ -15,13 +17,9 @@ const globalConfig = loadGlobalConfig(globalConfigDir);
 const project = await initProject(projectRoot);
 const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
 
-const token = globalConfig.auth[config.provider]?.token;
+let token = loadToken(globalConfigDir, config.provider);
 if (!token) {
-	console.error(`No auth token found for provider "${config.provider}".`);
-	console.error(`\nSet up authentication:`);
-	console.error(`  mkdir -p ~/.config/bobai`);
-	console.error(`  echo '{"${config.provider}": {"token": "YOUR_TOKEN"}}' > ~/.config/bobai/auth.json`);
-	process.exit(1);
+	token = await authorize(globalConfigDir, config.provider);
 }
 
 const provider = createCopilotProvider(token);
