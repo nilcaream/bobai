@@ -55,6 +55,8 @@ describe("CopilotProvider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer test-token");
 		expect(headers["Openai-Intent"]).toBe("conversation-edits");
+		expect(headers["User-Agent"]).toMatch(/^bobai\//);
+		expect(headers["x-initiator"]).toBe("user");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("gpt-5-mini");
 		expect(body.stream).toBe(true);
@@ -112,5 +114,28 @@ describe("CopilotProvider", () => {
 		}
 
 		expect(tokens).toEqual(["only"]);
+	});
+
+	test("sets x-initiator to agent when last message is not from user", async () => {
+		let capturedInit: RequestInit | undefined;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [
+				{ role: "user", content: "hi" },
+				{ role: "assistant", content: "hello" },
+			],
+		})) {
+			/* drain */
+		}
+
+		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers["x-initiator"]).toBe("agent");
 	});
 });

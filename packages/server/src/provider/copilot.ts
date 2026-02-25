@@ -1,8 +1,15 @@
-import type { Provider, ProviderOptions } from "./provider";
+import pkg from "../../package.json";
+import type { Message, Provider, ProviderOptions } from "./provider";
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
 
 const COPILOT_API = "https://api.githubcopilot.com/chat/completions";
+const USER_AGENT = `bobai/${pkg.version}`;
+
+function resolveInitiator(messages: Message[]): "user" | "agent" {
+	const last = messages[messages.length - 1];
+	return last?.role === "user" ? "user" : "agent";
+}
 
 export function createCopilotProvider(token: string): Provider {
 	return {
@@ -14,7 +21,9 @@ export function createCopilotProvider(token: string): Provider {
 				headers: {
 					Authorization: `Bearer ${token}`,
 					"Content-Type": "application/json",
+					"User-Agent": USER_AGENT,
 					"Openai-Intent": "conversation-edits",
+					"x-initiator": resolveInitiator(options.messages),
 				},
 				body: JSON.stringify({
 					model: options.model,
