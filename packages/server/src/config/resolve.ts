@@ -10,7 +10,7 @@ interface ConfigLayer {
 
 const DEFAULTS: ResolvedConfig = {
 	provider: "github-copilot",
-	model: "gpt-5-mini",
+	model: "gpt-4o",
 };
 
 export function resolveConfig(project: ConfigLayer, global: ConfigLayer): ResolvedConfig {

@@ -5,7 +5,7 @@ describe("resolveConfig", () => {
 	test("returns defaults when no overrides provided", () => {
 		const config = resolveConfig({}, {});
 		expect(config.provider).toBe("github-copilot");
-		expect(config.model).toBe("gpt-5-mini");
+		expect(config.model).toBe("gpt-4o");
 	});
 
 	test("global preferences override defaults", () => {
