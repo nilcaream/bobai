@@ -28,3 +28,60 @@ export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
 
 	return (await response.json()) as DeviceCodeResponse;
 }
+
+const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
+
+interface TokenResponse {
+	access_token?: string;
+	error?: string;
+	error_description?: string;
+	interval?: number;
+}
+
+export async function pollForToken(
+	deviceCode: string,
+	intervalSeconds: number,
+	sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
+): Promise<string> {
+	let interval = intervalSeconds;
+
+	while (true) {
+		if (interval > 0) {
+			await sleep(interval * 1000);
+		}
+
+		const response = await fetch(GITHUB_TOKEN_URL, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			},
+			body: JSON.stringify({
+				client_id: CLIENT_ID,
+				device_code: deviceCode,
+				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+			}),
+		});
+
+		if (!response.ok) {
+			throw new Error(`Token poll failed: HTTP ${response.status}`);
+		}
+
+		const data = (await response.json()) as TokenResponse;
+
+		if (data.access_token) {
+			return data.access_token;
+		}
+
+		if (data.error === "authorization_pending") {
+			continue;
+		}
+
+		if (data.error === "slow_down") {
+			interval = (data.interval ?? interval) + 5;
+			continue;
+		}
+
+		throw new Error(data.error_description ?? data.error ?? "Unknown error during token polling");
+	}
+}
