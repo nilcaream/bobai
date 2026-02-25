@@ -1,5 +1,5 @@
-import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import path from "node:path";
 import { createServer } from "../src/server";
 
 const uiDist = path.resolve(import.meta.dir, "../../ui/dist");

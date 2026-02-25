@@ -53,7 +53,7 @@ describe("CopilotProvider", () => {
 		expect(capturedUrl).toBe("https://api.githubcopilot.com/chat/completions");
 		expect(capturedInit?.method).toBe("POST");
 		const headers = capturedInit?.headers as Record<string, string>;
-		expect(headers["Authorization"]).toBe("Bearer test-token");
+		expect(headers.Authorization).toBe("Bearer test-token");
 		expect(headers["Openai-Intent"]).toBe("conversation-edits");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("gpt-5-mini");

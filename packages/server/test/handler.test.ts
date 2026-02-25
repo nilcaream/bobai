@@ -27,8 +27,12 @@ function mockProvider(tokens: string[]): Provider {
 function failingProvider(status: number, body: string): Provider {
 	return {
 		id: "mock",
-		async *stream() {
-			throw new ProviderError(status, body);
+		stream() {
+			async function* gen(): AsyncGenerator<string> {
+				yield* []; // satisfy useYield lint
+				throw new ProviderError(status, body);
+			}
+			return gen();
 		},
 	};
 }

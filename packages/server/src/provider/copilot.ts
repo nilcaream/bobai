@@ -28,7 +28,11 @@ export function createCopilotProvider(token: string): Provider {
 				throw new ProviderError(response.status, await response.text());
 			}
 
-			for await (const event of parseSSE(response.body!)) {
+			if (!response.body) {
+				return;
+			}
+
+			for await (const event of parseSSE(response.body)) {
 				const data = event as {
 					choices?: { delta?: { content?: string } }[];
 				};
