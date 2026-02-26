@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useWebSocket } from "./useWebSocket";
 
 export function App() {
-	const { messages, connected, sendPrompt } = useWebSocket();
+	const { messages, connected, sendPrompt, newChat } = useWebSocket();
 	const [input, setInput] = useState("");
 	const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -16,9 +16,14 @@ export function App() {
 
 	return (
 		<main style={{ display: "flex", flexDirection: "column", height: "100vh", padding: "1rem" }}>
-			<header>
-				<h1 style={{ margin: 0 }}>Bob AI</h1>
-				<small>{connected ? "connected" : "connecting..."}</small>
+			<header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+				<div>
+					<h1 style={{ margin: 0 }}>Bob AI</h1>
+					<small>{connected ? "connected" : "connecting..."}</small>
+				</div>
+				<button type="button" onClick={newChat} disabled={!connected || messages.length === 0}>
+					New Chat
+				</button>
 			</header>
 
 			<section
