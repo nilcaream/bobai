@@ -11,18 +11,23 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 	return last?.role === "user" ? "user" : "agent";
 }
 
-export function createCopilotProvider(token: string): Provider {
+export function createCopilotProvider(token: string, configHeaders: Record<string, string> = {}): Provider {
 	return {
 		id: "github-copilot",
 
 		async *stream(options: ProviderOptions): AsyncGenerator<string> {
+			const defaults: Record<string, string> = {
+				"Content-Type": "application/json",
+				"User-Agent": USER_AGENT,
+				"Openai-Intent": "conversation-edits",
+			};
+
 			const response = await fetch(COPILOT_API, {
 				method: "POST",
 				headers: {
+					...defaults,
+					...configHeaders,
 					Authorization: `Bearer ${token}`,
-					"Content-Type": "application/json",
-					"User-Agent": USER_AGENT,
-					"Openai-Intent": "conversation-edits",
 					"x-initiator": resolveInitiator(options.messages),
 				},
 				body: JSON.stringify({
