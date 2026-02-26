@@ -16,34 +16,32 @@ describe("auth store", () => {
 	});
 
 	test("saveToken creates auth.json with correct permissions", () => {
-		saveToken(tmpDir, "github-copilot", "gho_abc");
+		saveToken(tmpDir, "gho_abc");
 		const filePath = path.join(tmpDir, "auth.json");
 		expect(fs.existsSync(filePath)).toBe(true);
 		const stat = fs.statSync(filePath);
 		expect(stat.mode & 0o777).toBe(0o600);
 	});
 
-	test("saveToken writes provider-keyed token", () => {
-		saveToken(tmpDir, "github-copilot", "gho_abc");
+	test("saveToken writes flat token object", () => {
+		saveToken(tmpDir, "gho_abc");
 		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8"));
-		expect(raw["github-copilot"].token).toBe("gho_abc");
-		expect(raw["github-copilot"].type).toBe("oauth");
+		expect(raw).toEqual({ token: "gho_abc" });
 	});
 
-	test("saveToken preserves existing provider entries", () => {
-		fs.writeFileSync(path.join(tmpDir, "auth.json"), JSON.stringify({ other: { token: "keep" } }));
-		saveToken(tmpDir, "github-copilot", "gho_new");
+	test("saveToken overwrites existing token", () => {
+		saveToken(tmpDir, "gho_old");
+		saveToken(tmpDir, "gho_new");
 		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8"));
-		expect(raw.other.token).toBe("keep");
-		expect(raw["github-copilot"].token).toBe("gho_new");
+		expect(raw).toEqual({ token: "gho_new" });
 	});
 
 	test("loadToken returns token when present", () => {
-		saveToken(tmpDir, "github-copilot", "gho_abc");
-		expect(loadToken(tmpDir, "github-copilot")).toBe("gho_abc");
+		saveToken(tmpDir, "gho_abc");
+		expect(loadToken(tmpDir)).toBe("gho_abc");
 	});
 
 	test("loadToken returns undefined when missing", () => {
-		expect(loadToken(tmpDir, "github-copilot")).toBeUndefined();
+		expect(loadToken(tmpDir)).toBeUndefined();
 	});
 });
