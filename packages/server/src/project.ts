@@ -37,6 +37,28 @@ export async function initProject(projectRoot: string): Promise<Project> {
 	}
 
 	const db = new Database(dbFile, { create: true });
+	db.exec("PRAGMA journal_mode = WAL");
+	db.exec("PRAGMA foreign_keys = ON");
+
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id         TEXT PRIMARY KEY,
+			title      TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)
+	`);
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS messages (
+			id         TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL REFERENCES sessions(id),
+			role       TEXT NOT NULL,
+			content    TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			sort_order INTEGER NOT NULL
+		)
+	`);
+	db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, sort_order)`);
 
 	return { id, port: config.port, provider: config.provider, model: config.model, dir: bobaiDir, db };
 }

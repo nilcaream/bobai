@@ -52,4 +52,19 @@ describe("initProject", () => {
 		expect(typeof project.id).toBe("string");
 		expect(project.id.length).toBeGreaterThan(0);
 	});
+
+	test("creates sessions and messages tables", async () => {
+		const project = await initProject(tmpDir);
+		const tables = project.db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as {
+			name: string;
+		}[];
+		const names = tables.map((t) => t.name);
+		expect(names).toContain("sessions");
+		expect(names).toContain("messages");
+
+		const indexes = project.db
+			.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_messages_session'")
+			.all();
+		expect(indexes).toHaveLength(1);
+	});
 });
