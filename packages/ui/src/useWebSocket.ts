@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Server → Client messages
-type ServerMessage =
-	| { type: "token"; text: string }
-	| { type: "done" }
-	| { type: "error"; message: string };
+type ServerMessage = { type: "token"; text: string } | { type: "done"; sessionId: string } | { type: "error"; message: string };
 
 export type Message = { role: "user" | "assistant"; text: string };
 
@@ -12,6 +8,7 @@ export function useWebSocket() {
 	const ws = useRef<WebSocket | null>(null);
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [connected, setConnected] = useState(false);
+	const sessionId = useRef<string | null>(null);
 
 	useEffect(() => {
 		const socket = new WebSocket(`ws://${window.location.host}/bobai/ws`);
@@ -32,11 +29,12 @@ export function useWebSocket() {
 				});
 			}
 
+			if (msg.type === "done") {
+				sessionId.current = msg.sessionId;
+			}
+
 			if (msg.type === "error") {
-				setMessages((prev) => [
-					...prev,
-					{ role: "assistant", text: `Error: ${msg.message}` },
-				]);
+				setMessages((prev) => [...prev, { role: "assistant", text: `Error: ${msg.message}` }]);
 			}
 		};
 
@@ -47,8 +45,17 @@ export function useWebSocket() {
 	const sendPrompt = useCallback((text: string) => {
 		if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 		setMessages((prev) => [...prev, { role: "user", text }]);
-		ws.current.send(JSON.stringify({ type: "prompt", text }));
+		const payload: { type: string; text: string; sessionId?: string } = { type: "prompt", text };
+		if (sessionId.current) {
+			payload.sessionId = sessionId.current;
+		}
+		ws.current.send(JSON.stringify(payload));
 	}, []);
 
-	return { messages, connected, sendPrompt };
+	const newChat = useCallback(() => {
+		sessionId.current = null;
+		setMessages([]);
+	}, []);
+
+	return { messages, connected, sendPrompt, newChat };
 }
