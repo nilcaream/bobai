@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { pollForToken, requestDeviceCode } from "../src/auth/device-flow";
+import { DEFAULT_CLIENT_ID, pollForToken, requestDeviceCode } from "../src/auth/device-flow";
 
 describe("requestDeviceCode", () => {
 	const originalFetch = globalThis.fetch;
@@ -32,7 +32,7 @@ describe("requestDeviceCode", () => {
 		expect(capturedUrl).toBe("https://github.com/login/device/code");
 		expect(capturedInit?.method).toBe("POST");
 		const body = JSON.parse(capturedInit?.body as string);
-		expect(body.client_id).toBe("Ov23lilOtSxsmULu7KfI");
+		expect(body.client_id).toBe(DEFAULT_CLIENT_ID);
 		expect(body.scope).toBe("read:user");
 		expect(result.device_code).toBe("dc_123");
 		expect(result.user_code).toBe("ABCD-1234");
@@ -46,6 +46,28 @@ describe("requestDeviceCode", () => {
 		}) as typeof fetch;
 
 		await expect(requestDeviceCode()).rejects.toThrow("Failed to request device code");
+	});
+
+	test("uses custom clientId when provided", async () => {
+		let capturedBody = "";
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedBody = init?.body as string;
+			return new Response(
+				JSON.stringify({
+					device_code: "dc_custom",
+					user_code: "CUST-1234",
+					verification_uri: "https://github.com/login/device",
+					interval: 5,
+					expires_in: 900,
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			);
+		}) as typeof fetch;
+
+		await requestDeviceCode("Iv1.customclientid");
+		const body = JSON.parse(capturedBody);
+		expect(body.client_id).toBe("Iv1.customclientid");
 	});
 });
 
@@ -129,5 +151,22 @@ describe("pollForToken", () => {
 		}) as typeof fetch;
 
 		await expect(pollForToken("dc_err", 0)).rejects.toThrow("Token poll failed: HTTP 500");
+	});
+
+	test("uses custom clientId in token poll", async () => {
+		let capturedBody = "";
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedBody = init?.body as string;
+			return new Response(JSON.stringify({ access_token: "gho_custom", token_type: "bearer" }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}) as typeof fetch;
+
+		const noopSleep = async () => {};
+		await pollForToken("dc_123", 0, noopSleep, "Iv1.customclientid");
+		const body = JSON.parse(capturedBody);
+		expect(body.client_id).toBe("Iv1.customclientid");
 	});
 });
