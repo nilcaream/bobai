@@ -17,9 +17,11 @@ export interface PromptRequest {
 export async function handlePrompt(req: PromptRequest) {
 	const { ws, db, provider, model, text, sessionId } = req;
 
+	let currentSessionId: string | undefined;
+	let fullResponse = "";
+
 	try {
 		// Resolve or create session
-		let currentSessionId: string;
 		if (sessionId) {
 			const session = getSession(db, sessionId);
 			if (!session) {
@@ -40,7 +42,6 @@ export async function handlePrompt(req: PromptRequest) {
 		const messages: Message[] = stored.map((m) => ({ role: m.role, content: m.content }));
 
 		// Stream from provider
-		let fullResponse = "";
 		for await (const chunk of provider.stream({ model, messages })) {
 			fullResponse += chunk;
 			send(ws, { type: "token", text: chunk });
@@ -51,6 +52,9 @@ export async function handlePrompt(req: PromptRequest) {
 
 		send(ws, { type: "done", sessionId: currentSessionId });
 	} catch (err) {
+		if (currentSessionId && fullResponse) {
+			appendMessage(db, currentSessionId, "assistant", fullResponse);
+		}
 		const message =
 			err instanceof ProviderError ? `Provider error (${err.status}): ${err.body}` : "Unexpected error during generation";
 		send(ws, { type: "error", message });
