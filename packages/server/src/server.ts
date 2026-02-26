@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { handlePrompt } from "./handler";
 import type { ClientMessage } from "./protocol";
@@ -7,6 +8,7 @@ import type { Provider } from "./provider/provider";
 export interface ServerOptions {
 	port: number;
 	staticDir?: string;
+	db?: Database;
 	provider?: Provider;
 	model?: string;
 }
@@ -52,8 +54,15 @@ export function createServer(options: ServerOptions) {
 				}
 
 				if (msg.type === "prompt") {
-					if (options.provider && options.model) {
-						handlePrompt(ws, msg, options.provider, options.model);
+					if (options.provider && options.model && options.db) {
+						handlePrompt({
+							ws,
+							db: options.db,
+							provider: options.provider,
+							model: options.model,
+							text: msg.text,
+							sessionId: msg.sessionId,
+						});
 					} else {
 						send(ws, { type: "error", message: "No provider configured" });
 					}
