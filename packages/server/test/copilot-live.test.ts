@@ -5,7 +5,7 @@ import { loadToken } from "../src/auth/store";
 import { createCopilotProvider } from "../src/provider/copilot";
 
 const configDir = path.join(os.homedir(), ".config", "bobai");
-const token = loadToken(configDir, "github-copilot");
+const token = loadToken(configDir);
 
 describe.skipIf(!token)("copilot live", () => {
 	test("completes a simple math prompt", async () => {

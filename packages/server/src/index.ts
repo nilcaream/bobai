@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { authorize } from "./auth/authorize";
 import { loadToken } from "./auth/store";
+import { parseCLI } from "./cli";
 import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
 import { installFetchInterceptor } from "./log/fetch";
@@ -11,29 +12,35 @@ import { initProject } from "./project";
 import { createCopilotProvider } from "./provider/copilot";
 import { createServer } from "./server";
 
-const debug = process.argv.includes("--debug");
+const cli = parseCLI(process.argv.slice(2));
+
 const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
 const logDir = path.join(dataHome, "bobai", "log");
-const logger = createLogger({ level: debug ? "debug" : "info", logDir });
-installFetchInterceptor({ logger, logDir, debug });
+const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
+installFetchInterceptor({ logger, logDir, debug: cli.debug });
 
-logger.info("SERVER", `Starting bobai (debug=${debug})`);
-
-const projectRoot = process.cwd();
-const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
 const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
 
-const globalConfig = loadGlobalConfig(globalConfigDir);
-const project = await initProject(projectRoot);
-const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
-
-let token = loadToken(globalConfigDir, config.provider);
-if (!token) {
-	token = await authorize(globalConfigDir, config.provider);
+if (cli.command === "auth") {
+	logger.info("AUTH", "Starting authentication flow");
+	await authorize(globalConfigDir, cli.clientId);
+	process.exit(0);
 }
 
-const provider = createCopilotProvider(token);
+logger.info("SERVER", `Starting bobai (debug=${cli.debug})`);
+
+const globalConfig = loadGlobalConfig(globalConfigDir);
+const project = await initProject(process.cwd());
+const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
+
+let token = loadToken(globalConfigDir);
+if (!token) {
+	token = await authorize(globalConfigDir);
+}
+
+const provider = createCopilotProvider(token, config.headers);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
+const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
 const server = createServer({ port, staticDir, provider, model: config.model });
 
 logger.info("SERVER", `Project: ${project.id}`);
