@@ -33,4 +33,11 @@ describe("loadGlobalConfig", () => {
 		const config = loadGlobalConfig(tmpDir);
 		expect(config.preferences).toEqual({});
 	});
+
+	test("reads headers from bobai.json", () => {
+		fs.mkdirSync(tmpDir, { recursive: true });
+		fs.writeFileSync(path.join(tmpDir, "bobai.json"), JSON.stringify({ headers: { "User-Agent": "Custom/1.0" } }));
+		const config = loadGlobalConfig(tmpDir);
+		expect(config.preferences.headers).toEqual({ "User-Agent": "Custom/1.0" });
+	});
 });
