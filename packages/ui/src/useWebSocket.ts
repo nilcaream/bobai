@@ -8,6 +8,7 @@ export function useWebSocket() {
 	const ws = useRef<WebSocket | null>(null);
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [connected, setConnected] = useState(false);
+	const [isStreaming, setIsStreaming] = useState(false);
 	const sessionId = useRef<string | null>(null);
 
 	useEffect(() => {
@@ -31,10 +32,12 @@ export function useWebSocket() {
 
 			if (msg.type === "done") {
 				sessionId.current = msg.sessionId;
+				setIsStreaming(false);
 			}
 
 			if (msg.type === "error") {
 				setMessages((prev) => [...prev, { role: "assistant", text: `Error: ${msg.message}` }]);
+				setIsStreaming(false);
 			}
 		};
 
@@ -42,20 +45,25 @@ export function useWebSocket() {
 		return () => socket.close();
 	}, []);
 
-	const sendPrompt = useCallback((text: string) => {
-		if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-		setMessages((prev) => [...prev, { role: "user", text }]);
-		const payload: { type: string; text: string; sessionId?: string } = { type: "prompt", text };
-		if (sessionId.current) {
-			payload.sessionId = sessionId.current;
-		}
-		ws.current.send(JSON.stringify(payload));
-	}, []);
+	const sendPrompt = useCallback(
+		(text: string) => {
+			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+			if (isStreaming) return;
+			setIsStreaming(true);
+			setMessages((prev) => [...prev, { role: "user", text }]);
+			const payload: { type: string; text: string; sessionId?: string } = { type: "prompt", text };
+			if (sessionId.current) {
+				payload.sessionId = sessionId.current;
+			}
+			ws.current.send(JSON.stringify(payload));
+		},
+		[isStreaming],
+	);
 
 	const newChat = useCallback(() => {
 		sessionId.current = null;
 		setMessages([]);
 	}, []);
 
-	return { messages, connected, sendPrompt, newChat };
+	return { messages, connected, isStreaming, sendPrompt, newChat };
 }

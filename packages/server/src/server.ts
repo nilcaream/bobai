@@ -62,6 +62,9 @@ export function createServer(options: ServerOptions) {
 							model: options.model,
 							text: msg.text,
 							sessionId: msg.sessionId,
+						}).catch((err) => {
+							send(ws, { type: "error", message: "Unexpected error" });
+							console.error("Unhandled error in handlePrompt:", err);
 						});
 					} else {
 						send(ws, { type: "error", message: "No provider configured" });
