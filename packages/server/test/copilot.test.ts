@@ -116,6 +116,51 @@ describe("CopilotProvider", () => {
 		expect(tokens).toEqual(["only"]);
 	});
 
+	test("config headers override default headers", async () => {
+		let capturedInit: RequestInit | undefined;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok", {
+			"User-Agent": "CustomAgent/2.0",
+			"X-Custom": "value",
+		});
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers["User-Agent"]).toBe("CustomAgent/2.0");
+		expect(headers["X-Custom"]).toBe("value");
+		expect(headers["Openai-Intent"]).toBe("conversation-edits");
+	});
+
+	test("uses default headers when no config headers provided", async () => {
+		let capturedInit: RequestInit | undefined;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers["User-Agent"]).toMatch(/^bobai\//);
+	});
+
 	test("sets x-initiator to agent when last message is not from user", async () => {
 		let capturedInit: RequestInit | undefined;
 
