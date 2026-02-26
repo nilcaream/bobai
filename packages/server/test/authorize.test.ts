@@ -47,10 +47,40 @@ describe("authorize", () => {
 			});
 		}) as typeof fetch;
 
-		const token = await authorize(tmpDir, "github-copilot");
+		const token = await authorize(tmpDir);
 
 		expect(token).toBe("gho_final");
 		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8"));
-		expect(raw["github-copilot"].token).toBe("gho_final");
+		expect(raw.token).toBe("gho_final");
+	});
+
+	test("forwards custom clientId to device flow", async () => {
+		let capturedBody = "";
+
+		globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+			const u = url.toString();
+			if (u.includes("/login/device/code")) {
+				capturedBody = init?.body as string;
+				return new Response(
+					JSON.stringify({
+						device_code: "dc_custom",
+						user_code: "CUST-CODE",
+						verification_uri: "https://github.com/login/device",
+						interval: 0,
+						expires_in: 900,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			return new Response(JSON.stringify({ access_token: "gho_custom", token_type: "bearer" }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}) as typeof fetch;
+
+		await authorize(tmpDir, "Iv1.customid");
+
+		const body = JSON.parse(capturedBody);
+		expect(body.client_id).toBe("Iv1.customid");
 	});
 });
