@@ -41,7 +41,7 @@ if (!token) {
 const provider = createCopilotProvider(token, config.headers);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
-const server = createServer({ port, staticDir, provider, model: config.model });
+const server = createServer({ port, staticDir, db: project.db, provider, model: config.model });
 
 logger.info("SERVER", `Project: ${project.id}`);
 logger.info("SERVER", `Provider: ${config.provider} / ${config.model}`);

@@ -1,19 +1,55 @@
-import type { ClientMessage } from "./protocol";
+import type { Database } from "bun:sqlite";
 import { send } from "./protocol";
 import type { Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
+import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
+import { SYSTEM_PROMPT } from "./system-prompt";
 
-export async function handlePrompt(ws: { send: (msg: string) => void }, msg: ClientMessage, provider: Provider, model: string) {
+export interface PromptRequest {
+	ws: { send: (msg: string) => void };
+	db: Database;
+	provider: Provider;
+	model: string;
+	text: string;
+	sessionId?: string;
+}
+
+export async function handlePrompt(req: PromptRequest) {
+	const { ws, db, provider, model, text, sessionId } = req;
+
 	try {
-		const messages: Message[] = [
-			{ role: "system", content: "You are Bob AI, a coding assistant." },
-			{ role: "user", content: msg.text },
-		];
-
-		for await (const text of provider.stream({ model, messages })) {
-			send(ws, { type: "token", text });
+		// Resolve or create session
+		let currentSessionId: string;
+		if (sessionId) {
+			const session = getSession(db, sessionId);
+			if (!session) {
+				send(ws, { type: "error", message: `Session not found: ${sessionId}` });
+				return;
+			}
+			currentSessionId = sessionId;
+		} else {
+			const session = createSession(db, SYSTEM_PROMPT);
+			currentSessionId = session.id;
 		}
-		send(ws, { type: "done" });
+
+		// Persist the user message
+		appendMessage(db, currentSessionId, "user", text);
+
+		// Load full conversation history
+		const stored = getMessages(db, currentSessionId);
+		const messages: Message[] = stored.map((m) => ({ role: m.role, content: m.content }));
+
+		// Stream from provider
+		let fullResponse = "";
+		for await (const chunk of provider.stream({ model, messages })) {
+			fullResponse += chunk;
+			send(ws, { type: "token", text: chunk });
+		}
+
+		// Persist the assistant response
+		appendMessage(db, currentSessionId, "assistant", fullResponse);
+
+		send(ws, { type: "done", sessionId: currentSessionId });
 	} catch (err) {
 		const message =
 			err instanceof ProviderError ? `Provider error (${err.status}): ${err.body}` : "Unexpected error during generation";
