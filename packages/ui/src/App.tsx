@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useWebSocket } from "./useWebSocket";
 
 export function App() {
-	const { messages, connected, sendPrompt, newChat } = useWebSocket();
+	const { messages, connected, isStreaming, sendPrompt, newChat } = useWebSocket();
 	const [input, setInput] = useState("");
 	const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -21,7 +21,7 @@ export function App() {
 					<h1 style={{ margin: 0 }}>Bob AI</h1>
 					<small>{connected ? "connected" : "connecting..."}</small>
 				</div>
-				<button type="button" onClick={newChat} disabled={!connected || messages.length === 0}>
+				<button type="button" onClick={newChat} disabled={!connected || messages.length === 0 || isStreaming}>
 					New Chat
 				</button>
 			</header>
@@ -63,9 +63,9 @@ export function App() {
 					onChange={(e) => setInput(e.target.value)}
 					onKeyDown={(e) => e.key === "Enter" && submit()}
 					placeholder="Type a message..."
-					disabled={!connected}
+					disabled={!connected || isStreaming}
 				/>
-				<button type="button" onClick={submit} disabled={!connected}>
+				<button type="button" onClick={submit} disabled={!connected || isStreaming}>
 					Send
 				</button>
 			</footer>

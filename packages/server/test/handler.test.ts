@@ -1,33 +1,10 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { handlePrompt } from "../src/handler";
 import type { Provider, ProviderOptions } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 import { getMessages } from "../src/session/repository";
-
-function initTestDb(): Database {
-	const db = new Database(":memory:");
-	db.exec(`
-		CREATE TABLE sessions (
-			id TEXT PRIMARY KEY,
-			title TEXT,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
-	`);
-	db.exec(`
-		CREATE TABLE messages (
-			id TEXT PRIMARY KEY,
-			session_id TEXT NOT NULL REFERENCES sessions(id),
-			role TEXT NOT NULL,
-			content TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			sort_order INTEGER NOT NULL
-		)
-	`);
-	db.exec("CREATE INDEX idx_messages_session ON messages(session_id, sort_order)");
-	return db;
-}
+import { createTestDb } from "./helpers";
 
 function mockWs() {
 	const sent: string[] = [];
@@ -76,11 +53,25 @@ function failingProvider(status: number, body: string): Provider {
 	};
 }
 
+/** Provider that yields some tokens then throws a ProviderError */
+function partialFailingProvider(tokens: string[], status: number, body: string): Provider {
+	return {
+		id: "mock",
+		stream() {
+			async function* gen(): AsyncGenerator<string> {
+				for (const t of tokens) yield t;
+				throw new ProviderError(status, body);
+			}
+			return gen();
+		},
+	};
+}
+
 describe("handlePrompt", () => {
 	let db: Database;
 
 	beforeAll(() => {
-		db = initTestDb();
+		db = createTestDb();
 	});
 
 	afterAll(() => {
@@ -171,5 +162,39 @@ describe("handlePrompt", () => {
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
 		expect(errors).toHaveLength(1);
 		expect(errors[0].message).toContain("401");
+	});
+
+	test("persists partial response when provider errors mid-stream", async () => {
+		const ws = mockWs();
+		const provider = partialFailingProvider(["Hello", " wor"], 500, "Internal Server Error");
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "tell me something" });
+
+		const msgs = ws.messages();
+
+		// Tokens yielded before the error should be sent to the client
+		const tokens = msgs.filter((m: { type: string }) => m.type === "token");
+		expect(tokens).toEqual([
+			{ type: "token", text: "Hello" },
+			{ type: "token", text: " wor" },
+		]);
+
+		// Error should be sent to the client
+		const errors = msgs.filter((m: { type: string }) => m.type === "error");
+		expect(errors).toHaveLength(1);
+		expect(errors[0].message).toContain("500");
+
+		// Partial response should be persisted in the DB
+		// Find the session via the user message we sent (unique text avoids cross-test collision)
+		const row = db.query("SELECT session_id FROM messages WHERE content = ? LIMIT 1").get("tell me something") as {
+			session_id: string;
+		};
+		const stored = getMessages(db, row.session_id);
+
+		expect(stored).toHaveLength(3); // system + user + partial assistant
+		expect(stored[0].role).toBe("system");
+		expect(stored[1].role).toBe("user");
+		expect(stored[1].content).toBe("tell me something");
+		expect(stored[2].role).toBe("assistant");
+		expect(stored[2].content).toBe("Hello wor");
 	});
 });
