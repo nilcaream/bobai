@@ -39,7 +39,7 @@ describe("prompt session", () => {
 				yield { type: "finish", reason: "stop" };
 			},
 		};
-		server = createServer({ port: 0, db, provider, model: "test-model" });
+		server = createServer({ port: 0, db, provider, model: "test-model", projectRoot: "/tmp" });
 		wsUrl = `ws://localhost:${server.port}/bobai/ws`;
 	});
 
