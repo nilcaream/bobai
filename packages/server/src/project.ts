@@ -55,7 +55,8 @@ export async function initProject(projectRoot: string): Promise<Project> {
 			role       TEXT NOT NULL,
 			content    TEXT NOT NULL,
 			created_at TEXT NOT NULL,
-			sort_order INTEGER NOT NULL
+			sort_order INTEGER NOT NULL,
+			metadata   TEXT
 		)
 	`);
 	db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, sort_order)`);
