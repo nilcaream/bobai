@@ -83,7 +83,7 @@ describe("handlePrompt", () => {
 	test("creates new session when no sessionId provided", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
 
 		const msgs = ws.messages();
 		const done = msgs.find((m: { type: string }) => m.type === "done");
@@ -93,7 +93,7 @@ describe("handlePrompt", () => {
 	test("streams tokens then done with sessionId", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello", " world"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
 
 		const msgs = ws.messages();
 		const tokens = msgs.filter((m: { type: string }) => m.type === "token");
@@ -108,7 +108,7 @@ describe("handlePrompt", () => {
 	test("persists user and assistant messages to DB", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["response text"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "my question" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "my question", projectRoot: "/tmp" });
 
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
@@ -124,20 +124,31 @@ describe("handlePrompt", () => {
 	test("resumes existing session with sessionId", async () => {
 		const ws1 = mockWs();
 		const provider1 = mockProvider(["first response"]);
-		await handlePrompt({ ws: ws1, db, provider: provider1, model: "test-model", text: "first" });
+		await handlePrompt({ ws: ws1, db, provider: provider1, model: "test-model", text: "first", projectRoot: "/tmp" });
 		const sessionId = ws1.messages().find((m: { type: string }) => m.type === "done").sessionId;
 
 		const ws2 = mockWs();
 		const provider2 = capturingProvider(["second response"]);
-		await handlePrompt({ ws: ws2, db, provider: provider2, model: "test-model", text: "second", sessionId });
+		await handlePrompt({
+			ws: ws2,
+			db,
+			provider: provider2,
+			model: "test-model",
+			text: "second",
+			sessionId,
+			projectRoot: "/tmp",
+		});
 
-		// Provider should have received full history
+		// Provider should have received full history (system + user1 + assistant1 + user2)
+		// Note: the agent loop appends its response to the conversation array after streaming,
+		// so the captured reference also contains the new assistant message (5 total)
 		const sentMessages = provider2.captured[0].messages;
-		expect(sentMessages).toHaveLength(4); // system + user1 + assistant1 + user2
+		expect(sentMessages).toHaveLength(5); // system + user1 + assistant1 + user2 + assistant2 (appended by agent loop)
 		expect(sentMessages[0].role).toBe("system");
 		expect(sentMessages[1].content).toBe("first");
 		expect(sentMessages[2].content).toBe("first response");
 		expect(sentMessages[3].content).toBe("second");
+		expect(sentMessages[4].content).toBe("second response");
 
 		// DB should have 5 messages total
 		const stored = getMessages(db, sessionId);
@@ -147,7 +158,7 @@ describe("handlePrompt", () => {
 	test("sends error for unknown sessionId", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["x"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", sessionId: "nonexistent" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", sessionId: "nonexistent", projectRoot: "/tmp" });
 
 		const msgs = ws.messages();
 		expect(msgs).toHaveLength(1);
@@ -158,7 +169,7 @@ describe("handlePrompt", () => {
 	test("sends error on ProviderError", async () => {
 		const ws = mockWs();
 		const provider = failingProvider(401, "Unauthorized");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
 
 		const msgs = ws.messages();
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
@@ -166,10 +177,10 @@ describe("handlePrompt", () => {
 		expect(errors[0].message).toContain("401");
 	});
 
-	test("persists partial response when provider errors mid-stream", async () => {
+	test("sends tokens and error when provider errors mid-stream", async () => {
 		const ws = mockWs();
 		const provider = partialFailingProvider(["Hello", " wor"], 500, "Internal Server Error");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "tell me something" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "tell me something", projectRoot: "/tmp" });
 
 		const msgs = ws.messages();
 
@@ -184,19 +195,44 @@ describe("handlePrompt", () => {
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
 		expect(errors).toHaveLength(1);
 		expect(errors[0].message).toContain("500");
+	});
 
-		// Partial response should be persisted in the DB
-		// Find the session via the user message we sent (unique text avoids cross-test collision)
-		const row = db.query("SELECT session_id FROM messages WHERE content = ? LIMIT 1").get("tell me something") as {
-			session_id: string;
+	test("executes tool calls and persists tool messages", async () => {
+		// Provider that requests a tool call then responds with text
+		let callCount = 0;
+		const toolProvider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					yield { type: "tool_call_start", index: 0, id: "call_1", name: "list_directory" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"path":"."}' };
+					yield { type: "finish", reason: "tool_calls" };
+				} else {
+					yield { type: "text", text: "I see the files" };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
 		};
-		const stored = getMessages(db, row.session_id);
 
-		expect(stored).toHaveLength(3); // system + user + partial assistant
-		expect(stored[0].role).toBe("system");
-		expect(stored[1].role).toBe("user");
-		expect(stored[1].content).toBe("tell me something");
+		const ws = mockWs();
+		await handlePrompt({ ws, db, provider: toolProvider, model: "test-model", text: "what files?", projectRoot: "/tmp" });
+
+		const msgs = ws.messages();
+		// Should have tool_call, tool_result, text token(s), and done
+		expect(msgs.some((m: { type: string }) => m.type === "tool_call")).toBe(true);
+		expect(msgs.some((m: { type: string }) => m.type === "tool_result")).toBe(true);
+		expect(msgs.at(-1).type).toBe("done");
+
+		// DB should have: system + user + assistant(tool_calls) + tool + assistant(text)
+		const sessionId = msgs.find((m: { type: string }) => m.type === "done").sessionId;
+		const stored = getMessages(db, sessionId);
+		expect(stored).toHaveLength(5);
 		expect(stored[2].role).toBe("assistant");
-		expect(stored[2].content).toBe("Hello wor");
+		expect(stored[2].metadata).toBeTruthy(); // has tool_calls
+		expect(stored[3].role).toBe("tool");
+		expect(stored[3].metadata).toBeTruthy(); // has tool_call_id
+		expect(stored[4].role).toBe("assistant");
+		expect(stored[4].content).toBe("I see the files");
 	});
 });

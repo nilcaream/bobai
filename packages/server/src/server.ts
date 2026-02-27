@@ -11,6 +11,7 @@ export interface ServerOptions {
 	db?: Database;
 	provider?: Provider;
 	model?: string;
+	projectRoot?: string;
 }
 
 export function createServer(options: ServerOptions) {
@@ -62,6 +63,7 @@ export function createServer(options: ServerOptions) {
 							model: options.model,
 							text: msg.text,
 							sessionId: msg.sessionId,
+							projectRoot: options.projectRoot ?? process.cwd(),
 						}).catch((err) => {
 							send(ws, { type: "error", message: "Unexpected error" });
 							console.error("Unhandled error in handlePrompt:", err);
