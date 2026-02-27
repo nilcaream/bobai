@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type ServerMessage = { type: "token"; text: string } | { type: "done"; sessionId: string } | { type: "error"; message: string };
+type ServerMessage =
+	| { type: "token"; text: string }
+	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
+	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean }
+	| { type: "done"; sessionId: string }
+	| { type: "error"; message: string };
 
 export type Message = { role: "user" | "assistant"; text: string };
 
@@ -27,6 +32,28 @@ export function useWebSocket() {
 						return [...prev.slice(0, -1), { role: "assistant", text: last.text + msg.text }];
 					}
 					return [...prev, { role: "assistant", text: msg.text }];
+				});
+			}
+
+			if (msg.type === "tool_call") {
+				setMessages((prev) => {
+					const last = prev.at(-1);
+					const status = `\n[Calling ${msg.name}...]\n`;
+					if (last?.role === "assistant") {
+						return [...prev.slice(0, -1), { role: "assistant", text: last.text + status }];
+					}
+					return [...prev, { role: "assistant", text: status }];
+				});
+			}
+
+			if (msg.type === "tool_result") {
+				setMessages((prev) => {
+					const last = prev.at(-1);
+					const status = msg.isError ? `[${msg.name} failed]\n` : `[${msg.name} done]\n`;
+					if (last?.role === "assistant") {
+						return [...prev.slice(0, -1), { role: "assistant", text: last.text + status }];
+					}
+					return [...prev, { role: "assistant", text: status }];
 				});
 			}
 
