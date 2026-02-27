@@ -1,5 +1,5 @@
 import pkg from "../../package.json";
-import type { Message, Provider, ProviderOptions } from "./provider";
+import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
 
@@ -15,7 +15,7 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 	return {
 		id: "github-copilot",
 
-		async *stream(options: ProviderOptions): AsyncGenerator<string> {
+		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			const defaults: Record<string, string> = {
 				"Content-Type": "application/json",
 				"User-Agent": USER_AGENT,
@@ -51,8 +51,10 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 					choices?: { delta?: { content?: string } }[];
 				};
 				const content = data.choices?.[0]?.delta?.content;
-				if (content) yield content;
+				if (content) yield { type: "text" as const, text: content };
 			}
+
+			yield { type: "finish" as const, reason: "stop" as const };
 		},
 	};
 }

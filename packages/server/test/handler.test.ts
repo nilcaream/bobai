@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { handlePrompt } from "../src/handler";
-import type { Provider, ProviderOptions } from "../src/provider/provider";
+import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 import { getMessages } from "../src/session/repository";
 import { createTestDb } from "./helpers";
@@ -21,8 +21,9 @@ function mockWs() {
 function mockProvider(tokens: string[]): Provider {
 	return {
 		id: "mock",
-		async *stream(_opts: ProviderOptions) {
-			for (const t of tokens) yield t;
+		async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+			for (const t of tokens) yield { type: "text", text: t };
+			yield { type: "finish", reason: "stop" };
 		},
 	};
 }
@@ -33,9 +34,10 @@ function capturingProvider(tokens: string[]): Provider & { captured: ProviderOpt
 	return {
 		id: "mock",
 		captured,
-		async *stream(opts: ProviderOptions) {
+		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			captured.push(opts);
-			for (const t of tokens) yield t;
+			for (const t of tokens) yield { type: "text", text: t };
+			yield { type: "finish", reason: "stop" };
 		},
 	};
 }
@@ -44,7 +46,7 @@ function failingProvider(status: number, body: string): Provider {
 	return {
 		id: "mock",
 		stream() {
-			async function* gen(): AsyncGenerator<string> {
+			async function* gen(): AsyncGenerator<StreamEvent> {
 				yield* [];
 				throw new ProviderError(status, body);
 			}
@@ -58,8 +60,8 @@ function partialFailingProvider(tokens: string[], status: number, body: string):
 	return {
 		id: "mock",
 		stream() {
-			async function* gen(): AsyncGenerator<string> {
-				for (const t of tokens) yield t;
+			async function* gen(): AsyncGenerator<StreamEvent> {
+				for (const t of tokens) yield { type: "text", text: t };
 				throw new ProviderError(status, body);
 			}
 			return gen();
