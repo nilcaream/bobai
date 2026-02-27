@@ -169,6 +169,126 @@ describe("CopilotProvider", () => {
 		expect(headers["User-Agent"]).toMatch(/^bobai\//);
 	});
 
+	test("includes tools in request body when provided", async () => {
+		let capturedInit: RequestInit | undefined;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		const tools = [
+			{
+				type: "function" as const,
+				function: {
+					name: "read_file",
+					description: "Read a file",
+					parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+				},
+			},
+		];
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+			tools,
+		})) {
+			/* drain */
+		}
+
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.tools).toEqual(tools);
+	});
+
+	test("does not include tools in request body when not provided", async () => {
+		let capturedInit: RequestInit | undefined;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.tools).toBeUndefined();
+	});
+
+	test("parses delta.tool_calls into tool_call_start and tool_call_delta events", async () => {
+		const chunks = [
+			JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [{ index: 0, id: "call_abc123", type: "function", function: { name: "read_file", arguments: "" } }],
+						},
+					},
+				],
+			}),
+			JSON.stringify({
+				choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"path"' } }] } }],
+			}),
+			JSON.stringify({
+				choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: ':"src/index.ts"}' } }] } }],
+			}),
+			JSON.stringify({
+				choices: [{ finish_reason: "tool_calls", delta: {} }],
+			}),
+			"[DONE]",
+		];
+
+		globalThis.fetch = mock(async () => {
+			return new Response(sseStream(chunks), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(t);
+		}
+
+		expect(events).toEqual([
+			{ type: "tool_call_start", index: 0, id: "call_abc123", name: "read_file" },
+			{ type: "tool_call_delta", index: 0, arguments: '{"path"' },
+			{ type: "tool_call_delta", index: 0, arguments: ':"src/index.ts"}' },
+			{ type: "finish", reason: "tool_calls" },
+		]);
+	});
+
+	test("yields finish with reason 'stop' for normal text completion", async () => {
+		globalThis.fetch = mock(async () => {
+			const chunks = [
+				JSON.stringify({ choices: [{ delta: { content: "Hello" } }] }),
+				JSON.stringify({ choices: [{ finish_reason: "stop", delta: {} }] }),
+				"[DONE]",
+			];
+			return new Response(sseStream(chunks), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(t);
+		}
+
+		expect(events).toEqual([
+			{ type: "text", text: "Hello" },
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
 	test("sets x-initiator to agent when last message is not from user", async () => {
 		let capturedInit: RequestInit | undefined;
 
