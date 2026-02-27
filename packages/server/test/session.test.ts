@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { Provider } from "../src/provider/provider";
+import type { Provider, StreamEvent } from "../src/provider/provider";
 import { createServer } from "../src/server";
 import { createTestDb } from "./helpers";
 
@@ -33,9 +33,10 @@ describe("prompt session", () => {
 		const db = createTestDb();
 		const provider: Provider = {
 			id: "test",
-			async *stream() {
-				yield "test ";
-				yield "response";
+			async *stream(): AsyncGenerator<StreamEvent> {
+				yield { type: "text", text: "test " };
+				yield { type: "text", text: "response" };
+				yield { type: "finish", reason: "stop" };
 			},
 		};
 		server = createServer({ port: 0, db, provider, model: "test-model" });

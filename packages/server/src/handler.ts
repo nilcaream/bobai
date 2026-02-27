@@ -39,12 +39,17 @@ export async function handlePrompt(req: PromptRequest) {
 
 		// Load full conversation history
 		const stored = getMessages(db, currentSessionId);
-		const messages: Message[] = stored.map((m) => ({ role: m.role, content: m.content }));
+		const messages: Message[] = stored.map((m) => ({
+			role: m.role as "system" | "user" | "assistant",
+			content: m.content,
+		}));
 
 		// Stream from provider
-		for await (const chunk of provider.stream({ model, messages })) {
-			fullResponse += chunk;
-			send(ws, { type: "token", text: chunk });
+		for await (const event of provider.stream({ model, messages })) {
+			if (event.type === "text") {
+				fullResponse += event.text;
+				send(ws, { type: "token", text: event.text });
+			}
 		}
 
 		// Persist the assistant response

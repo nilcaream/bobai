@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { createCopilotProvider } from "../src/provider/copilot";
+import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 
 function sseStream(events: string[]): ReadableStream<Uint8Array> {
@@ -42,7 +43,7 @@ describe("CopilotProvider", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider("test-token");
-		const tokens: string[] = [];
+		const tokens: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-5-mini",
 			messages: [{ role: "user", content: "hello" }],
@@ -68,15 +69,19 @@ describe("CopilotProvider", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider("tok");
-		const tokens: string[] = [];
+		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-5-mini",
 			messages: [{ role: "user", content: "hi" }],
 		})) {
-			tokens.push(t);
+			events.push(t);
 		}
 
-		expect(tokens).toEqual(["Hello", " world"]);
+		expect(events).toEqual([
+			{ type: "text", text: "Hello" },
+			{ type: "text", text: " world" },
+			{ type: "finish", reason: "stop" },
+		]);
 	});
 
 	test("throws ProviderError on non-OK response", async () => {
@@ -105,15 +110,18 @@ describe("CopilotProvider", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider("tok");
-		const tokens: string[] = [];
+		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-5-mini",
 			messages: [{ role: "user", content: "hi" }],
 		})) {
-			tokens.push(t);
+			events.push(t);
 		}
 
-		expect(tokens).toEqual(["only"]);
+		expect(events).toEqual([
+			{ type: "text", text: "only" },
+			{ type: "finish", reason: "stop" },
+		]);
 	});
 
 	test("config headers override default headers", async () => {
