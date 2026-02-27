@@ -11,11 +11,13 @@ describe.skipIf(!token)("copilot live", () => {
 	test("completes a simple math prompt", async () => {
 		const provider = createCopilotProvider(token!);
 		let result = "";
-		for await (const chunk of provider.stream({
+		for await (const event of provider.stream({
 			model: "gpt-4o",
 			messages: [{ role: "user", content: "What is 2+7? Return single number." }],
 		})) {
-			result += chunk;
+			if (event.type === "text") {
+				result += event.text;
+			}
 		}
 		expect(result).toContain("9");
 	}, 30_000);
