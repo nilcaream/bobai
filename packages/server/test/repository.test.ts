@@ -89,4 +89,34 @@ describe("session repository", () => {
 		const after = getSession(db, session.id)!.updatedAt;
 		expect(after >= before).toBe(true);
 	});
+
+	test("appendMessage stores and retrieves metadata", () => {
+		const session = createSession(db, "sys");
+		const toolCalls = [{ id: "call_1", type: "function", function: { name: "read_file", arguments: '{"path":"x"}' } }];
+		appendMessage(db, session.id, "assistant", "", { tool_calls: toolCalls });
+
+		const messages = getMessages(db, session.id);
+		const assistantMsg = messages.find((m) => m.role === "assistant");
+		expect(assistantMsg).toBeTruthy();
+		expect(assistantMsg!.metadata).toEqual({ tool_calls: toolCalls });
+	});
+
+	test("appendMessage supports tool role with tool_call_id metadata", () => {
+		const session = createSession(db, "sys");
+		appendMessage(db, session.id, "tool", "file contents", { tool_call_id: "call_1" });
+
+		const messages = getMessages(db, session.id);
+		const toolMsg = messages.find((m) => m.role === "tool");
+		expect(toolMsg).toBeTruthy();
+		expect(toolMsg!.content).toBe("file contents");
+		expect(toolMsg!.metadata).toEqual({ tool_call_id: "call_1" });
+	});
+
+	test("appendMessage returns null metadata when none provided", () => {
+		const session = createSession(db, "sys");
+		appendMessage(db, session.id, "user", "hello");
+		const messages = getMessages(db, session.id);
+		const userMsg = messages.find((m) => m.role === "user");
+		expect(userMsg!.metadata).toBeNull();
+	});
 });
