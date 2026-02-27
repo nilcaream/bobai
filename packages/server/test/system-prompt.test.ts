@@ -11,8 +11,14 @@ describe("system prompt", () => {
 		expect(SYSTEM_PROMPT).toContain("Bob AI");
 	});
 
-	test("states limitations", () => {
-		// Should mention it cannot access files (yet)
-		expect(SYSTEM_PROMPT.toLowerCase()).toContain("cannot");
+	test("mentions available tools", () => {
+		expect(SYSTEM_PROMPT).toContain("read_file");
+		expect(SYSTEM_PROMPT).toContain("list_directory");
+	});
+
+	test("does not claim inability to read files", () => {
+		expect(SYSTEM_PROMPT).not.toContain("cannot read");
+		expect(SYSTEM_PROMPT).not.toContain("cannot modify");
+		expect(SYSTEM_PROMPT).not.toContain("no access to the project");
 	});
 });
