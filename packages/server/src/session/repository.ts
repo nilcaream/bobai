@@ -10,14 +10,23 @@ export interface Session {
 export interface StoredMessage {
 	id: string;
 	sessionId: string;
-	role: "system" | "user" | "assistant";
+	role: "system" | "user" | "assistant" | "tool";
 	content: string;
 	createdAt: string;
 	sortOrder: number;
+	metadata: Record<string, unknown> | null;
 }
 
 type SessionRow = { id: string; title: string | null; created_at: string; updated_at: string };
-type MessageRow = { id: string; session_id: string; role: string; content: string; created_at: string; sort_order: number };
+type MessageRow = {
+	id: string;
+	session_id: string;
+	role: string;
+	content: string;
+	created_at: string;
+	sort_order: number;
+	metadata: string | null;
+};
 
 export function createSession(db: Database, systemPrompt: string): Session {
 	const id = crypto.randomUUID();
@@ -38,15 +47,22 @@ export function createSession(db: Database, systemPrompt: string): Session {
 	return { id, title: null, createdAt: now, updatedAt: now };
 }
 
-export function appendMessage(db: Database, sessionId: string, role: "user" | "assistant", content: string): StoredMessage {
+export function appendMessage(
+	db: Database,
+	sessionId: string,
+	role: "user" | "assistant" | "tool",
+	content: string,
+	metadata?: Record<string, unknown>,
+): StoredMessage {
 	const id = crypto.randomUUID();
 	const now = new Date().toISOString();
+	const metadataJson = metadata ? JSON.stringify(metadata) : null;
 
 	db.transaction(() => {
 		db.prepare(
-			`INSERT INTO messages (id, session_id, role, content, created_at, sort_order)
-			 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM messages WHERE session_id = ?))`,
-		).run(id, sessionId, role, content, now, sessionId);
+			`INSERT INTO messages (id, session_id, role, content, created_at, sort_order, metadata)
+			 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM messages WHERE session_id = ?), ?)`,
+		).run(id, sessionId, role, content, now, sessionId, metadataJson);
 
 		db.prepare("UPDATE sessions SET updated_at = ? WHERE id = ?").run(now, sessionId);
 	})();
@@ -54,23 +70,24 @@ export function appendMessage(db: Database, sessionId: string, role: "user" | "a
 	// Read back the sort_order that was assigned
 	const row = db.prepare("SELECT sort_order FROM messages WHERE id = ?").get(id) as { sort_order: number };
 
-	return { id, sessionId, role, content, createdAt: now, sortOrder: row.sort_order };
+	return { id, sessionId, role, content, createdAt: now, sortOrder: row.sort_order, metadata: metadata ?? null };
 }
 
 export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 	const rows = db
 		.prepare(
-			"SELECT id, session_id, role, content, created_at, sort_order FROM messages WHERE session_id = ? ORDER BY sort_order",
+			"SELECT id, session_id, role, content, created_at, sort_order, metadata FROM messages WHERE session_id = ? ORDER BY sort_order",
 		)
 		.all(sessionId) as MessageRow[];
 
 	return rows.map((r) => ({
 		id: r.id,
 		sessionId: r.session_id,
-		role: r.role as "system" | "user" | "assistant",
+		role: r.role as "system" | "user" | "assistant" | "tool",
 		content: r.content,
 		createdAt: r.created_at,
 		sortOrder: r.sort_order,
+		metadata: r.metadata ? (JSON.parse(r.metadata) as Record<string, unknown>) : null,
 	}));
 }
 
