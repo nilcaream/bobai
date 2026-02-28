@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import { send } from "./protocol";
-import type { AssistantMessage, Message, Provider, ToolMessage } from "./provider/provider";
+import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
 import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
 import { SYSTEM_PROMPT } from "./system-prompt";
@@ -65,7 +65,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const tools = createToolRegistry([readFileTool, listDirectoryTool, writeFileTool, editFileTool, grepSearchTool, bashTool]);
 
 		// Run the agent loop
-		const newMessages = await runAgentLoop({
+		await runAgentLoop({
 			provider,
 			model,
 			messages,
@@ -80,27 +80,38 @@ export async function handlePrompt(req: PromptRequest) {
 					send(ws, { type: "tool_result", id: event.id, name: event.name, output: event.output, isError: event.isError });
 				}
 			},
+			onMessage(msg) {
+				if (!currentSessionId) return;
+				if (msg.role === "assistant") {
+					const metadata = msg.tool_calls ? { tool_calls: msg.tool_calls } : undefined;
+					appendMessage(db, currentSessionId, "assistant", msg.content ?? "", metadata);
+				} else if (msg.role === "tool") {
+					appendMessage(db, currentSessionId, "tool", msg.content, { tool_call_id: msg.tool_call_id });
+				}
+			},
 		});
-
-		// Persist all new messages
-		for (const msg of newMessages) {
-			if (msg.role === "assistant") {
-				const am = msg as AssistantMessage;
-				const metadata = am.tool_calls ? { tool_calls: am.tool_calls } : undefined;
-				appendMessage(db, currentSessionId, "assistant", am.content ?? "", metadata);
-			} else if (msg.role === "tool") {
-				const tm = msg as ToolMessage;
-				appendMessage(db, currentSessionId, "tool", tm.content, { tool_call_id: tm.tool_call_id });
-			}
-		}
 
 		send(ws, { type: "done", sessionId: currentSessionId, model });
 	} catch (err) {
+		// Persist error as assistant message so agent can resume with context
+		if (currentSessionId) {
+			const errorText =
+				err instanceof ProviderError
+					? `[Error: Provider error (${err.status}): ${err.body}]`
+					: `[Error: ${(err as Error).message}]`;
+			appendMessage(db, currentSessionId, "assistant", errorText);
+		}
+
 		if (err instanceof ProviderError) {
 			send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
 		} else {
 			console.error("Unexpected error in handlePrompt:", err);
 			send(ws, { type: "error", message: "Unexpected error during generation" });
+		}
+
+		// Send done so UI gets sessionId for resume
+		if (currentSessionId) {
+			send(ws, { type: "done", sessionId: currentSessionId, model });
 		}
 	}
 }

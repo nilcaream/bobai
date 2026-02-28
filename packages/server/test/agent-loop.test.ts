@@ -70,6 +70,7 @@ describe("runAgentLoop", () => {
 			onEvent(event) {
 				events.push(event);
 			},
+			onMessage() {},
 		});
 
 		// Should return the assistant message
@@ -98,6 +99,7 @@ describe("runAgentLoop", () => {
 			onEvent(event) {
 				events.push(event);
 			},
+			onMessage() {},
 		});
 
 		// Should return: assistant (tool_calls) + tool result + assistant (text)
@@ -147,6 +149,7 @@ describe("runAgentLoop", () => {
 			onEvent(event) {
 				events.push(event);
 			},
+			onMessage() {},
 		});
 
 		// Tool result should contain error
@@ -197,6 +200,7 @@ describe("runAgentLoop", () => {
 			tools: registry,
 			projectRoot: "/tmp",
 			onEvent() {},
+			onMessage() {},
 		});
 
 		const toolMsg = messages.find((m) => m.role === "tool");
@@ -232,6 +236,7 @@ describe("runAgentLoop", () => {
 			projectRoot: "/tmp",
 			maxIterations: 3, // Use a small number for testing
 			onEvent() {},
+			onMessage() {},
 		});
 
 		// Should have stopped and the last message should indicate the limit
@@ -288,6 +293,7 @@ describe("runAgentLoop", () => {
 			onEvent(event) {
 				events.push(event);
 			},
+			onMessage() {},
 		});
 
 		// Should have: assistant(read) + tool(read result) + assistant(edit) + tool(edit result) + assistant(text)
@@ -309,5 +315,33 @@ describe("runAgentLoop", () => {
 		expect(toolCallEvents).toHaveLength(2);
 
 		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("calls onMessage for each completed message", async () => {
+		const registry = createToolRegistry([echoTool()]);
+		const collected: Message[] = [];
+
+		const messages = await runAgentLoop({
+			provider: toolThenTextProvider("call_1", "echo", '{"text":"hello"}', ["Done"]),
+			model: "test",
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "use echo" },
+			],
+			tools: registry,
+			projectRoot: "/tmp",
+			onEvent() {},
+			onMessage(msg) {
+				collected.push(msg);
+			},
+		});
+
+		// onMessage should have been called for each message in order
+		expect(collected).toHaveLength(3);
+		expect(collected[0].role).toBe("assistant"); // tool_calls
+		expect(collected[1].role).toBe("tool"); // tool result
+		expect(collected[2].role).toBe("assistant"); // final text
+		// Should match return value
+		expect(collected).toEqual(messages);
 	});
 });
