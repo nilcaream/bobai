@@ -74,7 +74,10 @@ export function useWebSocket() {
 				if (msg.name === "bash" && typeof msg.arguments.command === "string") {
 					content = `$ ${msg.arguments.command}`;
 				} else if (msg.name === "read_file" && typeof msg.arguments.path === "string") {
-					content = `▸ Reading ${msg.arguments.path}`;
+					const from = typeof msg.arguments.from === "number" ? msg.arguments.from : undefined;
+					const to = typeof msg.arguments.to === "number" ? msg.arguments.to : undefined;
+					const range = from || to ? ` (lines ${from ?? 1}-${to ?? "end"})` : "";
+					content = `▸ Reading ${msg.arguments.path}${range}`;
 				} else if (msg.name === "edit_file" && typeof msg.arguments.path === "string") {
 					content = `▸ Editing ${msg.arguments.path}`;
 					if (typeof msg.arguments.old_string === "string") oldString = msg.arguments.old_string;
