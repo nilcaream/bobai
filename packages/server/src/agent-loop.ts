@@ -16,6 +16,7 @@ export interface AgentLoopOptions {
 	projectRoot: string;
 	maxIterations?: number;
 	onEvent: (event: AgentEvent) => void;
+	onMessage: (msg: Message) => void;
 }
 
 interface AccumulatedToolCall {
@@ -25,7 +26,7 @@ interface AccumulatedToolCall {
 }
 
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
-	const { provider, model, tools, projectRoot, onEvent } = options;
+	const { provider, model, tools, projectRoot, onEvent, onMessage } = options;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
 	// Working copy of messages — starts with what was passed in
@@ -68,6 +69,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			const assistantMsg: AssistantMessage = { role: "assistant", content: textContent };
 			conversation.push(assistantMsg);
 			newMessages.push(assistantMsg);
+			onMessage(assistantMsg);
 			return newMessages;
 		}
 
@@ -88,6 +90,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 		};
 		conversation.push(assistantMsg);
 		newMessages.push(assistantMsg);
+		onMessage(assistantMsg);
 
 		// Execute each tool call sequentially
 		for (const tc of toolCallContents) {
@@ -123,6 +126,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			const toolMsg: ToolMessage = { role: "tool", content: output, tool_call_id: tc.id };
 			conversation.push(toolMsg);
 			newMessages.push(toolMsg);
+			onMessage(toolMsg);
 		}
 
 		// Loop continues — provider will be called again with updated conversation
@@ -135,5 +139,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	};
 	conversation.push(warningMsg);
 	newMessages.push(warningMsg);
+	onMessage(warningMsg);
 	return newMessages;
 }
