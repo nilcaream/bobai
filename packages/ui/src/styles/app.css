@@ -14,7 +14,8 @@ body,
 	background: var(--bg-primary);
 	color: var(--text-primary);
 	font-family: var(--font-family);
-	font-size: var(--font-size-base);
+	font-size: var(--font-size);
+	line-height: var(--line-height);
 }
 
 /* Three-zone flex layout */
@@ -28,10 +29,9 @@ body,
 .status-bar {
 	display: flex;
 	align-items: center;
-	gap: var(--spacing-sm);
-	padding: var(--spacing-xs) var(--spacing-md);
+	gap: 1em;
+	padding: 1em;
 	background: var(--bg-status-bar);
-	font-size: var(--font-size-status);
 	color: var(--text-status);
 	flex-shrink: 0;
 }
@@ -66,7 +66,7 @@ body,
 
 .message {
 	width: 100%;
-	padding: var(--spacing-md);
+	padding: 1em;
 	white-space: pre-wrap;
 	word-wrap: break-word;
 }
@@ -79,47 +79,123 @@ body,
 .message--assistant {
 	background: var(--bg-assistant-message);
 	color: var(--text-assistant);
+	white-space: normal;
 }
 
 .message--status {
-	font-size: var(--font-size-status);
-	color: var(--text-muted);
-	padding: var(--spacing-xs) var(--spacing-md);
+	color: var(--text-status);
+	padding: 0 1em 1em;
+}
+
+.message--status-user {
+	background: var(--bg-user-message);
+}
+
+.message--status-assistant {
 	background: var(--bg-assistant-message);
 }
 
-/* Prompt — bottom zone */
+/* Markdown rendering — terminal grid: margins are 0 or 1em */
+.md p {
+	margin: 0 0 1em;
+}
+
+.md p:last-child {
+	margin-bottom: 0;
+}
+
+.md strong {
+	font-weight: 700;
+	color: var(--md-bold);
+}
+
+.md code {
+	color: var(--md-code);
+}
+
+.md pre {
+	margin: 1em 0;
+	padding: 1em;
+	background: var(--bg-user-message);
+	overflow-x: auto;
+}
+
+.md pre code {
+	color: var(--md-code);
+}
+
+.md ul,
+.md ol {
+	margin: 1em 0;
+	padding-left: 2em;
+}
+
+.md li::marker {
+	color: var(--md-list-marker);
+}
+
+.md li {
+	margin: 0;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+	color: var(--text-user);
+	font-size: inherit;
+	margin: 1em 0 0;
+}
+
+.md h1:first-child,
+.md h2:first-child,
+.md h3:first-child {
+	margin-top: 0;
+}
+
+.md a {
+	color: var(--md-bold);
+	text-decoration: underline;
+}
+
+.md blockquote {
+	border-left: 2px solid var(--text-muted);
+	padding-left: 1em;
+	color: var(--text-muted);
+	margin: 1em 0;
+}
+
+.md hr {
+	border: none;
+	border-top: 1px solid var(--text-muted);
+	margin: 1em 0;
+}
+
+/* Prompt — bottom zone, visually identical to message--user */
 .prompt {
 	flex-shrink: 0;
-	margin: var(--spacing-md);
-	padding: var(--spacing-md);
-	background: var(--bg-input);
+	background: var(--bg-user-message);
+	padding: 1em;
 }
 
 .prompt-input {
 	width: 100%;
-	background: var(--bg-input);
-	color: var(--text-primary);
+	background: var(--bg-user-message);
+	color: var(--text-user);
 	font-family: var(--font-family);
-	font-size: var(--font-size-base);
+	font-size: var(--font-size);
+	line-height: var(--line-height);
 	border: none;
 	outline: none;
-	padding: var(--spacing-sm) var(--spacing-md);
 	resize: none;
-	overflow-y: auto;
+	overflow: hidden;
 	max-height: 40vh;
-	line-height: 1.5;
 }
 
 .prompt-input::placeholder {
 	color: var(--text-muted);
-}
-
-.prompt-hint {
-	font-size: var(--font-size-status);
-	color: var(--text-muted);
-	margin-top: var(--spacing-xs);
-	padding-left: var(--spacing-md);
 }
 
 /* New Chat button */
@@ -128,8 +204,8 @@ body,
 	border: 1px solid var(--text-muted);
 	color: var(--text-muted);
 	font-family: var(--font-family);
-	font-size: var(--font-size-small);
-	padding: var(--spacing-xs) var(--spacing-sm);
+	font-size: var(--font-size);
+	padding: 0;
 	cursor: pointer;
 }
 

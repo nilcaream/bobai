@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Markdown } from "./Markdown";
 import { useWebSocket } from "./useWebSocket";
 
 export function App() {
@@ -69,13 +70,18 @@ export function App() {
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
 				{messages.map((msg, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: static list
-					<div key={i} className={`message message--${msg.role}`}>
-						{msg.text}
+					<div key={i}>
+						<div className={`message message--${msg.role}`}>
+							{msg.role === "assistant" ? <Markdown>{msg.text}</Markdown> : msg.text}
+						</div>
+						{msg.timestamp && (
+							<div className={`message--status message--status-${msg.role}`}>
+								{msg.timestamp}
+								{msg.role === "assistant" && model ? ` | ${model}` : ""}
+							</div>
+						)}
 					</div>
 				))}
-				{messages.length > 0 && messages[messages.length - 1].role === "assistant" && !isStreaming && (
-					<div className="message--status">model: {model}</div>
-				)}
 			</div>
 
 			<div className="prompt">
@@ -93,7 +99,6 @@ export function App() {
 					placeholder="Type a message..."
 					disabled={!connected || isStreaming}
 				/>
-				<div className="prompt-hint">Shift+Enter to send</div>
 			</div>
 		</main>
 	);

@@ -7,7 +7,13 @@ type ServerMessage =
 	| { type: "done"; sessionId: string; model: string }
 	| { type: "error"; message: string };
 
-export type Message = { role: "user" | "assistant"; text: string };
+export type Message = { role: "user" | "assistant"; text: string; timestamp?: string };
+
+function formatTimestamp(): string {
+	const d = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 export function useWebSocket() {
 	const ws = useRef<WebSocket | null>(null);
@@ -61,6 +67,13 @@ export function useWebSocket() {
 			if (msg.type === "done") {
 				sessionId.current = msg.sessionId;
 				setModel(msg.model);
+				setMessages((prev) => {
+					const last = prev.at(-1);
+					if (last?.role === "assistant") {
+						return [...prev.slice(0, -1), { ...last, timestamp: formatTimestamp() }];
+					}
+					return prev;
+				});
 				setIsStreaming(false);
 			}
 
@@ -79,7 +92,7 @@ export function useWebSocket() {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 			if (isStreaming) return;
 			setIsStreaming(true);
-			setMessages((prev) => [...prev, { role: "user", text }]);
+			setMessages((prev) => [...prev, { role: "user", text, timestamp: formatTimestamp() }]);
 			const payload: { type: string; text: string; sessionId?: string } = { type: "prompt", text };
 			if (sessionId.current) {
 				payload.sessionId = sessionId.current;
