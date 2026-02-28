@@ -9,7 +9,7 @@ type ServerMessage =
 
 export type MessagePart =
 	| { type: "text"; content: string }
-	| { type: "tool_call"; name: string; content: string }
+	| { type: "tool_call"; name: string; content: string; oldString?: string; newString?: string }
 	| { type: "tool_result"; name: string; content: string; isError: boolean };
 
 export type Message =
@@ -69,14 +69,20 @@ export function useWebSocket() {
 
 			if (msg.type === "tool_call") {
 				let content: string;
+				let oldString: string | undefined;
+				let newString: string | undefined;
 				if (msg.name === "bash" && typeof msg.arguments.command === "string") {
 					content = `$ ${msg.arguments.command}`;
 				} else if (msg.name === "read_file" && typeof msg.arguments.path === "string") {
 					content = `▸ Reading ${msg.arguments.path}`;
+				} else if (msg.name === "edit_file" && typeof msg.arguments.path === "string") {
+					content = `▸ Editing ${msg.arguments.path}`;
+					if (typeof msg.arguments.old_string === "string") oldString = msg.arguments.old_string;
+					if (typeof msg.arguments.new_string === "string") newString = msg.arguments.new_string;
 				} else {
 					content = `[${msg.name}]`;
 				}
-				setMessages((prev) => appendPart(prev, { type: "tool_call", name: msg.name, content }));
+				setMessages((prev) => appendPart(prev, { type: "tool_call", name: msg.name, content, oldString, newString }));
 			}
 
 			if (msg.type === "tool_result") {

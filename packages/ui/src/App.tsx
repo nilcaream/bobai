@@ -3,9 +3,35 @@ import { Markdown } from "./Markdown";
 import type { MessagePart } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
+function UnifiedDiff({ oldString, newString }: { oldString: string; newString: string }) {
+	const oldLines = oldString.split("\n");
+	const newLines = newString.split("\n");
+	return (
+		<div className="diff">
+			{oldLines.map((line, i) => (
+				<div key={`old-${i}-${line}`} className="diff-removed">
+					{`- ${line}`}
+				</div>
+			))}
+			{newLines.map((line, i) => (
+				<div key={`new-${i}-${line}`} className="diff-added">
+					{`+ ${line}`}
+				</div>
+			))}
+		</div>
+	);
+}
+
 type Panel =
 	| { type: "text"; content: string }
-	| { type: "tool"; name: string; calls: string[]; result?: string; isError?: boolean };
+	| {
+			type: "tool";
+			name: string;
+			calls: string[];
+			result?: string;
+			isError?: boolean;
+			diff?: { oldString: string; newString: string };
+	  };
 
 function groupParts(parts: MessagePart[]): Panel[] {
 	const panels: Panel[] = [];
@@ -17,13 +43,17 @@ function groupParts(parts: MessagePart[]): Panel[] {
 			if (last?.type === "tool" && last.name === "read_file" && part.name === "read_file") {
 				last.calls.push(part.content);
 			} else {
-				panels.push({ type: "tool", name: part.name, calls: [part.content] });
+				const diff =
+					part.oldString != null && part.newString != null
+						? { oldString: part.oldString, newString: part.newString }
+						: undefined;
+				panels.push({ type: "tool", name: part.name, calls: [part.content], diff });
 			}
 		} else if (part.type === "tool_result") {
 			const last = panels.at(-1);
 			if (last?.type === "tool") {
-				if (part.name === "read_file") {
-					// Suppress file content display for read_file
+				if (part.name === "read_file" || part.name === "edit_file") {
+					// Suppress output display for read_file and edit_file
 				} else {
 					last.result = part.content;
 					last.isError = part.isError;
@@ -132,6 +162,7 @@ export function App() {
 									{call}
 								</div>
 							))}
+							{panel.diff && <UnifiedDiff oldString={panel.diff.oldString} newString={panel.diff.newString} />}
 							{panel.result != null && (
 								<div className={panel.isError ? "tool-result tool-result--error" : "tool-result"}>{panel.result}</div>
 							)}

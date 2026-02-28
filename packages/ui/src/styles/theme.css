@@ -15,6 +15,10 @@
 	--accent-tool-success: #4caf50;
 	--accent-tool-error: #ff6b6b;
 
+	/* Diff colors */
+	--diff-removed: #ff6b6b;
+	--diff-added: #4caf50;
+
 	/* Markdown colors */
 	--md-bold: #b0c4ff;
 	--md-code: #a8e6a3;
