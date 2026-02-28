@@ -78,6 +78,11 @@ export function useWebSocket() {
 					const to = typeof msg.arguments.to === "number" ? msg.arguments.to : undefined;
 					const range = from || to ? ` (lines ${from ?? 1}-${to ?? "end"})` : "";
 					content = `▸ Reading ${msg.arguments.path}${range}`;
+				} else if (msg.name === "write_file" && typeof msg.arguments.path === "string") {
+					content = `▸ Writing ${msg.arguments.path}`;
+				} else if (msg.name === "list_directory") {
+					const dir = typeof msg.arguments.path === "string" ? msg.arguments.path : ".";
+					content = `▸ Listing ${dir}`;
 				} else if (msg.name === "edit_file" && typeof msg.arguments.path === "string") {
 					content = `▸ Editing ${msg.arguments.path}`;
 					if (typeof msg.arguments.old_string === "string") oldString = msg.arguments.old_string;

@@ -30,8 +30,11 @@ type Panel =
 			calls: string[];
 			result?: string;
 			isError?: boolean;
+			quiet?: boolean;
 			diff?: { oldString: string; newString: string };
 	  };
+
+const quietTools = new Set(["read_file", "write_file", "list_directory"]);
 
 function groupParts(parts: MessagePart[]): Panel[] {
 	const panels: Panel[] = [];
@@ -40,20 +43,21 @@ function groupParts(parts: MessagePart[]): Panel[] {
 			panels.push({ type: "text", content: part.content });
 		} else if (part.type === "tool_call") {
 			const last = panels.at(-1);
-			if (last?.type === "tool" && last.name === "read_file" && part.name === "read_file") {
+			const isQuiet = quietTools.has(part.name);
+			if (last?.type === "tool" && last.quiet && isQuiet) {
 				last.calls.push(part.content);
 			} else {
 				const diff =
 					part.oldString != null && part.newString != null
 						? { oldString: part.oldString, newString: part.newString }
 						: undefined;
-				panels.push({ type: "tool", name: part.name, calls: [part.content], diff });
+				panels.push({ type: "tool", name: part.name, calls: [part.content], diff, quiet: isQuiet });
 			}
 		} else if (part.type === "tool_result") {
 			const last = panels.at(-1);
 			if (last?.type === "tool") {
-				if (part.name === "read_file" || part.name === "edit_file") {
-					// Suppress output display for read_file and edit_file
+				if (quietTools.has(part.name) || part.name === "edit_file") {
+					// Suppress output display for quiet tools and edit_file
 				} else {
 					last.result = part.content;
 					last.isError = part.isError;
