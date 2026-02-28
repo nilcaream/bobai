@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { AgentEvent } from "../src/agent-loop";
 import { runAgentLoop } from "../src/agent-loop";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
+import { editFileTool } from "../src/tool/edit-file";
+import { readFileTool } from "../src/tool/read-file";
 import type { Tool, ToolContext, ToolResult } from "../src/tool/tool";
 import { createToolRegistry } from "../src/tool/tool";
 
@@ -234,5 +239,75 @@ describe("runAgentLoop", () => {
 		const lastMsg = messages[messages.length - 1];
 		expect(lastMsg.role).toBe("assistant");
 		expect((lastMsg as { content: string }).content).toContain("iteration");
+	});
+
+	test("handles multi-tool workflow (read then edit)", async () => {
+		let callCount = 0;
+		const multiProvider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					// First: LLM calls read_file
+					yield { type: "tool_call_start", index: 0, id: "call_read", name: "read_file" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"path":"test.txt"}' };
+					yield { type: "finish", reason: "tool_calls" };
+				} else if (callCount === 2) {
+					// Second: LLM calls edit_file
+					yield { type: "tool_call_start", index: 0, id: "call_edit", name: "edit_file" };
+					yield {
+						type: "tool_call_delta",
+						index: 0,
+						arguments: '{"path":"test.txt","old_string":"hello","new_string":"goodbye"}',
+					};
+					yield { type: "finish", reason: "tool_calls" };
+				} else {
+					// Third: LLM responds with text
+					yield { type: "text", text: "I updated the file." };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+
+		// Create a temp dir with a test file
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-integration-"));
+		fs.writeFileSync(path.join(tmpDir, "test.txt"), "hello world");
+
+		const events: AgentEvent[] = [];
+		const registry = createToolRegistry([readFileTool, editFileTool]);
+
+		const messages = await runAgentLoop({
+			provider: multiProvider,
+			model: "test",
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "update the file" },
+			],
+			tools: registry,
+			projectRoot: tmpDir,
+			onEvent(event) {
+				events.push(event);
+			},
+		});
+
+		// Should have: assistant(read) + tool(read result) + assistant(edit) + tool(edit result) + assistant(text)
+		expect(messages).toHaveLength(5);
+		expect(messages[0].role).toBe("assistant"); // read_file call
+		expect(messages[1].role).toBe("tool"); // read result
+		expect((messages[1] as { content: string }).content).toContain("hello world");
+		expect(messages[2].role).toBe("assistant"); // edit_file call
+		expect(messages[3].role).toBe("tool"); // edit result
+		expect(messages[4].role).toBe("assistant"); // final text
+		expect((messages[4] as { content: string }).content).toBe("I updated the file.");
+
+		// Verify the file was actually modified
+		const content = fs.readFileSync(path.join(tmpDir, "test.txt"), "utf-8");
+		expect(content).toBe("goodbye world");
+
+		// Verify tool_call events were emitted
+		const toolCallEvents = events.filter((e) => e.type === "tool_call");
+		expect(toolCallEvents).toHaveLength(2);
+
+		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 });
