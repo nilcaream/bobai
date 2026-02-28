@@ -14,6 +14,10 @@ describe("system prompt", () => {
 	test("mentions available tools", () => {
 		expect(SYSTEM_PROMPT).toContain("read_file");
 		expect(SYSTEM_PROMPT).toContain("list_directory");
+		expect(SYSTEM_PROMPT).toContain("write_file");
+		expect(SYSTEM_PROMPT).toContain("edit_file");
+		expect(SYSTEM_PROMPT).toContain("grep_search");
+		expect(SYSTEM_PROMPT).toContain("bash");
 	});
 
 	test("does not claim inability to read files", () => {
