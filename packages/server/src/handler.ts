@@ -6,9 +6,13 @@ import type { AssistantMessage, Message, Provider, ToolMessage } from "./provide
 import { ProviderError } from "./provider/provider";
 import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
 import { SYSTEM_PROMPT } from "./system-prompt";
+import { bashTool } from "./tool/bash";
+import { editFileTool } from "./tool/edit-file";
+import { grepSearchTool } from "./tool/grep-search";
 import { listDirectoryTool } from "./tool/list-directory";
 import { readFileTool } from "./tool/read-file";
 import { createToolRegistry } from "./tool/tool";
+import { writeFileTool } from "./tool/write-file";
 
 export interface PromptRequest {
 	ws: { send: (msg: string) => void };
@@ -58,7 +62,7 @@ export async function handlePrompt(req: PromptRequest) {
 			return { role: m.role as "system" | "user" | "assistant", content: m.content };
 		});
 
-		const tools = createToolRegistry([readFileTool, listDirectoryTool]);
+		const tools = createToolRegistry([readFileTool, listDirectoryTool, writeFileTool, editFileTool, grepSearchTool, bashTool]);
 
 		// Run the agent loop
 		const newMessages = await runAgentLoop({
@@ -92,8 +96,11 @@ export async function handlePrompt(req: PromptRequest) {
 
 		send(ws, { type: "done", sessionId: currentSessionId });
 	} catch (err) {
-		const message =
-			err instanceof ProviderError ? `Provider error (${err.status}): ${err.body}` : "Unexpected error during generation";
-		send(ws, { type: "error", message });
+		if (err instanceof ProviderError) {
+			send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
+		} else {
+			console.error("Unexpected error in handlePrompt:", err);
+			send(ws, { type: "error", message: "Unexpected error during generation" });
+		}
 	}
 }
