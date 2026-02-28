@@ -3,7 +3,9 @@ import { Markdown } from "./Markdown";
 import type { MessagePart } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
-type Panel = { type: "text"; content: string } | { type: "tool"; call: string; result?: string; isError?: boolean };
+type Panel =
+	| { type: "text"; content: string }
+	| { type: "tool"; name: string; calls: string[]; result?: string; isError?: boolean };
 
 function groupParts(parts: MessagePart[]): Panel[] {
 	const panels: Panel[] = [];
@@ -11,12 +13,21 @@ function groupParts(parts: MessagePart[]): Panel[] {
 		if (part.type === "text") {
 			panels.push({ type: "text", content: part.content });
 		} else if (part.type === "tool_call") {
-			panels.push({ type: "tool", call: part.content });
+			const last = panels.at(-1);
+			if (last?.type === "tool" && last.name === "read_file" && part.name === "read_file") {
+				last.calls.push(part.content);
+			} else {
+				panels.push({ type: "tool", name: part.name, calls: [part.content] });
+			}
 		} else if (part.type === "tool_result") {
 			const last = panels.at(-1);
 			if (last?.type === "tool") {
-				last.result = part.content;
-				last.isError = part.isError;
+				if (part.name === "read_file") {
+					// Suppress file content display for read_file
+				} else {
+					last.result = part.content;
+					last.isError = part.isError;
+				}
 			}
 		}
 	}
@@ -116,7 +127,11 @@ export function App() {
 				} else {
 					elements.push(
 						<div key={key++} className="panel panel--tool">
-							<div className="tool-call">{panel.call}</div>
+							{panel.calls.map((call) => (
+								<div key={call} className="tool-call">
+									{call}
+								</div>
+							))}
 							{panel.result != null && (
 								<div className={panel.isError ? "tool-result tool-result--error" : "tool-result"}>{panel.result}</div>
 							)}

@@ -71,6 +71,8 @@ export function useWebSocket() {
 				let content: string;
 				if (msg.name === "bash" && typeof msg.arguments.command === "string") {
 					content = `$ ${msg.arguments.command}`;
+				} else if (msg.name === "read_file" && typeof msg.arguments.path === "string") {
+					content = `▸ Reading ${msg.arguments.path}`;
 				} else {
 					content = `[${msg.name}]`;
 				}
