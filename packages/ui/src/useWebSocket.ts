@@ -4,7 +4,7 @@ type ServerMessage =
 	| { type: "token"; text: string }
 	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
 	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean }
-	| { type: "done"; sessionId: string }
+	| { type: "done"; sessionId: string; model: string }
 	| { type: "error"; message: string };
 
 export type Message = { role: "user" | "assistant"; text: string };
@@ -14,6 +14,7 @@ export function useWebSocket() {
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [connected, setConnected] = useState(false);
 	const [isStreaming, setIsStreaming] = useState(false);
+	const [model, setModel] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
 
 	useEffect(() => {
@@ -59,6 +60,7 @@ export function useWebSocket() {
 
 			if (msg.type === "done") {
 				sessionId.current = msg.sessionId;
+				setModel(msg.model);
 				setIsStreaming(false);
 			}
 
@@ -90,7 +92,8 @@ export function useWebSocket() {
 	const newChat = useCallback(() => {
 		sessionId.current = null;
 		setMessages([]);
+		setModel(null);
 	}, []);
 
-	return { messages, connected, isStreaming, sendPrompt, newChat };
+	return { messages, connected, isStreaming, sendPrompt, newChat, model };
 }
