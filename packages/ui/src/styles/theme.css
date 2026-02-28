@@ -1,0 +1,34 @@
+:root {
+	/* Background colors */
+	--bg-primary: #000000;
+	--bg-user-message: #1a1a1a;
+	--bg-assistant-message: #0a0a0a;
+	--bg-input: #1a1a1a;
+	--bg-status-bar: #0a0a0a;
+
+	/* Text colors */
+	--text-primary: #e0e0e0;
+	--text-user: #ffffff;
+	--text-assistant: #e0e0e0;
+	--text-thinking: #888888;
+	--text-muted: #666666;
+	--text-status: #888888;
+	--text-error: #ff6b6b;
+
+	/* Accent colors */
+	--accent-tool-call: #888888;
+	--accent-tool-success: #4caf50;
+	--accent-tool-error: #ff6b6b;
+
+	/* Typography */
+	--font-family: "Space Mono", monospace;
+	--font-size-base: 14px;
+	--font-size-small: 12px;
+	--font-size-status: 11px;
+
+	/* Spacing */
+	--spacing-xs: 0.25rem;
+	--spacing-sm: 0.5rem;
+	--spacing-md: 1rem;
+	--spacing-lg: 1.5rem;
+}
