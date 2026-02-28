@@ -28,15 +28,26 @@ export function App() {
 	const [input, setInput] = useState("");
 	const messagesRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const autoScroll = useRef(true);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: messages triggers scroll even though ref is used
+	// Mouse wheel disables autoscroll
 	useEffect(() => {
 		const el = messagesRef.current;
 		if (!el) return;
-		const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-		if (distanceFromBottom < 150) {
-			el.scrollTop = el.scrollHeight;
-		}
+		const onWheel = () => {
+			autoScroll.current = false;
+		};
+		el.addEventListener("wheel", onWheel);
+		return () => el.removeEventListener("wheel", onWheel);
+	}, []);
+
+	// Scroll to bottom on new content when autoscroll is active
+	// biome-ignore lint/correctness/useExhaustiveDependencies: messages triggers scroll even though ref is used
+	useEffect(() => {
+		if (!autoScroll.current) return;
+		const el = messagesRef.current;
+		if (!el) return;
+		el.scrollTop = el.scrollHeight;
 	}, [messages]);
 
 	useEffect(() => {
@@ -55,6 +66,7 @@ export function App() {
 	function submit() {
 		const text = input.trim();
 		if (!text || !connected || isStreaming) return;
+		autoScroll.current = true;
 		sendPrompt(text);
 		setInput("");
 		if (textareaRef.current) {
