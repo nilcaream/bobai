@@ -61,5 +61,11 @@ export async function initProject(projectRoot: string): Promise<Project> {
 	`);
 	db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, sort_order)`);
 
+	// Migrate: add metadata column if missing (added in Phase 6)
+	const columns = db.prepare("PRAGMA table_info(messages)").all() as { name: string }[];
+	if (!columns.some((c) => c.name === "metadata")) {
+		db.exec("ALTER TABLE messages ADD COLUMN metadata TEXT");
+	}
+
 	return { id, port: config.port, provider: config.provider, model: config.model, dir: bobaiDir, db };
 }
