@@ -101,6 +101,21 @@ body,
 	color: var(--text-status);
 }
 
+/* Unified diff */
+.diff {
+	margin-top: 1em;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.diff-removed {
+	color: var(--diff-removed);
+}
+
+.diff-added {
+	color: var(--diff-added);
+}
+
 /* Tool result output */
 .tool-result {
 	margin-top: 1em;
