@@ -1,74 +1,100 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWebSocket } from "./useWebSocket";
 
 export function App() {
-	const { messages, connected, isStreaming, sendPrompt, newChat } = useWebSocket();
+	const { messages, connected, isStreaming, sendPrompt, newChat, model } = useWebSocket();
 	const [input, setInput] = useState("");
-	const bottomRef = useRef<HTMLDivElement>(null);
+	const messagesRef = useRef<HTMLDivElement>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+	// Auto-scroll when messages change, but only if user is near the bottom
+	// biome-ignore lint/correctness/useExhaustiveDependencies: messages triggers scroll even though ref is used
+	useEffect(() => {
+		const el = messagesRef.current;
+		if (!el) return;
+		const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+		if (distanceFromBottom < 150) {
+			el.scrollTop = el.scrollHeight;
+		}
+	}, [messages]);
+
+	// Re-focus textarea when streaming ends
+	useEffect(() => {
+		if (!isStreaming && connected) {
+			textareaRef.current?.focus();
+		}
+	}, [isStreaming, connected]);
+
+	// Auto-grow textarea
+	const adjustHeight = useCallback(() => {
+		const ta = textareaRef.current;
+		if (!ta) return;
+		ta.style.height = "auto";
+		ta.style.height = `${ta.scrollHeight}px`;
+	}, []);
 
 	function submit() {
 		const text = input.trim();
-		if (!text || !connected) return;
+		if (!text || !connected || isStreaming) return;
 		sendPrompt(text);
 		setInput("");
-		setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+		if (textareaRef.current) {
+			textareaRef.current.style.height = "auto";
+		}
+	}
+
+	function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+		if (e.key === "Enter" && e.shiftKey) {
+			e.preventDefault();
+			submit();
+		}
 	}
 
 	return (
-		<main style={{ display: "flex", flexDirection: "column", height: "100vh", padding: "1rem" }}>
-			<header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-				<div>
-					<h1 style={{ margin: 0 }}>Bob AI</h1>
-					<small>{connected ? "connected" : "connecting..."}</small>
-				</div>
-				<button type="button" onClick={newChat} disabled={!connected || messages.length === 0 || isStreaming}>
+		<main className="app">
+			<div className="status-bar">
+				<span className="status-bar-label">Bob AI</span>
+				<span className={`status-dot${connected ? "" : " disconnected"}`} />
+				<span>{connected ? "connected" : "connecting..."}</span>
+				<button
+					type="button"
+					className="new-chat-btn"
+					onClick={newChat}
+					disabled={!connected || messages.length === 0 || isStreaming}
+				>
 					New Chat
 				</button>
-			</header>
+			</div>
 
-			<section
-				style={{
-					flex: 1,
-					overflowY: "auto",
-					padding: "1rem 0",
-					display: "flex",
-					flexDirection: "column",
-					gap: "0.5rem",
-				}}
-			>
+			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
 				{messages.map((msg, i) => (
-					<div
-						// biome-ignore lint/suspicious/noArrayIndexKey: static list
-						key={i}
-						style={{
-							alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
-							background: msg.role === "user" ? "#0070f3" : "#222",
-							color: "#fff",
-							borderRadius: "8px",
-							padding: "0.5rem 0.75rem",
-							maxWidth: "70%",
-							whiteSpace: "pre-wrap",
-						}}
-					>
+					// biome-ignore lint/suspicious/noArrayIndexKey: static list
+					<div key={i} className={`message message--${msg.role}`}>
 						{msg.text}
 					</div>
 				))}
-				<div ref={bottomRef} />
-			</section>
+				{messages.length > 0 && messages[messages.length - 1].role === "assistant" && !isStreaming && (
+					<div className="message--status">model: {model}</div>
+				)}
+			</div>
 
-			<footer style={{ display: "flex", gap: "0.5rem" }}>
-				<input
-					style={{ flex: 1, padding: "0.5rem", fontSize: "1rem" }}
+			<div className="prompt">
+				<textarea
+					ref={textareaRef}
+					className="prompt-input"
+					rows={1}
+					spellCheck={false}
 					value={input}
-					onChange={(e) => setInput(e.target.value)}
-					onKeyDown={(e) => e.key === "Enter" && submit()}
+					onChange={(e) => {
+						setInput(e.target.value);
+						adjustHeight();
+					}}
+					onKeyDown={handleKeyDown}
 					placeholder="Type a message..."
 					disabled={!connected || isStreaming}
 				/>
-				<button type="button" onClick={submit} disabled={!connected || isStreaming}>
-					Send
-				</button>
-			</footer>
+				<div className="prompt-hint">Shift+Enter to send</div>
+			</div>
 		</main>
 	);
 }

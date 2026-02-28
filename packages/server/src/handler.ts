@@ -94,7 +94,7 @@ export async function handlePrompt(req: PromptRequest) {
 			}
 		}
 
-		send(ws, { type: "done", sessionId: currentSessionId });
+		send(ws, { type: "done", sessionId: currentSessionId, model });
 	} catch (err) {
 		if (err instanceof ProviderError) {
 			send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
