@@ -1,9 +1,7 @@
 :root {
 	/* Background colors */
 	--bg-primary: #000000;
-	--bg-user-message: #1a1a1a;
-	--bg-assistant-message: #0a0a0a;
-	--bg-status-bar: #0a0a0a;
+	--bg-panel: #1a1a1a;
 
 	/* Text colors */
 	--text-primary: #e0e0e0;
@@ -23,7 +21,7 @@
 	--md-list-marker: #d4a846;
 
 	/* Typography — one size everywhere */
-	--font-family: "Space Mono", monospace;
-	--font-size: 14px;
+	--font-family: "Ubuntu Mono", monospace;
+	--font-size: 15px;
 	--line-height: 1.1;
 }

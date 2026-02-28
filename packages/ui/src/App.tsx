@@ -1,14 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
+import type { MessagePart } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
+type Panel = { type: "text"; content: string } | { type: "tool"; call: string; result?: string; isError?: boolean };
+
+function groupParts(parts: MessagePart[]): Panel[] {
+	const panels: Panel[] = [];
+	for (const part of parts) {
+		if (part.type === "text") {
+			panels.push({ type: "text", content: part.content });
+		} else if (part.type === "tool_call") {
+			panels.push({ type: "tool", call: part.content });
+		} else if (part.type === "tool_result") {
+			const last = panels.at(-1);
+			if (last?.type === "tool") {
+				last.result = part.content;
+				last.isError = part.isError;
+			}
+		}
+	}
+	return panels;
+}
+
 export function App() {
-	const { messages, connected, isStreaming, sendPrompt, newChat, model } = useWebSocket();
+	const { messages, connected, isStreaming, sendPrompt, model } = useWebSocket();
 	const [input, setInput] = useState("");
 	const messagesRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-	// Auto-scroll when messages change, but only if user is near the bottom
 	// biome-ignore lint/correctness/useExhaustiveDependencies: messages triggers scroll even though ref is used
 	useEffect(() => {
 		const el = messagesRef.current;
@@ -19,14 +39,12 @@ export function App() {
 		}
 	}, [messages]);
 
-	// Re-focus textarea when streaming ends
 	useEffect(() => {
 		if (!isStreaming && connected) {
 			textareaRef.current?.focus();
 		}
 	}, [isStreaming, connected]);
 
-	// Auto-grow textarea
 	const adjustHeight = useCallback(() => {
 		const ta = textareaRef.current;
 		if (!ta) return;
@@ -51,40 +69,73 @@ export function App() {
 		}
 	}
 
+	function renderPanels() {
+		const elements: React.ReactNode[] = [];
+		let key = 0;
+
+		for (const msg of messages) {
+			if (msg.role === "user") {
+				elements.push(
+					<div key={key++} className="panel panel--user">
+						{msg.text}
+						<div className="panel-status">{msg.timestamp}</div>
+					</div>,
+				);
+				continue;
+			}
+
+			const panels = groupParts(msg.parts);
+			for (let i = 0; i < panels.length; i++) {
+				const panel = panels[i];
+				const isLast = i === panels.length - 1;
+
+				if (panel.type === "text") {
+					elements.push(
+						<div key={key++} className="panel panel--assistant">
+							<Markdown>{panel.content}</Markdown>
+							{isLast && msg.timestamp && (
+								<div className="panel-status">
+									{msg.timestamp}
+									{model ? ` | ${model}` : ""}
+								</div>
+							)}
+						</div>,
+					);
+				} else {
+					elements.push(
+						<div key={key++} className="panel panel--tool">
+							<div className="tool-call">{panel.call}</div>
+							{panel.result != null && (
+								<div className={panel.isError ? "tool-result tool-result--error" : "tool-result"}>{panel.result}</div>
+							)}
+							{isLast && msg.timestamp && (
+								<div className="panel-status">
+									{msg.timestamp}
+									{model ? ` | ${model}` : ""}
+								</div>
+							)}
+						</div>,
+					);
+				}
+			}
+		}
+
+		return elements;
+	}
+
 	return (
 		<main className="app">
-			<div className="status-bar">
+			<div className="panel panel--status-bar">
 				<span className="status-bar-label">Bob AI</span>
 				<span className={`status-dot${connected ? "" : " disconnected"}`} />
 				<span>{connected ? "connected" : "connecting..."}</span>
-				<button
-					type="button"
-					className="new-chat-btn"
-					onClick={newChat}
-					disabled={!connected || messages.length === 0 || isStreaming}
-				>
-					New Chat
-				</button>
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
-				{messages.map((msg, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: static list
-					<div key={i}>
-						<div className={`message message--${msg.role}`}>
-							{msg.role === "assistant" ? <Markdown>{msg.text}</Markdown> : msg.text}
-						</div>
-						{msg.timestamp && (
-							<div className={`message--status message--status-${msg.role}`}>
-								{msg.timestamp}
-								{msg.role === "assistant" && model ? ` | ${model}` : ""}
-							</div>
-						)}
-					</div>
-				))}
+				{renderPanels()}
 			</div>
 
-			<div className="prompt">
+			<div className="panel panel--prompt">
 				<textarea
 					ref={textareaRef}
 					className="prompt-input"

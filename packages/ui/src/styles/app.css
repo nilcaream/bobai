@@ -25,21 +25,19 @@ body,
 	height: 100vh;
 }
 
-/* Status bar — top zone */
-.status-bar {
+/* Status bar — top zone, same structure as prompt panel */
+.panel--status-bar {
 	display: flex;
 	align-items: center;
 	gap: 1em;
-	padding: 1em;
-	background: var(--bg-status-bar);
 	color: var(--text-status);
 	flex-shrink: 0;
+	margin: 1em;
 }
 
 .status-bar-label {
 	font-weight: 700;
 	color: var(--text-primary);
-	margin-right: auto;
 }
 
 .status-dot {
@@ -60,39 +58,57 @@ body,
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
+	gap: 1em;
+	padding: 1em;
 	scrollbar-width: thin;
 	scrollbar-color: var(--text-muted) var(--bg-primary);
 }
 
-.message {
-	width: 100%;
+/* Panel — the universal building block */
+.panel {
 	padding: 1em;
+	background: var(--bg-panel);
 	white-space: pre-wrap;
 	word-wrap: break-word;
 }
 
-.message--user {
-	background: var(--bg-user-message);
+.panel--user {
 	color: var(--text-user);
 }
 
-.message--assistant {
-	background: var(--bg-assistant-message);
-	color: var(--text-assistant);
+.panel--assistant {
 	white-space: normal;
 }
 
-.message--status {
+.panel--tool {
+	color: var(--text-primary);
+}
+
+.panel--prompt {
+	flex-shrink: 0;
+	margin: 1em;
+}
+
+/* Panel status line — inside a panel, inherits background */
+.panel-status {
 	color: var(--text-status);
-	padding: 0 1em 1em;
+	margin-top: 1em;
 }
 
-.message--status-user {
-	background: var(--bg-user-message);
+/* Tool call line (e.g. "$ date") */
+.tool-call {
+	color: var(--text-status);
 }
 
-.message--status-assistant {
-	background: var(--bg-assistant-message);
+/* Tool result output */
+.tool-result {
+	margin-top: 1em;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.tool-result--error {
+	color: var(--text-error);
 }
 
 /* Markdown rendering — terminal grid: margins are 0 or 1em */
@@ -116,7 +132,7 @@ body,
 .md pre {
 	margin: 1em 0;
 	padding: 1em;
-	background: var(--bg-user-message);
+	background: var(--bg-primary);
 	overflow-x: auto;
 }
 
@@ -173,16 +189,10 @@ body,
 	margin: 1em 0;
 }
 
-/* Prompt — bottom zone, visually identical to message--user */
-.prompt {
-	flex-shrink: 0;
-	background: var(--bg-user-message);
-	padding: 1em;
-}
-
+/* Prompt textarea */
 .prompt-input {
 	width: 100%;
-	background: var(--bg-user-message);
+	background: var(--bg-panel);
 	color: var(--text-user);
 	font-family: var(--font-family);
 	font-size: var(--font-size);
@@ -196,32 +206,6 @@ body,
 
 .prompt-input::placeholder {
 	color: var(--text-muted);
-}
-
-/* New Chat button */
-.new-chat-btn {
-	background: transparent;
-	border: 1px solid var(--text-muted);
-	color: var(--text-muted);
-	font-family: var(--font-family);
-	font-size: var(--font-size);
-	padding: 0;
-	cursor: pointer;
-}
-
-.new-chat-btn:hover:not(:disabled) {
-	color: var(--text-primary);
-	border-color: var(--text-primary);
-}
-
-.new-chat-btn:focus-visible {
-	outline: 1px solid var(--text-primary);
-	outline-offset: 2px;
-}
-
-.new-chat-btn:disabled {
-	opacity: 0.3;
-	cursor: not-allowed;
 }
 
 /* Scrollbar styling */

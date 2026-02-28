@@ -7,12 +7,43 @@ type ServerMessage =
 	| { type: "done"; sessionId: string; model: string }
 	| { type: "error"; message: string };
 
-export type Message = { role: "user" | "assistant"; text: string; timestamp?: string };
+export type MessagePart =
+	| { type: "text"; content: string }
+	| { type: "tool_call"; name: string; content: string }
+	| { type: "tool_result"; name: string; content: string; isError: boolean };
+
+export type Message =
+	| { role: "user"; text: string; timestamp: string }
+	| { role: "assistant"; parts: MessagePart[]; timestamp?: string };
 
 function formatTimestamp(): string {
 	const d = new Date();
 	const pad = (n: number) => String(n).padStart(2, "0");
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** Append to the last assistant message's parts, or create a new assistant message. */
+function appendPart(prev: Message[], part: MessagePart): Message[] {
+	const last = prev.at(-1);
+	if (last?.role === "assistant") {
+		const updated: Message = { ...last, parts: [...last.parts, part] };
+		return [...prev.slice(0, -1), updated];
+	}
+	return [...prev, { role: "assistant", parts: [part] }];
+}
+
+/** Append text to the last text part of the last assistant message, or create one. */
+function appendText(prev: Message[], text: string): Message[] {
+	const last = prev.at(-1);
+	if (last?.role === "assistant" && last.parts.length > 0) {
+		const lastPart = last.parts.at(-1);
+		if (lastPart?.type === "text") {
+			const updatedParts = [...last.parts.slice(0, -1), { type: "text" as const, content: lastPart.content + text }];
+			return [...prev.slice(0, -1), { ...last, parts: updatedParts }];
+		}
+		return appendPart(prev, { type: "text", content: text });
+	}
+	return [...prev, { role: "assistant", parts: [{ type: "text", content: text }] }];
 }
 
 export function useWebSocket() {
@@ -33,35 +64,23 @@ export function useWebSocket() {
 			const msg = JSON.parse(event.data as string) as ServerMessage;
 
 			if (msg.type === "token") {
-				setMessages((prev) => {
-					const last = prev.at(-1);
-					if (last?.role === "assistant") {
-						return [...prev.slice(0, -1), { role: "assistant", text: last.text + msg.text }];
-					}
-					return [...prev, { role: "assistant", text: msg.text }];
-				});
+				setMessages((prev) => appendText(prev, msg.text));
 			}
 
 			if (msg.type === "tool_call") {
-				setMessages((prev) => {
-					const last = prev.at(-1);
-					const status = `\n[Calling ${msg.name}...]\n`;
-					if (last?.role === "assistant") {
-						return [...prev.slice(0, -1), { role: "assistant", text: last.text + status }];
-					}
-					return [...prev, { role: "assistant", text: status }];
-				});
+				let content: string;
+				if (msg.name === "bash" && typeof msg.arguments.command === "string") {
+					content = `$ ${msg.arguments.command}`;
+				} else {
+					content = `[${msg.name}]`;
+				}
+				setMessages((prev) => appendPart(prev, { type: "tool_call", name: msg.name, content }));
 			}
 
 			if (msg.type === "tool_result") {
-				setMessages((prev) => {
-					const last = prev.at(-1);
-					const status = msg.isError ? `[${msg.name} failed]\n` : `[${msg.name} done]\n`;
-					if (last?.role === "assistant") {
-						return [...prev.slice(0, -1), { role: "assistant", text: last.text + status }];
-					}
-					return [...prev, { role: "assistant", text: status }];
-				});
+				setMessages((prev) =>
+					appendPart(prev, { type: "tool_result", name: msg.name, content: msg.output, isError: msg.isError ?? false }),
+				);
 			}
 
 			if (msg.type === "done") {
@@ -78,7 +97,7 @@ export function useWebSocket() {
 			}
 
 			if (msg.type === "error") {
-				setMessages((prev) => [...prev, { role: "assistant", text: `Error: ${msg.message}` }]);
+				setMessages((prev) => appendPart(prev, { type: "text", content: `Error: ${msg.message}` }));
 				setIsStreaming(false);
 			}
 		};
