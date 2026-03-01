@@ -100,6 +100,30 @@ export function App() {
 		return () => el.removeEventListener("wheel", onWheel);
 	}, []);
 
+	// PAGE UP/DOWN scrolls the messages panel globally (works even during streaming)
+	useEffect(() => {
+		const el = messagesRef.current;
+		if (!el) return;
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key !== "PageUp" && e.key !== "PageDown") return;
+			e.preventDefault();
+			const style = getComputedStyle(el);
+			const lineHeight = parseFloat(style.fontSize) * parseFloat(style.lineHeight);
+			const distance = el.clientHeight - lineHeight * 2;
+			if (e.key === "PageUp") {
+				el.scrollTop -= distance;
+				autoScroll.current = false;
+			} else {
+				el.scrollTop += distance;
+				if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
+					autoScroll.current = true;
+				}
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, []);
+
 	// Scroll to bottom on new content when autoscroll is active
 	// biome-ignore lint/correctness/useExhaustiveDependencies: messages triggers scroll even though ref is used
 	useEffect(() => {
