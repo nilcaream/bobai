@@ -32,10 +32,10 @@ describe("editFileTool", () => {
 			{ path: "target.ts", old_string: "const y = 2;", new_string: "const y = 42;" },
 			ctx,
 		);
-		expect(result.isError).toBeUndefined();
+		expect(result.isError).toBeFalsy();
 		const content = fs.readFileSync(path.join(tmpDir, "target.ts"), "utf-8");
 		expect(content).toBe("const x = 1;\nconst y = 42;\nconst z = 3;\n");
-		expect(result.output).toContain("target.ts");
+		expect(result.llmOutput).toContain("target.ts");
 	});
 
 	test("returns error when old_string is not found", async () => {
@@ -45,26 +45,26 @@ describe("editFileTool", () => {
 			ctx,
 		);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("not found");
+		expect(result.llmOutput).toContain("not found");
 	});
 
 	test("returns error when old_string has multiple matches", async () => {
 		fs.writeFileSync(path.join(tmpDir, "multi.ts"), "foo\nbar\nfoo\n");
 		const result = await editFileTool.execute({ path: "multi.ts", old_string: "foo", new_string: "baz" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("multiple");
+		expect(result.llmOutput).toContain("multiple");
 	});
 
 	test("returns error for nonexistent file", async () => {
 		const result = await editFileTool.execute({ path: "nope.ts", old_string: "x", new_string: "y" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("not found");
+		expect(result.llmOutput).toContain("not found");
 	});
 
 	test("returns error for path traversal attempt", async () => {
 		const result = await editFileTool.execute({ path: "../../etc/passwd", old_string: "root", new_string: "hacked" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("outside");
+		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when required args are missing", async () => {
@@ -82,7 +82,7 @@ describe("editFileTool", () => {
 			{ path: "dollar.ts", old_string: 'const msg = "hello";', new_string: "const msg = `cost: $1 or $& or $$`;" },
 			ctx,
 		);
-		expect(result.isError).toBeUndefined();
+		expect(result.isError).toBeFalsy();
 		const content = fs.readFileSync(path.join(tmpDir, "dollar.ts"), "utf-8");
 		expect(content).toBe("const msg = `cost: $1 or $& or $$`;\n");
 	});
@@ -91,14 +91,14 @@ describe("editFileTool", () => {
 		fs.writeFileSync(path.join(tmpDir, "empty-match.ts"), "some content\n");
 		const result = await editFileTool.execute({ path: "empty-match.ts", old_string: "", new_string: "injected" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("non-empty");
+		expect(result.llmOutput).toContain("non-empty");
 	});
 
 	test("shows context around the edit in output", async () => {
 		fs.writeFileSync(path.join(tmpDir, "context.ts"), "line1\nline2\nline3\nline4\nline5\n");
 		const result = await editFileTool.execute({ path: "context.ts", old_string: "line3", new_string: "LINE_THREE" }, ctx);
-		expect(result.isError).toBeUndefined();
+		expect(result.isError).toBeFalsy();
 		// Output should show surrounding lines for context
-		expect(result.output).toContain("LINE_THREE");
+		expect(result.llmOutput).toContain("LINE_THREE");
 	});
 });
