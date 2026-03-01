@@ -81,6 +81,10 @@ function groupParts(parts: MessagePart[]): Panel[] {
 export function App() {
 	const { messages, connected, isStreaming, sendPrompt, model } = useWebSocket();
 	const [input, setInput] = useState("");
+	const [historyIndex, setHistoryIndex] = useState(-1);
+	const historyEntries = useRef<string[]>([]);
+	const savedDraft = useRef("");
+	const fetchGen = useRef(0);
 	const messagesRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const autoScroll = useRef(true);
@@ -118,18 +122,91 @@ export function App() {
 		ta.style.height = `${ta.scrollHeight}px`;
 	}, []);
 
+	// Adjust textarea height when navigating history
+	// biome-ignore lint/correctness/useExhaustiveDependencies: adjustHeight is stable via useCallback
+	useEffect(() => {
+		requestAnimationFrame(adjustHeight);
+	}, [historyIndex]);
+
 	function submit() {
 		const text = input.trim();
 		if (!text || !connected || isStreaming) return;
 		autoScroll.current = true;
 		sendPrompt(text);
 		setInput("");
+		setHistoryIndex(-1);
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto";
 		}
 	}
 
+	function exitHistory(restoreValue: string) {
+		setHistoryIndex(-1);
+		setInput(restoreValue);
+	}
+
 	function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+		const inHistory = historyIndex >= 0;
+
+		// History mode: intercept UP/DOWN/ESCAPE/ENTER before anything else
+		if (inHistory) {
+			if (e.key === "ArrowUp") {
+				e.preventDefault();
+				const nextIndex = Math.min(historyIndex + 1, historyEntries.current.length - 1);
+				if (nextIndex !== historyIndex) {
+					setHistoryIndex(nextIndex);
+					setInput(historyEntries.current[nextIndex]);
+				}
+				return;
+			}
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				const nextIndex = historyIndex - 1;
+				if (nextIndex < 0) {
+					exitHistory(savedDraft.current);
+				} else {
+					setHistoryIndex(nextIndex);
+					setInput(historyEntries.current[nextIndex]);
+				}
+				return;
+			}
+			if (e.key === "Escape") {
+				e.preventDefault();
+				exitHistory(savedDraft.current);
+				return;
+			}
+			if (e.key === "Enter") {
+				e.preventDefault();
+				// Copy history entry into input as editable text
+				exitHistory(historyEntries.current[historyIndex]);
+				return;
+			}
+			return;
+		}
+
+		// Not in history mode: UP at position 0 enters history mode
+		if (e.key === "ArrowUp" && e.currentTarget.selectionStart === 0) {
+			e.preventDefault();
+			savedDraft.current = input;
+			const gen = ++fetchGen.current;
+			fetch("/bobai/prompts/recent?limit=10")
+				.then((res) => {
+					if (!res.ok) return;
+					return res.json();
+				})
+				.then((entries: string[] | undefined) => {
+					if (!entries || entries.length === 0) return;
+					if (gen !== fetchGen.current) return;
+					historyEntries.current = entries;
+					setHistoryIndex(0);
+					setInput(entries[0]);
+				})
+				.catch(() => {
+					// Silently ignore fetch errors — user stays in normal mode
+				});
+			return;
+		}
+
 		if (e.key === "Enter" && e.shiftKey) {
 			e.preventDefault();
 			submit();
@@ -210,10 +287,11 @@ export function App() {
 			<div className="panel panel--prompt">
 				<textarea
 					ref={textareaRef}
-					className="prompt-input"
+					className={historyIndex >= 0 ? "prompt-input prompt-input--history" : "prompt-input"}
 					rows={1}
 					spellCheck={false}
 					value={input}
+					readOnly={historyIndex >= 0}
 					onChange={(e) => {
 						setInput(e.target.value);
 						adjustHeight();

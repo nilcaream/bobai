@@ -219,6 +219,10 @@ body,
 	max-height: 40vh;
 }
 
+.prompt-input--history {
+	color: var(--text-muted);
+}
+
 .prompt-input::placeholder {
 	color: var(--text-muted);
 }

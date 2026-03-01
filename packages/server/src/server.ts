@@ -4,6 +4,7 @@ import { handlePrompt } from "./handler";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import type { Provider } from "./provider/provider";
+import { getRecentPrompts } from "./session/repository";
 
 export interface ServerOptions {
 	port: number;
@@ -30,6 +31,16 @@ export function createServer(options: ServerOptions) {
 
 			if (url.pathname === "/bobai/health") {
 				return Response.json({ status: "ok" });
+			}
+
+			if (url.pathname === "/bobai/prompts/recent") {
+				if (!options.db) {
+					return new Response("Database not available", { status: 503 });
+				}
+				const limitParam = Number(url.searchParams.get("limit") ?? 10);
+				const limit = Math.min(Math.max(1, Number.isFinite(limitParam) ? limitParam : 10), 50);
+				const prompts = getRecentPrompts(options.db, limit);
+				return Response.json(prompts);
 			}
 
 			if (staticDir && url.pathname.startsWith("/bobai")) {
