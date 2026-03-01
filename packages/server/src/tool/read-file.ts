@@ -34,15 +34,35 @@ export const readFileTool: Tool = {
 		},
 	},
 
+	mergeable: true,
+
+	formatCall(args: Record<string, unknown>): string {
+		const filePath = typeof args.path === "string" ? args.path : "?";
+		const from = typeof args.from === "number" ? args.from : undefined;
+		const to = typeof args.to === "number" ? args.to : undefined;
+		const range = from || to ? ` (lines ${from ?? 1}-${to ?? "end"})` : "";
+		return `▸ Reading ${filePath}${range}`;
+	},
+
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
 		const filePath = args.path;
 		if (typeof filePath !== "string" || filePath.length === 0) {
-			return { output: "Error: 'path' argument is required and must be a non-empty string", isError: true };
+			return {
+				llmOutput: "Error: 'path' argument is required and must be a non-empty string",
+				uiOutput: "Error: 'path' argument is required and must be a non-empty string",
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, filePath);
 		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
-			return { output: `Error: path '${filePath}' resolves outside the project root`, isError: true };
+			return {
+				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
+				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		let rawContent: string;
@@ -51,12 +71,27 @@ export const readFileTool: Tool = {
 		} catch (err) {
 			const code = (err as NodeJS.ErrnoException).code;
 			if (code === "ENOENT") {
-				return { output: `Error: file not found: ${filePath}`, isError: true };
+				return {
+					llmOutput: `Error: file not found: ${filePath}`,
+					uiOutput: `▸ Reading ${filePath} — file not found`,
+					isError: true,
+					mergeable: true,
+				};
 			}
 			if (code === "EISDIR") {
-				return { output: `Error: '${filePath}' is a directory, not a file. Use list_directory instead.`, isError: true };
+				return {
+					llmOutput: `Error: '${filePath}' is a directory, not a file. Use list_directory instead.`,
+					uiOutput: `▸ Reading ${filePath} — is a directory`,
+					isError: true,
+					mergeable: true,
+				};
 			}
-			return { output: `Error reading file: ${(err as Error).message}`, isError: true };
+			return {
+				llmOutput: `Error reading file: ${(err as Error).message}`,
+				uiOutput: `Error reading file: ${(err as Error).message}`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		const allLines = rawContent.split("\n");
@@ -67,7 +102,12 @@ export const readFileTool: Tool = {
 		const to = typeof args.to === "number" && args.to >= from ? Math.floor(args.to) : defaultTo;
 
 		if (from > totalLines) {
-			return { output: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`, isError: true };
+			return {
+				llmOutput: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`,
+				uiOutput: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		const startIdx = from - 1;
@@ -109,6 +149,11 @@ export const readFileTool: Tool = {
 			footer = `(End of file - total ${totalLines} lines)`;
 		}
 
-		return { output: `${outputLines.join("\n")}\n\n${footer}`, metadata: { linesRead: outputLines.length, totalLines } };
+		return {
+			llmOutput: `${outputLines.join("\n")}\n\n${footer}`,
+			uiOutput: `▸ Reading ${filePath} (${outputLines.length} lines)`,
+			isError: false,
+			mergeable: true,
+		};
 	},
 };
