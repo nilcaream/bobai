@@ -26,27 +26,59 @@ export const writeFileTool: Tool = {
 		},
 	},
 
+	mergeable: true,
+
+	formatCall(args: Record<string, unknown>): string {
+		const filePath = typeof args.path === "string" ? args.path : "?";
+		return `▸ Writing ${filePath}`;
+	},
+
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
 		const filePath = args.path;
 		if (typeof filePath !== "string" || filePath.length === 0) {
-			return { output: "Error: 'path' argument is required and must be a non-empty string", isError: true };
+			return {
+				llmOutput: "Error: 'path' argument is required and must be a non-empty string",
+				uiOutput: "Error: 'path' argument is required and must be a non-empty string",
+				isError: true,
+				mergeable: true,
+			};
 		}
 		const content = args.content;
 		if (typeof content !== "string") {
-			return { output: "Error: 'content' argument is required and must be a string", isError: true };
+			return {
+				llmOutput: "Error: 'content' argument is required and must be a string",
+				uiOutput: "Error: 'content' argument is required and must be a string",
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, filePath);
 		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
-			return { output: `Error: path '${filePath}' resolves outside the project root`, isError: true };
+			return {
+				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
+				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		try {
 			fs.mkdirSync(path.dirname(resolved), { recursive: true });
 			fs.writeFileSync(resolved, content, "utf-8");
-			return { output: `Wrote ${content.length} bytes to ${filePath}`, metadata: { bytesWritten: content.length } };
+			return {
+				llmOutput: `Wrote ${content.length} bytes to ${filePath}`,
+				uiOutput: `▸ Writing ${filePath} (${content.length} bytes)`,
+				isError: false,
+				mergeable: true,
+			};
 		} catch (err) {
-			return { output: `Error writing file: ${(err as Error).message}`, isError: true };
+			return {
+				llmOutput: `Error writing file: ${(err as Error).message}`,
+				uiOutput: `Error writing file: ${(err as Error).message}`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 	},
 };
