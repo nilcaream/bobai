@@ -100,6 +100,21 @@ export function getSession(db: Database, sessionId: string): Session | null {
 	return { id: row.id, title: row.title, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
+export function getRecentPrompts(db: Database, limit: number): string[] {
+	const rows = db
+		.prepare(
+			`SELECT content, MAX(created_at) AS latest, MAX(rowid) AS max_rowid
+			 FROM messages
+			 WHERE role = 'user'
+			 GROUP BY content
+			 ORDER BY latest DESC, max_rowid DESC
+			 LIMIT ?`,
+		)
+		.all(limit) as { content: string; latest: string; max_rowid: number }[];
+
+	return rows.map((r) => r.content);
+}
+
 export function listSessions(db: Database): Session[] {
 	const rows = db
 		.prepare("SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC, rowid DESC")
