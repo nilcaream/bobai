@@ -31,16 +31,34 @@ export const grepSearchTool: Tool = {
 		},
 	},
 
+	mergeable: true,
+
+	formatCall(args: Record<string, unknown>): string {
+		const pattern = typeof args.pattern === "string" ? args.pattern : "?";
+		const dir = typeof args.path === "string" ? args.path : ".";
+		return `▸ Searching ${pattern} in ${dir}`;
+	},
+
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
 		const pattern = args.pattern;
 		if (typeof pattern !== "string" || pattern.length === 0) {
-			return { output: "Error: 'pattern' argument is required and must be a non-empty string", isError: true };
+			return {
+				llmOutput: "Error: 'pattern' argument is required and must be a non-empty string",
+				uiOutput: "Error: 'pattern' argument is required and must be a non-empty string",
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		const searchPath = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
 		const resolved = path.resolve(ctx.projectRoot, searchPath);
 		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
-			return { output: `Error: path '${searchPath}' resolves outside the project root`, isError: true };
+			return {
+				llmOutput: `Error: path '${searchPath}' resolves outside the project root`,
+				uiOutput: `Error: path '${searchPath}' resolves outside the project root`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		const grepArgs = ["-rn", "--color=never"];
@@ -61,22 +79,44 @@ export const grepSearchTool: Tool = {
 			const exitCode = await proc.exited;
 
 			if (exitCode === 1 && stdout.length === 0) {
-				return { output: "No matches found.", metadata: { matchCount: 0 } };
+				return {
+					llmOutput: "No matches found.",
+					uiOutput: `▸ Searching ${pattern} in ${searchPath} (no results)`,
+					isError: false,
+					mergeable: true,
+				};
 			}
 			if (exitCode > 1) {
-				return { output: `Error running grep: ${stderr}`, isError: true };
+				return {
+					llmOutput: `Error running grep: ${stderr}`,
+					uiOutput: `Error running grep: ${stderr}`,
+					isError: true,
+					mergeable: true,
+				};
 			}
 
 			const lines = stdout.trimEnd().split("\n");
 			if (lines.length > MAX_RESULTS) {
 				return {
-					output: `${lines.slice(0, MAX_RESULTS).join("\n")}\n\n... truncated (${lines.length} total matches, showing first ${MAX_RESULTS})`,
-					metadata: { matchCount: lines.length },
+					llmOutput: `${lines.slice(0, MAX_RESULTS).join("\n")}\n\n... truncated (${lines.length} total matches, showing first ${MAX_RESULTS})`,
+					uiOutput: `▸ Searching ${pattern} in ${searchPath} (${lines.length} results)`,
+					isError: false,
+					mergeable: true,
 				};
 			}
-			return { output: stdout.trimEnd(), metadata: { matchCount: lines.length } };
+			return {
+				llmOutput: stdout.trimEnd(),
+				uiOutput: `▸ Searching ${pattern} in ${searchPath} (${lines.length} results)`,
+				isError: false,
+				mergeable: true,
+			};
 		} catch (err) {
-			return { output: `Error running search: ${(err as Error).message}`, isError: true };
+			return {
+				llmOutput: `Error running search: ${(err as Error).message}`,
+				uiOutput: `Error running search: ${(err as Error).message}`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 	},
 };
