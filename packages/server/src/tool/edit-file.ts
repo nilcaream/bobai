@@ -8,7 +8,7 @@ export const editFileTool: Tool = {
 		function: {
 			name: "edit_file",
 			description:
-				"Edit a file by replacing a specific string with new content. The old_string must match exactly one location in the file. Include enough surrounding context in old_string to make it unique.",
+				"Edit a file by replacing a specific string with new content. The old_string must match exactly one location in the file. Include enough surrounding context in old_string to make it unique. Use actual newline characters in string values, never escaped sequences like \\n.",
 			parameters: {
 				type: "object",
 				properties: {
