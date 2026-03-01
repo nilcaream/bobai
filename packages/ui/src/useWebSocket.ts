@@ -2,15 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type ServerMessage =
 	| { type: "token"; text: string }
-	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
-	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean; metadata?: Record<string, unknown> }
+	| { type: "tool_call"; id: string; output: string }
+	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
 	| { type: "done"; sessionId: string; model: string }
 	| { type: "error"; message: string };
 
 export type MessagePart =
 	| { type: "text"; content: string }
-	| { type: "tool_call"; id: string; name: string; content: string; oldString?: string; newString?: string }
-	| { type: "tool_result"; id: string; name: string; content: string; isError: boolean; metadata?: Record<string, unknown> };
+	| { type: "tool_call"; id: string; content: string }
+	| { type: "tool_result"; id: string; content: string | null; mergeable: boolean };
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }
@@ -68,46 +68,12 @@ export function useWebSocket() {
 			}
 
 			if (msg.type === "tool_call") {
-				let content: string;
-				let oldString: string | undefined;
-				let newString: string | undefined;
-				if (msg.name === "bash" && typeof msg.arguments.command === "string") {
-					content = `$ ${msg.arguments.command}`;
-				} else if (msg.name === "read_file" && typeof msg.arguments.path === "string") {
-					const from = typeof msg.arguments.from === "number" ? msg.arguments.from : undefined;
-					const to = typeof msg.arguments.to === "number" ? msg.arguments.to : undefined;
-					const range = from || to ? ` (lines ${from ?? 1}-${to ?? "end"})` : "";
-					content = `▸ Reading ${msg.arguments.path}${range}`;
-				} else if (msg.name === "write_file" && typeof msg.arguments.path === "string") {
-					content = `▸ Writing ${msg.arguments.path}`;
-				} else if (msg.name === "list_directory") {
-					const dir = typeof msg.arguments.path === "string" ? msg.arguments.path : ".";
-					content = `▸ Listing ${dir}`;
-				} else if (msg.name === "grep_search" && typeof msg.arguments.pattern === "string") {
-					const dir = typeof msg.arguments.path === "string" ? msg.arguments.path : ".";
-					content = `▸ Searching ${msg.arguments.pattern} in ${dir}`;
-				} else if (msg.name === "edit_file" && typeof msg.arguments.path === "string") {
-					content = `▸ Editing ${msg.arguments.path}`;
-					if (typeof msg.arguments.old_string === "string") oldString = msg.arguments.old_string;
-					if (typeof msg.arguments.new_string === "string") newString = msg.arguments.new_string;
-				} else {
-					content = `[${msg.name}]`;
-				}
-				setMessages((prev) =>
-					appendPart(prev, { type: "tool_call", id: msg.id, name: msg.name, content, oldString, newString }),
-				);
+				setMessages((prev) => appendPart(prev, { type: "tool_call", id: msg.id, content: msg.output }));
 			}
 
 			if (msg.type === "tool_result") {
 				setMessages((prev) =>
-					appendPart(prev, {
-						type: "tool_result",
-						id: msg.id,
-						name: msg.name,
-						content: msg.output,
-						isError: msg.isError ?? false,
-						metadata: msg.metadata,
-					}),
+					appendPart(prev, { type: "tool_result", id: msg.id, content: msg.output, mergeable: msg.mergeable }),
 				);
 			}
 
