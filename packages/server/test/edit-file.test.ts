@@ -32,7 +32,7 @@ describe("editFileTool", () => {
 			{ path: "target.ts", old_string: "const y = 2;", new_string: "const y = 42;" },
 			ctx,
 		);
-		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).not.toContain("Error");
 		const content = fs.readFileSync(path.join(tmpDir, "target.ts"), "utf-8");
 		expect(content).toBe("const x = 1;\nconst y = 42;\nconst z = 3;\n");
 		expect(result.llmOutput).toContain("target.ts");
@@ -44,36 +44,32 @@ describe("editFileTool", () => {
 			{ path: "no-match.ts", old_string: "does not exist", new_string: "replacement" },
 			ctx,
 		);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("not found");
 	});
 
 	test("returns error when old_string has multiple matches", async () => {
 		fs.writeFileSync(path.join(tmpDir, "multi.ts"), "foo\nbar\nfoo\n");
 		const result = await editFileTool.execute({ path: "multi.ts", old_string: "foo", new_string: "baz" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("multiple");
 	});
 
 	test("returns error for nonexistent file", async () => {
 		const result = await editFileTool.execute({ path: "nope.ts", old_string: "x", new_string: "y" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("not found");
 	});
 
 	test("returns error for path traversal attempt", async () => {
 		const result = await editFileTool.execute({ path: "../../etc/passwd", old_string: "root", new_string: "hacked" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when required args are missing", async () => {
 		const r1 = await editFileTool.execute({ old_string: "x", new_string: "y" }, ctx);
-		expect(r1.isError).toBe(true);
+		expect(r1.llmOutput).toContain("path");
 		const r2 = await editFileTool.execute({ path: "f.ts", new_string: "y" }, ctx);
-		expect(r2.isError).toBe(true);
+		expect(r2.llmOutput).toContain("old_string");
 		const r3 = await editFileTool.execute({ path: "f.ts", old_string: "x" }, ctx);
-		expect(r3.isError).toBe(true);
+		expect(r3.llmOutput).toContain("new_string");
 	});
 
 	test("preserves dollar-sign replacement patterns literally in new_string", async () => {
@@ -82,7 +78,7 @@ describe("editFileTool", () => {
 			{ path: "dollar.ts", old_string: 'const msg = "hello";', new_string: "const msg = `cost: $1 or $& or $$`;" },
 			ctx,
 		);
-		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).not.toContain("Error");
 		const content = fs.readFileSync(path.join(tmpDir, "dollar.ts"), "utf-8");
 		expect(content).toBe("const msg = `cost: $1 or $& or $$`;\n");
 	});
@@ -90,14 +86,13 @@ describe("editFileTool", () => {
 	test("returns error when old_string is empty", async () => {
 		fs.writeFileSync(path.join(tmpDir, "empty-match.ts"), "some content\n");
 		const result = await editFileTool.execute({ path: "empty-match.ts", old_string: "", new_string: "injected" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("non-empty");
 	});
 
 	test("shows context around the edit in output", async () => {
 		fs.writeFileSync(path.join(tmpDir, "context.ts"), "line1\nline2\nline3\nline4\nline5\n");
 		const result = await editFileTool.execute({ path: "context.ts", old_string: "line3", new_string: "LINE_THREE" }, ctx);
-		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).not.toContain("Error");
 		// Output should show surrounding lines for context
 		expect(result.llmOutput).toContain("LINE_THREE");
 	});

@@ -27,7 +27,6 @@ describe("writeFileTool", () => {
 
 	test("creates a new file", async () => {
 		const result = await writeFileTool.execute({ path: "new-file.txt", content: "hello world" }, ctx);
-		expect(result.isError).toBeFalsy();
 		expect(result.llmOutput).toContain("new-file.txt");
 		const written = fs.readFileSync(path.join(tmpDir, "new-file.txt"), "utf-8");
 		expect(written).toBe("hello world");
@@ -35,14 +34,12 @@ describe("writeFileTool", () => {
 
 	test("overwrites an existing file", async () => {
 		const result = await writeFileTool.execute({ path: "existing.txt", content: "new content" }, ctx);
-		expect(result.isError).toBeFalsy();
 		const written = fs.readFileSync(path.join(tmpDir, "existing.txt"), "utf-8");
 		expect(written).toBe("new content");
 	});
 
 	test("creates parent directories automatically", async () => {
 		const result = await writeFileTool.execute({ path: "deep/nested/dir/file.txt", content: "deep" }, ctx);
-		expect(result.isError).toBeFalsy();
 		const written = fs.readFileSync(path.join(tmpDir, "deep/nested/dir/file.txt"), "utf-8");
 		expect(written).toBe("deep");
 	});
@@ -57,17 +54,16 @@ describe("writeFileTool", () => {
 
 	test("returns error for path traversal attempt", async () => {
 		const result = await writeFileTool.execute({ path: "../../etc/evil", content: "bad" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when path is missing", async () => {
 		const result = await writeFileTool.execute({ content: "hello" }, ctx);
-		expect(result.isError).toBe(true);
+		expect(result.llmOutput).toContain("path");
 	});
 
 	test("returns error when content is missing", async () => {
 		const result = await writeFileTool.execute({ path: "foo.txt" }, ctx);
-		expect(result.isError).toBe(true);
+		expect(result.llmOutput).toContain("content");
 	});
 });

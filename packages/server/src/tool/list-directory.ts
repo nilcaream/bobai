@@ -37,7 +37,7 @@ export const listDirectoryTool: Tool = {
 			return {
 				llmOutput: `Error: path '${dirPath}' resolves outside the project root`,
 				uiOutput: `Error: path '${dirPath}' resolves outside the project root`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -48,7 +48,7 @@ export const listDirectoryTool: Tool = {
 			return {
 				llmOutput: lines.join("\n"),
 				uiOutput: `▸ Listing ${dirPath} (${entries.length} entries)`,
-				isError: false,
+
 				mergeable: true,
 			};
 		} catch (err) {
@@ -57,7 +57,7 @@ export const listDirectoryTool: Tool = {
 				return {
 					llmOutput: `Error: directory not found: ${dirPath}`,
 					uiOutput: `▸ Listing ${dirPath} — not found`,
-					isError: true,
+
 					mergeable: true,
 				};
 			}
@@ -65,14 +65,14 @@ export const listDirectoryTool: Tool = {
 				return {
 					llmOutput: `Error: '${dirPath}' is not a directory`,
 					uiOutput: `▸ Listing ${dirPath} — not a directory`,
-					isError: true,
+
 					mergeable: true,
 				};
 			}
 			return {
 				llmOutput: `Error listing directory: ${(err as Error).message}`,
 				uiOutput: `Error listing directory: ${(err as Error).message}`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}

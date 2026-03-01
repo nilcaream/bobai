@@ -52,7 +52,7 @@ export const editFileTool: Tool = {
 			return {
 				llmOutput: "Error: 'path' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'path' argument is required and must be a non-empty string",
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -61,7 +61,7 @@ export const editFileTool: Tool = {
 			return {
 				llmOutput: "Error: 'old_string' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'old_string' argument is required and must be a non-empty string",
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -70,7 +70,7 @@ export const editFileTool: Tool = {
 			return {
 				llmOutput: "Error: 'new_string' argument is required and must be a string",
 				uiOutput: "Error: 'new_string' argument is required and must be a string",
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -80,7 +80,7 @@ export const editFileTool: Tool = {
 			return {
 				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
 				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -94,14 +94,14 @@ export const editFileTool: Tool = {
 				return {
 					llmOutput: `Error: file not found: ${filePath}`,
 					uiOutput: `▸ Editing ${filePath} — file not found`,
-					isError: true,
+
 					mergeable: false,
 				};
 			}
 			return {
 				llmOutput: `Error reading file: ${(err as Error).message}`,
 				uiOutput: `Error reading file: ${(err as Error).message}`,
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -118,7 +118,7 @@ export const editFileTool: Tool = {
 			return {
 				llmOutput: `Error: old_string not found in ${filePath}`,
 				uiOutput: `▸ Editing ${filePath} — old_string not found`,
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -126,7 +126,7 @@ export const editFileTool: Tool = {
 			return {
 				llmOutput: `Error: old_string found multiple times (${count}) in ${filePath}. Include more surrounding context to make the match unique.`,
 				uiOutput: `▸ Editing ${filePath} — multiple matches`,
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -151,6 +151,6 @@ export const editFileTool: Tool = {
 		const ctxEnd = Math.min(lines.length, editLine + newString.split("\n").length + 3);
 		const contextLines = lines.slice(ctxStart, ctxEnd).map((l, i) => `${ctxStart + i + 1}: ${l}`);
 
-		return { llmOutput: `Edited ${filePath}:\n${contextLines.join("\n")}`, uiOutput: null, isError: false, mergeable: false };
+		return { llmOutput: `Edited ${filePath}:\n${contextLines.join("\n")}`, uiOutput: null, mergeable: false };
 	},
 };

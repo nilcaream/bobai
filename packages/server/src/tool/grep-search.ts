@@ -45,7 +45,7 @@ export const grepSearchTool: Tool = {
 			return {
 				llmOutput: "Error: 'pattern' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'pattern' argument is required and must be a non-empty string",
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -56,7 +56,7 @@ export const grepSearchTool: Tool = {
 			return {
 				llmOutput: `Error: path '${searchPath}' resolves outside the project root`,
 				uiOutput: `Error: path '${searchPath}' resolves outside the project root`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -82,7 +82,7 @@ export const grepSearchTool: Tool = {
 				return {
 					llmOutput: "No matches found.",
 					uiOutput: `▸ Searching ${pattern} in ${searchPath} (no results)`,
-					isError: false,
+
 					mergeable: true,
 				};
 			}
@@ -90,7 +90,7 @@ export const grepSearchTool: Tool = {
 				return {
 					llmOutput: `Error running grep: ${stderr}`,
 					uiOutput: `Error running grep: ${stderr}`,
-					isError: true,
+
 					mergeable: true,
 				};
 			}
@@ -100,21 +100,21 @@ export const grepSearchTool: Tool = {
 				return {
 					llmOutput: `${lines.slice(0, MAX_RESULTS).join("\n")}\n\n... truncated (${lines.length} total matches, showing first ${MAX_RESULTS})`,
 					uiOutput: `▸ Searching ${pattern} in ${searchPath} (${lines.length} results)`,
-					isError: false,
+
 					mergeable: true,
 				};
 			}
 			return {
 				llmOutput: stdout.trimEnd(),
 				uiOutput: `▸ Searching ${pattern} in ${searchPath} (${lines.length} results)`,
-				isError: false,
+
 				mergeable: true,
 			};
 		} catch (err) {
 			return {
 				llmOutput: `Error running search: ${(err as Error).message}`,
 				uiOutput: `Error running search: ${(err as Error).message}`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}

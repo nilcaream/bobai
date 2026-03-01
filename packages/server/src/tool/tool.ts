@@ -7,7 +7,6 @@ export interface ToolContext {
 export interface ToolResult {
 	llmOutput: string;
 	uiOutput: string | null;
-	isError?: boolean;
 	mergeable: boolean;
 }
 
