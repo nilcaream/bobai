@@ -224,6 +224,12 @@ describe("handlePrompt", () => {
 		expect(msgs.some((m: { type: string }) => m.type === "tool_result")).toBe(true);
 		expect(msgs.at(-1).type).toBe("done");
 
+		const toolCall = msgs.find((m: { type: string }) => m.type === "tool_call");
+		expect(toolCall.output).toBeTruthy(); // pre-formatted markdown
+		expect(toolCall.name).toBeUndefined(); // name no longer sent
+		const toolResult = msgs.find((m: { type: string }) => m.type === "tool_result");
+		expect(toolResult.mergeable).toBe(true); // list_directory is mergeable
+
 		// DB should have: system + user + assistant(tool_calls) + tool + assistant(text)
 		const sessionId = msgs.find((m: { type: string }) => m.type === "done").sessionId;
 		const stored = getMessages(db, sessionId);

@@ -16,8 +16,8 @@ function mockWs() {
 describe("protocol", () => {
 	test("send done includes sessionId", () => {
 		const ws = mockWs();
-		send(ws, { type: "done", sessionId: "abc-123" });
-		expect(ws.messages()[0]).toEqual({ type: "done", sessionId: "abc-123" });
+		send(ws, { type: "done", sessionId: "abc-123", model: "claude-sonnet" });
+		expect(ws.messages()[0]).toEqual({ type: "done", sessionId: "abc-123", model: "claude-sonnet" });
 	});
 
 	test("send token message unchanged", () => {
@@ -28,35 +28,33 @@ describe("protocol", () => {
 
 	test("send encodes tool_call message", () => {
 		const ws = mockWs();
-		send(ws, { type: "tool_call", id: "call_1", name: "read_file", arguments: { path: "src/index.ts" } });
+		send(ws, { type: "tool_call", id: "call_1", output: "**Reading** `src/index.ts`" });
 		expect(ws.messages()[0]).toEqual({
 			type: "tool_call",
 			id: "call_1",
-			name: "read_file",
-			arguments: { path: "src/index.ts" },
+			output: "**Reading** `src/index.ts`",
 		});
 	});
 
 	test("send encodes tool_result message", () => {
 		const ws = mockWs();
-		send(ws, { type: "tool_result", id: "call_1", name: "read_file", output: "file contents" });
+		send(ws, { type: "tool_result", id: "call_1", output: "file contents", mergeable: true });
 		expect(ws.messages()[0]).toEqual({
 			type: "tool_result",
 			id: "call_1",
-			name: "read_file",
 			output: "file contents",
+			mergeable: true,
 		});
 	});
 
-	test("send encodes tool_result with isError", () => {
+	test("send encodes tool_result with null output", () => {
 		const ws = mockWs();
-		send(ws, { type: "tool_result", id: "call_1", name: "read_file", output: "not found", isError: true });
+		send(ws, { type: "tool_result", id: "call_1", output: null, mergeable: false });
 		expect(ws.messages()[0]).toEqual({
 			type: "tool_result",
 			id: "call_1",
-			name: "read_file",
-			output: "not found",
-			isError: true,
+			output: null,
+			mergeable: false,
 		});
 	});
 });
