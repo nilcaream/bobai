@@ -28,8 +28,8 @@ describe("listDirectoryTool", () => {
 
 	test("lists project root when path is '.'", async () => {
 		const result = await listDirectoryTool.execute({ path: "." }, ctx);
-		expect(result.isError).toBeUndefined();
-		const lines = result.output.split("\n").filter(Boolean);
+		expect(result.isError).toBeFalsy();
+		const lines = result.llmOutput.split("\n").filter(Boolean);
 		expect(lines).toContain("file-a.txt");
 		expect(lines).toContain("file-b.txt");
 		expect(lines).toContain("subdir/");
@@ -37,37 +37,39 @@ describe("listDirectoryTool", () => {
 
 	test("lists subdirectory contents", async () => {
 		const result = await listDirectoryTool.execute({ path: "subdir" }, ctx);
-		const lines = result.output.split("\n").filter(Boolean);
+		const lines = result.llmOutput.split("\n").filter(Boolean);
 		expect(lines).toContain("child.txt");
 	});
 
-	test("returns metadata with entryCount", async () => {
+	test("returns split llmOutput/uiOutput with mergeable flag", async () => {
 		const result = await listDirectoryTool.execute({ path: "." }, ctx);
-		expect(result.metadata).toEqual({ entryCount: 3 });
+		expect(result.llmOutput).toContain("file-a.txt");
+		expect(result.uiOutput).toBe("▸ Listing . (3 entries)");
+		expect(result.mergeable).toBe(true);
 	});
 
 	test("returns error for nonexistent directory", async () => {
 		const result = await listDirectoryTool.execute({ path: "nope" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("nope");
+		expect(result.llmOutput).toContain("nope");
 	});
 
 	test("returns error for path traversal", async () => {
 		const result = await listDirectoryTool.execute({ path: "../../" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("outside");
+		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when path is a file, not a directory", async () => {
 		const result = await listDirectoryTool.execute({ path: "file-a.txt" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("not a directory");
+		expect(result.llmOutput).toContain("not a directory");
 	});
 
 	test("defaults to project root when path is omitted", async () => {
 		const result = await listDirectoryTool.execute({}, ctx);
-		expect(result.isError).toBeUndefined();
-		const lines = result.output.split("\n").filter(Boolean);
+		expect(result.isError).toBeFalsy();
+		const lines = result.llmOutput.split("\n").filter(Boolean);
 		expect(lines).toContain("file-a.txt");
 	});
 });
