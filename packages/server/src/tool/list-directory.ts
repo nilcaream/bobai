@@ -33,7 +33,7 @@ export const listDirectoryTool: Tool = {
 		try {
 			const entries = fs.readdirSync(resolved, { withFileTypes: true });
 			const lines = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-			return { output: lines.join("\n") };
+			return { output: lines.join("\n"), metadata: { entryCount: entries.length } };
 		} catch (err) {
 			const code = (err as NodeJS.ErrnoException).code;
 			if (code === "ENOENT") {

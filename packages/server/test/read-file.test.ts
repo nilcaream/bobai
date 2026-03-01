@@ -118,6 +118,11 @@ describe("readFileTool", () => {
 		expect(result.output).not.toContain("x".repeat(3000));
 	});
 
+	test("returns metadata with linesRead and totalLines", async () => {
+		const result = await readFileTool.execute({ path: "multiline.txt", from: 10, to: 15 }, ctx);
+		expect(result.metadata).toEqual({ linesRead: 6, totalLines: 50 });
+	});
+
 	test("enforces byte budget", async () => {
 		// Create a file with many lines that exceed 50KB total
 		const lines = Array.from({ length: 5000 }, (_, i) => `line ${i + 1}: ${"a".repeat(50)}`);

@@ -47,6 +47,12 @@ describe("writeFileTool", () => {
 		expect(written).toBe("deep");
 	});
 
+	test("returns metadata with bytesWritten", async () => {
+		const content = "metadata test content";
+		const result = await writeFileTool.execute({ path: "meta-test.txt", content }, ctx);
+		expect(result.metadata).toEqual({ bytesWritten: content.length });
+	});
+
 	test("returns error for path traversal attempt", async () => {
 		const result = await writeFileTool.execute({ path: "../../etc/evil", content: "bad" }, ctx);
 		expect(result.isError).toBe(true);

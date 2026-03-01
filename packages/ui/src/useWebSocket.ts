@@ -9,8 +9,8 @@ type ServerMessage =
 
 export type MessagePart =
 	| { type: "text"; content: string }
-	| { type: "tool_call"; name: string; content: string; oldString?: string; newString?: string }
-	| { type: "tool_result"; name: string; content: string; isError: boolean; metadata?: Record<string, unknown> };
+	| { type: "tool_call"; id: string; name: string; content: string; oldString?: string; newString?: string }
+	| { type: "tool_result"; id: string; name: string; content: string; isError: boolean; metadata?: Record<string, unknown> };
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }
@@ -93,13 +93,16 @@ export function useWebSocket() {
 				} else {
 					content = `[${msg.name}]`;
 				}
-				setMessages((prev) => appendPart(prev, { type: "tool_call", name: msg.name, content, oldString, newString }));
+				setMessages((prev) =>
+					appendPart(prev, { type: "tool_call", id: msg.id, name: msg.name, content, oldString, newString }),
+				);
 			}
 
 			if (msg.type === "tool_result") {
 				setMessages((prev) =>
 					appendPart(prev, {
 						type: "tool_result",
+						id: msg.id,
 						name: msg.name,
 						content: msg.output,
 						isError: msg.isError ?? false,

@@ -44,7 +44,7 @@ export const writeFileTool: Tool = {
 		try {
 			fs.mkdirSync(path.dirname(resolved), { recursive: true });
 			fs.writeFileSync(resolved, content, "utf-8");
-			return { output: `Wrote ${content.length} bytes to ${filePath}` };
+			return { output: `Wrote ${content.length} bytes to ${filePath}`, metadata: { bytesWritten: content.length } };
 		} catch (err) {
 			return { output: `Error writing file: ${(err as Error).message}`, isError: true };
 		}

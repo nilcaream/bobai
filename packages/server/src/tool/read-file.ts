@@ -109,6 +109,6 @@ export const readFileTool: Tool = {
 			footer = `(End of file - total ${totalLines} lines)`;
 		}
 
-		return { output: `${outputLines.join("\n")}\n\n${footer}` };
+		return { output: `${outputLines.join("\n")}\n\n${footer}`, metadata: { linesRead: outputLines.length, totalLines } };
 	},
 };
