@@ -5,13 +5,16 @@ export interface ToolContext {
 }
 
 export interface ToolResult {
-	output: string;
+	llmOutput: string;
+	uiOutput: string | null;
 	isError?: boolean;
-	metadata?: Record<string, unknown>;
+	mergeable: boolean;
 }
 
 export interface Tool {
 	definition: ToolDefinition;
+	mergeable: boolean;
+	formatCall(args: Record<string, unknown>): string;
 	execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 }
 
