@@ -25,19 +25,16 @@ describe("bashTool", () => {
 
 	test("executes a simple command and returns stdout", async () => {
 		const result = await bashTool.execute({ command: "echo 'hello world'" }, ctx);
-		expect(result.isError).toBeFalsy();
 		expect(result.llmOutput).toContain("hello world");
 	});
 
 	test("runs in projectRoot as working directory", async () => {
 		const result = await bashTool.execute({ command: "cat test.txt" }, ctx);
-		expect(result.isError).toBeFalsy();
 		expect(result.llmOutput).toContain("hello from test");
 	});
 
 	test("returns exit code and stderr on failure", async () => {
 		const result = await bashTool.execute({ command: "ls nonexistent_dir_12345" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("exit code");
 	});
 
@@ -50,12 +47,11 @@ describe("bashTool", () => {
 
 	test("respects timeout", async () => {
 		const result = await bashTool.execute({ command: "sleep 60", timeout: 500 }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("timed out");
 	}, 10000);
 
 	test("returns error when command is missing", async () => {
 		const result = await bashTool.execute({}, ctx);
-		expect(result.isError).toBe(true);
+		expect(result.llmOutput).toContain("command");
 	});
 });

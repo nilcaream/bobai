@@ -36,7 +36,6 @@ describe("readFileTool", () => {
 		const result = await readFileTool.execute({ path: "hello.txt" }, ctx);
 		expect(result.llmOutput).toContain("1: Hello, world!");
 		expect(result.llmOutput).toContain("(End of file - total 1 lines)");
-		expect(result.isError).toBeFalsy();
 	});
 
 	test("reads a nested file", async () => {
@@ -46,24 +45,21 @@ describe("readFileTool", () => {
 
 	test("returns error for nonexistent file", async () => {
 		const result = await readFileTool.execute({ path: "nope.txt" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("nope.txt");
 	});
 
 	test("returns error for path traversal attempt", async () => {
 		const result = await readFileTool.execute({ path: "../../etc/passwd" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when path is missing", async () => {
 		const result = await readFileTool.execute({}, ctx);
-		expect(result.isError).toBe(true);
+		expect(result.llmOutput).toContain("path");
 	});
 
 	test("returns error for directory", async () => {
 		const result = await readFileTool.execute({ path: "sub" }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("directory");
 	});
 
@@ -85,7 +81,6 @@ describe("readFileTool", () => {
 
 	test("returns error when from is beyond end of file", async () => {
 		const result = await readFileTool.execute({ path: "multiline.txt", from: 100 }, ctx);
-		expect(result.isError).toBe(true);
 		expect(result.llmOutput).toContain("beyond end of file");
 	});
 

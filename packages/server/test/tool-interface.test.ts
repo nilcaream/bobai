@@ -2,16 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { Tool, ToolResult } from "../src/tool/tool";
 
 describe("Tool interface", () => {
-	test("ToolResult has llmOutput, uiOutput, isError, mergeable", () => {
+	test("ToolResult has llmOutput, uiOutput, mergeable", () => {
 		const result: ToolResult = {
 			llmOutput: "file contents here",
 			uiOutput: "▸ Reading src/app.ts (150 lines)",
-			isError: false,
 			mergeable: true,
 		};
 		expect(result.llmOutput).toBe("file contents here");
 		expect(result.uiOutput).toBe("▸ Reading src/app.ts (150 lines)");
-		expect(result.isError).toBe(false);
 		expect(result.mergeable).toBe(true);
 	});
 
@@ -19,7 +17,6 @@ describe("Tool interface", () => {
 		const result: ToolResult = {
 			llmOutput: "Edited file",
 			uiOutput: null,
-			isError: false,
 			mergeable: false,
 		};
 		expect(result.uiOutput).toBeNull();
@@ -40,7 +37,7 @@ describe("Tool interface", () => {
 				return `▸ Testing ${args.name}`;
 			},
 			async execute(): Promise<ToolResult> {
-				return { llmOutput: "ok", uiOutput: "ok", isError: false, mergeable: true };
+				return { llmOutput: "ok", uiOutput: "ok", mergeable: true };
 			},
 		};
 		expect(tool.mergeable).toBe(true);

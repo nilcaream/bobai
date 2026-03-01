@@ -54,7 +54,7 @@ function echoTool(): Tool {
 			return `▸ Echo ${args.text}`;
 		},
 		async execute(args: Record<string, unknown>): Promise<ToolResult> {
-			return { llmOutput: `echoed: ${args.text}`, uiOutput: `▸ Echo ${args.text} (done)`, isError: false, mergeable: true };
+			return { llmOutput: `echoed: ${args.text}`, uiOutput: `▸ Echo ${args.text} (done)`, mergeable: true };
 		},
 	};
 }

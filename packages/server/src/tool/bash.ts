@@ -40,7 +40,7 @@ export const bashTool: Tool = {
 			return {
 				llmOutput: "Error: 'command' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'command' argument is required and must be a non-empty string",
-				isError: true,
+
 				mergeable: false,
 			};
 		}
@@ -71,7 +71,7 @@ export const bashTool: Tool = {
 				let output = truncate(`${stdout}${stderr}`.trim());
 				if (output.length > 0) output += "\n\n";
 				output += `Command timed out after ${timeoutMs}ms`;
-				return { llmOutput: output, uiOutput: formatBashOutput(command, output), isError: true, mergeable: false };
+				return { llmOutput: output, uiOutput: formatBashOutput(command, output), mergeable: false };
 			}
 
 			clearTimeout(timerId!);
@@ -84,7 +84,7 @@ export const bashTool: Tool = {
 				return {
 					llmOutput: `${truncated}\n\nexit code: ${result.code}`,
 					uiOutput: formatBashOutput(command, `${truncated}\n\nexit code: ${result.code}`),
-					isError: true,
+
 					mergeable: false,
 				};
 			}
@@ -92,14 +92,14 @@ export const bashTool: Tool = {
 			return {
 				llmOutput: truncated || "(no output)",
 				uiOutput: formatBashOutput(command, truncated || "(no output)"),
-				isError: false,
+
 				mergeable: false,
 			};
 		} catch (err) {
 			return {
 				llmOutput: `Error executing command: ${(err as Error).message}`,
 				uiOutput: `Error executing command: ${(err as Error).message}`,
-				isError: true,
+
 				mergeable: false,
 			};
 		}

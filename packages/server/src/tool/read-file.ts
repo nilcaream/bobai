@@ -50,7 +50,7 @@ export const readFileTool: Tool = {
 			return {
 				llmOutput: "Error: 'path' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'path' argument is required and must be a non-empty string",
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -60,7 +60,7 @@ export const readFileTool: Tool = {
 			return {
 				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
 				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -74,7 +74,7 @@ export const readFileTool: Tool = {
 				return {
 					llmOutput: `Error: file not found: ${filePath}`,
 					uiOutput: `▸ Reading ${filePath} — file not found`,
-					isError: true,
+
 					mergeable: true,
 				};
 			}
@@ -82,14 +82,14 @@ export const readFileTool: Tool = {
 				return {
 					llmOutput: `Error: '${filePath}' is a directory, not a file. Use list_directory instead.`,
 					uiOutput: `▸ Reading ${filePath} — is a directory`,
-					isError: true,
+
 					mergeable: true,
 				};
 			}
 			return {
 				llmOutput: `Error reading file: ${(err as Error).message}`,
 				uiOutput: `Error reading file: ${(err as Error).message}`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -105,7 +105,7 @@ export const readFileTool: Tool = {
 			return {
 				llmOutput: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`,
 				uiOutput: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -152,7 +152,7 @@ export const readFileTool: Tool = {
 		return {
 			llmOutput: `${outputLines.join("\n")}\n\n${footer}`,
 			uiOutput: `▸ Reading ${filePath} (${outputLines.length} lines)`,
-			isError: false,
+
 			mergeable: true,
 		};
 	},

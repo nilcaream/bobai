@@ -39,7 +39,7 @@ export const writeFileTool: Tool = {
 			return {
 				llmOutput: "Error: 'path' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'path' argument is required and must be a non-empty string",
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -48,7 +48,7 @@ export const writeFileTool: Tool = {
 			return {
 				llmOutput: "Error: 'content' argument is required and must be a string",
 				uiOutput: "Error: 'content' argument is required and must be a string",
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -58,7 +58,7 @@ export const writeFileTool: Tool = {
 			return {
 				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
 				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
@@ -69,14 +69,14 @@ export const writeFileTool: Tool = {
 			return {
 				llmOutput: `Wrote ${content.length} bytes to ${filePath}`,
 				uiOutput: `▸ Writing ${filePath} (${content.length} bytes)`,
-				isError: false,
+
 				mergeable: true,
 			};
 		} catch (err) {
 			return {
 				llmOutput: `Error writing file: ${(err as Error).message}`,
 				uiOutput: `Error writing file: ${(err as Error).message}`,
-				isError: true,
+
 				mergeable: true,
 			};
 		}
