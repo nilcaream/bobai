@@ -8,7 +8,7 @@ export const writeFileTool: Tool = {
 		function: {
 			name: "write_file",
 			description:
-				"Create or overwrite a file. The path is relative to the project root. Parent directories are created automatically.",
+				"Create or overwrite a file. The path is relative to the project root. Parent directories are created automatically. Use actual newline characters in content, never escaped sequences like \\n.",
 			parameters: {
 				type: "object",
 				properties: {

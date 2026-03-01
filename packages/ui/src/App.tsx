@@ -49,7 +49,7 @@ function groupParts(parts: MessagePart[]): Panel[] {
 			prev.completed &&
 			prev.mergeable
 		) {
-			prev.content = `${prev.content}\n${panel.content}`;
+			prev.content = `${prev.content}  \n${panel.content}`;
 		} else {
 			merged.push(panel);
 		}
