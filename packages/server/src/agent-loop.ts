@@ -5,8 +5,8 @@ const DEFAULT_MAX_ITERATIONS = 20;
 
 export type AgentEvent =
 	| { type: "text"; text: string }
-	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
-	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean; metadata?: Record<string, unknown> };
+	| { type: "tool_call"; id: string; output: string }
+	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean };
 
 export interface AgentLoopOptions {
 	provider: Provider;
@@ -101,31 +101,38 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				args = {};
 			}
 
-			onEvent({ type: "tool_call", id: tc.id, name: tc.function.name, arguments: args });
-
 			const tool = tools.get(tc.function.name);
-			let output: string;
+
+			// Emit formatCall output
+			const callOutput = tool ? tool.formatCall(args) : `[${tc.function.name}]`;
+			onEvent({ type: "tool_call", id: tc.id, output: callOutput });
+
+			let llmOutput: string;
+			let uiOutput: string | null = null;
 			let isError: boolean | undefined;
-			let metadata: Record<string, unknown> | undefined;
+			let mergeable = false;
 
 			if (!tool) {
-				output = `Unknown tool: ${tc.function.name}`;
+				llmOutput = `Unknown tool: ${tc.function.name}`;
+				uiOutput = `Unknown tool: ${tc.function.name}`;
 				isError = true;
 			} else {
 				try {
 					const result = await tool.execute(args, { projectRoot });
-					output = result.output;
+					llmOutput = result.llmOutput;
+					uiOutput = result.uiOutput;
 					isError = result.isError;
-					metadata = result.metadata;
+					mergeable = result.mergeable;
 				} catch (err) {
-					output = `Tool execution error: ${(err as Error).message}`;
+					llmOutput = `Tool execution error: ${(err as Error).message}`;
+					uiOutput = `Tool execution error: ${(err as Error).message}`;
 					isError = true;
 				}
 			}
 
-			onEvent({ type: "tool_result", id: tc.id, name: tc.function.name, output, isError, metadata });
+			onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable });
 
-			const toolMsg: ToolMessage = { role: "tool", content: output, tool_call_id: tc.id };
+			const toolMsg: ToolMessage = { role: "tool", content: llmOutput, tool_call_id: tc.id };
 			conversation.push(toolMsg);
 			newMessages.push(toolMsg);
 			onMessage(toolMsg);

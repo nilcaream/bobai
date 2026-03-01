@@ -49,8 +49,12 @@ function echoTool(): Tool {
 				parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
 			},
 		},
+		mergeable: true,
+		formatCall(args: Record<string, unknown>): string {
+			return `▸ Echo ${args.text}`;
+		},
 		async execute(args: Record<string, unknown>): Promise<ToolResult> {
-			return { output: `echoed: ${args.text}` };
+			return { llmOutput: `echoed: ${args.text}`, uiOutput: `▸ Echo ${args.text} (done)`, isError: false, mergeable: true };
 		},
 	};
 }
@@ -113,8 +117,10 @@ describe("runAgentLoop", () => {
 		// Should have emitted tool_call and tool_result events
 		const toolCallEvents = events.filter((e) => e.type === "tool_call");
 		expect(toolCallEvents).toHaveLength(1);
+		expect((toolCallEvents[0] as { output: string }).output).toBe("▸ Echo hello");
 		const toolResultEvents = events.filter((e) => e.type === "tool_result");
 		expect(toolResultEvents).toHaveLength(1);
+		expect((toolResultEvents[0] as { output: string }).output).toBe("▸ Echo hello (done)");
 	});
 
 	test("handles unknown tool gracefully", async () => {
@@ -167,6 +173,10 @@ describe("runAgentLoop", () => {
 					description: "Always throws",
 					parameters: { type: "object", properties: {}, required: [] },
 				},
+			},
+			mergeable: false,
+			formatCall(): string {
+				return "▸ Boom";
 			},
 			async execute(): Promise<ToolResult> {
 				throw new Error("disk on fire");
