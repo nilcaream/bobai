@@ -61,7 +61,7 @@ export const grepSearchTool: Tool = {
 			const exitCode = await proc.exited;
 
 			if (exitCode === 1 && stdout.length === 0) {
-				return { output: "No matches found." };
+				return { output: "No matches found.", metadata: { matchCount: 0 } };
 			}
 			if (exitCode > 1) {
 				return { output: `Error running grep: ${stderr}`, isError: true };
@@ -71,9 +71,10 @@ export const grepSearchTool: Tool = {
 			if (lines.length > MAX_RESULTS) {
 				return {
 					output: `${lines.slice(0, MAX_RESULTS).join("\n")}\n\n... truncated (${lines.length} total matches, showing first ${MAX_RESULTS})`,
+					metadata: { matchCount: lines.length },
 				};
 			}
-			return { output: stdout.trimEnd() };
+			return { output: stdout.trimEnd(), metadata: { matchCount: lines.length } };
 		} catch (err) {
 			return { output: `Error running search: ${(err as Error).message}`, isError: true };
 		}

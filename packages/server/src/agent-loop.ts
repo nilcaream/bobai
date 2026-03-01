@@ -6,7 +6,7 @@ const DEFAULT_MAX_ITERATIONS = 20;
 export type AgentEvent =
 	| { type: "text"; text: string }
 	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
-	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean };
+	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean; metadata?: Record<string, unknown> };
 
 export interface AgentLoopOptions {
 	provider: Provider;
@@ -106,6 +106,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			const tool = tools.get(tc.function.name);
 			let output: string;
 			let isError: boolean | undefined;
+			let metadata: Record<string, unknown> | undefined;
 
 			if (!tool) {
 				output = `Unknown tool: ${tc.function.name}`;
@@ -115,13 +116,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 					const result = await tool.execute(args, { projectRoot });
 					output = result.output;
 					isError = result.isError;
+					metadata = result.metadata;
 				} catch (err) {
 					output = `Tool execution error: ${(err as Error).message}`;
 					isError = true;
 				}
 			}
 
-			onEvent({ type: "tool_result", id: tc.id, name: tc.function.name, output, isError });
+			onEvent({ type: "tool_result", id: tc.id, name: tc.function.name, output, isError, metadata });
 
 			const toolMsg: ToolMessage = { role: "tool", content: output, tool_call_id: tc.id };
 			conversation.push(toolMsg);

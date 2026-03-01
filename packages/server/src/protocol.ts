@@ -5,7 +5,7 @@ export type ClientMessage = { type: "prompt"; text: string; sessionId?: string }
 export type ServerMessage =
 	| { type: "token"; text: string }
 	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
-	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean }
+	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean; metadata?: Record<string, unknown> }
 	| { type: "done"; sessionId: string; model: string }
 	| { type: "error"; message: string };
 

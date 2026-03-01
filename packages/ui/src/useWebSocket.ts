@@ -3,14 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type ServerMessage =
 	| { type: "token"; text: string }
 	| { type: "tool_call"; id: string; name: string; arguments: Record<string, unknown> }
-	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean }
+	| { type: "tool_result"; id: string; name: string; output: string; isError?: boolean; metadata?: Record<string, unknown> }
 	| { type: "done"; sessionId: string; model: string }
 	| { type: "error"; message: string };
 
 export type MessagePart =
 	| { type: "text"; content: string }
 	| { type: "tool_call"; name: string; content: string; oldString?: string; newString?: string }
-	| { type: "tool_result"; name: string; content: string; isError: boolean };
+	| { type: "tool_result"; name: string; content: string; isError: boolean; metadata?: Record<string, unknown> };
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }
@@ -83,6 +83,9 @@ export function useWebSocket() {
 				} else if (msg.name === "list_directory") {
 					const dir = typeof msg.arguments.path === "string" ? msg.arguments.path : ".";
 					content = `▸ Listing ${dir}`;
+				} else if (msg.name === "grep_search" && typeof msg.arguments.pattern === "string") {
+					const dir = typeof msg.arguments.path === "string" ? msg.arguments.path : ".";
+					content = `▸ Searching ${msg.arguments.pattern} in ${dir}`;
 				} else if (msg.name === "edit_file" && typeof msg.arguments.path === "string") {
 					content = `▸ Editing ${msg.arguments.path}`;
 					if (typeof msg.arguments.old_string === "string") oldString = msg.arguments.old_string;
@@ -95,7 +98,13 @@ export function useWebSocket() {
 
 			if (msg.type === "tool_result") {
 				setMessages((prev) =>
-					appendPart(prev, { type: "tool_result", name: msg.name, content: msg.output, isError: msg.isError ?? false }),
+					appendPart(prev, {
+						type: "tool_result",
+						name: msg.name,
+						content: msg.output,
+						isError: msg.isError ?? false,
+						metadata: msg.metadata,
+					}),
 				);
 			}
 
