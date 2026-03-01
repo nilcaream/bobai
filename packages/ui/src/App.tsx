@@ -3,116 +3,59 @@ import { Markdown } from "./Markdown";
 import type { MessagePart } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
-function UnifiedDiff({ oldString, newString }: { oldString: string; newString: string }) {
-	const oldLines = oldString.split("\n");
-	const newLines = newString.split("\n");
-	return (
-		<div className="diff">
-			{oldLines.map((line, i) => (
-				<div key={`old-${i}-${line}`} className="diff-removed">
-					{`- ${line}`}
-				</div>
-			))}
-			{newLines.map((line, i) => (
-				<div key={`new-${i}-${line}`} className="diff-added">
-					{`+ ${line}`}
-				</div>
-			))}
-		</div>
-	);
-}
-
-type ToolCall = { id: string; label: string };
-
 type Panel =
 	| { type: "text"; content: string }
-	| {
-			type: "tool";
-			name: string;
-			calls: ToolCall[];
-			result?: string;
-			isError?: boolean;
-			quiet?: boolean;
-			diff?: { oldString: string; newString: string };
-	  };
-
-const quietTools = new Set(["read_file", "write_file", "list_directory", "grep_search"]);
-
-function formatQuietSuffix(name: string, metadata?: Record<string, unknown>): string {
-	if (!metadata) return "";
-	if (name === "read_file") {
-		const n = metadata.linesRead;
-		if (typeof n !== "number") return "";
-		return `(${n} ${n === 1 ? "line" : "lines"})`;
-	}
-	if (name === "write_file") {
-		const n = metadata.bytesWritten;
-		if (typeof n !== "number") return "";
-		return `(${n} bytes)`;
-	}
-	if (name === "list_directory") {
-		const n = metadata.entryCount;
-		if (typeof n !== "number") return "";
-		return `(${n} ${n === 1 ? "entry" : "entries"})`;
-	}
-	if (name === "grep_search") {
-		const n = metadata.matchCount;
-		if (typeof n !== "number") return "";
-		if (n === 0) return "(no results)";
-		return `(${n} ${n === 1 ? "result" : "results"})`;
-	}
-	return "";
-}
+	| { type: "tool"; id: string; content: string; completed: boolean; mergeable: boolean };
 
 function groupParts(parts: MessagePart[]): Panel[] {
-	const panels: Panel[] = [];
-	const callIndex = new Map<string, { panel: Panel & { type: "tool" }; callIdx: number }>();
+	// Pass 1: Create panels for each part
+	const raw: Panel[] = [];
+	const toolPanelMap = new Map<string, Panel & { type: "tool" }>();
 
 	for (const part of parts) {
 		if (part.type === "text") {
-			panels.push({ type: "text", content: part.content });
+			raw.push({ type: "text", content: part.content });
 		} else if (part.type === "tool_call") {
-			const isQuiet = quietTools.has(part.name);
-			const last = panels.at(-1);
-			const call: ToolCall = { id: part.id, label: part.content };
-
-			if (last?.type === "tool" && last.quiet && isQuiet) {
-				// Merge into existing quiet panel
-				last.calls.push(call);
-				callIndex.set(part.id, { panel: last, callIdx: last.calls.length - 1 });
-			} else {
-				const diff =
-					part.oldString != null && part.newString != null
-						? { oldString: part.oldString, newString: part.newString }
-						: undefined;
-				const panel = { type: "tool" as const, name: part.name, calls: [call], diff, quiet: isQuiet };
-				panels.push(panel);
-				callIndex.set(part.id, { panel, callIdx: 0 });
-			}
+			const panel: Panel & { type: "tool" } = {
+				type: "tool",
+				id: part.id,
+				content: part.content,
+				completed: false,
+				mergeable: false,
+			};
+			raw.push(panel);
+			toolPanelMap.set(part.id, panel);
 		} else if (part.type === "tool_result") {
-			const entry = callIndex.get(part.id);
-			if (!entry) continue;
-
-			if (entry.panel.quiet) {
-				// Quiet tool: update the call label with result info
-				if (part.isError) {
-					entry.panel.calls[entry.callIdx].label += " (error)";
-				} else {
-					const suffix = formatQuietSuffix(part.name, part.metadata);
-					if (suffix) {
-						entry.panel.calls[entry.callIdx].label += ` ${suffix}`;
-					}
+			const panel = toolPanelMap.get(part.id);
+			if (panel) {
+				if (part.content !== null) {
+					panel.content = part.content;
 				}
-			} else if (part.name === "edit_file") {
-				// edit_file: suppress text result (diff shown instead)
-			} else {
-				// Non-quiet: show result as block
-				entry.panel.result = part.content;
-				entry.panel.isError = part.isError;
+				panel.completed = true;
+				panel.mergeable = part.mergeable;
 			}
 		}
 	}
-	return panels;
+
+	// Pass 2: Merge adjacent completed+mergeable tool panels
+	const merged: Panel[] = [];
+	for (const panel of raw) {
+		const prev = merged.at(-1);
+		if (
+			panel.type === "tool" &&
+			panel.completed &&
+			panel.mergeable &&
+			prev?.type === "tool" &&
+			prev.completed &&
+			prev.mergeable
+		) {
+			prev.content = `${prev.content}\n${panel.content}`;
+		} else {
+			merged.push(panel);
+		}
+	}
+
+	return merged;
 }
 
 export function App() {
@@ -309,15 +252,7 @@ export function App() {
 				} else {
 					elements.push(
 						<div key={key++} className="panel panel--tool">
-							{panel.calls.map((call) => (
-								<div key={call.id} className="tool-call">
-									{call.label}
-								</div>
-							))}
-							{panel.diff && <UnifiedDiff oldString={panel.diff.oldString} newString={panel.diff.newString} />}
-							{panel.result != null && (
-								<div className={panel.isError ? "tool-result tool-result--error" : "tool-result"}>{panel.result}</div>
-							)}
+							<Markdown>{panel.content}</Markdown>
 							{isLast && msg.timestamp && (
 								<div className="panel-status">
 									{msg.timestamp}
