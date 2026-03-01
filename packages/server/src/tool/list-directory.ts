@@ -22,27 +22,59 @@ export const listDirectoryTool: Tool = {
 		},
 	},
 
+	mergeable: true,
+
+	formatCall(args: Record<string, unknown>): string {
+		const dir = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
+		return `▸ Listing ${dir}`;
+	},
+
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
 		const dirPath = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
 
 		const resolved = path.resolve(ctx.projectRoot, dirPath);
 		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
-			return { output: `Error: path '${dirPath}' resolves outside the project root`, isError: true };
+			return {
+				llmOutput: `Error: path '${dirPath}' resolves outside the project root`,
+				uiOutput: `Error: path '${dirPath}' resolves outside the project root`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 
 		try {
 			const entries = fs.readdirSync(resolved, { withFileTypes: true });
 			const lines = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-			return { output: lines.join("\n"), metadata: { entryCount: entries.length } };
+			return {
+				llmOutput: lines.join("\n"),
+				uiOutput: `▸ Listing ${dirPath} (${entries.length} entries)`,
+				isError: false,
+				mergeable: true,
+			};
 		} catch (err) {
 			const code = (err as NodeJS.ErrnoException).code;
 			if (code === "ENOENT") {
-				return { output: `Error: directory not found: ${dirPath}`, isError: true };
+				return {
+					llmOutput: `Error: directory not found: ${dirPath}`,
+					uiOutput: `▸ Listing ${dirPath} — not found`,
+					isError: true,
+					mergeable: true,
+				};
 			}
 			if (code === "ENOTDIR") {
-				return { output: `Error: '${dirPath}' is not a directory`, isError: true };
+				return {
+					llmOutput: `Error: '${dirPath}' is not a directory`,
+					uiOutput: `▸ Listing ${dirPath} — not a directory`,
+					isError: true,
+					mergeable: true,
+				};
 			}
-			return { output: `Error listing directory: ${(err as Error).message}`, isError: true };
+			return {
+				llmOutput: `Error listing directory: ${(err as Error).message}`,
+				uiOutput: `Error listing directory: ${(err as Error).message}`,
+				isError: true,
+				mergeable: true,
+			};
 		}
 	},
 };
