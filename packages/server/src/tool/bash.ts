@@ -27,10 +27,22 @@ export const bashTool: Tool = {
 		},
 	},
 
+	mergeable: false,
+
+	formatCall(args: Record<string, unknown>): string {
+		const command = typeof args.command === "string" ? args.command : "?";
+		return `\`$ ${command}\``;
+	},
+
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
 		const command = args.command;
 		if (typeof command !== "string" || command.length === 0) {
-			return { output: "Error: 'command' argument is required and must be a non-empty string", isError: true };
+			return {
+				llmOutput: "Error: 'command' argument is required and must be a non-empty string",
+				uiOutput: "Error: 'command' argument is required and must be a non-empty string",
+				isError: true,
+				mergeable: false,
+			};
 		}
 
 		const timeoutMs = typeof args.timeout === "number" && args.timeout > 0 ? args.timeout : DEFAULT_TIMEOUT_MS;
@@ -59,7 +71,7 @@ export const bashTool: Tool = {
 				let output = truncate(`${stdout}${stderr}`.trim());
 				if (output.length > 0) output += "\n\n";
 				output += `Command timed out after ${timeoutMs}ms`;
-				return { output, isError: true };
+				return { llmOutput: output, uiOutput: formatBashOutput(command, output), isError: true, mergeable: false };
 			}
 
 			clearTimeout(timerId!);
@@ -70,14 +82,26 @@ export const bashTool: Tool = {
 
 			if (result.code !== 0) {
 				return {
-					output: `${truncated}\n\nexit code: ${result.code}`,
+					llmOutput: `${truncated}\n\nexit code: ${result.code}`,
+					uiOutput: formatBashOutput(command, `${truncated}\n\nexit code: ${result.code}`),
 					isError: true,
+					mergeable: false,
 				};
 			}
 
-			return { output: truncated || "(no output)" };
+			return {
+				llmOutput: truncated || "(no output)",
+				uiOutput: formatBashOutput(command, truncated || "(no output)"),
+				isError: false,
+				mergeable: false,
+			};
 		} catch (err) {
-			return { output: `Error executing command: ${(err as Error).message}`, isError: true };
+			return {
+				llmOutput: `Error executing command: ${(err as Error).message}`,
+				uiOutput: `Error executing command: ${(err as Error).message}`,
+				isError: true,
+				mergeable: false,
+			};
 		}
 	},
 };
@@ -85,4 +109,8 @@ export const bashTool: Tool = {
 function truncate(text: string): string {
 	if (text.length <= MAX_OUTPUT_BYTES) return text;
 	return `${text.slice(0, MAX_OUTPUT_BYTES)}\n\n... truncated (${text.length} bytes total, showing first ${MAX_OUTPUT_BYTES})`;
+}
+
+function formatBashOutput(command: string, output: string): string {
+	return `\`$ ${command}\`\n\n\`\`\`\n${output}\n\`\`\``;
 }
