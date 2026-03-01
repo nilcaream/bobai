@@ -25,33 +25,33 @@ describe("bashTool", () => {
 
 	test("executes a simple command and returns stdout", async () => {
 		const result = await bashTool.execute({ command: "echo 'hello world'" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("hello world");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("hello world");
 	});
 
 	test("runs in projectRoot as working directory", async () => {
 		const result = await bashTool.execute({ command: "cat test.txt" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("hello from test");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("hello from test");
 	});
 
 	test("returns exit code and stderr on failure", async () => {
 		const result = await bashTool.execute({ command: "ls nonexistent_dir_12345" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("exit code");
+		expect(result.llmOutput).toContain("exit code");
 	});
 
 	test("captures both stdout and stderr", async () => {
 		const result = await bashTool.execute({ command: "echo 'out' && echo 'err' >&2" }, ctx);
 		// Both streams should be in the output
-		expect(result.output).toContain("out");
-		expect(result.output).toContain("err");
+		expect(result.llmOutput).toContain("out");
+		expect(result.llmOutput).toContain("err");
 	});
 
 	test("respects timeout", async () => {
 		const result = await bashTool.execute({ command: "sleep 60", timeout: 500 }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("timed out");
+		expect(result.llmOutput).toContain("timed out");
 	}, 10000);
 
 	test("returns error when command is missing", async () => {
