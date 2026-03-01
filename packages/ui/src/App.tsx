@@ -58,6 +58,16 @@ function groupParts(parts: MessagePart[]): Panel[] {
 			if (last?.type === "tool") {
 				if (quietTools.has(part.name) || part.name === "edit_file") {
 					// Suppress output display for quiet tools and edit_file
+				} else if (part.name === "grep_search") {
+					// Update call text with result count from metadata, suppress raw output
+					const lastCall = last.calls.at(-1);
+					if (part.isError) {
+						last.result = part.content;
+						last.isError = true;
+					} else if (lastCall && typeof part.metadata?.matchCount === "number") {
+						const count = part.metadata.matchCount as number;
+						last.calls[last.calls.length - 1] = `${lastCall} (${count} ${count === 1 ? "result" : "results"})`;
+					}
 				} else {
 					last.result = part.content;
 					last.isError = part.isError;
