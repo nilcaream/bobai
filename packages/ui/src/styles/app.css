@@ -96,37 +96,6 @@ body,
 	margin-top: 1em;
 }
 
-/* Tool call line (e.g. "$ date") */
-.tool-call {
-	color: var(--text-status);
-}
-
-/* Unified diff */
-.diff {
-	margin-top: 1em;
-	white-space: pre-wrap;
-	word-wrap: break-word;
-}
-
-.diff-removed {
-	color: var(--diff-removed);
-}
-
-.diff-added {
-	color: var(--diff-added);
-}
-
-/* Tool result output */
-.tool-result {
-	margin-top: 1em;
-	white-space: pre-wrap;
-	word-wrap: break-word;
-}
-
-.tool-result--error {
-	color: var(--text-error);
-}
-
 /* Markdown rendering — terminal grid: margins are 0 or 1em */
 .md p {
 	margin: 0 0 1em;
