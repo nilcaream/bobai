@@ -109,24 +109,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 
 			let llmOutput: string;
 			let uiOutput: string | null = null;
-			let isError: boolean | undefined;
 			let mergeable = false;
 
 			if (!tool) {
 				llmOutput = `Unknown tool: ${tc.function.name}`;
 				uiOutput = `Unknown tool: ${tc.function.name}`;
-				isError = true;
 			} else {
 				try {
 					const result = await tool.execute(args, { projectRoot });
 					llmOutput = result.llmOutput;
 					uiOutput = result.uiOutput;
-					isError = result.isError;
 					mergeable = result.mergeable;
 				} catch (err) {
 					llmOutput = `Tool execution error: ${(err as Error).message}`;
 					uiOutput = `Tool execution error: ${(err as Error).message}`;
-					isError = true;
 				}
 			}
 
