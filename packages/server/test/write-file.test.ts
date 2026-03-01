@@ -27,36 +27,38 @@ describe("writeFileTool", () => {
 
 	test("creates a new file", async () => {
 		const result = await writeFileTool.execute({ path: "new-file.txt", content: "hello world" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("new-file.txt");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("new-file.txt");
 		const written = fs.readFileSync(path.join(tmpDir, "new-file.txt"), "utf-8");
 		expect(written).toBe("hello world");
 	});
 
 	test("overwrites an existing file", async () => {
 		const result = await writeFileTool.execute({ path: "existing.txt", content: "new content" }, ctx);
-		expect(result.isError).toBeUndefined();
+		expect(result.isError).toBeFalsy();
 		const written = fs.readFileSync(path.join(tmpDir, "existing.txt"), "utf-8");
 		expect(written).toBe("new content");
 	});
 
 	test("creates parent directories automatically", async () => {
 		const result = await writeFileTool.execute({ path: "deep/nested/dir/file.txt", content: "deep" }, ctx);
-		expect(result.isError).toBeUndefined();
+		expect(result.isError).toBeFalsy();
 		const written = fs.readFileSync(path.join(tmpDir, "deep/nested/dir/file.txt"), "utf-8");
 		expect(written).toBe("deep");
 	});
 
-	test("returns metadata with bytesWritten", async () => {
+	test("returns split llmOutput/uiOutput with mergeable flag", async () => {
 		const content = "metadata test content";
 		const result = await writeFileTool.execute({ path: "meta-test.txt", content }, ctx);
-		expect(result.metadata).toEqual({ bytesWritten: content.length });
+		expect(result.llmOutput).toContain("meta-test.txt");
+		expect(result.uiOutput).toBe(`▸ Writing meta-test.txt (${content.length} bytes)`);
+		expect(result.mergeable).toBe(true);
 	});
 
 	test("returns error for path traversal attempt", async () => {
 		const result = await writeFileTool.execute({ path: "../../etc/evil", content: "bad" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("outside");
+		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when path is missing", async () => {
