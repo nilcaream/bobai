@@ -75,16 +75,9 @@ export async function handlePrompt(req: PromptRequest) {
 				if (event.type === "text") {
 					send(ws, { type: "token", text: event.text });
 				} else if (event.type === "tool_call") {
-					send(ws, { type: "tool_call", id: event.id, name: event.name, arguments: event.arguments });
+					send(ws, { type: "tool_call", id: event.id, output: event.output });
 				} else if (event.type === "tool_result") {
-					send(ws, {
-						type: "tool_result",
-						id: event.id,
-						name: event.name,
-						output: event.output,
-						isError: event.isError,
-						metadata: event.metadata,
-					});
+					send(ws, { type: "tool_result", id: event.id, output: event.output, mergeable: event.mergeable });
 				}
 			},
 			onMessage(msg) {
