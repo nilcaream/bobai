@@ -29,34 +29,34 @@ describe("grepSearchTool", () => {
 
 	test("finds pattern across files", async () => {
 		const result = await grepSearchTool.execute({ pattern: "export default" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("hello.ts");
-		expect(result.output).toContain("world.ts");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("hello.ts");
+		expect(result.llmOutput).toContain("world.ts");
 	});
 
 	test("scopes search to a subdirectory", async () => {
 		const result = await grepSearchTool.execute({ pattern: "import", path: "src" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("app.ts");
-		expect(result.output).not.toContain("hello.ts");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("app.ts");
+		expect(result.llmOutput).not.toContain("hello.ts");
 	});
 
 	test("filters by file glob with include", async () => {
 		const result = await grepSearchTool.execute({ pattern: "body", include: "*.css" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("app.css");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("app.css");
 	});
 
 	test("returns message when no matches found", async () => {
 		const result = await grepSearchTool.execute({ pattern: "zzz_nonexistent_zzz" }, ctx);
-		expect(result.isError).toBeUndefined();
-		expect(result.output).toContain("No matches");
+		expect(result.isError).toBeFalsy();
+		expect(result.llmOutput).toContain("No matches");
 	});
 
 	test("returns error for path traversal attempt", async () => {
 		const result = await grepSearchTool.execute({ pattern: "test", path: "../../" }, ctx);
 		expect(result.isError).toBe(true);
-		expect(result.output).toContain("outside");
+		expect(result.llmOutput).toContain("outside");
 	});
 
 	test("returns error when pattern is missing", async () => {
