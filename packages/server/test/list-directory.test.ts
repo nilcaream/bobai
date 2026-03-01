@@ -41,6 +41,11 @@ describe("listDirectoryTool", () => {
 		expect(lines).toContain("child.txt");
 	});
 
+	test("returns metadata with entryCount", async () => {
+		const result = await listDirectoryTool.execute({ path: "." }, ctx);
+		expect(result.metadata).toEqual({ entryCount: 3 });
+	});
+
 	test("returns error for nonexistent directory", async () => {
 		const result = await listDirectoryTool.execute({ path: "nope" }, ctx);
 		expect(result.isError).toBe(true);

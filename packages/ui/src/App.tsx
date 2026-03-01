@@ -22,56 +22,93 @@ function UnifiedDiff({ oldString, newString }: { oldString: string; newString: s
 	);
 }
 
+type ToolCall = { id: string; label: string };
+
 type Panel =
 	| { type: "text"; content: string }
 	| {
 			type: "tool";
 			name: string;
-			calls: string[];
+			calls: ToolCall[];
 			result?: string;
 			isError?: boolean;
 			quiet?: boolean;
 			diff?: { oldString: string; newString: string };
 	  };
 
-const quietTools = new Set(["read_file", "write_file", "list_directory"]);
+const quietTools = new Set(["read_file", "write_file", "list_directory", "grep_search"]);
+
+function formatQuietSuffix(name: string, metadata?: Record<string, unknown>): string {
+	if (!metadata) return "";
+	if (name === "read_file") {
+		const n = metadata.linesRead;
+		if (typeof n !== "number") return "";
+		return `(${n} ${n === 1 ? "line" : "lines"})`;
+	}
+	if (name === "write_file") {
+		const n = metadata.bytesWritten;
+		if (typeof n !== "number") return "";
+		return `(${n} bytes)`;
+	}
+	if (name === "list_directory") {
+		const n = metadata.entryCount;
+		if (typeof n !== "number") return "";
+		return `(${n} ${n === 1 ? "entry" : "entries"})`;
+	}
+	if (name === "grep_search") {
+		const n = metadata.matchCount;
+		if (typeof n !== "number") return "";
+		if (n === 0) return "(no results)";
+		return `(${n} ${n === 1 ? "result" : "results"})`;
+	}
+	return "";
+}
 
 function groupParts(parts: MessagePart[]): Panel[] {
 	const panels: Panel[] = [];
+	const callIndex = new Map<string, { panel: Panel & { type: "tool" }; callIdx: number }>();
+
 	for (const part of parts) {
 		if (part.type === "text") {
 			panels.push({ type: "text", content: part.content });
 		} else if (part.type === "tool_call") {
-			const last = panels.at(-1);
 			const isQuiet = quietTools.has(part.name);
+			const last = panels.at(-1);
+			const call: ToolCall = { id: part.id, label: part.content };
+
 			if (last?.type === "tool" && last.quiet && isQuiet) {
-				last.calls.push(part.content);
+				// Merge into existing quiet panel
+				last.calls.push(call);
+				callIndex.set(part.id, { panel: last, callIdx: last.calls.length - 1 });
 			} else {
 				const diff =
 					part.oldString != null && part.newString != null
 						? { oldString: part.oldString, newString: part.newString }
 						: undefined;
-				panels.push({ type: "tool", name: part.name, calls: [part.content], diff, quiet: isQuiet });
+				const panel = { type: "tool" as const, name: part.name, calls: [call], diff, quiet: isQuiet };
+				panels.push(panel);
+				callIndex.set(part.id, { panel, callIdx: 0 });
 			}
 		} else if (part.type === "tool_result") {
-			const last = panels.at(-1);
-			if (last?.type === "tool") {
-				if (quietTools.has(part.name) || part.name === "edit_file") {
-					// Suppress output display for quiet tools and edit_file
-				} else if (part.name === "grep_search") {
-					// Update call text with result count from metadata, suppress raw output
-					const lastCall = last.calls.at(-1);
-					if (part.isError) {
-						last.result = part.content;
-						last.isError = true;
-					} else if (lastCall && typeof part.metadata?.matchCount === "number") {
-						const count = part.metadata.matchCount as number;
-						last.calls[last.calls.length - 1] = `${lastCall} (${count} ${count === 1 ? "result" : "results"})`;
-					}
+			const entry = callIndex.get(part.id);
+			if (!entry) continue;
+
+			if (entry.panel.quiet) {
+				// Quiet tool: update the call label with result info
+				if (part.isError) {
+					entry.panel.calls[entry.callIdx].label += " (error)";
 				} else {
-					last.result = part.content;
-					last.isError = part.isError;
+					const suffix = formatQuietSuffix(part.name, part.metadata);
+					if (suffix) {
+						entry.panel.calls[entry.callIdx].label += ` ${suffix}`;
+					}
 				}
+			} else if (part.name === "edit_file") {
+				// edit_file: suppress text result (diff shown instead)
+			} else {
+				// Non-quiet: show result as block
+				entry.panel.result = part.content;
+				entry.panel.isError = part.isError;
 			}
 		}
 	}
@@ -273,8 +310,8 @@ export function App() {
 					elements.push(
 						<div key={key++} className="panel panel--tool">
 							{panel.calls.map((call) => (
-								<div key={call} className="tool-call">
-									{call}
+								<div key={call.id} className="tool-call">
+									{call.label}
 								</div>
 							))}
 							{panel.diff && <UnifiedDiff oldString={panel.diff.oldString} newString={panel.diff.newString} />}
