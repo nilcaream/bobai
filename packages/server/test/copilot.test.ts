@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
 import { createCopilotProvider } from "../src/provider/copilot";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
@@ -260,6 +262,7 @@ describe("CopilotProvider", () => {
 			{ type: "tool_call_start", index: 0, id: "call_abc123", name: "read_file" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path"' },
 			{ type: "tool_call_delta", index: 0, arguments: ':"src/index.ts"}' },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "0 tokens" },
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -285,6 +288,7 @@ describe("CopilotProvider", () => {
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "0 tokens" },
 			{ type: "finish", reason: "stop" },
 		]);
 	});
@@ -309,6 +313,107 @@ describe("CopilotProvider", () => {
 		}
 
 		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers["x-initiator"]).toBe("agent");
+	});
+
+	test("yields usage event from final SSE chunk", async () => {
+		const configDir = path.join(__dirname, "copilot-config-usage.tmp");
+		fs.mkdirSync(configDir, { recursive: true });
+		try {
+			const modelsConfig = [
+				{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 1, enabled: true },
+			];
+			fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(modelsConfig));
+
+			const chunks = [
+				chatChunk("Hello"),
+				JSON.stringify({
+					choices: [{ finish_reason: "stop", delta: {} }],
+					usage: { prompt_tokens: 895, completion_tokens: 37, total_tokens: 932 },
+				}),
+				"[DONE]",
+			];
+
+			globalThis.fetch = mock(async () => {
+				return new Response(sseStream(chunks), { status: 200 });
+			}) as typeof fetch;
+
+			const provider = createCopilotProvider("tok", {}, configDir);
+			const events: StreamEvent[] = [];
+			for await (const t of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				events.push(t);
+			}
+
+			expect(events).toEqual([
+				{ type: "text", text: "Hello" },
+				{ type: "usage", tokenCount: 932, tokenLimit: 64000, display: "932 / 64000 | 1%" },
+				{ type: "finish", reason: "stop" },
+			]);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
+	test("yields usage with tokenLimit 0 when no config file exists", async () => {
+		const configDir = path.join(__dirname, "copilot-config-empty.tmp");
+		fs.mkdirSync(configDir, { recursive: true });
+		try {
+			// No config file written — directory is empty
+
+			const chunks = [
+				chatChunk("Hi"),
+				JSON.stringify({
+					choices: [{ finish_reason: "stop", delta: {} }],
+					usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+				}),
+				"[DONE]",
+			];
+
+			globalThis.fetch = mock(async () => {
+				return new Response(sseStream(chunks), { status: 200 });
+			}) as typeof fetch;
+
+			const provider = createCopilotProvider("tok", {}, configDir);
+			const events: StreamEvent[] = [];
+			for await (const t of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				events.push(t);
+			}
+
+			expect(events).toEqual([
+				{ type: "text", text: "Hi" },
+				{ type: "usage", tokenCount: 150, tokenLimit: 0, display: "150 tokens" },
+				{ type: "finish", reason: "stop" },
+			]);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
+	test("uses initiator override when provided", async () => {
+		let capturedInit: RequestInit | undefined;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider("tok");
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+			initiator: "agent",
+		})) {
+			/* drain */
+		}
+
+		const headers = capturedInit?.headers as Record<string, string>;
+		// Last message is user, but initiator override is "agent"
 		expect(headers["x-initiator"]).toBe("agent");
 	});
 });
