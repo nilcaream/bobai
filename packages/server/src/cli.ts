@@ -11,7 +11,12 @@ export interface AuthCommand {
 	clientId: string;
 }
 
-export type CLICommand = ServeCommand | AuthCommand;
+export interface RefreshCommand {
+	command: "refresh";
+	debug: boolean;
+}
+
+export type CLICommand = ServeCommand | AuthCommand | RefreshCommand;
 
 export function parseCLI(argv: string[]): CLICommand {
 	const debug = argv.includes("--debug");
@@ -22,6 +27,10 @@ export function parseCLI(argv: string[]): CLICommand {
 			debug,
 			clientId: parseClientId(argv) ?? DEFAULT_CLIENT_ID,
 		};
+	}
+
+	if (argv[0] === "refresh") {
+		return { command: "refresh", debug };
 	}
 
 	return { command: "serve", debug };
