@@ -5,7 +5,8 @@ type ServerMessage =
 	| { type: "tool_call"; id: string; output: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
 	| { type: "done"; sessionId: string; model: string }
-	| { type: "error"; message: string };
+	| { type: "error"; message: string }
+	| { type: "status"; text: string };
 
 export type MessagePart =
 	| { type: "text"; content: string }
@@ -52,6 +53,7 @@ export function useWebSocket() {
 	const [connected, setConnected] = useState(false);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [model, setModel] = useState<string | null>(null);
+	const [status, setStatus] = useState("");
 	const sessionId = useRef<string | null>(null);
 
 	useEffect(() => {
@@ -94,6 +96,10 @@ export function useWebSocket() {
 				setMessages((prev) => appendPart(prev, { type: "text", content: `Error: ${msg.message}` }));
 				setIsStreaming(false);
 			}
+
+			if (msg.type === "status") {
+				setStatus(msg.text);
+			}
 		};
 
 		ws.current = socket;
@@ -119,7 +125,8 @@ export function useWebSocket() {
 		sessionId.current = null;
 		setMessages([]);
 		setModel(null);
+		setStatus("");
 	}, []);
 
-	return { messages, connected, isStreaming, sendPrompt, newChat, model };
+	return { messages, connected, isStreaming, sendPrompt, newChat, model, status };
 }

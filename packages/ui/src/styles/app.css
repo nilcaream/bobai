@@ -30,6 +30,7 @@ body,
 .panel--status-bar {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: 1em;
 	color: var(--text-status);
 	flex-shrink: 0;
