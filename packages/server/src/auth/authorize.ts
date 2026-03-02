@@ -2,14 +2,10 @@ import { exchangeToken } from "../provider/copilot";
 import { pollForToken, requestDeviceCode } from "./device-flow";
 import { type StoredAuth, saveAuth } from "./store";
 
-export async function authorize(
-	configDir: string,
-	clientId?: string,
-	configHeaders?: Record<string, string>,
-): Promise<StoredAuth> {
+export async function authorize(configDir: string): Promise<StoredAuth> {
 	console.log("Authenticating with GitHub Copilot");
 
-	const deviceCode = await requestDeviceCode(clientId);
+	const deviceCode = await requestDeviceCode();
 
 	console.log(`- Open: ${deviceCode.verification_uri}`);
 	console.log(`- Enter code: ${deviceCode.user_code}`);
@@ -17,12 +13,12 @@ export async function authorize(
 	console.log("");
 	console.log("Waiting for authorization");
 
-	const githubToken = await pollForToken(deviceCode.device_code, deviceCode.interval, undefined, clientId);
+	const githubToken = await pollForToken(deviceCode.device_code, deviceCode.interval);
 	console.log("- GitHub OAuth complete");
 
 	console.log("");
 	console.log("Exchanging token for Copilot session");
-	const session = await exchangeToken(githubToken, configHeaders);
+	const session = await exchangeToken(githubToken);
 	console.log("- Session obtained");
 	console.log("");
 

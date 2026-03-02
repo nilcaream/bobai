@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import pkg from "../../package.json";
 import { type StoredAuth, saveAuth } from "../auth/store";
 import { fetchCatalog } from "../models-catalog";
 import type { ModelConfig } from "./copilot-models";
@@ -10,9 +9,16 @@ import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
 
+const COPILOT_CONFIGURATION =
+	"eyJjbGllbnRJZCI6Ikl2MS5iNTA3YTA4Yzg3ZWNmZTk4IiwiaGVhZGVycyI6eyJVc2VyLUFnZW50IjoiR2l0SHViQ29waWxvdENoYXQvMC4zNS4wIiwiRWRpdG9yLVZlcnNpb24iOiJ2c2NvZGUvMS4xMDcuMCIsIkVkaXRvci1QbHVnaW4tVmVyc2lvbiI6ImNvcGlsb3QtY2hhdC8wLjM1LjAiLCJDb3BpbG90LUludGVncmF0aW9uLUlkIjoidnNjb2RlLWNoYXQifX0=";
+
+export const copilotConfig = JSON.parse(atob(COPILOT_CONFIGURATION)) as {
+	clientId: string;
+	headers: Record<string, string>;
+};
+
 const COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
 const DEFAULT_BASE_URL = "https://api.individual.githubcopilot.com";
-const USER_AGENT = `bobai/${pkg.version}`;
 
 export function deriveBaseUrl(token: string): string {
 	const match = token.match(/proxy-ep=([^;]+)/);
@@ -21,20 +27,12 @@ export function deriveBaseUrl(token: string): string {
 	return `https://${host}`;
 }
 
-export async function exchangeToken(
-	refreshToken: string,
-	configHeaders?: Record<string, string>,
-): Promise<{ access: string; expires: number; baseUrl: string }> {
-	const defaults: Record<string, string> = {
-		"User-Agent": USER_AGENT,
-		Accept: "application/json",
-	};
-
+export async function exchangeToken(refreshToken: string): Promise<{ access: string; expires: number; baseUrl: string }> {
 	const response = await fetch(COPILOT_TOKEN_URL, {
 		method: "GET",
 		headers: {
-			...defaults,
-			...configHeaders,
+			...copilotConfig.headers,
+			Accept: "application/json",
 			Authorization: `Bearer ${refreshToken}`,
 		},
 	});
@@ -61,11 +59,7 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 	return last?.role === "user" ? "user" : "agent";
 }
 
-export function createCopilotProvider(
-	auth: StoredAuth,
-	configHeaders: Record<string, string> = {},
-	configDir?: string,
-): Provider {
+export function createCopilotProvider(auth: StoredAuth, configDir?: string): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
 	let modelsConfig: ModelConfig[] | null = null;
 
@@ -77,7 +71,7 @@ export function createCopilotProvider(
 
 	async function ensureValidSession(): Promise<void> {
 		if (Date.now() < sessionExpires) return;
-		const result = await exchangeToken(refreshToken, configHeaders);
+		const result = await exchangeToken(refreshToken);
 		sessionToken = result.access;
 		sessionExpires = result.expires;
 		baseUrl = result.baseUrl;
@@ -101,17 +95,12 @@ export function createCopilotProvider(
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			await ensureValidSession();
 
-			const defaults: Record<string, string> = {
-				"Content-Type": "application/json",
-				"User-Agent": USER_AGENT,
-				"Openai-Intent": "conversation-edits",
-			};
-
 			const response = await fetch(`${baseUrl}/chat/completions`, {
 				method: "POST",
 				headers: {
-					...defaults,
-					...configHeaders,
+					"Content-Type": "application/json",
+					...copilotConfig.headers,
+					"Openai-Intent": "conversation-edits",
 					Authorization: `Bearer ${sessionToken}`,
 					"x-initiator": options.initiator ?? resolveInitiator(options.messages),
 				},
@@ -195,19 +184,7 @@ export function createCopilotProvider(
 	};
 }
 
-export async function enableModels(
-	sessionToken: string,
-	baseUrl: string,
-	modelIds: string[],
-	configHeaders?: Record<string, string>,
-): Promise<void> {
-	const defaults: Record<string, string> = {
-		"Content-Type": "application/json",
-		"User-Agent": USER_AGENT,
-		"openai-intent": "chat-policy",
-		"x-interaction-type": "chat-policy",
-	};
-
+export async function enableModels(sessionToken: string, baseUrl: string, modelIds: string[]): Promise<void> {
 	console.log("Enabling models");
 
 	const results = await Promise.all(
@@ -216,8 +193,10 @@ export async function enableModels(
 				const response = await fetch(`${baseUrl}/models/${id}/policy`, {
 					method: "POST",
 					headers: {
-						...defaults,
-						...configHeaders,
+						"Content-Type": "application/json",
+						...copilotConfig.headers,
+						"openai-intent": "chat-policy",
+						"x-interaction-type": "chat-policy",
 						Authorization: `Bearer ${sessionToken}`,
 					},
 					body: JSON.stringify({ state: "enabled" }),
@@ -243,12 +222,7 @@ export interface RefreshResult {
 	configPath: string;
 }
 
-export async function refreshModels(
-	sessionToken: string,
-	baseUrl: string,
-	configDir: string,
-	configHeaders: Record<string, string> = {},
-): Promise<RefreshResult> {
+export async function refreshModels(sessionToken: string, baseUrl: string, configDir: string): Promise<RefreshResult> {
 	console.log("Fetching model catalog from models.dev");
 	const catalog = await fetchCatalog("github-copilot");
 	console.log(`- Got ${catalog.length} models`);
@@ -259,7 +233,6 @@ export async function refreshModels(
 		sessionToken,
 		baseUrl,
 		configs.map((c) => c.id),
-		configHeaders,
 	);
 	console.log("");
 
@@ -271,9 +244,8 @@ export async function refreshModels(
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					"User-Agent": USER_AGENT,
+					...copilotConfig.headers,
 					"Openai-Intent": "conversation-edits",
-					...configHeaders,
 					Authorization: `Bearer ${sessionToken}`,
 					"x-initiator": "agent",
 				},

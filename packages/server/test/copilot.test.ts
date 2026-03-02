@@ -70,7 +70,7 @@ describe("CopilotProvider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer test-token");
 		expect(headers["Openai-Intent"]).toBe("conversation-edits");
-		expect(headers["User-Agent"]).toMatch(/^bobai\//);
+		expect(headers["User-Agent"]).toMatch(/^GitHubCopilotChat\//);
 		expect(headers["x-initiator"]).toBe("user");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("gpt-5-mini");
@@ -138,32 +138,7 @@ describe("CopilotProvider", () => {
 		]);
 	});
 
-	test("config headers override default headers", async () => {
-		let capturedInit: RequestInit | undefined;
-
-		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
-			capturedInit = init;
-			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
-		}) as typeof fetch;
-
-		const provider = createCopilotProvider(makeAuth(), {
-			"User-Agent": "CustomAgent/2.0",
-			"X-Custom": "value",
-		});
-		for await (const _ of provider.stream({
-			model: "gpt-4o",
-			messages: [{ role: "user", content: "hi" }],
-		})) {
-			/* drain */
-		}
-
-		const headers = capturedInit?.headers as Record<string, string>;
-		expect(headers["User-Agent"]).toBe("CustomAgent/2.0");
-		expect(headers["X-Custom"]).toBe("value");
-		expect(headers["Openai-Intent"]).toBe("conversation-edits");
-	});
-
-	test("uses default headers when no config headers provided", async () => {
+	test("uses default headers", async () => {
 		let capturedInit: RequestInit | undefined;
 
 		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -180,7 +155,7 @@ describe("CopilotProvider", () => {
 		}
 
 		const headers = capturedInit?.headers as Record<string, string>;
-		expect(headers["User-Agent"]).toMatch(/^bobai\//);
+		expect(headers["User-Agent"]).toMatch(/^GitHubCopilotChat\//);
 	});
 
 	test("includes tools in request body when provided", async () => {
@@ -261,7 +236,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream(chunks), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), {}, emptyConfigDir);
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-4o",
@@ -289,7 +264,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream(chunks), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), {}, emptyConfigDir);
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-4o",
@@ -350,7 +325,7 @@ describe("CopilotProvider", () => {
 				return new Response(sseStream(chunks), { status: 200 });
 			}) as typeof fetch;
 
-			const provider = createCopilotProvider(makeAuth(), {}, configDir);
+			const provider = createCopilotProvider(makeAuth(), configDir);
 			const events: StreamEvent[] = [];
 			for await (const t of provider.stream({
 				model: "gpt-4o",
@@ -388,7 +363,7 @@ describe("CopilotProvider", () => {
 				return new Response(sseStream(chunks), { status: 200 });
 			}) as typeof fetch;
 
-			const provider = createCopilotProvider(makeAuth(), {}, configDir);
+			const provider = createCopilotProvider(makeAuth(), configDir);
 			const events: StreamEvent[] = [];
 			for await (const t of provider.stream({
 				model: "gpt-4o",
@@ -454,7 +429,6 @@ describe("CopilotProvider", () => {
 
 			const provider = createCopilotProvider(
 				{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
-				{},
 				configDir,
 			);
 

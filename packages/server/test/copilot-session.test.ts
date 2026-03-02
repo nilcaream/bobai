@@ -49,25 +49,6 @@ describe("exchangeToken", () => {
 		expect(result.baseUrl).toBe("https://api.individual.githubcopilot.com");
 	});
 
-	test("merges config headers into exchange request", async () => {
-		let capturedHeaders: Record<string, string> = {};
-
-		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
-			capturedHeaders = { ...(init?.headers as Record<string, string>) };
-			return new Response(
-				JSON.stringify({
-					token: "tid=x;exp=1;proxy-ep=proxy.individual.githubcopilot.com",
-					expires_at: 1700000000,
-				}),
-				{ status: 200 },
-			);
-		}) as typeof fetch;
-
-		await exchangeToken("gho_test", { "User-Agent": "CustomAgent/1.0" });
-
-		expect(capturedHeaders["User-Agent"]).toBe("CustomAgent/1.0");
-	});
-
 	test("throws on non-OK response", async () => {
 		globalThis.fetch = mock(async () => {
 			return new Response("Forbidden", { status: 403 });
@@ -122,19 +103,6 @@ describe("enableModels", () => {
 		expect(capturedHeaders.Authorization).toBe("Bearer my-session-tok");
 		expect(capturedHeaders["openai-intent"]).toBe("chat-policy");
 		expect(capturedHeaders["x-interaction-type"]).toBe("chat-policy");
-	});
-
-	test("merges config headers", async () => {
-		let capturedHeaders: Record<string, string> = {};
-
-		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
-			capturedHeaders = { ...(init?.headers as Record<string, string>) };
-			return new Response(null, { status: 200 });
-		}) as typeof fetch;
-
-		await enableModels("tok", "https://api.example.com", ["gpt-4o"], { "User-Agent": "CustomAgent/1.0" });
-
-		expect(capturedHeaders["User-Agent"]).toBe("CustomAgent/1.0");
 	});
 
 	test("does not throw on individual model failure", async () => {

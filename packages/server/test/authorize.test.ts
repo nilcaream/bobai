@@ -8,20 +8,10 @@ import type { StoredAuth } from "../src/auth/store";
 const SESSION_TOKEN = "tid=session;proxy-ep=proxy.individual.githubcopilot.com";
 const SESSION_EXPIRES_AT = Math.floor(Date.now() / 1000) + 3600;
 
-function createMockFetch(options?: {
-	captureBody?: (url: string, body: string) => void;
-	captureHeaders?: (url: string, headers: HeadersInit | undefined) => void;
-}) {
+function createMockFetch() {
 	let pollCount = 0;
-	return mock(async (url: string | URL | Request, init?: RequestInit) => {
+	return mock(async (url: string | URL | Request, _init?: RequestInit) => {
 		const u = url.toString();
-
-		if (options?.captureBody) {
-			options.captureBody(u, init?.body as string);
-		}
-		if (options?.captureHeaders) {
-			options.captureHeaders(u, init?.headers);
-		}
 
 		// 1. Device code request
 		if (u.includes("/login/device/code")) {
@@ -96,41 +86,5 @@ describe("authorize", () => {
 
 		// Return value matches saved format
 		expect(result).toEqual(raw);
-	});
-
-	test("forwards custom clientId to device flow", async () => {
-		let capturedBody = "";
-
-		globalThis.fetch = createMockFetch({
-			captureBody: (url, body) => {
-				if (url.includes("/login/device/code") && body) {
-					capturedBody = body;
-				}
-			},
-		});
-
-		await authorize(tmpDir, "Iv1.customid");
-
-		const body = JSON.parse(capturedBody);
-		expect(body.client_id).toBe("Iv1.customid");
-	});
-
-	test("passes configHeaders to exchangeToken", async () => {
-		const capturedHeaders: Record<string, HeadersInit | undefined> = {};
-
-		globalThis.fetch = createMockFetch({
-			captureHeaders: (url, headers) => {
-				if (url.includes("copilot_internal/v2/token")) {
-					capturedHeaders.exchange = headers;
-				}
-			},
-		});
-
-		const customHeaders = { "X-Custom": "test-value" };
-		await authorize(tmpDir, undefined, customHeaders);
-
-		// Verify exchange call received configHeaders
-		const exchangeHeaders = capturedHeaders.exchange as Record<string, string>;
-		expect(exchangeHeaders["X-Custom"]).toBe("test-value");
 	});
 });
