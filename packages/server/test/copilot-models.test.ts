@@ -8,8 +8,8 @@ import {
 } from "../src/provider/copilot-models";
 
 describe("copilot model constants", () => {
-	test("curated list has 6 models", () => {
-		expect(CURATED_MODELS).toHaveLength(6);
+	test("curated list has 7 models", () => {
+		expect(CURATED_MODELS).toHaveLength(7);
 	});
 
 	test("every curated model has a multiplier", () => {
@@ -28,10 +28,18 @@ describe("buildModelConfigs", () => {
 		];
 
 		const configs = buildModelConfigs(catalog);
-		expect(configs).toHaveLength(2); // gpt-4o not in curated list
+		expect(configs).toHaveLength(3); // all three are in curated list
 		expect(configs.find((c) => c.id === "gpt-4.1")).toEqual({
 			id: "gpt-4.1",
 			name: "GPT-4.1",
+			contextWindow: 64000,
+			maxOutput: 16384,
+			premiumRequestMultiplier: 0,
+			enabled: false,
+		});
+		expect(configs.find((c) => c.id === "gpt-4o")).toEqual({
+			id: "gpt-4o",
+			name: "GPT-4o",
 			contextWindow: 64000,
 			maxOutput: 16384,
 			premiumRequestMultiplier: 0,

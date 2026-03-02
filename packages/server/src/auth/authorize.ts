@@ -1,19 +1,33 @@
+import { exchangeToken } from "../provider/copilot";
 import { pollForToken, requestDeviceCode } from "./device-flow";
-import { saveToken } from "./store";
+import { type StoredAuth, saveAuth } from "./store";
 
-export async function authorize(configDir: string, clientId?: string): Promise<string> {
-	console.log("Authenticating with GitHub Copilot...\n");
+export async function authorize(
+	configDir: string,
+	clientId?: string,
+	configHeaders?: Record<string, string>,
+): Promise<StoredAuth> {
+	console.log("Authenticating with GitHub Copilot");
 
 	const deviceCode = await requestDeviceCode(clientId);
 
-	console.log(`  Open: ${deviceCode.verification_uri}`);
-	console.log(`  Enter code: ${deviceCode.user_code}\n`);
-	console.log("Waiting for authorization...");
+	console.log(`- Open: ${deviceCode.verification_uri}`);
+	console.log(`- Enter code: ${deviceCode.user_code}`);
 
-	const token = await pollForToken(deviceCode.device_code, deviceCode.interval, undefined, clientId);
+	console.log("");
+	console.log("Waiting for authorization");
 
-	saveToken(configDir, token);
-	console.log("Authenticated successfully.\n");
+	const githubToken = await pollForToken(deviceCode.device_code, deviceCode.interval, undefined, clientId);
+	console.log("- GitHub OAuth complete");
 
-	return token;
+	console.log("");
+	console.log("Exchanging token for Copilot session");
+	const session = await exchangeToken(githubToken, configHeaders);
+	console.log("- Session obtained");
+	console.log("");
+
+	const auth: StoredAuth = { refresh: githubToken, access: session.access, expires: session.expires };
+	saveAuth(configDir, auth);
+
+	return auth;
 }

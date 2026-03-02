@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { StoredAuth } from "../src/auth/store";
 import { createCopilotProvider } from "../src/provider/copilot";
@@ -26,9 +27,15 @@ function chatChunk(content: string): string {
 
 describe("CopilotProvider", () => {
 	const originalFetch = globalThis.fetch;
+	let emptyConfigDir: string;
+
+	beforeEach(() => {
+		emptyConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-copilot-"));
+	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		fs.rmSync(emptyConfigDir, { recursive: true, force: true });
 	});
 
 	test("has correct id", () => {
@@ -254,7 +261,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream(chunks), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), {}, emptyConfigDir);
 		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-4o",
@@ -282,7 +289,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream(chunks), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), {}, emptyConfigDir);
 		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-4o",

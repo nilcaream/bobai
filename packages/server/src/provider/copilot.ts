@@ -208,7 +208,9 @@ export async function enableModels(
 		"x-interaction-type": "chat-policy",
 	};
 
-	await Promise.all(
+	console.log("Enabling models");
+
+	const results = await Promise.all(
 		modelIds.map(async (id) => {
 			try {
 				const response = await fetch(`${baseUrl}/models/${id}/policy`, {
@@ -221,15 +223,18 @@ export async function enableModels(
 					body: JSON.stringify({ state: "enabled" }),
 				});
 				if (response.ok) {
-					console.log(`  ${id}: enabled`);
-				} else {
-					console.log(`  ${id}: failed (${response.status})`);
+					return { id, status: "enabled" };
 				}
+				return { id, status: `failed (HTTP ${response.status})` };
 			} catch (err) {
-				console.log(`  ${id}: failed (${err instanceof Error ? err.message : String(err)})`);
+				return { id, status: `failed (${err instanceof Error ? err.message : String(err)})` };
 			}
 		}),
 	);
+
+	for (const r of results) {
+		console.log(`- ${r.id.padEnd(20)}: ${r.status}`);
+	}
 }
 
 export interface RefreshResult {
@@ -244,11 +249,12 @@ export async function refreshModels(
 	configDir: string,
 	configHeaders: Record<string, string> = {},
 ): Promise<RefreshResult> {
-	console.log("Fetching model catalog from models.dev...");
+	console.log("Fetching model catalog from models.dev");
 	const catalog = await fetchCatalog("github-copilot");
+	console.log(`- Got ${catalog.length} models`);
 	const configs = buildModelConfigs(catalog);
 
-	console.log("Enabling models...");
+	console.log("");
 	await enableModels(
 		sessionToken,
 		baseUrl,
@@ -257,8 +263,9 @@ export async function refreshModels(
 	);
 	console.log("");
 
+	console.log("Checking models");
 	for (const config of configs) {
-		process.stdout.write(`Checking ${config.id}... `);
+		process.stdout.write(`- ${config.id.padEnd(20)}`);
 		try {
 			const response = await fetch(`${baseUrl}/chat/completions`, {
 				method: "POST",
@@ -275,16 +282,16 @@ export async function refreshModels(
 					messages: [{ role: "user", content: "Ping. Respond pong." }],
 					stream: false,
 				}),
-				signal: AbortSignal.timeout(10_000),
+				signal: AbortSignal.timeout(20_000),
 			});
 			if (response.ok) {
 				config.enabled = true;
-				console.log("ok");
+				console.log(": OK");
 			} else {
-				console.log(`failed (${response.status})`);
+				console.log(`: failed (HTTP ${response.status})`);
 			}
 		} catch (err) {
-			console.log(`failed (${err instanceof Error ? err.message : "unknown error"})`);
+			console.log(`: failed (${err instanceof Error ? err.message : "unknown error"})`);
 		}
 	}
 
@@ -293,6 +300,7 @@ export async function refreshModels(
 	fs.writeFileSync(configPath, JSON.stringify(configs, null, "\t"));
 
 	const enabled = configs.filter((c) => c.enabled).length;
+	console.log("");
 	console.log(`Wrote ${configs.length} models (${enabled} enabled) to ${configPath}`);
 
 	return { total: configs.length, enabled, configPath };
