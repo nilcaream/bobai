@@ -59,7 +59,7 @@ function groupParts(parts: MessagePart[]): Panel[] {
 }
 
 export function App() {
-	const { messages, connected, isStreaming, sendPrompt, model } = useWebSocket();
+	const { messages, connected, isStreaming, sendPrompt, model, status } = useWebSocket();
 	const [input, setInput] = useState("");
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const historyEntries = useRef<string[]>([]);
@@ -271,9 +271,11 @@ export function App() {
 	return (
 		<main className="app">
 			<div className="panel panel--status-bar">
-				<span className="status-bar-label">Bob AI</span>
-				<span className={`status-dot${connected ? "" : " disconnected"}`} />
-				<span>{connected ? "connected" : "connecting..."}</span>
+				<span>
+					<span className="status-bar-label">Bob AI</span> <span className={`status-dot${connected ? "" : " disconnected"}`} />{" "}
+					{connected ? "connected" : "connecting..."}
+				</span>
+				<span>{status}</span>
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
