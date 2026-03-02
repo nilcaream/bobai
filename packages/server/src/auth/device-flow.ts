@@ -1,4 +1,5 @@
-export const DEFAULT_CLIENT_ID = "Ov23lilOtSxsmULu7KfI";
+import { copilotConfig } from "../provider/copilot";
+
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
 export interface DeviceCodeResponse {
@@ -9,7 +10,7 @@ export interface DeviceCodeResponse {
 	expires_in: number;
 }
 
-export async function requestDeviceCode(clientId: string = DEFAULT_CLIENT_ID): Promise<DeviceCodeResponse> {
+export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
 	const response = await fetch(GITHUB_DEVICE_CODE_URL, {
 		method: "POST",
 		headers: {
@@ -17,7 +18,7 @@ export async function requestDeviceCode(clientId: string = DEFAULT_CLIENT_ID): P
 			Accept: "application/json",
 		},
 		body: JSON.stringify({
-			client_id: clientId,
+			client_id: copilotConfig.clientId,
 			scope: "read:user",
 		}),
 	});
@@ -42,7 +43,6 @@ export async function pollForToken(
 	deviceCode: string,
 	intervalSeconds: number,
 	sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
-	clientId: string = DEFAULT_CLIENT_ID,
 ): Promise<string> {
 	let interval = intervalSeconds;
 
@@ -58,7 +58,7 @@ export async function pollForToken(
 				Accept: "application/json",
 			},
 			body: JSON.stringify({
-				client_id: clientId,
+				client_id: copilotConfig.clientId,
 				device_code: deviceCode,
 				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
 			}),

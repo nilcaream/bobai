@@ -20,13 +20,11 @@ const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
 installFetchInterceptor({ logger, logDir, debug: cli.debug });
 
 const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
-const globalConfig = loadGlobalConfig(globalConfigDir);
-const configHeaders = globalConfig.preferences?.headers ?? {};
 
 if (cli.command === "auth") {
 	logger.info("AUTH", "Starting authentication flow");
-	const auth = await authorize(globalConfigDir, cli.clientId, configHeaders);
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, configHeaders);
+	const auth = await authorize(globalConfigDir);
+	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
 	process.exit(0);
 }
 
@@ -37,25 +35,26 @@ if (cli.command === "refresh") {
 		process.exit(1);
 	}
 	if (Date.now() >= auth.expires) {
-		const session = await exchangeToken(auth.refresh, configHeaders);
+		const session = await exchangeToken(auth.refresh);
 		auth = { refresh: auth.refresh, access: session.access, expires: session.expires };
 		saveAuth(globalConfigDir, auth);
 	}
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, configHeaders);
+	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
 	process.exit(0);
 }
 
 logger.info("SERVER", `Starting bobai (debug=${cli.debug})`);
 
+const globalConfig = loadGlobalConfig(globalConfigDir);
 const project = await initProject(process.cwd());
 const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
 
 let auth = loadAuth(globalConfigDir);
 if (!auth) {
-	auth = await authorize(globalConfigDir, undefined, configHeaders);
+	auth = await authorize(globalConfigDir);
 }
 
-const provider = createCopilotProvider(auth, config.headers, globalConfigDir);
+const provider = createCopilotProvider(auth, globalConfigDir);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
 const server = createServer({ port, staticDir, db: project.db, provider, model: config.model, projectRoot: process.cwd() });

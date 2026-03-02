@@ -4,7 +4,6 @@ import path from "node:path";
 export interface GlobalPreferences {
 	provider?: string;
 	model?: string;
-	headers?: Record<string, string>;
 }
 
 export interface GlobalConfig {
