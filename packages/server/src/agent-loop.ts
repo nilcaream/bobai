@@ -6,7 +6,8 @@ const DEFAULT_MAX_ITERATIONS = 20;
 export type AgentEvent =
 	| { type: "text"; text: string }
 	| { type: "tool_call"; id: string; output: string }
-	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean };
+	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
+	| { type: "status"; text: string };
 
 export interface AgentLoopOptions {
 	provider: Provider;
@@ -58,6 +59,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 					if (tc) tc.arguments += event.arguments;
 					break;
 				}
+				case "usage":
+					onEvent({ type: "status", text: event.display });
+					break;
 				case "finish":
 					finishReason = event.reason;
 					break;

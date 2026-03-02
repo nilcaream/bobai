@@ -78,6 +78,8 @@ export async function handlePrompt(req: PromptRequest) {
 					send(ws, { type: "tool_call", id: event.id, output: event.output });
 				} else if (event.type === "tool_result") {
 					send(ws, { type: "tool_result", id: event.id, output: event.output, mergeable: event.mergeable });
+				} else if (event.type === "status") {
+					send(ws, { type: "status", text: event.text });
 				}
 			},
 			onMessage(msg) {

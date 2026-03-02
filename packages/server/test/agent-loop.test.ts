@@ -327,6 +327,39 @@ describe("runAgentLoop", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
+	test("emits status event from provider usage", async () => {
+		const events: AgentEvent[] = [];
+
+		// Create a provider that yields a usage event
+		const usageProvider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield { type: "text", text: "Hello" };
+				yield { type: "usage", tokenCount: 932, tokenLimit: 64000, display: "932 / 64000 | 1%" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		await runAgentLoop({
+			provider: usageProvider,
+			model: "test",
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hi" },
+			],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			onEvent(event) {
+				events.push(event);
+			},
+			onMessage() {},
+		});
+
+		const statusEvents = events.filter((e) => e.type === "status");
+		expect(statusEvents).toHaveLength(1);
+		expect((statusEvents[0] as { text: string }).text).toBe("932 / 64000 | 1%");
+	});
+
 	test("calls onMessage for each completed message", async () => {
 		const registry = createToolRegistry([echoTool()]);
 		const collected: Message[] = [];
