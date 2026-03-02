@@ -174,6 +174,43 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 	};
 }
 
+export async function enableModels(
+	sessionToken: string,
+	baseUrl: string,
+	modelIds: string[],
+	configHeaders?: Record<string, string>,
+): Promise<void> {
+	const defaults: Record<string, string> = {
+		"Content-Type": "application/json",
+		"User-Agent": USER_AGENT,
+		"openai-intent": "chat-policy",
+		"x-interaction-type": "chat-policy",
+	};
+
+	await Promise.all(
+		modelIds.map(async (id) => {
+			try {
+				const response = await fetch(`${baseUrl}/models/${id}/policy`, {
+					method: "POST",
+					headers: {
+						...defaults,
+						...configHeaders,
+						Authorization: `Bearer ${sessionToken}`,
+					},
+					body: JSON.stringify({ state: "enabled" }),
+				});
+				if (response.ok) {
+					console.log(`  ${id}: enabled`);
+				} else {
+					console.log(`  ${id}: failed (${response.status})`);
+				}
+			} catch (err) {
+				console.log(`  ${id}: failed (${err instanceof Error ? err.message : String(err)})`);
+			}
+		}),
+	);
+}
+
 export interface RefreshResult {
 	total: number;
 	enabled: number;
