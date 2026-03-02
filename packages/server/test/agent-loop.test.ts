@@ -222,14 +222,26 @@ describe("runAgentLoop", () => {
 		expect((lastMsg as { content: string }).content).toBe("Recovered");
 	});
 
-	test("respects max iterations safety valve", async () => {
-		// Provider always requests tool calls — should stop after 3 iterations
+	test("makes a final tool-free LLM call when iteration limit is reached", async () => {
+		let callCount = 0;
+		let lastCallHadTools = true;
+
 		const provider: Provider = {
 			id: "mock",
-			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				yield { type: "tool_call_start", index: 0, id: `call_${Math.random()}`, name: "echo" };
-				yield { type: "tool_call_delta", index: 0, arguments: '{"text":"loop"}' };
-				yield { type: "finish", reason: "tool_calls" };
+			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				lastCallHadTools = opts.tools !== undefined;
+
+				if (callCount <= 3) {
+					// First 3 calls: always request tool calls
+					yield { type: "tool_call_start", index: 0, id: `call_${callCount}`, name: "echo" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"text":"loop"}' };
+					yield { type: "finish", reason: "tool_calls" };
+				} else {
+					// 4th call: the final summarization call (no tools)
+					yield { type: "text", text: "Here is what I found so far." };
+					yield { type: "finish", reason: "stop" };
+				}
 			},
 		};
 
@@ -244,16 +256,19 @@ describe("runAgentLoop", () => {
 			],
 			tools: registry,
 			projectRoot: "/tmp",
-			maxIterations: 3, // Use a small number for testing
+			maxIterations: 3,
 			onEvent() {},
 			onMessage() {},
 		});
 
-		// Should have stopped and the last message should indicate the limit
-		// 3 iterations × (1 assistant + 1 tool) = 6, plus a final error message
+		// The final LLM call should have been made without tools
+		expect(callCount).toBe(4);
+		expect(lastCallHadTools).toBe(false);
+
+		// Last message should be the model's synthesized response, not a canned warning
 		const lastMsg = messages[messages.length - 1];
 		expect(lastMsg.role).toBe("assistant");
-		expect((lastMsg as { content: string }).content).toContain("iteration");
+		expect((lastMsg as { content: string }).content).toBe("Here is what I found so far.");
 	});
 
 	test("handles multi-tool workflow (read then edit)", async () => {

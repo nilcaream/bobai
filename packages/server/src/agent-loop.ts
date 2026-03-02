@@ -141,13 +141,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 		// Loop continues — provider will be called again with updated conversation
 	}
 
-	// Hit max iterations — append a warning message
-	const warningMsg: AssistantMessage = {
-		role: "assistant",
-		content: `Stopped after ${maxIterations} iteration${maxIterations === 1 ? "" : "s"} — possible runaway loop.`,
+	// Hit max iterations — nudge the model and make one final call without tools
+	const nudge: Message = {
+		role: "user",
+		content: "You've reached the tool call limit. Respond now with what you have — do not call any more tools.",
 	};
-	conversation.push(warningMsg);
-	newMessages.push(warningMsg);
-	onMessage(warningMsg);
+	conversation.push(nudge);
+
+	let finalText = "";
+	for await (const event of provider.stream({ model, messages: conversation })) {
+		if (event.type === "text") {
+			finalText += event.text;
+			onEvent({ type: "text", text: event.text });
+		} else if (event.type === "usage") {
+			onEvent({ type: "status", text: event.display });
+		}
+	}
+
+	const finalMsg: AssistantMessage = { role: "assistant", content: finalText };
+	conversation.push(finalMsg);
+	newMessages.push(finalMsg);
+	onMessage(finalMsg);
 	return newMessages;
 }
