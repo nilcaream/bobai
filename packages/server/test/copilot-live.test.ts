@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
-import { loadToken } from "../src/auth/store";
+import { loadAuth } from "../src/auth/store";
 import { createCopilotProvider } from "../src/provider/copilot";
 
 const configDir = path.join(os.homedir(), ".config", "bobai");
-const token = loadToken(configDir);
+const auth = loadAuth(configDir);
 
-describe.skipIf(!token)("copilot live", () => {
+describe.skipIf(!auth)("copilot live", () => {
 	test("completes a simple math prompt", async () => {
-		const provider = createCopilotProvider(token!);
+		const provider = createCopilotProvider(auth!);
 		let result = "";
 		for await (const event of provider.stream({
 			model: "gpt-4o",

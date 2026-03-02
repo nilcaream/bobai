@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
+import { type StoredAuth, saveAuth } from "../auth/store";
 import { fetchCatalog } from "../models-catalog";
 import type { ModelConfig } from "./copilot-models";
 import { buildModelConfigs } from "./copilot-models";
@@ -9,7 +10,6 @@ import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
 
-const COPILOT_API = "https://api.githubcopilot.com/chat/completions";
 const COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
 const DEFAULT_BASE_URL = "https://api.individual.githubcopilot.com";
 const USER_AGENT = `bobai/${pkg.version}`;
@@ -61,9 +61,28 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 	return last?.role === "user" ? "user" : "agent";
 }
 
-export function createCopilotProvider(token: string, configHeaders: Record<string, string> = {}, configDir?: string): Provider {
+export function createCopilotProvider(
+	auth: StoredAuth,
+	configHeaders: Record<string, string> = {},
+	configDir?: string,
+): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
 	let modelsConfig: ModelConfig[] | null = null;
+
+	// Mutable session state
+	let sessionToken = auth.access;
+	let sessionExpires = auth.expires;
+	let baseUrl = deriveBaseUrl(auth.access);
+	const refreshToken = auth.refresh;
+
+	async function ensureValidSession(): Promise<void> {
+		if (Date.now() < sessionExpires) return;
+		const result = await exchangeToken(refreshToken, configHeaders);
+		sessionToken = result.access;
+		sessionExpires = result.expires;
+		baseUrl = result.baseUrl;
+		saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
+	}
 
 	function loadModelsConfig(): ModelConfig[] {
 		if (modelsConfig !== null) return modelsConfig;
@@ -80,18 +99,20 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 		id: "github-copilot",
 
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
+			await ensureValidSession();
+
 			const defaults: Record<string, string> = {
 				"Content-Type": "application/json",
 				"User-Agent": USER_AGENT,
 				"Openai-Intent": "conversation-edits",
 			};
 
-			const response = await fetch(COPILOT_API, {
+			const response = await fetch(`${baseUrl}/chat/completions`, {
 				method: "POST",
 				headers: {
 					...defaults,
 					...configHeaders,
-					Authorization: `Bearer ${token}`,
+					Authorization: `Bearer ${sessionToken}`,
 					"x-initiator": options.initiator ?? resolveInitiator(options.messages),
 				},
 				body: JSON.stringify({
@@ -217,21 +238,36 @@ export interface RefreshResult {
 	configPath: string;
 }
 
-export async function refreshModels(token: string, configDir: string): Promise<RefreshResult> {
+export async function refreshModels(
+	sessionToken: string,
+	baseUrl: string,
+	configDir: string,
+	configHeaders: Record<string, string> = {},
+): Promise<RefreshResult> {
 	console.log("Fetching model catalog from models.dev...");
 	const catalog = await fetchCatalog("github-copilot");
 	const configs = buildModelConfigs(catalog);
 
+	console.log("Enabling models...");
+	await enableModels(
+		sessionToken,
+		baseUrl,
+		configs.map((c) => c.id),
+		configHeaders,
+	);
+	console.log("");
+
 	for (const config of configs) {
 		process.stdout.write(`Checking ${config.id}... `);
 		try {
-			const response = await fetch(COPILOT_API, {
+			const response = await fetch(`${baseUrl}/chat/completions`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					"User-Agent": USER_AGENT,
 					"Openai-Intent": "conversation-edits",
-					Authorization: `Bearer ${token}`,
+					...configHeaders,
+					Authorization: `Bearer ${sessionToken}`,
 					"x-initiator": "agent",
 				},
 				body: JSON.stringify({
