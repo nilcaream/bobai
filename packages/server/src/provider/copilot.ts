@@ -1,4 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import pkg from "../../package.json";
+import { fetchCatalog } from "../models-catalog";
+import { buildModelConfigs } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
@@ -92,4 +96,55 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 			yield { type: "finish" as const, reason: "stop" as const };
 		},
 	};
+}
+
+export interface RefreshResult {
+	total: number;
+	enabled: number;
+	configPath: string;
+}
+
+export async function refreshModels(token: string, configDir: string): Promise<RefreshResult> {
+	console.log("Fetching model catalog from models.dev...");
+	const catalog = await fetchCatalog("github-copilot");
+	const configs = buildModelConfigs(catalog);
+
+	for (const config of configs) {
+		process.stdout.write(`Checking ${config.id}... `);
+		try {
+			const response = await fetch(COPILOT_API, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"User-Agent": USER_AGENT,
+					"Openai-Intent": "conversation-edits",
+					Authorization: `Bearer ${token}`,
+					"x-initiator": "agent",
+				},
+				body: JSON.stringify({
+					model: config.id,
+					messages: [{ role: "user", content: "Ping. Respond pong." }],
+					stream: false,
+				}),
+				signal: AbortSignal.timeout(10_000),
+			});
+			if (response.ok) {
+				config.enabled = true;
+				console.log("ok");
+			} else {
+				console.log(`failed (${response.status})`);
+			}
+		} catch (err) {
+			console.log(`failed (${err instanceof Error ? err.message : "unknown error"})`);
+		}
+	}
+
+	fs.mkdirSync(configDir, { recursive: true });
+	const configPath = path.join(configDir, "copilot-models.json");
+	fs.writeFileSync(configPath, JSON.stringify(configs, null, "\t"));
+
+	const enabled = configs.filter((c) => c.enabled).length;
+	console.log(`Wrote ${configs.length} models (${enabled} enabled) to ${configPath}`);
+
+	return { total: configs.length, enabled, configPath };
 }
