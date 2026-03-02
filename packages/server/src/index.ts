@@ -9,7 +9,7 @@ import { installFetchInterceptor } from "./log/fetch";
 import { createLogger } from "./log/logger";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
-import { createCopilotProvider } from "./provider/copilot";
+import { createCopilotProvider, refreshModels } from "./provider/copilot";
 import { createServer } from "./server";
 
 const cli = parseCLI(process.argv.slice(2));
@@ -23,7 +23,18 @@ const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
 
 if (cli.command === "auth") {
 	logger.info("AUTH", "Starting authentication flow");
-	await authorize(globalConfigDir, cli.clientId);
+	const token = await authorize(globalConfigDir, cli.clientId);
+	await refreshModels(token, globalConfigDir);
+	process.exit(0);
+}
+
+if (cli.command === "refresh") {
+	const token = loadToken(globalConfigDir);
+	if (!token) {
+		console.error("No token found. Run `bobai auth` first.");
+		process.exit(1);
+	}
+	await refreshModels(token, globalConfigDir);
 	process.exit(0);
 }
 
