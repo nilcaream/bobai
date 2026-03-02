@@ -10,7 +10,51 @@ import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
 
 const COPILOT_API = "https://api.githubcopilot.com/chat/completions";
+const COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
+const DEFAULT_BASE_URL = "https://api.individual.githubcopilot.com";
 const USER_AGENT = `bobai/${pkg.version}`;
+
+export function deriveBaseUrl(token: string): string {
+	const match = token.match(/proxy-ep=([^;]+)/);
+	if (!match) return DEFAULT_BASE_URL;
+	const host = match[1].replace(/^proxy\./, "api.");
+	return `https://${host}`;
+}
+
+export async function exchangeToken(
+	refreshToken: string,
+	configHeaders?: Record<string, string>,
+): Promise<{ access: string; expires: number; baseUrl: string }> {
+	const defaults: Record<string, string> = {
+		"User-Agent": USER_AGENT,
+		Accept: "application/json",
+	};
+
+	const response = await fetch(COPILOT_TOKEN_URL, {
+		method: "GET",
+		headers: {
+			...defaults,
+			...configHeaders,
+			Authorization: `Bearer ${refreshToken}`,
+		},
+	});
+
+	if (!response.ok) {
+		throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
+	}
+
+	const data = (await response.json()) as { token?: string; expires_at?: number };
+
+	if (typeof data.token !== "string" || typeof data.expires_at !== "number") {
+		throw new Error("Invalid token exchange response: missing token or expires_at");
+	}
+
+	return {
+		access: data.token,
+		expires: data.expires_at * 1000 - 5 * 60 * 1000,
+		baseUrl: deriveBaseUrl(data.token),
+	};
+}
 
 function resolveInitiator(messages: Message[]): "user" | "agent" {
 	const last = messages[messages.length - 1];
