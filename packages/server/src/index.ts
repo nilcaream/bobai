@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { authorize } from "./auth/authorize";
-import { loadAuth, loadToken } from "./auth/store";
+import { loadAuth, saveAuth } from "./auth/store";
 import { parseCLI } from "./cli";
 import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
@@ -9,7 +9,7 @@ import { installFetchInterceptor } from "./log/fetch";
 import { createLogger } from "./log/logger";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
-import { createCopilotProvider, deriveBaseUrl, refreshModels } from "./provider/copilot";
+import { createCopilotProvider, deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
 import { createServer } from "./server";
 
 const cli = parseCLI(process.argv.slice(2));
@@ -20,43 +20,42 @@ const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
 installFetchInterceptor({ logger, logDir, debug: cli.debug });
 
 const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
+const globalConfig = loadGlobalConfig(globalConfigDir);
+const configHeaders = globalConfig.preferences?.headers ?? {};
 
 if (cli.command === "auth") {
 	logger.info("AUTH", "Starting authentication flow");
-	const token = await authorize(globalConfigDir, cli.clientId);
-	await refreshModels(token, deriveBaseUrl(token), globalConfigDir);
+	const auth = await authorize(globalConfigDir, cli.clientId, configHeaders);
+	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, configHeaders);
 	process.exit(0);
 }
 
 if (cli.command === "refresh") {
-	const auth = loadAuth(globalConfigDir);
+	let auth = loadAuth(globalConfigDir);
 	if (!auth) {
-		// Fall back to legacy token format
-		const legacyToken = loadToken(globalConfigDir);
-		if (!legacyToken) {
-			console.error("No token found. Run `bobai auth` first.");
-			process.exit(1);
-		}
-		await refreshModels(legacyToken, deriveBaseUrl(legacyToken), globalConfigDir);
-		process.exit(0);
+		console.error("No auth found. Run `bobai auth` first.");
+		process.exit(1);
 	}
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
+	if (Date.now() >= auth.expires) {
+		const session = await exchangeToken(auth.refresh, configHeaders);
+		auth = { refresh: auth.refresh, access: session.access, expires: session.expires };
+		saveAuth(globalConfigDir, auth);
+	}
+	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, configHeaders);
 	process.exit(0);
 }
 
 logger.info("SERVER", `Starting bobai (debug=${cli.debug})`);
 
-const globalConfig = loadGlobalConfig(globalConfigDir);
 const project = await initProject(process.cwd());
 const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
 
 let auth = loadAuth(globalConfigDir);
 if (!auth) {
-	const token = await authorize(globalConfigDir);
-	auth = { refresh: token, access: token, expires: 0 };
+	auth = await authorize(globalConfigDir, undefined, configHeaders);
 }
 
-const provider = createCopilotProvider(auth, config.headers);
+const provider = createCopilotProvider(auth, config.headers, globalConfigDir);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
 const server = createServer({ port, staticDir, db: project.db, provider, model: config.model, projectRoot: process.cwd() });

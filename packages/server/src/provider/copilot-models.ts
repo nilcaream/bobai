@@ -6,6 +6,7 @@ export interface ModelConfig extends CatalogModel {
 }
 
 export const CURATED_MODELS = [
+	"gpt-4o",
 	"gpt-4.1",
 	"gpt-5-mini",
 	"grok-code-fast-1",
@@ -17,6 +18,7 @@ export const CURATED_MODELS = [
 type CuratedModelId = (typeof CURATED_MODELS)[number];
 
 export const PREMIUM_REQUEST_MULTIPLIERS: Record<CuratedModelId, number> = {
+	"gpt-4o": 0,
 	"gpt-4.1": 0,
 	"gpt-5-mini": 0,
 	"grok-code-fast-1": 0.25,
@@ -26,12 +28,17 @@ export const PREMIUM_REQUEST_MULTIPLIERS: Record<CuratedModelId, number> = {
 };
 
 export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {
-	const curatedSet = new Set<string>(CURATED_MODELS);
-	return catalog
-		.filter((m) => curatedSet.has(m.id))
-		.map((m) => ({
-			...m,
-			premiumRequestMultiplier: PREMIUM_REQUEST_MULTIPLIERS[m.id as CuratedModelId] ?? 1,
-			enabled: false,
-		}));
+	const catalogMap = new Map(catalog.map((m) => [m.id, m]));
+	const configs: ModelConfig[] = [];
+	for (const id of CURATED_MODELS) {
+		const m = catalogMap.get(id);
+		if (m) {
+			configs.push({
+				...m,
+				premiumRequestMultiplier: PREMIUM_REQUEST_MULTIPLIERS[id] ?? 1,
+				enabled: false,
+			});
+		}
+	}
+	return configs;
 }
