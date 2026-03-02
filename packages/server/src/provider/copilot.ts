@@ -1,7 +1,9 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
 import { fetchCatalog } from "../models-catalog";
+import type { ModelConfig } from "./copilot-models";
 import { buildModelConfigs } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
@@ -15,7 +17,21 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 	return last?.role === "user" ? "user" : "agent";
 }
 
-export function createCopilotProvider(token: string, configHeaders: Record<string, string> = {}): Provider {
+export function createCopilotProvider(token: string, configHeaders: Record<string, string> = {}, configDir?: string): Provider {
+	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
+	let modelsConfig: ModelConfig[] | null = null;
+
+	function loadModelsConfig(): ModelConfig[] {
+		if (modelsConfig !== null) return modelsConfig;
+		try {
+			const raw = fs.readFileSync(path.join(resolvedConfigDir, "copilot-models.json"), "utf8");
+			modelsConfig = JSON.parse(raw) as ModelConfig[];
+		} catch {
+			modelsConfig = [];
+		}
+		return modelsConfig;
+	}
+
 	return {
 		id: "github-copilot",
 
@@ -32,7 +48,7 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 					...defaults,
 					...configHeaders,
 					Authorization: `Bearer ${token}`,
-					"x-initiator": resolveInitiator(options.messages),
+					"x-initiator": options.initiator ?? resolveInitiator(options.messages),
 				},
 				body: JSON.stringify({
 					model: options.model,
@@ -65,11 +81,27 @@ export function createCopilotProvider(token: string, configHeaders: Record<strin
 						};
 						finish_reason?: string | null;
 					}[];
+					usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 				};
 
 				const choice = data.choices?.[0];
 
 				if (choice?.finish_reason) {
+					const totalTokens = data.usage?.total_tokens ?? 0;
+					const models = loadModelsConfig();
+					const modelConfig = models.find((m) => m.id === options.model);
+					const contextWindow = modelConfig?.contextWindow ?? 0;
+
+					let display: string;
+					if (contextWindow > 0) {
+						const percent = Math.round((totalTokens / contextWindow) * 100);
+						display = `${totalTokens} / ${contextWindow} | ${percent}%`;
+					} else {
+						display = `${totalTokens} tokens`;
+					}
+
+					yield { type: "usage" as const, tokenCount: totalTokens, tokenLimit: contextWindow, display };
+
 					const reason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
 					yield { type: "finish" as const, reason } as StreamEvent;
 					return;
