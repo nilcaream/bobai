@@ -4,7 +4,7 @@ import { type CommandRequest, handleCommand } from "./command";
 import { handlePrompt } from "./handler";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
-import { CURATED_MODELS, formatModelCost, formatModelStatus } from "./provider/copilot-models";
+import { CURATED_MODELS, formatModelCost, formatModelDisplay } from "./provider/copilot-models";
 import type { Provider } from "./provider/provider";
 import { getRecentPrompts } from "./session/repository";
 
@@ -15,6 +15,7 @@ export interface ServerOptions {
 	provider?: Provider;
 	model?: string;
 	projectRoot?: string;
+	configDir?: string;
 }
 
 export function createServer(options: ServerOptions) {
@@ -52,7 +53,7 @@ export function createServer(options: ServerOptions) {
 					cost: formatModelCost(id),
 				}));
 				const defaultModel = options.model ?? "gpt-5-mini";
-				const defaultStatus = formatModelStatus(defaultModel);
+				const defaultStatus = formatModelDisplay(defaultModel, 0, options.configDir);
 				return Response.json({ models, defaultModel, defaultStatus });
 			}
 
@@ -61,7 +62,7 @@ export function createServer(options: ServerOptions) {
 					return Response.json({ ok: false, error: "Database not available" });
 				}
 				const body = (await req.json()) as CommandRequest;
-				const result = handleCommand(options.db, body);
+				const result = handleCommand(options.db, body, options.configDir);
 				return Response.json(result);
 			}
 

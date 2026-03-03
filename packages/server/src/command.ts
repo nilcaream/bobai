@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { CURATED_MODELS, formatModelStatus } from "./provider/copilot-models";
+import { CURATED_MODELS, formatModelDisplay } from "./provider/copilot-models";
 import { createSession, getSession, updateSessionModel, updateSessionTitle } from "./session/repository";
 import { SYSTEM_PROMPT } from "./system-prompt";
 
@@ -11,7 +11,7 @@ export interface CommandRequest {
 
 export type CommandResult = { ok: true; status?: string; sessionId?: string } | { ok: false; error: string };
 
-export function handleCommand(db: Database, req: CommandRequest): CommandResult {
+export function handleCommand(db: Database, req: CommandRequest, configDir?: string): CommandResult {
 	const { command, args } = req;
 	let { sessionId } = req;
 
@@ -28,7 +28,7 @@ export function handleCommand(db: Database, req: CommandRequest): CommandResult 
 
 	switch (command) {
 		case "model":
-			return withSessionId(handleModelCommand(db, sessionId, args), sessionId);
+			return withSessionId(handleModelCommand(db, sessionId, args, configDir), sessionId);
 		case "title":
 			return withSessionId(handleTitleCommand(db, sessionId, args), sessionId);
 		case "session":
@@ -45,14 +45,14 @@ function withSessionId(result: CommandResult, sessionId: string): CommandResult 
 	return result;
 }
 
-function handleModelCommand(db: Database, sessionId: string, args: string): CommandResult {
+function handleModelCommand(db: Database, sessionId: string, args: string, configDir?: string): CommandResult {
 	const index = Number.parseInt(args, 10);
 	if (Number.isNaN(index) || index < 1 || index > CURATED_MODELS.length) {
 		return { ok: false, error: `Invalid model index: ${args}. Must be 1-${CURATED_MODELS.length}` };
 	}
 	const modelId = CURATED_MODELS[index - 1];
 	updateSessionModel(db, sessionId, modelId);
-	return { ok: true, status: formatModelStatus(modelId) };
+	return { ok: true, status: formatModelDisplay(modelId, 0, configDir) };
 }
 
 function handleTitleCommand(db: Database, sessionId: string, args: string): CommandResult {

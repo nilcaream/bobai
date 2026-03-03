@@ -4,7 +4,7 @@ type ServerMessage =
 	| { type: "token"; text: string }
 	| { type: "tool_call"; id: string; output: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
-	| { type: "done"; sessionId: string; model: string; title?: string | null }
+	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string }
 	| { type: "status"; text: string };
 
@@ -15,7 +15,7 @@ export type MessagePart =
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }
-	| { role: "assistant"; parts: MessagePart[]; timestamp?: string; model?: string };
+	| { role: "assistant"; parts: MessagePart[]; timestamp?: string; model?: string; summary?: string };
 
 function formatTimestamp(): string {
 	const d = new Date();
@@ -87,7 +87,7 @@ export function useWebSocket() {
 				setMessages((prev) => {
 					const last = prev.at(-1);
 					if (last?.role === "assistant") {
-						return [...prev.slice(0, -1), { ...last, timestamp: formatTimestamp(), model: msg.model }];
+						return [...prev.slice(0, -1), { ...last, timestamp: formatTimestamp(), model: msg.model, summary: msg.summary }];
 					}
 					return prev;
 				});

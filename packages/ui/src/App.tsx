@@ -367,7 +367,7 @@ export function App() {
 			}
 
 			const panels = groupParts(msg.parts);
-			const msgModel = msg.model ?? "";
+			const msgSummary = msg.summary ?? (msg.model ? ` | ${msg.model}` : "");
 			for (let i = 0; i < panels.length; i++) {
 				const panel = panels[i];
 				const isLast = i === panels.length - 1;
@@ -379,7 +379,7 @@ export function App() {
 							{isLast && msg.timestamp && (
 								<div className="panel-status">
 									{msg.timestamp}
-									{msgModel ? ` | ${msgModel}` : ""}
+									{msgSummary}
 								</div>
 							)}
 						</div>,
@@ -391,7 +391,7 @@ export function App() {
 							{isLast && msg.timestamp && (
 								<div className="panel-status">
 									{msg.timestamp}
-									{msgModel ? ` | ${msgModel}` : ""}
+									{msgSummary}
 								</div>
 							)}
 						</div>,

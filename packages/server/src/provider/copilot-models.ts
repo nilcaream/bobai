@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { CatalogModel } from "../models-catalog";
 
 export interface ModelConfig extends CatalogModel {
@@ -36,6 +39,30 @@ export function formatModelCost(modelId: string): string {
 /** Format the status prefix for a model (e.g. "gpt-5-mini | 0x"). */
 export function formatModelStatus(modelId: string): string {
 	return `${modelId} | ${formatModelCost(modelId)}`;
+}
+
+/** Load model configs from the copilot-models.json config file. */
+export function loadModelsConfig(configDir?: string): ModelConfig[] {
+	const dir = configDir ?? path.join(os.homedir(), ".config", "bobai");
+	try {
+		const raw = fs.readFileSync(path.join(dir, "copilot-models.json"), "utf8");
+		return JSON.parse(raw) as ModelConfig[];
+	} catch {
+		return [];
+	}
+}
+
+/** Format the full display string for a model (e.g. "gpt-5-mini | 0x | 1547 / 128000 | 1%"). */
+export function formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string {
+	const statusPrefix = formatModelStatus(modelId);
+	const configs = loadModelsConfig(configDir);
+	const modelConfig = configs.find((m) => m.id === modelId);
+	const contextWindow = modelConfig?.contextWindow ?? 0;
+	if (contextWindow > 0) {
+		const percent = Math.round((promptTokens / contextWindow) * 100);
+		return `${statusPrefix} | ${promptTokens} / ${contextWindow} | ${percent}%`;
+	}
+	return `${statusPrefix} | ${promptTokens} tokens`;
 }
 
 export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {

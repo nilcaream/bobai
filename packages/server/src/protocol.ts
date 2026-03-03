@@ -7,7 +7,7 @@ export type ServerMessage =
 	| { type: "tool_call"; id: string; output: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
 	| { type: "status"; text: string }
-	| { type: "done"; sessionId: string; model: string; title?: string | null }
+	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string };
 
 export function send(ws: { send: (msg: string) => void }, msg: ServerMessage) {
