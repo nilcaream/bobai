@@ -27,6 +27,17 @@ export const PREMIUM_REQUEST_MULTIPLIERS: Record<CuratedModelId, number> = {
 	"claude-opus-4.6": 3,
 };
 
+/** Format the cost label for a model (e.g. "0x", "1x", "3x"). */
+export function formatModelCost(modelId: string): string {
+	const multiplier = PREMIUM_REQUEST_MULTIPLIERS[modelId as CuratedModelId];
+	return multiplier !== undefined ? `${multiplier}x` : "?x";
+}
+
+/** Format the status prefix for a model (e.g. "gpt-5-mini | 0x"). */
+export function formatModelStatus(modelId: string): string {
+	return `${modelId} | ${formatModelCost(modelId)}`;
+}
+
 export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {
 	const catalogMap = new Map(catalog.map((m) => [m.id, m]));
 	const configs: ModelConfig[] = [];

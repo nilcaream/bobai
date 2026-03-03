@@ -1,8 +1,10 @@
 import type { Database } from "bun:sqlite";
 import path from "node:path";
+import { type CommandRequest, handleCommand } from "./command";
 import { handlePrompt } from "./handler";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
+import { CURATED_MODELS, formatModelCost, formatModelStatus } from "./provider/copilot-models";
 import type { Provider } from "./provider/provider";
 import { getRecentPrompts } from "./session/repository";
 
@@ -20,7 +22,7 @@ export function createServer(options: ServerOptions) {
 
 	return Bun.serve({
 		port: options.port,
-		fetch(req, server) {
+		async fetch(req, server) {
 			const url = new URL(req.url);
 
 			if (url.pathname === "/bobai/ws") {
@@ -41,6 +43,26 @@ export function createServer(options: ServerOptions) {
 				const limit = Math.min(Math.max(1, Number.isFinite(limitParam) ? limitParam : 10), 50);
 				const prompts = getRecentPrompts(options.db, limit);
 				return Response.json(prompts);
+			}
+
+			if (url.pathname === "/bobai/models") {
+				const models = CURATED_MODELS.map((id, i) => ({
+					index: i + 1,
+					id,
+					cost: formatModelCost(id),
+				}));
+				const defaultModel = options.model ?? "gpt-5-mini";
+				const defaultStatus = formatModelStatus(defaultModel);
+				return Response.json({ models, defaultModel, defaultStatus });
+			}
+
+			if (url.pathname === "/bobai/command" && req.method === "POST") {
+				if (!options.db) {
+					return Response.json({ ok: false, error: "Database not available" });
+				}
+				const body = (await req.json()) as CommandRequest;
+				const result = handleCommand(options.db, body);
+				return Response.json(result);
 			}
 
 			if (staticDir && url.pathname.startsWith("/bobai")) {

@@ -4,7 +4,7 @@ type ServerMessage =
 	| { type: "token"; text: string }
 	| { type: "tool_call"; id: string; output: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
-	| { type: "done"; sessionId: string; model: string }
+	| { type: "done"; sessionId: string; model: string; title?: string | null }
 	| { type: "error"; message: string }
 	| { type: "status"; text: string };
 
@@ -15,7 +15,7 @@ export type MessagePart =
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }
-	| { role: "assistant"; parts: MessagePart[]; timestamp?: string };
+	| { role: "assistant"; parts: MessagePart[]; timestamp?: string; model?: string };
 
 function formatTimestamp(): string {
 	const d = new Date();
@@ -53,6 +53,7 @@ export function useWebSocket() {
 	const [connected, setConnected] = useState(false);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [model, setModel] = useState<string | null>(null);
+	const [title, setTitle] = useState<string | null>(null);
 	const [status, setStatus] = useState("");
 	const sessionId = useRef<string | null>(null);
 
@@ -82,10 +83,11 @@ export function useWebSocket() {
 			if (msg.type === "done") {
 				sessionId.current = msg.sessionId;
 				setModel(msg.model);
+				setTitle(msg.title ?? null);
 				setMessages((prev) => {
 					const last = prev.at(-1);
 					if (last?.role === "assistant") {
-						return [...prev.slice(0, -1), { ...last, timestamp: formatTimestamp() }];
+						return [...prev.slice(0, -1), { ...last, timestamp: formatTimestamp(), model: msg.model }];
 					}
 					return prev;
 				});
@@ -125,8 +127,30 @@ export function useWebSocket() {
 		sessionId.current = null;
 		setMessages([]);
 		setModel(null);
+		setTitle(null);
 		setStatus("");
 	}, []);
 
-	return { messages, connected, isStreaming, sendPrompt, newChat, model, status };
+	const addErrorMessage = useCallback((text: string) => {
+		setMessages((prev) => appendPart(prev, { type: "text", content: `Error: ${text}` }));
+	}, []);
+
+	return {
+		messages,
+		connected,
+		isStreaming,
+		sendPrompt,
+		newChat,
+		model,
+		setModel,
+		title,
+		setTitle,
+		status,
+		setStatus,
+		addErrorMessage,
+		getSessionId: () => sessionId.current,
+		setSessionId: (id: string) => {
+			sessionId.current = id;
+		},
+	};
 }

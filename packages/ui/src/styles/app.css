@@ -42,7 +42,17 @@ body,
 	color: var(--text-primary);
 }
 
+.status-bar-title {
+	color: var(--text-primary);
+}
+
+/* Dot command panel — sits between messages and prompt */
+.panel--dot {
+	margin: 1em 1em 0;
+}
+
 .status-dot {
+	display: inline-block;
 	width: 6px;
 	height: 6px;
 	border-radius: 50%;

@@ -70,7 +70,7 @@ describe("prompt session", () => {
 
 		expect(received.length).toBeGreaterThan(1);
 		expect(received.at(-1)).toBe("done");
-		expect(received.slice(0, -1).every((t) => t === "token")).toBe(true);
+		expect(received.slice(0, -1).every((t) => t === "token" || t === "status")).toBe(true);
 	});
 
 	test("sends error message for unknown message type", async () => {
