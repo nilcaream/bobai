@@ -249,7 +249,7 @@ describe("CopilotProvider", () => {
 			{ type: "tool_call_start", index: 0, id: "call_abc123", name: "read_file" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path"' },
 			{ type: "tool_call_delta", index: 0, arguments: ':"src/index.ts"}' },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "0 tokens" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "gpt-4o | 0x | 0 tokens" },
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -275,7 +275,7 @@ describe("CopilotProvider", () => {
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "0 tokens" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "gpt-4o | 0x | 0 tokens" },
 			{ type: "finish", reason: "stop" },
 		]);
 	});
@@ -336,7 +336,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hello" },
-				{ type: "usage", tokenCount: 932, tokenLimit: 64000, display: "932 / 64000 | 1%" },
+				{ type: "usage", tokenCount: 932, tokenLimit: 64000, display: "gpt-4o | 0x | 932 / 64000 | 1%" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -374,7 +374,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hi" },
-				{ type: "usage", tokenCount: 150, tokenLimit: 0, display: "150 tokens" },
+				{ type: "usage", tokenCount: 150, tokenLimit: 0, display: "gpt-4o | 0x | 150 tokens" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {

@@ -67,5 +67,11 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE messages ADD COLUMN metadata TEXT");
 	}
 
+	// Migrate: add model column to sessions if missing
+	const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+	if (!sessionColumns.some((c) => c.name === "model")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN model TEXT");
+	}
+
 	return { id, port: config.port, provider: config.provider, model: config.model, dir: bobaiDir, db };
 }

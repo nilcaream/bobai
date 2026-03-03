@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import { send } from "./protocol";
+import { formatModelStatus } from "./provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
 import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
@@ -28,6 +29,8 @@ export async function handlePrompt(req: PromptRequest) {
 	const { ws, db, provider, model, text, sessionId, projectRoot } = req;
 
 	let currentSessionId: string | undefined;
+	let sessionObj: { model: string | null; title: string | null } | null = null;
+	let effectiveModel = model;
 
 	try {
 		// Resolve or create session
@@ -38,10 +41,17 @@ export async function handlePrompt(req: PromptRequest) {
 				return;
 			}
 			currentSessionId = sessionId;
+			sessionObj = session;
 		} else {
 			const session = createSession(db, SYSTEM_PROMPT);
 			currentSessionId = session.id;
+			sessionObj = session;
 		}
+
+		effectiveModel = sessionObj?.model ?? model;
+
+		// Send initial status so UI shows model + cost immediately
+		send(ws, { type: "status", text: formatModelStatus(effectiveModel) });
 
 		// Persist the user message
 		appendMessage(db, currentSessionId, "user", text);
@@ -67,7 +77,7 @@ export async function handlePrompt(req: PromptRequest) {
 		// Run the agent loop
 		await runAgentLoop({
 			provider,
-			model,
+			model: effectiveModel,
 			messages,
 			tools,
 			projectRoot,
@@ -93,7 +103,7 @@ export async function handlePrompt(req: PromptRequest) {
 			},
 		});
 
-		send(ws, { type: "done", sessionId: currentSessionId, model });
+		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null });
 	} catch (err) {
 		// Persist error as assistant message so agent can resume with context
 		if (currentSessionId) {
@@ -113,7 +123,7 @@ export async function handlePrompt(req: PromptRequest) {
 
 		// Send done so UI gets sessionId for resume
 		if (currentSessionId) {
-			send(ws, { type: "done", sessionId: currentSessionId, model });
+			send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null });
 		}
 	}
 }

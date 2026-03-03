@@ -59,9 +59,23 @@ function groupParts(parts: MessagePart[]): Panel[] {
 }
 
 export function App() {
-	const { messages, connected, isStreaming, sendPrompt, model, status } = useWebSocket();
+	const {
+		messages,
+		connected,
+		isStreaming,
+		sendPrompt,
+		setModel,
+		title,
+		setTitle,
+		status,
+		setStatus,
+		addErrorMessage,
+		getSessionId,
+		setSessionId,
+	} = useWebSocket();
 	const [input, setInput] = useState("");
 	const [historyIndex, setHistoryIndex] = useState(-1);
+	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
 	const historyEntries = useRef<string[]>([]);
 	const savedDraft = useRef("");
 	const fetchGen = useRef(0);
@@ -132,9 +146,83 @@ export function App() {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
+	const DOT_COMMANDS = ["model", "session", "title"] as const;
+
+	function parseDotInput(text: string) {
+		if (!text.startsWith(".")) return null;
+		const withoutDot = text.slice(1);
+		const spaceIndex = withoutDot.indexOf(" ");
+		if (spaceIndex === -1) {
+			const prefix = withoutDot.toLowerCase();
+			const matches = DOT_COMMANDS.filter((c) => c.startsWith(prefix));
+			return { mode: "select" as const, prefix, matches, args: "", command: undefined };
+		}
+		const cmdPart = withoutDot.slice(0, spaceIndex).toLowerCase();
+		const matches = DOT_COMMANDS.filter((c) => c.startsWith(cmdPart));
+		if (matches.length === 1) {
+			return { mode: "args" as const, prefix: cmdPart, matches, args: withoutDot.slice(spaceIndex + 1), command: matches[0] };
+		}
+		return { mode: "select" as const, prefix: cmdPart, matches, args: "", command: undefined };
+	}
+
+	// Fetch models eagerly on mount — needed for status bar and dot panel
+	// biome-ignore lint/correctness/useExhaustiveDependencies: setModel/setStatus are stable React state setters
+	useEffect(() => {
+		fetch("/bobai/models")
+			.then((res) => res.json())
+			.then((data: { models: { index: number; id: string; cost: string }[]; defaultModel: string; defaultStatus: string }) => {
+				setModelList(data.models);
+				setModel((prev) => prev ?? data.defaultModel);
+				setStatus((prev) => prev || data.defaultStatus);
+			})
+			.catch(() => {});
+	}, []);
+
 	function submit() {
 		const text = input.trim();
-		if (!text || !connected || isStreaming) return;
+		if (!text || !connected) return;
+
+		const parsed = parseDotInput(text);
+		if (parsed?.mode === "args" && parsed.command) {
+			const sid = getSessionId();
+			fetch("/bobai/command", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ command: parsed.command, args: parsed.args.trim(), sessionId: sid }),
+			})
+				.then((res) => res.json())
+				.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string }) => {
+					if (result.ok) {
+						if (result.sessionId) {
+							setSessionId(result.sessionId);
+						}
+						if (parsed.command === "model" && modelList) {
+							const idx = Number.parseInt(parsed.args.trim(), 10);
+							const selected = modelList.find((m) => m.index === idx);
+							if (selected) setModel(selected.id);
+						}
+						if (parsed.command === "title") {
+							setTitle(parsed.args.trim());
+						}
+						if (result.status) {
+							setStatus(result.status);
+						}
+					} else {
+						addErrorMessage(result.error ?? "Command failed");
+					}
+				})
+				.catch(() => {
+					addErrorMessage("Failed to execute command");
+				});
+			setInput("");
+			if (textareaRef.current) textareaRef.current.style.height = "auto";
+			return;
+		}
+
+		// Incomplete or invalid dot command — don't send as prompt
+		if (parsed) return;
+
+		if (isStreaming) return;
 		autoScroll.current = true;
 		sendPrompt(text);
 		setInput("");
@@ -211,10 +299,56 @@ export function App() {
 			return;
 		}
 
-		if (e.key === "Enter" && e.shiftKey) {
-			e.preventDefault();
-			submit();
+		if (e.key === "Enter") {
+			// Dot commands: submit on any Enter (no modifier check, never multiline)
+			if (parseDotInput(input)) {
+				e.preventDefault();
+				submit();
+				return;
+			}
+			// Regular prompts: Shift+Enter to submit, bare Enter for newline
+			if (e.shiftKey) {
+				e.preventDefault();
+				submit();
+			}
 		}
+	}
+
+	function renderDotPanel() {
+		const parsed = parseDotInput(input);
+		if (!parsed) return null;
+
+		let content: React.ReactNode;
+
+		if (parsed.mode === "select") {
+			content =
+				parsed.matches.length > 0 ? parsed.matches.map((cmd) => <div key={cmd}>{cmd}</div>) : <div>No matching commands</div>;
+		} else if (parsed.command === "model") {
+			if (!modelList) {
+				content = "Loading models...";
+			} else {
+				const filtered = parsed.args ? modelList.filter((m) => String(m.index).startsWith(parsed.args.trim())) : modelList;
+				content =
+					filtered.length > 0 ? (
+						filtered.map((m) => (
+							<div key={m.id}>
+								{m.index}: {m.id} ({m.cost})
+							</div>
+						))
+					) : (
+						<div>No matching models</div>
+					);
+			}
+		} else if (parsed.command === "title") {
+			const titleText = parsed.args.trim();
+			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
+		} else if (parsed.command === "session") {
+			content = "Session switching is not implemented yet";
+		} else {
+			return null;
+		}
+
+		return <div className="panel panel--dot">{content}</div>;
 	}
 
 	function renderPanels() {
@@ -233,6 +367,7 @@ export function App() {
 			}
 
 			const panels = groupParts(msg.parts);
+			const msgModel = msg.model ?? "";
 			for (let i = 0; i < panels.length; i++) {
 				const panel = panels[i];
 				const isLast = i === panels.length - 1;
@@ -244,7 +379,7 @@ export function App() {
 							{isLast && msg.timestamp && (
 								<div className="panel-status">
 									{msg.timestamp}
-									{model ? ` | ${model}` : ""}
+									{msgModel ? ` | ${msgModel}` : ""}
 								</div>
 							)}
 						</div>,
@@ -256,7 +391,7 @@ export function App() {
 							{isLast && msg.timestamp && (
 								<div className="panel-status">
 									{msg.timestamp}
-									{model ? ` | ${model}` : ""}
+									{msgModel ? ` | ${msgModel}` : ""}
 								</div>
 							)}
 						</div>,
@@ -274,6 +409,7 @@ export function App() {
 				<span>
 					<span className="status-bar-label">Bob AI</span> <span className={`status-dot${connected ? "" : " disconnected"}`} />{" "}
 					{connected ? "connected" : "connecting..."}
+					{title && <span className="status-bar-title"> {title}</span>}
 				</span>
 				<span>{status}</span>
 			</div>
@@ -281,6 +417,8 @@ export function App() {
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
 				{renderPanels()}
 			</div>
+
+			{renderDotPanel()}
 
 			<div className="panel panel--prompt">
 				<textarea

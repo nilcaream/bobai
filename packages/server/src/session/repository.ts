@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 export interface Session {
 	id: string;
 	title: string | null;
+	model: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -17,7 +18,7 @@ export interface StoredMessage {
 	metadata: Record<string, unknown> | null;
 }
 
-type SessionRow = { id: string; title: string | null; created_at: string; updated_at: string };
+type SessionRow = { id: string; title: string | null; model: string | null; created_at: string; updated_at: string };
 type MessageRow = {
 	id: string;
 	session_id: string;
@@ -44,7 +45,7 @@ export function createSession(db: Database, systemPrompt: string): Session {
 		);
 	})();
 
-	return { id, title: null, createdAt: now, updatedAt: now };
+	return { id, title: null, model: null, createdAt: now, updatedAt: now };
 }
 
 export function appendMessage(
@@ -93,11 +94,11 @@ export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 
 export function getSession(db: Database, sessionId: string): Session | null {
 	const row = db
-		.prepare("SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?")
+		.prepare("SELECT id, title, model, created_at, updated_at FROM sessions WHERE id = ?")
 		.get(sessionId) as SessionRow | null;
 
 	if (!row) return null;
-	return { id: row.id, title: row.title, createdAt: row.created_at, updatedAt: row.updated_at };
+	return { id: row.id, title: row.title, model: row.model, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 export function getRecentPrompts(db: Database, limit: number): string[] {
@@ -117,8 +118,22 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 
 export function listSessions(db: Database): Session[] {
 	const rows = db
-		.prepare("SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC, rowid DESC")
+		.prepare("SELECT id, title, model, created_at, updated_at FROM sessions ORDER BY updated_at DESC, rowid DESC")
 		.all() as SessionRow[];
 
-	return rows.map((r) => ({ id: r.id, title: r.title, createdAt: r.created_at, updatedAt: r.updated_at }));
+	return rows.map((r) => ({
+		id: r.id,
+		title: r.title,
+		model: r.model,
+		createdAt: r.created_at,
+		updatedAt: r.updated_at,
+	}));
+}
+
+export function updateSessionModel(db: Database, sessionId: string, model: string): void {
+	db.prepare("UPDATE sessions SET model = ?, updated_at = ? WHERE id = ?").run(model, new Date().toISOString(), sessionId);
+}
+
+export function updateSessionTitle(db: Database, sessionId: string, title: string): void {
+	db.prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?").run(title, new Date().toISOString(), sessionId);
 }

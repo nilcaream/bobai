@@ -4,7 +4,7 @@ import path from "node:path";
 import { type StoredAuth, saveAuth } from "../auth/store";
 import { fetchCatalog } from "../models-catalog";
 import type { ModelConfig } from "./copilot-models";
-import { buildModelConfigs } from "./copilot-models";
+import { buildModelConfigs, formatModelStatus } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
@@ -147,11 +147,12 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 					const contextWindow = modelConfig?.contextWindow ?? 0;
 
 					let display: string;
+					const statusPrefix = formatModelStatus(options.model);
 					if (contextWindow > 0) {
 						const percent = Math.round((totalTokens / contextWindow) * 100);
-						display = `${totalTokens} / ${contextWindow} | ${percent}%`;
+						display = `${statusPrefix} | ${totalTokens} / ${contextWindow} | ${percent}%`;
 					} else {
-						display = `${totalTokens} tokens`;
+						display = `${statusPrefix} | ${totalTokens} tokens`;
 					}
 
 					yield { type: "usage" as const, tokenCount: totalTokens, tokenLimit: contextWindow, display };
