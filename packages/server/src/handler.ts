@@ -2,7 +2,6 @@ import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import { send } from "./protocol";
-import { formatModelStatus } from "./provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
 import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
@@ -50,9 +49,6 @@ export async function handlePrompt(req: PromptRequest) {
 
 		effectiveModel = sessionObj?.model ?? model;
 
-		// Send initial status so UI shows model + cost immediately
-		send(ws, { type: "status", text: formatModelStatus(effectiveModel) });
-
 		// Persist the user message
 		appendMessage(db, currentSessionId, "user", text);
 
@@ -73,6 +69,9 @@ export async function handlePrompt(req: PromptRequest) {
 		});
 
 		const tools = createToolRegistry([readFileTool, listDirectoryTool, writeFileTool, editFileTool, grepSearchTool, bashTool]);
+
+		// Signal the provider to start tracking turn stats
+		provider.beginTurn?.();
 
 		// Run the agent loop
 		await runAgentLoop({
@@ -103,7 +102,8 @@ export async function handlePrompt(req: PromptRequest) {
 			},
 		});
 
-		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null });
+		const summary = provider.getTurnSummary?.();
+		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null, summary });
 	} catch (err) {
 		// Persist error as assistant message so agent can resume with context
 		if (currentSessionId) {
@@ -123,7 +123,14 @@ export async function handlePrompt(req: PromptRequest) {
 
 		// Send done so UI gets sessionId for resume
 		if (currentSessionId) {
-			send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null });
+			const errSummary = provider.getTurnSummary?.();
+			send(ws, {
+				type: "done",
+				sessionId: currentSessionId,
+				model: effectiveModel,
+				title: sessionObj?.title ?? null,
+				summary: errSummary,
+			});
 		}
 	}
 }

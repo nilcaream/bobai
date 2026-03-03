@@ -57,7 +57,15 @@ if (!auth) {
 const provider = createCopilotProvider(auth, globalConfigDir);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
-const server = createServer({ port, staticDir, db: project.db, provider, model: config.model, projectRoot: process.cwd() });
+const server = createServer({
+	port,
+	staticDir,
+	db: project.db,
+	provider,
+	model: config.model,
+	projectRoot: process.cwd(),
+	configDir: globalConfigDir,
+});
 
 logger.info("SERVER", `Project: ${project.id}`);
 logger.info("SERVER", `Provider: ${config.provider} / ${config.model}`);

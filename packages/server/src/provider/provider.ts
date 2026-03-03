@@ -63,6 +63,10 @@ export interface ProviderOptions {
 export interface Provider {
 	readonly id: string;
 	stream(options: ProviderOptions): AsyncIterable<StreamEvent>;
+	/** Reset per-turn stats. Called before the agent loop starts. */
+	beginTurn?(): void;
+	/** Format accumulated turn stats into a display string (e.g. " | model | agent: 3 | ..."). */
+	getTurnSummary?(): string | undefined;
 }
 
 // --- Errors ---

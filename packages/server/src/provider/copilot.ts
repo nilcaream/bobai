@@ -3,8 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { type StoredAuth, saveAuth } from "../auth/store";
 import { fetchCatalog } from "../models-catalog";
-import type { ModelConfig } from "./copilot-models";
-import { buildModelConfigs, formatModelStatus } from "./copilot-models";
+import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import { parseSSE } from "./sse";
@@ -61,13 +60,22 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 
 export function createCopilotProvider(auth: StoredAuth, configDir?: string): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
-	let modelsConfig: ModelConfig[] | null = null;
 
 	// Mutable session state
 	let sessionToken = auth.access;
 	let sessionExpires = auth.expires;
 	let baseUrl = deriveBaseUrl(auth.access);
 	const refreshToken = auth.refresh;
+
+	// Per-turn tracking
+	let turnStartTime = 0;
+	let turnModel = "";
+	let turnAgentCalls = 0;
+	let turnUserCalls = 0;
+	let turnPremiumCost = 0;
+	let turnTokens = 0;
+	let turnLastCallTokens = 0;
+	let baselineTokens = 0;
 
 	async function ensureValidSession(): Promise<void> {
 		if (Date.now() < sessionExpires) return;
@@ -78,22 +86,40 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 		saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
 	}
 
-	function loadModelsConfig(): ModelConfig[] {
-		if (modelsConfig !== null) return modelsConfig;
-		try {
-			const raw = fs.readFileSync(path.join(resolvedConfigDir, "copilot-models.json"), "utf8");
-			modelsConfig = JSON.parse(raw) as ModelConfig[];
-		} catch {
-			modelsConfig = [];
-		}
-		return modelsConfig;
-	}
-
 	return {
 		id: "github-copilot",
 
+		beginTurn() {
+			turnStartTime = performance.now();
+			turnModel = "";
+			turnAgentCalls = 0;
+			turnUserCalls = 0;
+			turnPremiumCost = 0;
+			turnTokens = 0;
+			baselineTokens = turnLastCallTokens;
+			turnLastCallTokens = 0;
+		},
+
+		getTurnSummary(): string | undefined {
+			if (turnStartTime === 0) return undefined;
+			const elapsed = (performance.now() - turnStartTime) / 1000;
+			const contextDelta = turnLastCallTokens - baselineTokens;
+			const sign = contextDelta > 0 ? "+" : "";
+			const parts = [
+				turnModel,
+				`agent: ${turnAgentCalls}`,
+				`user: ${turnUserCalls}`,
+				`premium: ${turnPremiumCost.toFixed(2)}`,
+				`tokens: ${turnTokens}`,
+				`context: ${sign}${contextDelta}`,
+				`${elapsed.toFixed(2)}s`,
+			];
+			return ` | ${parts.join(" | ")}`;
+		},
+
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			await ensureValidSession();
+			const initiator = options.initiator ?? resolveInitiator(options.messages);
 
 			const response = await fetch(`${baseUrl}/chat/completions`, {
 				method: "POST",
@@ -102,7 +128,7 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 					...copilotConfig.headers,
 					"Openai-Intent": "conversation-edits",
 					Authorization: `Bearer ${sessionToken}`,
-					"x-initiator": options.initiator ?? resolveInitiator(options.messages),
+					"x-initiator": initiator,
 				},
 				body: JSON.stringify({
 					model: options.model,
@@ -141,21 +167,22 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 				const choice = data.choices?.[0];
 
 				if (choice?.finish_reason) {
+					const promptTokens = data.usage?.prompt_tokens ?? 0;
 					const totalTokens = data.usage?.total_tokens ?? 0;
-					const models = loadModelsConfig();
-					const modelConfig = models.find((m) => m.id === options.model);
-					const contextWindow = modelConfig?.contextWindow ?? 0;
+					const configs = loadModelsConfig(resolvedConfigDir);
+					const contextWindow = configs.find((m) => m.id === options.model)?.contextWindow ?? 0;
+					const display = formatModelDisplay(options.model, promptTokens, resolvedConfigDir);
 
-					let display: string;
-					const statusPrefix = formatModelStatus(options.model);
-					if (contextWindow > 0) {
-						const percent = Math.round((totalTokens / contextWindow) * 100);
-						display = `${statusPrefix} | ${totalTokens} / ${contextWindow} | ${percent}%`;
-					} else {
-						display = `${statusPrefix} | ${totalTokens} tokens`;
-					}
+					yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };
 
-					yield { type: "usage" as const, tokenCount: totalTokens, tokenLimit: contextWindow, display };
+					// Accumulate per-turn stats
+					turnModel = options.model;
+					turnTokens += totalTokens;
+					turnLastCallTokens = promptTokens;
+					if (initiator === "agent") turnAgentCalls++;
+					else turnUserCalls++;
+					const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+					if (initiator === "user") turnPremiumCost += multiplier;
 
 					const reason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
 					yield { type: "finish" as const, reason } as StreamEvent;
