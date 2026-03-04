@@ -7,6 +7,12 @@ type Panel =
 	| { type: "text"; content: string }
 	| { type: "tool"; id: string; content: string; completed: boolean; mergeable: boolean };
 
+interface ContextMessage {
+	role: "system" | "user" | "assistant" | "tool";
+	content: string;
+	metadata: Record<string, unknown> | null;
+}
+
 function groupParts(parts: MessagePart[]): Panel[] {
 	// Pass 1: Create panels for each part
 	const raw: Panel[] = [];
@@ -58,6 +64,23 @@ function groupParts(parts: MessagePart[]): Panel[] {
 	return merged;
 }
 
+function formatMsgSummary(msg: { summary?: string; model?: string }): string {
+	return msg.summary ?? (msg.model ? ` | ${msg.model}` : "");
+}
+
+function truncateContent(text: string, lineLimit: number): string {
+	if (lineLimit <= 0) return text;
+	const lines = text.split("\n");
+	if (lines.length <= lineLimit) return text;
+	const remaining = lines.length - lineLimit;
+	return lines.slice(0, lineLimit).join("\n") + `\n... (${remaining} more lines)`;
+}
+
+function truncateChars(text: string, charLimit: number): string {
+	if (charLimit <= 0 || text.length <= charLimit) return text;
+	return text.slice(0, charLimit) + `... (${text.length - charLimit} more chars)`;
+}
+
 export function App() {
 	const {
 		messages,
@@ -77,6 +100,8 @@ export function App() {
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
 	const historyEntries = useRef<string[]>([]);
+	const [view, setView] = useState<{ mode: "chat" | "context"; lineLimit: number }>({ mode: "chat", lineLimit: 16 });
+	const [contextMessages, setContextMessages] = useState<ContextMessage[] | null>(null);
 	const savedDraft = useRef("");
 	const fetchGen = useRef(0);
 	const messagesRef = useRef<HTMLDivElement>(null);
@@ -140,13 +165,25 @@ export function App() {
 		ta.style.height = `${ta.scrollHeight}px`;
 	}, []);
 
+	const fetchContext = useCallback(() => {
+		const sid = getSessionId();
+		if (!sid) {
+			setContextMessages(null);
+			return;
+		}
+		fetch(`/bobai/session/${sid}/context`)
+			.then((res) => res.json())
+			.then((data: ContextMessage[]) => setContextMessages(data))
+			.catch(() => setContextMessages(null));
+	}, [getSessionId]);
+
 	// Adjust textarea height when navigating history
 	// biome-ignore lint/correctness/useExhaustiveDependencies: adjustHeight is stable via useCallback
 	useEffect(() => {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const DOT_COMMANDS = ["model", "session", "title"] as const;
+	const DOT_COMMANDS = ["model", "session", "title", "view"] as const;
 
 	function parseDotInput(text: string) {
 		if (!text.startsWith(".")) return null;
@@ -184,6 +221,20 @@ export function App() {
 
 		const parsed = parseDotInput(text);
 		if (parsed?.mode === "args" && parsed.command) {
+			// View command: select by index or cycle when no args
+			if (parsed.command === "view") {
+				const arg = parsed.args.trim();
+				const viewMap: Record<string, "chat" | "context"> = { "1": "chat", "2": "context" };
+				setView((prev) => {
+					const next = arg ? (viewMap[arg] ?? prev.mode) : prev.mode === "chat" ? "context" : "chat";
+					if (next === "context") fetchContext();
+					return { ...prev, mode: next };
+				});
+				setInput("");
+				if (textareaRef.current) textareaRef.current.style.height = "auto";
+				return;
+			}
+
 			const sid = getSessionId();
 			fetch("/bobai/command", {
 				method: "POST",
@@ -219,11 +270,24 @@ export function App() {
 			return;
 		}
 
+		// View command without space (e.g. ".view", ".v", ".vi", ".vie")
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "view") {
+			setView((prev) => {
+				const next = prev.mode === "chat" ? "context" : "chat";
+				if (next === "context") fetchContext();
+				return { ...prev, mode: next };
+			});
+			setInput("");
+			if (textareaRef.current) textareaRef.current.style.height = "auto";
+			return;
+		}
+
 		// Incomplete or invalid dot command — don't send as prompt
 		if (parsed) return;
 
 		if (isStreaming) return;
 		autoScroll.current = true;
+		setView((prev) => ({ ...prev, mode: "chat" }));
 		sendPrompt(text);
 		setInput("");
 		setHistoryIndex(-1);
@@ -344,6 +408,16 @@ export function App() {
 			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
 		} else if (parsed.command === "session") {
 			content = "Session switching is not implemented yet";
+		} else if (parsed.command === "view") {
+			const views = [
+				{ index: 1, name: "Chat", desc: "Grouped panels, markdown" },
+				{ index: 2, name: "Context", desc: "Raw LLM context, one panel per message" },
+			];
+			content = views.map((v) => (
+				<div key={v.index}>
+					{v.index}: {v.name} — {v.desc}
+				</div>
+			));
 		} else {
 			return null;
 		}
@@ -367,7 +441,7 @@ export function App() {
 			}
 
 			const panels = groupParts(msg.parts);
-			const msgSummary = msg.summary ?? (msg.model ? ` | ${msg.model}` : "");
+			const msgSummary = formatMsgSummary(msg);
 			for (let i = 0; i < panels.length; i++) {
 				const panel = panels[i];
 				const isLast = i === panels.length - 1;
@@ -403,6 +477,91 @@ export function App() {
 		return elements;
 	}
 
+	function renderContextPanels() {
+		if (!contextMessages) {
+			return [
+				<div key="empty" className="panel panel--context">
+					No session context available.
+				</div>,
+			];
+		}
+
+		const elements: React.ReactNode[] = [];
+		let key = 0;
+		const limit = view.lineLimit;
+
+		// Build a map from tool_call_id → tool function name
+		const toolCallNames = new Map<string, string>();
+		for (const msg of contextMessages) {
+			if (msg.role === "assistant" && msg.metadata?.tool_calls) {
+				const calls = msg.metadata.tool_calls as Array<{ id: string; function: { name: string } }>;
+				for (const tc of calls) {
+					toolCallNames.set(tc.id, tc.function.name);
+				}
+			}
+		}
+
+		for (const msg of contextMessages) {
+			if (msg.role === "system") {
+				const body = truncateContent(msg.content, limit);
+				elements.push(
+					<div key={key++} className="panel panel--context">
+						<Markdown>{`# system\n\n${body}`}</Markdown>
+					</div>,
+				);
+			} else if (msg.role === "user") {
+				const body = truncateContent(msg.content, limit);
+				elements.push(
+					<div key={key++} className="panel panel--context">
+						<Markdown>{`# user\n\n${body}`}</Markdown>
+					</div>,
+				);
+			} else if (msg.role === "assistant") {
+				const toolCalls = msg.metadata?.tool_calls as
+					| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
+					| undefined;
+
+				if (toolCalls && toolCalls.length > 0) {
+					// Each tool call gets its own panel
+					for (const tc of toolCalls) {
+						const header = `# assistant | ${tc.id}`;
+						const callStr = `${tc.function.name}(${tc.function.arguments})`;
+						const body = truncateChars(callStr, 512);
+						elements.push(
+							<div key={key++} className="panel panel--context">
+								<Markdown>{`${header}\n\n${body}`}</Markdown>
+							</div>,
+						);
+					}
+				}
+
+				// Text-only assistant message (no tool calls)
+				if (msg.content) {
+					const body = truncateContent(msg.content, limit);
+					elements.push(
+						<div key={key++} className="panel panel--context">
+							<Markdown>{`# assistant\n\n${body}`}</Markdown>
+						</div>,
+					);
+				}
+			} else if (msg.role === "tool") {
+				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
+				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
+				const header = `# tool | ${toolCallId ?? ""} | ${toolName}`;
+				const rawContent = msg.content || "(no output)";
+				const body = `\`\`\`\n${truncateContent(rawContent, limit)}\n\`\`\``;
+
+				elements.push(
+					<div key={key++} className="panel panel--context">
+						<Markdown>{`${header}\n\n${body}`}</Markdown>
+					</div>,
+				);
+			}
+		}
+
+		return elements;
+	}
+
 	return (
 		<main className="app">
 			<div className="panel panel--status-bar">
@@ -415,7 +574,7 @@ export function App() {
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
-				{renderPanels()}
+				{view.mode === "chat" ? renderPanels() : renderContextPanels()}
 			</div>
 
 			{renderDotPanel()}

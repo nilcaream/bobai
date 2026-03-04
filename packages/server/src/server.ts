@@ -6,7 +6,7 @@ import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import { CURATED_MODELS, formatModelCost, formatModelDisplay } from "./provider/copilot-models";
 import type { Provider } from "./provider/provider";
-import { getRecentPrompts } from "./session/repository";
+import { getMessages, getRecentPrompts } from "./session/repository";
 
 export interface ServerOptions {
 	port: number;
@@ -44,6 +44,16 @@ export function createServer(options: ServerOptions) {
 				const limit = Math.min(Math.max(1, Number.isFinite(limitParam) ? limitParam : 10), 50);
 				const prompts = getRecentPrompts(options.db, limit);
 				return Response.json(prompts);
+			}
+
+			// Context endpoint: GET /bobai/session/:id/context
+			const contextMatch = url.pathname.match(/^\/bobai\/session\/([^/]+)\/context$/);
+			if (contextMatch) {
+				if (!options.db) {
+					return new Response("Database not available", { status: 503 });
+				}
+				const messages = getMessages(options.db, contextMatch[1]);
+				return Response.json(messages);
 			}
 
 			if (url.pathname === "/bobai/models") {
