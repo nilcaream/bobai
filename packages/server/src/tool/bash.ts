@@ -19,7 +19,7 @@ export const bashTool: Tool = {
 					},
 					timeout: {
 						type: "number",
-						description: "Timeout in milliseconds. Defaults to 30000 (30 seconds).",
+						description: `Timeout in milliseconds. Defaults to ${DEFAULT_TIMEOUT_MS}.`,
 					},
 				},
 				required: ["command"],

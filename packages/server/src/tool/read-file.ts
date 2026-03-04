@@ -12,7 +12,7 @@ export const readFileTool: Tool = {
 		function: {
 			name: "read_file",
 			description:
-				"Read the contents of a file. The path is relative to the project root. By default returns up to 2000 lines from the start of the file. Each line is prefixed with its line number. Use 'from' and 'to' to read a specific range of lines. Use the grep_search tool to find specific content in large files.",
+				`Read the contents of a file. The path is relative to the project root. By default returns up to ${MAX_LINE_LENGTH} lines from the start of the file. Each line is prefixed with its line number. Use 'from' and 'to' to read a specific range of lines. Use the grep_search tool to find specific content in large files.`,
 			parameters: {
 				type: "object",
 				properties: {
@@ -26,7 +26,7 @@ export const readFileTool: Tool = {
 					},
 					to: {
 						type: "number",
-						description: "Line number to stop reading at (inclusive). Defaults to from + 1999.",
+						description: `Line number to stop reading at (inclusive). Defaults to from + ${MAX_LINE_LENGTH - 1}.`,
 					},
 				},
 				required: ["path"],
@@ -142,7 +142,7 @@ export const readFileTool: Tool = {
 
 		let footer: string;
 		if (truncatedByBytes) {
-			footer = `(Output capped at 50 KB. Showing lines ${from}-${lastLine}. Use from=${lastLine + 1} to continue.)`;
+			footer = `(Output capped at ${MAX_BYTES} bytes. Showing lines ${from}-${lastLine}. Use from=${lastLine + 1} to continue.)`;
 		} else if (hasMore) {
 			footer = `(Showing lines ${from}-${lastLine} of ${totalLines}. Use from=${lastLine + 1} to continue.)`;
 		} else {
