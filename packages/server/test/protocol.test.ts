@@ -57,4 +57,22 @@ describe("protocol", () => {
 			mergeable: false,
 		});
 	});
+
+	test("send token with sessionId includes it in output", () => {
+		const ws = mockWs();
+		send(ws, { type: "token", text: "hello", sessionId: "child-1" });
+		expect(ws.messages()[0]).toEqual({ type: "token", text: "hello", sessionId: "child-1" });
+	});
+
+	test("send subagent_start message", () => {
+		const ws = mockWs();
+		send(ws, { type: "subagent_start", sessionId: "child-1", title: "Exploring code" });
+		expect(ws.messages()[0]).toEqual({ type: "subagent_start", sessionId: "child-1", title: "Exploring code" });
+	});
+
+	test("send subagent_done message", () => {
+		const ws = mockWs();
+		send(ws, { type: "subagent_done", sessionId: "child-1" });
+		expect(ws.messages()[0]).toEqual({ type: "subagent_done", sessionId: "child-1" });
+	});
 });
