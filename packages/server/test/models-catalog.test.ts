@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { type CatalogModel, fetchCatalog } from "../src/models-catalog";
+import { fetchCatalog } from "../src/models-catalog";
 
 describe("fetchCatalog", () => {
 	const originalFetch = globalThis.fetch;

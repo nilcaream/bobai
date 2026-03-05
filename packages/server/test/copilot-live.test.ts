@@ -9,7 +9,7 @@ const auth = loadAuth(configDir);
 
 describe.skipIf(!auth)("copilot live", () => {
 	test("completes a simple math prompt", async () => {
-		const provider = createCopilotProvider(auth!);
+		const provider = createCopilotProvider(auth as NonNullable<typeof auth>);
 		let result = "";
 		for await (const event of provider.stream({
 			model: "gpt-4o",

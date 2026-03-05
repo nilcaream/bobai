@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type RefreshResult, refreshModels } from "../src/provider/copilot";
+import { refreshModels } from "../src/provider/copilot";
 
 // Minimal catalog response that includes curated models
 function catalogResponse(modelIds: string[]) {

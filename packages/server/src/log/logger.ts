@@ -20,7 +20,7 @@ const LEVELS: Record<LogLevel, number> = {
 };
 
 export function localTimestamp(): string {
-	return new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60 * 1000).toISOString().replace(/[TZ]/g, " ").trim();
+	return new Date(Date.now() - new Date().getTimezoneOffset() * 60 * 1000).toISOString().replace(/[TZ]/g, " ").trim();
 }
 
 export function createLogger(options: { level: LogLevel; logDir: string }): Logger {
