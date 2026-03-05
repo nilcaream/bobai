@@ -2,11 +2,13 @@ import { Database } from "bun:sqlite";
 
 export function createTestDb(): Database {
 	const db = new Database(":memory:");
+	db.exec("PRAGMA foreign_keys = ON");
 	db.exec(`
 		CREATE TABLE sessions (
 			id TEXT PRIMARY KEY,
 			title TEXT,
 			model TEXT,
+			parent_id TEXT REFERENCES sessions(id),
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)

@@ -73,5 +73,10 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE sessions ADD COLUMN model TEXT");
 	}
 
+	// Migrate: add parent_id column to sessions if missing (subagent support)
+	if (!sessionColumns.some((c) => c.name === "parent_id")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN parent_id TEXT REFERENCES sessions(id)");
+	}
+
 	return { id, port: config.port, provider: config.provider, model: config.model, dir: bobaiDir, db };
 }
