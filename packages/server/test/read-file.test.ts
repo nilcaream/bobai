@@ -125,7 +125,7 @@ describe("readFileTool", () => {
 		const lines = Array.from({ length: 5000 }, (_, i) => `line ${i + 1}: ${"a".repeat(50)}`);
 		fs.writeFileSync(path.join(tmpDir, "large.txt"), lines.join("\n"));
 		const result = await readFileTool.execute({ path: "large.txt" }, ctx);
-		expect(result.llmOutput).toContain("Output capped at 50 KB");
+		expect(result.llmOutput).toContain("Output capped at 51200 bytes");
 		// Should not contain all 5000 lines
 		expect(result.llmOutput).not.toContain("line 5000");
 	});

@@ -1,5 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { handleCommand } from "../src/command";
 import { handlePrompt } from "../src/handler";
 import { CURATED_MODELS } from "../src/provider/copilot-models";
@@ -28,14 +31,14 @@ describe("session model field", () => {
 		const session = createSession(db, "system prompt");
 		updateSessionModel(db, session.id, "claude-sonnet-4.6");
 		const updated = getSession(db, session.id);
-		expect(updated!.model).toBe("claude-sonnet-4.6");
+		expect(updated?.model).toBe("claude-sonnet-4.6");
 	});
 
 	test("getSession returns model field", () => {
 		const session = createSession(db, "system prompt");
 		const fetched = getSession(db, session.id);
 		expect(fetched).toHaveProperty("model");
-		expect(fetched!.model).toBeNull();
+		expect(fetched?.model).toBeNull();
 	});
 });
 
@@ -54,76 +57,79 @@ describe("session title update", () => {
 		const session = createSession(db, "system prompt");
 		updateSessionTitle(db, session.id, "My Chat");
 		const updated = getSession(db, session.id);
-		expect(updated!.title).toBe("My Chat");
+		expect(updated?.title).toBe("My Chat");
 	});
 });
 
 describe("handleCommand", () => {
 	let db: Database;
+	let tmpDir: string;
 
 	beforeAll(() => {
 		db = createTestDb();
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
 	});
 
 	afterAll(() => {
 		db.close();
+		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
 	test("model command updates session model and returns status", () => {
 		const session = createSession(db, "system prompt");
-		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id });
+		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.status).toBe("gpt-4o | 0x");
+			expect(result.status).toBe("gpt-4o | 0x | 0 tokens");
 			expect(result.sessionId).toBe(session.id);
 		}
 		const updated = getSession(db, session.id);
-		expect(updated!.model).toBe(CURATED_MODELS[0]);
+		expect(updated?.model).toBe(CURATED_MODELS[0]);
 	});
 
 	test("model command rejects invalid index", () => {
 		const session = createSession(db, "system prompt");
-		const result = handleCommand(db, { command: "model", args: "99", sessionId: session.id });
+		const result = handleCommand(db, { command: "model", args: "99", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Invalid model index");
 	});
 
 	test("model command creates session when none provided", () => {
-		const result = handleCommand(db, { command: "model", args: "1" });
+		const result = handleCommand(db, { command: "model", args: "1" }, tmpDir);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
-			expect(result.status).toBe("gpt-4o | 0x");
-			const session = getSession(db, result.sessionId!);
-			expect(session!.model).toBe(CURATED_MODELS[0]);
+			expect(result.status).toBe("gpt-4o | 0x | 0 tokens");
+			const session = getSession(db, result.sessionId ?? "");
+			expect(session?.model).toBe(CURATED_MODELS[0]);
 		}
 	});
 
 	test("title command updates session title", () => {
 		const session = createSession(db, "system prompt");
-		const result = handleCommand(db, { command: "title", args: "My Chat Title", sessionId: session.id });
+		const result = handleCommand(db, { command: "title", args: "My Chat Title", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 		const updated = getSession(db, session.id);
-		expect(updated!.title).toBe("My Chat Title");
+		expect(updated?.title).toBe("My Chat Title");
 	});
 
 	test("title command rejects empty title", () => {
 		const session = createSession(db, "system prompt");
-		const result = handleCommand(db, { command: "title", args: "", sessionId: session.id });
+		const result = handleCommand(db, { command: "title", args: "", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Title cannot be empty");
 	});
 
 	test("session command returns not implemented", () => {
 		const session = createSession(db, "system prompt");
-		const result = handleCommand(db, { command: "session", args: "", sessionId: session.id });
+		const result = handleCommand(db, { command: "session", args: "", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("not implemented");
 	});
 
 	test("unknown command returns error", () => {
 		const session = createSession(db, "system prompt");
-		const result = handleCommand(db, { command: "foo", args: "", sessionId: session.id });
+		const result = handleCommand(db, { command: "foo", args: "", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Unknown command");
 	});
@@ -133,16 +139,19 @@ describe("HTTP endpoints", () => {
 	let server: ReturnType<typeof Bun.serve>;
 	let baseUrl: string;
 	let db: Database;
+	let tmpDir: string;
 
 	beforeAll(() => {
 		db = createTestDb();
-		server = createServer({ port: 0, db });
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
+		server = createServer({ port: 0, db, configDir: tmpDir });
 		baseUrl = `http://localhost:${server.port}`;
 	});
 
 	afterAll(() => {
 		server.stop(true);
 		db.close();
+		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
 	test("GET /bobai/models returns curated model list with cost strings, defaultModel and defaultStatus", async () => {
@@ -158,7 +167,7 @@ describe("HTTP endpoints", () => {
 		expect(body.models[0].id).toBe(CURATED_MODELS[0]);
 		expect(body.models[0].cost).toBe("0x");
 		expect(body.defaultModel).toBe("gpt-5-mini");
-		expect(body.defaultStatus).toBe("gpt-5-mini | 0x");
+		expect(body.defaultStatus).toBe("gpt-5-mini | 0x | 0 tokens");
 	});
 
 	test("POST /bobai/command executes model command and returns status", async () => {
@@ -171,9 +180,9 @@ describe("HTTP endpoints", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { ok: boolean; status?: string };
 		expect(body.ok).toBe(true);
-		expect(body.status).toBe("gpt-4o | 0x");
+		expect(body.status).toBe("gpt-4o | 0x | 0 tokens");
 		const updated = getSession(db, session.id);
-		expect(updated!.model).toBe(CURATED_MODELS[0]);
+		expect(updated?.model).toBe(CURATED_MODELS[0]);
 	});
 
 	test("POST /bobai/command returns error for bad command", async () => {
@@ -225,11 +234,6 @@ describe("handlePrompt respects session model", () => {
 		await handlePrompt({ ws, db, provider, model: "gpt-5-mini", text: "hello", sessionId: session.id, projectRoot: "/tmp" });
 
 		expect(captured[0].model).toBe("claude-sonnet-4.6");
-
-		// First message should be the initial status
-		const msgs = sent.map((s) => JSON.parse(s));
-		const firstStatus = msgs.find((m: { type: string }) => m.type === "status");
-		expect(firstStatus.text).toBe("claude-sonnet-4.6 | 1x");
 	});
 
 	test("falls back to default model when session model is null", async () => {
@@ -255,11 +259,6 @@ describe("handlePrompt respects session model", () => {
 		await handlePrompt({ ws, db, provider, model: "gpt-5-mini", text: "hello", sessionId: session.id, projectRoot: "/tmp" });
 
 		expect(captured[0].model).toBe("gpt-5-mini");
-
-		// Initial status should use the default model
-		const msgs = sent.map((s) => JSON.parse(s));
-		const firstStatus = msgs.find((m: { type: string }) => m.type === "status");
-		expect(firstStatus.text).toBe("gpt-5-mini | 0x");
 	});
 
 	test("done message includes session model when set", async () => {

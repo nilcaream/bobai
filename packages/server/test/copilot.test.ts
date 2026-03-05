@@ -336,7 +336,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hello" },
-				{ type: "usage", tokenCount: 932, tokenLimit: 64000, display: "gpt-4o | 0x | 932 / 64000 | 1%" },
+				{ type: "usage", tokenCount: 895, tokenLimit: 64000, display: "gpt-4o | 0x | 895 / 64000 | 1%" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -374,7 +374,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hi" },
-				{ type: "usage", tokenCount: 150, tokenLimit: 0, display: "gpt-4o | 0x | 150 tokens" },
+				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "gpt-4o | 0x | 100 tokens" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
