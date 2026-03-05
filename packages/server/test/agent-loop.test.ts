@@ -375,6 +375,65 @@ describe("runAgentLoop", () => {
 		expect((statusEvents[0] as { text: string }).text).toBe("932 / 64000 | 1%");
 	});
 
+	test("forwards signal and initiator to provider.stream()", async () => {
+		const captured: ProviderOptions[] = [];
+		const controller = new AbortController();
+		const provider: Provider = {
+			id: "mock",
+			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				captured.push(opts);
+				yield { type: "text", text: "ok" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hi" },
+			],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			signal: controller.signal,
+			initiator: "agent",
+			onEvent() {},
+			onMessage() {},
+		});
+
+		expect(captured[0].signal).toBe(controller.signal);
+		expect(captured[0].initiator).toBe("agent");
+	});
+
+	test("signal and initiator default to undefined when not provided", async () => {
+		const captured: ProviderOptions[] = [];
+		const provider: Provider = {
+			id: "mock",
+			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				captured.push(opts);
+				yield { type: "text", text: "ok" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hi" },
+			],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			onEvent() {},
+			onMessage() {},
+		});
+
+		expect(captured[0].signal).toBeUndefined();
+		expect(captured[0].initiator).toBeUndefined();
+	});
+
 	test("calls onMessage for each completed message", async () => {
 		const registry = createToolRegistry([echoTool()]);
 		const collected: Message[] = [];

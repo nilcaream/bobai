@@ -16,6 +16,8 @@ export interface AgentLoopOptions {
 	tools: ToolRegistry;
 	projectRoot: string;
 	maxIterations?: number;
+	signal?: AbortSignal;
+	initiator?: "user" | "agent";
 	onEvent: (event: AgentEvent) => void;
 	onMessage: (msg: Message) => void;
 }
@@ -27,7 +29,7 @@ interface AccumulatedToolCall {
 }
 
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
-	const { provider, model, tools, projectRoot, onEvent, onMessage } = options;
+	const { provider, model, tools, projectRoot, onEvent, onMessage, signal, initiator } = options;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
 	// Working copy of messages — starts with what was passed in
@@ -45,6 +47,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			model,
 			messages: conversation,
 			tools: tools.definitions.length > 0 ? tools.definitions : undefined,
+			signal,
+			initiator,
 		})) {
 			switch (event.type) {
 				case "text":
@@ -149,7 +153,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	conversation.push(nudge);
 
 	let finalText = "";
-	for await (const event of provider.stream({ model, messages: conversation })) {
+	for await (const event of provider.stream({ model, messages: conversation, signal, initiator })) {
 		if (event.type === "text") {
 			finalText += event.text;
 			onEvent({ type: "text", text: event.text });
