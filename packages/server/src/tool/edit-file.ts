@@ -108,10 +108,10 @@ export const editFileTool: Tool = {
 
 		// Count occurrences
 		let count = 0;
-		let idx = 0;
-		while ((idx = content.indexOf(oldString, idx)) !== -1) {
+		let idx = content.indexOf(oldString, 0);
+		while (idx !== -1) {
 			count++;
-			idx += oldString.length;
+			idx = content.indexOf(oldString, idx + oldString.length);
 		}
 
 		if (count === 0) {

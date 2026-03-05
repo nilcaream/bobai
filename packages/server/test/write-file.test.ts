@@ -33,13 +33,13 @@ describe("writeFileTool", () => {
 	});
 
 	test("overwrites an existing file", async () => {
-		const result = await writeFileTool.execute({ path: "existing.txt", content: "new content" }, ctx);
+		const _result = await writeFileTool.execute({ path: "existing.txt", content: "new content" }, ctx);
 		const written = fs.readFileSync(path.join(tmpDir, "existing.txt"), "utf-8");
 		expect(written).toBe("new content");
 	});
 
 	test("creates parent directories automatically", async () => {
-		const result = await writeFileTool.execute({ path: "deep/nested/dir/file.txt", content: "deep" }, ctx);
+		const _result = await writeFileTool.execute({ path: "deep/nested/dir/file.txt", content: "deep" }, ctx);
 		const written = fs.readFileSync(path.join(tmpDir, "deep/nested/dir/file.txt"), "utf-8");
 		expect(written).toBe("deep");
 	});

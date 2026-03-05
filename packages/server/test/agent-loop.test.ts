@@ -7,7 +7,7 @@ import { runAgentLoop } from "../src/agent-loop";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { editFileTool } from "../src/tool/edit-file";
 import { readFileTool } from "../src/tool/read-file";
-import type { Tool, ToolContext, ToolResult } from "../src/tool/tool";
+import type { Tool, ToolResult } from "../src/tool/tool";
 import { createToolRegistry } from "../src/tool/tool";
 
 function textProvider(tokens: string[]): Provider {

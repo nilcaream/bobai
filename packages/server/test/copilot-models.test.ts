@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CatalogModel } from "../src/models-catalog";
-import {
-	buildModelConfigs,
-	CURATED_MODELS,
-	type ModelConfig,
-	PREMIUM_REQUEST_MULTIPLIERS,
-} from "../src/provider/copilot-models";
+import { buildModelConfigs, CURATED_MODELS, PREMIUM_REQUEST_MULTIPLIERS } from "../src/provider/copilot-models";
 
 describe("copilot model constants", () => {
 	test("curated list has 7 models", () => {

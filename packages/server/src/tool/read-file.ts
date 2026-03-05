@@ -11,8 +11,7 @@ export const readFileTool: Tool = {
 		type: "function",
 		function: {
 			name: "read_file",
-			description:
-				`Read the contents of a file. The path is relative to the project root. By default returns up to ${MAX_LINE_LENGTH} lines from the start of the file. Each line is prefixed with its line number. Use 'from' and 'to' to read a specific range of lines. Use the grep_search tool to find specific content in large files.`,
+			description: `Read the contents of a file. The path is relative to the project root. By default returns up to ${MAX_LINE_LENGTH} lines from the start of the file. Each line is prefixed with its line number. Use 'from' and 'to' to read a specific range of lines. Use the grep_search tool to find specific content in large files.`,
 			parameters: {
 				type: "object",
 				properties: {

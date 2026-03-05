@@ -54,7 +54,7 @@ export const bashTool: Tool = {
 				stderr: "pipe",
 			});
 
-			let timerId: ReturnType<typeof setTimeout>;
+			let timerId: ReturnType<typeof setTimeout> | undefined;
 			const timeoutPromise = new Promise<"timeout">((resolve) => {
 				timerId = setTimeout(() => resolve("timeout"), timeoutMs);
 			});
@@ -74,7 +74,7 @@ export const bashTool: Tool = {
 				return { llmOutput: output, uiOutput: formatBashOutput(command, output), mergeable: false };
 			}
 
-			clearTimeout(timerId!);
+			if (timerId !== undefined) clearTimeout(timerId);
 			const stdout = await new Response(proc.stdout).text();
 			const stderr = await new Response(proc.stderr).text();
 			const combined = `${stdout}${stderr}`.trim();

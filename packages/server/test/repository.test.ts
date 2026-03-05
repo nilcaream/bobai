@@ -56,7 +56,7 @@ describe("session repository", () => {
 		const created = createSession(db, "sys");
 		const found = getSession(db, created.id);
 		expect(found).not.toBeNull();
-		expect(found!.id).toBe(created.id);
+		expect(found?.id).toBe(created.id);
 	});
 
 	test("getSession returns null for unknown id", () => {
@@ -86,7 +86,7 @@ describe("session repository", () => {
 			/* busy wait 5ms */
 		}
 		appendMessage(db, session.id, "user", "msg");
-		const after = getSession(db, session.id)!.updatedAt;
+		const after = getSession(db, session.id)?.updatedAt;
 		expect(after >= before).toBe(true);
 	});
 
@@ -98,7 +98,7 @@ describe("session repository", () => {
 		const messages = getMessages(db, session.id);
 		const assistantMsg = messages.find((m) => m.role === "assistant");
 		expect(assistantMsg).toBeTruthy();
-		expect(assistantMsg!.metadata).toEqual({ tool_calls: toolCalls });
+		expect(assistantMsg?.metadata).toEqual({ tool_calls: toolCalls });
 	});
 
 	test("appendMessage supports tool role with tool_call_id metadata", () => {
@@ -108,8 +108,8 @@ describe("session repository", () => {
 		const messages = getMessages(db, session.id);
 		const toolMsg = messages.find((m) => m.role === "tool");
 		expect(toolMsg).toBeTruthy();
-		expect(toolMsg!.content).toBe("file contents");
-		expect(toolMsg!.metadata).toEqual({ tool_call_id: "call_1" });
+		expect(toolMsg?.content).toBe("file contents");
+		expect(toolMsg?.metadata).toEqual({ tool_call_id: "call_1" });
 	});
 
 	test("appendMessage returns null metadata when none provided", () => {
@@ -117,6 +117,6 @@ describe("session repository", () => {
 		appendMessage(db, session.id, "user", "hello");
 		const messages = getMessages(db, session.id);
 		const userMsg = messages.find((m) => m.role === "user");
-		expect(userMsg!.metadata).toBeNull();
+		expect(userMsg?.metadata).toBeNull();
 	});
 });

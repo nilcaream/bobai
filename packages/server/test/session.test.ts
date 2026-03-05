@@ -96,11 +96,11 @@ describe("prompt session", () => {
 
 	test("second prompt with sessionId resumes session", async () => {
 		const msgs1 = await sendAndCollect(wsUrl, { type: "prompt", text: "first" });
-		const sessionId = msgs1.find((m) => m.type === "done")!.sessionId;
+		const sessionId = msgs1.find((m) => m.type === "done")?.sessionId;
 
 		const msgs2 = await sendAndCollect(wsUrl, { type: "prompt", text: "second", sessionId });
 		const done2 = msgs2.find((m) => m.type === "done");
-		expect(done2!.sessionId).toBe(sessionId);
+		expect(done2?.sessionId).toBe(sessionId);
 	});
 
 	test("prompt with invalid sessionId returns error", async () => {
