@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { appendMessage, createSession, getMessages, getSession, listSessions } from "../src/session/repository";
+import {
+	appendMessage,
+	createSession,
+	createSubagentSession,
+	getMessages,
+	getSession,
+	listSessions,
+	listSubagentSessions,
+} from "../src/session/repository";
 import { createTestDb } from "./helpers";
 
 describe("session repository", () => {
@@ -118,5 +126,67 @@ describe("session repository", () => {
 		const messages = getMessages(db, session.id);
 		const userMsg = messages.find((m) => m.role === "user");
 		expect(userMsg?.metadata).toBeNull();
+	});
+
+	test("createSubagentSession creates a session with parent_id and system prompt", () => {
+		const parent = createSession(db, "sys");
+		const child = createSubagentSession(db, parent.id, "Exploring codebase", "gpt-5-mini", "You are a subagent.");
+		expect(child.id).toBeTruthy();
+		expect(child.title).toBe("Exploring codebase");
+		expect(child.parentId).toBe(parent.id);
+
+		// Should have system prompt as first message
+		const messages = getMessages(db, child.id);
+		expect(messages).toHaveLength(1);
+		expect(messages[0].role).toBe("system");
+		expect(messages[0].content).toBe("You are a subagent.");
+	});
+
+	test("listSessions excludes subagent sessions", () => {
+		const freshDb = createTestDb();
+		const parent = createSession(freshDb, "sys");
+		createSubagentSession(freshDb, parent.id, "Child task", "m", "sys");
+
+		const sessions = listSessions(freshDb);
+		expect(sessions).toHaveLength(1); // only the parent
+		expect(sessions[0].id).toBe(parent.id);
+		freshDb.close();
+	});
+
+	test("listSubagentSessions returns only subagent sessions ordered by updated_at", () => {
+		const freshDb = createTestDb();
+		const parent = createSession(freshDb, "sys");
+		const c1 = createSubagentSession(freshDb, parent.id, "Task A", "gpt-5-mini", "sys");
+		appendMessage(freshDb, c1.id, "user", "bump"); // bump c1's updated_at
+		const c2 = createSubagentSession(freshDb, parent.id, "Task B", "gpt-5-mini", "sys");
+
+		const subagents = listSubagentSessions(freshDb, 5);
+		expect(subagents).toHaveLength(2);
+		// c2 was created after c1's update, so c2 is first
+		expect(subagents[0].id).toBe(c2.id);
+		expect(subagents[0].title).toBe("Task B");
+		expect(subagents[0].parentId).toBe(parent.id);
+		expect(subagents[1].id).toBe(c1.id);
+		freshDb.close();
+	});
+
+	test("listSubagentSessions respects limit", () => {
+		const freshDb = createTestDb();
+		const parent = createSession(freshDb, "sys");
+		createSubagentSession(freshDb, parent.id, "A", "m", "sys");
+		createSubagentSession(freshDb, parent.id, "B", "m", "sys");
+		createSubagentSession(freshDb, parent.id, "C", "m", "sys");
+
+		const subagents = listSubagentSessions(freshDb, 2);
+		expect(subagents).toHaveLength(2);
+		freshDb.close();
+	});
+
+	test("listSubagentSessions does not return regular sessions", () => {
+		const freshDb = createTestDb();
+		createSession(freshDb, "sys"); // regular session, no parent_id
+		const subagents = listSubagentSessions(freshDb);
+		expect(subagents).toHaveLength(0);
+		freshDb.close();
 	});
 });
