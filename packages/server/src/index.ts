@@ -7,6 +7,7 @@ import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
 import { installFetchInterceptor } from "./log/fetch";
 import { createLogger } from "./log/logger";
+import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
 import { createCopilotProvider, deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
@@ -74,3 +75,5 @@ logger.info("SERVER", `Listening at http://localhost:${server.port}/bobai`);
 console.log(`Project: ${project.id}`);
 console.log(`Provider: ${config.provider} / ${config.model}`);
 console.log(`http://localhost:${server.port}/bobai`);
+
+await loadPlugins(globalConfigDir, logger);
