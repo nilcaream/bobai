@@ -4,6 +4,7 @@ export interface Session {
 	id: string;
 	title: string | null;
 	model: string | null;
+	parentId: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -18,7 +19,14 @@ export interface StoredMessage {
 	metadata: Record<string, unknown> | null;
 }
 
-type SessionRow = { id: string; title: string | null; model: string | null; created_at: string; updated_at: string };
+type SessionRow = {
+	id: string;
+	title: string | null;
+	model: string | null;
+	parent_id: string | null;
+	created_at: string;
+	updated_at: string;
+};
 type MessageRow = {
 	id: string;
 	session_id: string;
@@ -45,7 +53,7 @@ export function createSession(db: Database, systemPrompt: string): Session {
 		);
 	})();
 
-	return { id, title: null, model: null, createdAt: now, updatedAt: now };
+	return { id, title: null, model: null, parentId: null, createdAt: now, updatedAt: now };
 }
 
 export function appendMessage(
@@ -94,11 +102,18 @@ export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 
 export function getSession(db: Database, sessionId: string): Session | null {
 	const row = db
-		.prepare("SELECT id, title, model, created_at, updated_at FROM sessions WHERE id = ?")
+		.prepare("SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE id = ?")
 		.get(sessionId) as SessionRow | null;
 
 	if (!row) return null;
-	return { id: row.id, title: row.title, model: row.model, createdAt: row.created_at, updatedAt: row.updated_at };
+	return {
+		id: row.id,
+		title: row.title,
+		model: row.model,
+		parentId: row.parent_id,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+	};
 }
 
 export function getRecentPrompts(db: Database, limit: number): string[] {
@@ -118,13 +133,16 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 
 export function listSessions(db: Database): Session[] {
 	const rows = db
-		.prepare("SELECT id, title, model, created_at, updated_at FROM sessions ORDER BY updated_at DESC, rowid DESC")
+		.prepare(
+			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC",
+		)
 		.all() as SessionRow[];
 
 	return rows.map((r) => ({
 		id: r.id,
 		title: r.title,
 		model: r.model,
+		parentId: r.parent_id,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -136,4 +154,53 @@ export function updateSessionModel(db: Database, sessionId: string, model: strin
 
 export function updateSessionTitle(db: Database, sessionId: string, title: string): void {
 	db.prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?").run(title, new Date().toISOString(), sessionId);
+}
+
+export function createSubagentSession(
+	db: Database,
+	parentId: string,
+	title: string,
+	model: string,
+	systemPrompt: string,
+): Session & { parentId: string } {
+	const id = crypto.randomUUID();
+	const now = new Date().toISOString();
+
+	db.transaction(() => {
+		db.prepare("INSERT INTO sessions (id, title, model, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+			id,
+			title,
+			model,
+			parentId,
+			now,
+			now,
+		);
+		db.prepare("INSERT INTO messages (id, session_id, role, content, created_at, sort_order) VALUES (?, ?, ?, ?, ?, ?)").run(
+			crypto.randomUUID(),
+			id,
+			"system",
+			systemPrompt,
+			now,
+			0,
+		);
+	})();
+
+	return { id, title, model, parentId, createdAt: now, updatedAt: now };
+}
+
+export function listSubagentSessions(db: Database, limit = 5): Session[] {
+	const rows = db
+		.prepare(
+			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NOT NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?",
+		)
+		.all(limit) as SessionRow[];
+
+	return rows.map((r) => ({
+		id: r.id,
+		title: r.title,
+		model: r.model,
+		parentId: r.parent_id,
+		createdAt: r.created_at,
+		updatedAt: r.updated_at,
+	}));
 }
