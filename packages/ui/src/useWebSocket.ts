@@ -114,7 +114,7 @@ export function useWebSocket() {
 			if (msg.type === "done") {
 				sessionId.current = msg.sessionId;
 				setModel(msg.model);
-				setTitle(msg.title ?? null);
+				if (msg.title) setTitle(msg.title);
 				setParentId(null);
 				setParentTitle(null);
 				setMessages((prev) => {

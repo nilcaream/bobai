@@ -111,6 +111,7 @@ export function App() {
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
 	const defaultStatus = useRef("");
+	const pendingNewTitle = useRef<string | null>(null);
 	const historyEntries = useRef<string[]>([]);
 	const [view, setView] = useState<{ mode: "chat" | "context"; lineLimit: number }>({ mode: "chat", lineLimit: 16 });
 	const [contextMessages, setContextMessages] = useState<ContextMessage[] | null>(null);
@@ -166,9 +167,49 @@ export function App() {
 
 	useEffect(() => {
 		if (!isStreaming && connected) {
-			textareaRef.current?.focus();
+			const ta = textareaRef.current;
+			if (ta) {
+				ta.focus();
+				ta.selectionStart = ta.selectionEnd = ta.value.length;
+			}
 		}
 	}, [isStreaming, connected]);
+
+	// Global keydown: redirect printable keystrokes to the prompt textarea
+	// when it's not already focused. Simpler than mousedown/visibility listeners
+	// and doesn't interfere with mouse text selection.
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			const ta = textareaRef.current;
+			if (!ta || document.activeElement === ta) return;
+			// Skip modifier combos (Ctrl+C, etc.) and non-printable keys
+			if (e.ctrlKey || e.altKey || e.metaKey) return;
+			if (e.key.length > 1 && e.key !== "Backspace" && e.key !== "Delete") return;
+			ta.focus();
+			ta.selectionStart = ta.selectionEnd = ta.value.length;
+			// Don't preventDefault — let the keystroke flow to the now-focused textarea
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	// Persist pending title from `.new <title>` after first prompt creates the session
+	useEffect(() => {
+		if (isStreaming || !connected) return;
+		const pendingTitle = pendingNewTitle.current;
+		if (!pendingTitle) return;
+		const sid = getSessionId();
+		if (!sid) return;
+		// Clear only after confirming we have a sessionId — otherwise the effect
+		// would fire immediately after `.new` (isStreaming=false, sid=null) and
+		// discard the title before the first prompt creates the session.
+		pendingNewTitle.current = null;
+		fetch("/bobai/command", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "title", args: pendingTitle, sessionId: sid }),
+		}).catch(() => {});
+	}, [isStreaming, connected, getSessionId]);
 
 	const adjustHeight = useCallback(() => {
 		const ta = textareaRef.current;
@@ -210,6 +251,19 @@ export function App() {
 		if (spaceIndex === -1) {
 			const prefix = withoutDot.toLowerCase();
 			const matches = activeDotCommands.filter((c) => c.startsWith(prefix));
+			// Number shorthand: .model1 → command="model", args="1"
+			// No dot command name contains a digit, so trailing digits are always an arg.
+			if (matches.length === 0) {
+				const m = prefix.match(/^([a-z]+)(\d+)$/);
+				if (m) {
+					const cmdPart = m[1];
+					const numPart = m[2];
+					const cmdMatches = activeDotCommands.filter((c) => c.startsWith(cmdPart));
+					if (cmdMatches.length === 1) {
+						return { mode: "args" as const, prefix: cmdPart, matches: cmdMatches, args: numPart, command: cmdMatches[0] };
+					}
+				}
+			}
 			return { mode: "select" as const, prefix, matches, args: "", command: undefined };
 		}
 		const cmdPart = withoutDot.slice(0, spaceIndex).toLowerCase();
@@ -289,11 +343,16 @@ export function App() {
 
 		const parsed = parseDotInput(text);
 		if (parsed?.mode === "args" && parsed.command) {
-			// New chat: .new (with trailing space) — same as .new without space
+			// New chat: .new [optional title]
 			if (parsed.command === "new") {
 				newChat();
 				setStatus(defaultStatus.current);
 				setView((prev) => ({ ...prev, mode: "chat" }));
+				const newTitle = parsed.args.trim();
+				if (newTitle) {
+					setTitle(newTitle);
+					pendingNewTitle.current = newTitle;
+				}
 				clearInput();
 				return;
 			}
@@ -515,6 +574,14 @@ export function App() {
 				submit();
 			}
 		}
+
+		// Tab submits dot commands; otherwise suppressed (no tab navigation)
+		if (e.key === "Tab") {
+			e.preventDefault();
+			if (parseDotInput(input)) {
+				submit();
+			}
+		}
 	}
 
 	function renderDotPanel() {
@@ -543,7 +610,8 @@ export function App() {
 					);
 			}
 		} else if (parsed.command === "new") {
-			content = "Start a new chat session";
+			const newTitle = parsed.args.trim();
+			content = newTitle ? `Start a new chat session: ${newTitle}` : "Start a new chat session (optional title)";
 		} else if (parsed.command === "title") {
 			const titleText = parsed.args.trim();
 			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
