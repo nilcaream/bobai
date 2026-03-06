@@ -6,7 +6,7 @@ import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import { CURATED_MODELS, formatModelCost, formatModelDisplay } from "./provider/copilot-models";
 import type { Provider } from "./provider/provider";
-import { getMessages, getRecentPrompts } from "./session/repository";
+import { getMessages, getRecentPrompts, listSubagentSessions } from "./session/repository";
 
 export interface ServerOptions {
 	port: number;
@@ -74,6 +74,19 @@ export function createServer(options: ServerOptions) {
 				const body = (await req.json()) as CommandRequest;
 				const result = handleCommand(options.db, body, options.configDir);
 				return Response.json(result);
+			}
+
+			if (url.pathname === "/bobai/subagents") {
+				if (!options.db) {
+					return new Response("Database not available", { status: 503 });
+				}
+				const subagents = listSubagentSessions(options.db);
+				const body = subagents.map((s, i) => ({
+					index: i + 1,
+					title: s.title ?? "(untitled)",
+					sessionId: s.id,
+				}));
+				return Response.json(body);
 			}
 
 			if (staticDir && url.pathname.startsWith("/bobai")) {

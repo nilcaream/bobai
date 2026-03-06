@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type ServerMessage =
-	| { type: "token"; text: string }
-	| { type: "tool_call"; id: string; output: string }
-	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
+	| { type: "token"; text: string; sessionId?: string }
+	| { type: "tool_call"; id: string; output: string; sessionId?: string }
+	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
 	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
-	| { type: "error"; message: string }
-	| { type: "status"; text: string };
+	| { type: "error"; message: string; sessionId?: string }
+	| { type: "status"; text: string; sessionId?: string }
+	| { type: "subagent_start"; sessionId: string; title: string }
+	| { type: "subagent_done"; sessionId: string };
+
+export type SubagentInfo = {
+	sessionId: string;
+	title: string;
+	status: "running" | "done";
+};
 
 export type MessagePart =
 	| { type: "text"; content: string }
 	| { type: "tool_call"; id: string; content: string }
-	| { type: "tool_result"; id: string; content: string | null; mergeable: boolean };
+	| { type: "tool_result"; id: string; content: string | null; mergeable: boolean; summary?: string };
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }
@@ -55,6 +63,7 @@ export function useWebSocket() {
 	const [model, setModel] = useState<string | null>(null);
 	const [title, setTitle] = useState<string | null>(null);
 	const [status, setStatus] = useState("");
+	const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
 	const sessionId = useRef<string | null>(null);
 
 	useEffect(() => {
@@ -66,6 +75,19 @@ export function useWebSocket() {
 		socket.onmessage = (event) => {
 			const msg = JSON.parse(event.data as string) as ServerMessage;
 
+			if (msg.type === "subagent_start") {
+				setSubagents((prev) => [...prev, { sessionId: msg.sessionId, title: msg.title, status: "running" }]);
+				return;
+			}
+
+			if (msg.type === "subagent_done") {
+				setSubagents((prev) => prev.map((s) => (s.sessionId === msg.sessionId ? { ...s, status: "done" } : s)));
+				return;
+			}
+
+			// Skip events tagged with a child sessionId (don't render in parent chat)
+			if ("sessionId" in msg && msg.type !== "done" && msg.sessionId) return;
+
 			if (msg.type === "token") {
 				setMessages((prev) => appendText(prev, msg.text));
 			}
@@ -76,7 +98,13 @@ export function useWebSocket() {
 
 			if (msg.type === "tool_result") {
 				setMessages((prev) =>
-					appendPart(prev, { type: "tool_result", id: msg.id, content: msg.output, mergeable: msg.mergeable }),
+					appendPart(prev, {
+						type: "tool_result",
+						id: msg.id,
+						content: msg.output,
+						mergeable: msg.mergeable,
+						summary: msg.summary,
+					}),
 				);
 			}
 
@@ -129,6 +157,7 @@ export function useWebSocket() {
 		setModel(null);
 		setTitle(null);
 		setStatus("");
+		setSubagents([]);
 	}, []);
 
 	const addErrorMessage = useCallback((text: string) => {
@@ -147,6 +176,7 @@ export function useWebSocket() {
 		setTitle,
 		status,
 		setStatus,
+		subagents,
 		addErrorMessage,
 		getSessionId: () => sessionId.current,
 		setSessionId: (id: string) => {
