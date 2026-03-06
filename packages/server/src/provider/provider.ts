@@ -67,6 +67,10 @@ export interface Provider {
 	beginTurn?(): void;
 	/** Format accumulated turn stats into a display string (e.g. " | model | agent: 3 | ..."). */
 	getTurnSummary?(): string | undefined;
+	/** Save current turn tracking state (so it can be restored after a subagent run). */
+	saveTurnState?(): unknown;
+	/** Restore previously saved turn tracking state. */
+	restoreTurnState?(state: unknown): void;
 }
 
 // --- Errors ---

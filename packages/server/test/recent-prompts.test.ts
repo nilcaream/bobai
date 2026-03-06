@@ -85,6 +85,35 @@ describe("getRecentPrompts", () => {
 		expect(result).toEqual(["from session 2", "from session 1"]);
 		freshDb.close();
 	});
+
+	test("excludes agent-sourced prompts (subagent task prompts)", () => {
+		const freshDb = createTestDb();
+		const session = createSession(freshDb, "system");
+		appendMessage(freshDb, session.id, "user", "real user prompt");
+		appendMessage(freshDb, session.id, "user", "subagent task prompt", {
+			source: "agent",
+			parentSessionId: "parent-123",
+		});
+		appendMessage(freshDb, session.id, "user", "another real prompt");
+
+		const result = getRecentPrompts(freshDb, 10);
+		expect(result).toEqual(["another real prompt", "real user prompt"]);
+		freshDb.close();
+	});
+
+	test("excludes title-generation prompts", () => {
+		const freshDb = createTestDb();
+		const session = createSession(freshDb, "system");
+		appendMessage(freshDb, session.id, "user", "real user prompt");
+		appendMessage(freshDb, session.id, "user", "Generate a short title for this task...", {
+			purpose: "title-generation",
+		});
+		appendMessage(freshDb, session.id, "user", "another real prompt");
+
+		const result = getRecentPrompts(freshDb, 10);
+		expect(result).toEqual(["another real prompt", "real user prompt"]);
+		freshDb.close();
+	});
 });
 
 describe("GET /bobai/prompts/recent", () => {

@@ -6,7 +6,7 @@ const DEFAULT_MAX_ITERATIONS = 20;
 export type AgentEvent =
 	| { type: "text"; text: string }
 	| { type: "tool_call"; id: string; output: string }
-	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean }
+	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string }
 	| { type: "status"; text: string };
 
 export interface AgentLoopOptions {
@@ -118,6 +118,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			let llmOutput: string;
 			let uiOutput: string | null = null;
 			let mergeable = false;
+			let summary: string | undefined;
 
 			if (!tool) {
 				llmOutput = `Unknown tool: ${tc.function.name}`;
@@ -128,13 +129,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 					llmOutput = result.llmOutput;
 					uiOutput = result.uiOutput;
 					mergeable = result.mergeable;
+					summary = result.summary;
 				} catch (err) {
 					llmOutput = `Tool execution error: ${(err as Error).message}`;
 					uiOutput = `Tool execution error: ${(err as Error).message}`;
 				}
 			}
 
-			onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable });
+			onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable, summary });
 
 			const toolMsg: ToolMessage = { role: "tool", content: llmOutput, tool_call_id: tc.id };
 			conversation.push(toolMsg);

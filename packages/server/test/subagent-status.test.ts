@@ -24,12 +24,21 @@ describe("SubagentStatus", () => {
 		const tracker = new SubagentStatus();
 		tracker.set("s1", "running");
 		tracker.set("s2", "done");
+		tracker.set("s3", "error");
 		const all = tracker.getAll();
 		expect(all).toEqual(
 			new Map([
 				["s1", "running"],
 				["s2", "done"],
+				["s3", "error"],
 			]),
 		);
+	});
+
+	test("supports error state", () => {
+		const tracker = new SubagentStatus();
+		tracker.set("session-1", "running");
+		tracker.set("session-1", "error");
+		expect(tracker.get("session-1")).toBe("error");
 	});
 });

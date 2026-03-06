@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type {
 	AssistantMessage,
 	Message,
+	Provider,
 	StreamEvent,
 	SystemMessage,
 	ToolDefinition,
@@ -66,5 +67,35 @@ describe("type contracts", () => {
 		expect(msgs).toHaveLength(5);
 		expect(assistantWithTools.tool_calls).toHaveLength(1);
 		expect(toolResult.tool_call_id).toBe("call_1");
+	});
+
+	test("Provider interface allows optional saveTurnState and restoreTurnState", () => {
+		// A provider with save/restore is valid
+		const providerWithState: Provider = {
+			id: "test",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+			beginTurn() {},
+			getTurnSummary() {
+				return " | test | 0s";
+			},
+			saveTurnState() {
+				return { turnStartTime: 0 };
+			},
+			restoreTurnState(_state: unknown) {},
+		};
+		expect(providerWithState.saveTurnState).toBeDefined();
+		expect(providerWithState.restoreTurnState).toBeDefined();
+
+		// A provider without save/restore is also valid
+		const providerWithout: Provider = {
+			id: "test",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+		expect(providerWithout.saveTurnState).toBeUndefined();
+		expect(providerWithout.restoreTurnState).toBeUndefined();
 	});
 });
