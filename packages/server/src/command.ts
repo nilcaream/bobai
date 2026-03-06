@@ -34,7 +34,7 @@ export function handleCommand(db: Database, req: CommandRequest, configDir?: str
 		case "subagent":
 			return withSessionId(handleSubagentCommand(db, sessionId), sessionId);
 		case "session":
-			return { ok: false, error: "Session switching is not implemented yet" };
+			return { ok: true, sessionId };
 		default:
 			return { ok: false, error: `Unknown command: ${command}` };
 	}
@@ -58,10 +58,8 @@ function handleModelCommand(db: Database, sessionId: string, args: string, confi
 }
 
 function handleSubagentCommand(db: Database, sessionId: string): CommandResult {
-	const session = getSession(db, sessionId);
-	if (!session) {
-		return { ok: false, error: `Session not found: ${sessionId}` };
-	}
+	// Session existence already validated by handleCommand
+	const session = getSession(db, sessionId)!;
 	const parentId = session.parentId ?? sessionId;
 	const subagents = listSubagentSessions(db, parentId);
 	if (subagents.length === 0) {
