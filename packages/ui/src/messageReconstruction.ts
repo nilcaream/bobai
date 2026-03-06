@@ -59,6 +59,7 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 			if (currentAssistant) {
 				// Same turn: merge parts into existing assistant message
 				currentAssistant.parts.push(...newParts);
+				currentAssistant.timestamp = formatStoredTimestamp(msg.createdAt);
 				if (summary) currentAssistant.summary = summary;
 				if (model) currentAssistant.model = model;
 			} else {
@@ -78,12 +79,23 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 		if (msg.role === "tool") {
 			const toolCallId = msg.metadata?.tool_call_id as string | undefined;
 			if (currentAssistant && toolCallId) {
-				const uiOutput = msg.metadata?.ui_output as string | null | undefined;
+				// Fix tool_call part content with the formatted call output if available
+				const formatCall = msg.metadata?.format_call as string | undefined;
+				if (formatCall) {
+					const callPart = currentAssistant.parts.find((p) => p.type === "tool_call" && p.id === toolCallId);
+					if (callPart) callPart.content = formatCall;
+				}
+
+				const hasUiOutput = msg.metadata != null && "ui_output" in msg.metadata;
+				const content = hasUiOutput ? (msg.metadata!.ui_output as string | null) : msg.content;
+				const mergeable = msg.metadata?.mergeable !== undefined ? (msg.metadata.mergeable as boolean) : true;
+				const summary = msg.metadata?.tool_summary as string | undefined;
 				currentAssistant.parts.push({
 					type: "tool_result",
 					id: toolCallId,
-					content: uiOutput ?? msg.content,
-					mergeable: true,
+					content,
+					mergeable,
+					...(summary ? { summary } : {}),
 				});
 			}
 		}
