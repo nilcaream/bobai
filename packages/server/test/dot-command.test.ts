@@ -240,7 +240,7 @@ describe("HTTP endpoints", () => {
 		expect(body.length).toBeGreaterThanOrEqual(1);
 		const match = body.find((s) => s.title === "HTTP Task A");
 		expect(match).toBeTruthy();
-		expect(match!.sessionId).toBeTruthy();
+		expect(match?.sessionId).toBeTruthy();
 	});
 });
 
