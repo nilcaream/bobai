@@ -39,6 +39,12 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 				| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 				| undefined;
 
+			// Text before tool_calls — matches streaming order where the provider
+			// emits text tokens first, then fires tool_call events.
+			if (msg.content) {
+				newParts.push({ type: "text", content: msg.content });
+			}
+
 			if (toolCalls && toolCalls.length > 0) {
 				for (const tc of toolCalls) {
 					newParts.push({
@@ -47,10 +53,6 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 						content: `**${tc.function.name}** ${tc.function.arguments}`,
 					});
 				}
-			}
-
-			if (msg.content) {
-				newParts.push({ type: "text", content: msg.content });
 			}
 
 			const summary = msg.metadata?.summary as string | undefined;
