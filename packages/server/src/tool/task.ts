@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
-import { appendMessage, createSubagentSession, getMessages, getSession } from "../session/repository";
+import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
 import type { SubagentStatus } from "../subagent-status";
 import { bashTool } from "./bash";
 import { editFileTool } from "./edit-file";
@@ -32,25 +32,6 @@ export interface TaskToolDeps {
 	subagentStatus: SubagentStatus;
 }
 
-interface TitleResult {
-	title: string;
-	userPrompt: string;
-}
-
-async function generateTitle(provider: Provider, model: string, prompt: string, signal?: AbortSignal): Promise<TitleResult> {
-	const truncatedPrompt = prompt.length > 1000 ? `${prompt.slice(0, 1000)}...\n\n(truncated)` : prompt;
-	const userPrompt = `Generate a short title (1 sentence, up to 20 words) for this task. Return ONLY the title, nothing else.\n\nTask: ${truncatedPrompt}`;
-	const messages: Message[] = [{ role: "user", content: userPrompt }];
-
-	let title = "";
-	for await (const event of provider.stream({ model, messages, signal, initiator: "agent" })) {
-		if (event.type === "text") {
-			title += event.text;
-		}
-	}
-	return { title: title.trim().replace(/^["']|["']$/g, ""), userPrompt };
-}
-
 export function createTaskTool(deps: TaskToolDeps): Tool {
 	const { db, provider, model, parentSessionId, projectRoot, systemPrompt, signal, onEvent, sendWs, subagentStatus } = deps;
 
@@ -70,7 +51,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					properties: {
 						description: {
 							type: "string",
-							description: "Short task description (up to 20 words)",
+							description: "Session title — one sentence describing what the subagent should accomplish",
 						},
 						prompt: {
 							type: "string",
@@ -115,30 +96,9 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				}
 				childSessionId = taskId;
 			} else {
-				// Generate title, fall back to description
-				let title: string;
-				let titleGenExchange: { userPrompt: string; assistantResponse: string } | undefined;
-				try {
-					const result = await generateTitle(provider, "gpt-5-mini", prompt, signal);
-					title = result.title || description;
-					titleGenExchange = { userPrompt: result.userPrompt, assistantResponse: result.title };
-				} catch {
-					title = description;
-				}
-
-				// Create child session
-				const child = createSubagentSession(db, parentSessionId, title, model, systemPrompt);
+				// Create child session with description as title
+				const child = createSubagentSession(db, parentSessionId, description, model, systemPrompt);
 				childSessionId = child.id;
-
-				// Persist title generation exchange if available
-				if (titleGenExchange) {
-					appendMessage(db, childSessionId, "user", titleGenExchange.userPrompt, {
-						purpose: "title-generation",
-					});
-					appendMessage(db, childSessionId, "assistant", titleGenExchange.assistantResponse, {
-						purpose: "title-generation",
-					});
-				}
 
 				// Add the task prompt as a user message with agent metadata
 				appendMessage(db, childSessionId, "user", prompt, {
@@ -157,8 +117,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				sendWs({ type: "subagent_start", sessionId: childSessionId, title: session?.title ?? description });
 			}
 
-			// Load child session messages, excluding title-generation exchanges
-			const stored = getMessages(db, childSessionId).filter((m) => m.metadata?.purpose !== "title-generation");
+			// Load child session messages
+			const stored = getMessages(db, childSessionId);
 			const messages: Message[] = stored.map((m) => {
 				if (m.role === "tool" && m.metadata?.tool_call_id) {
 					return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
@@ -187,6 +147,14 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			let newMessages: Message[];
 			const parentState = provider.saveTurnState?.();
 			provider.beginTurn?.();
+
+			// Capture tool metadata from onEvent (same pattern as handler.ts)
+			const toolMeta = new Map<
+				string,
+				{ formatCall?: string; uiOutput?: string | null; mergeable?: boolean; summary?: string }
+			>();
+			let lastAssistantMessageId: string | undefined;
+
 			try {
 				newMessages = await runAgentLoop({
 					provider,
@@ -198,15 +166,38 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					initiator: "agent",
 					onEvent(event: AgentEvent) {
 						onEvent({ ...event, sessionId: childSessionId });
+						if (event.type === "tool_call") {
+							const existing = toolMeta.get(event.id) ?? {};
+							toolMeta.set(event.id, { ...existing, formatCall: event.output });
+						}
+						if (event.type === "tool_result") {
+							const existing = toolMeta.get(event.id) ?? {};
+							toolMeta.set(event.id, {
+								...existing,
+								uiOutput: event.output,
+								mergeable: event.mergeable ?? true,
+								summary: event.summary,
+							});
+						}
 					},
 					onMessage(msg) {
 						if (msg.role === "assistant") {
 							const assistantMsg = msg as AssistantMessage;
 							const metadata = assistantMsg.tool_calls ? { tool_calls: assistantMsg.tool_calls } : undefined;
-							appendMessage(db, childSessionId, "assistant", assistantMsg.content ?? "", metadata);
+							const stored = appendMessage(db, childSessionId, "assistant", assistantMsg.content ?? "", metadata);
+							lastAssistantMessageId = stored.id;
 						} else if (msg.role === "tool") {
 							const toolMsg = msg as { role: "tool"; content: string; tool_call_id: string };
-							appendMessage(db, childSessionId, "tool", toolMsg.content, { tool_call_id: toolMsg.tool_call_id });
+							const metadata: Record<string, unknown> = { tool_call_id: toolMsg.tool_call_id };
+							const captured = toolMeta.get(toolMsg.tool_call_id);
+							if (captured !== undefined) {
+								if (captured.formatCall !== undefined) metadata.format_call = captured.formatCall;
+								if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
+								if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
+								if (captured.summary) metadata.tool_summary = captured.summary;
+								toolMeta.delete(toolMsg.tool_call_id);
+							}
+							appendMessage(db, childSessionId, "tool", toolMsg.content, metadata);
 						}
 					},
 				});
@@ -215,6 +206,10 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				sendWs?.({ type: "subagent_done", sessionId: childSessionId });
 				const turnSummary = provider.getTurnSummary?.() ?? "";
 				if (parentState !== undefined) provider.restoreTurnState?.(parentState);
+				// Persist turn summary on last assistant message for reconstruction
+				if (lastAssistantMessageId && turnSummary) {
+					updateMessageMetadata(db, lastAssistantMessageId, { summary: turnSummary, turn_model: model });
+				}
 				const ts = formatTimestamp();
 				return {
 					llmOutput: `Subagent failed: ${(err as Error).message}\n\n[task_id: ${childSessionId}]`,
@@ -226,6 +221,14 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 
 			const turnSummary = provider.getTurnSummary?.();
 			if (parentState !== undefined) provider.restoreTurnState?.(parentState);
+
+			// Persist turn summary on last assistant message for reconstruction
+			if (lastAssistantMessageId && (turnSummary || model)) {
+				updateMessageMetadata(db, lastAssistantMessageId, {
+					...(turnSummary ? { summary: turnSummary } : {}),
+					turn_model: model,
+				});
+			}
 
 			subagentStatus.set(childSessionId, "done");
 			sendWs?.({ type: "subagent_done", sessionId: childSessionId });

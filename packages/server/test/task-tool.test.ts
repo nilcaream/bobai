@@ -8,7 +8,7 @@ import { SubagentStatus } from "../src/subagent-status";
 import { createTaskTool } from "../src/tool/task";
 import { createTestDb } from "./helpers";
 
-// Minimal mock provider: first call yields text, done.
+// Minimal mock provider: yields text, done.
 function textOnlyProvider(text: string): Provider {
 	return {
 		id: "mock",
@@ -24,41 +24,6 @@ function textOnlyProvider(text: string): Provider {
 			return {};
 		},
 		restoreTurnState() {},
-	};
-}
-
-// Title-generating provider: returns a short title on first call, then agent text
-function titleAndAgentProvider(titleText: string, agentText: string): Provider {
-	let callCount = 0;
-	let agentCalls = 0;
-	return {
-		id: "mock",
-		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-			callCount++;
-			// First call is title generation (single user message with "Generate" prefix)
-			const lastMsg = opts.messages[opts.messages.length - 1];
-			if (callCount === 1 && lastMsg?.role === "user" && (lastMsg as { content: string }).content.startsWith("Generate")) {
-				yield { type: "text", text: titleText };
-				yield { type: "finish", reason: "stop" };
-				return;
-			}
-			// Agent loop call
-			agentCalls++;
-			yield { type: "text", text: agentText };
-			yield { type: "finish", reason: "stop" };
-		},
-		beginTurn() {
-			agentCalls = 0;
-		},
-		getTurnSummary() {
-			return ` | test-model | agent: ${agentCalls} | user: 0 | 0.01s`;
-		},
-		saveTurnState() {
-			return { agentCalls };
-		},
-		restoreTurnState(state: unknown) {
-			agentCalls = (state as { agentCalls: number }).agentCalls;
-		},
 	};
 }
 
@@ -97,7 +62,7 @@ describe("createTaskTool", () => {
 		const status = new SubagentStatus();
 		const tool = createTaskTool({
 			db,
-			provider: titleAndAgentProvider("Code explorer", "I found 3 files."),
+			provider: textOnlyProvider("I found 3 files."),
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
@@ -129,37 +94,6 @@ describe("createTaskTool", () => {
 		expect(result.summary).toContain("agent:");
 	});
 
-	test("uses description as title fallback on title generation failure", async () => {
-		// Provider that throws on first call (title gen) and succeeds on agent call
-		let callCount = 0;
-		const failTitleProvider: Provider = {
-			id: "mock",
-			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				callCount++;
-				if (callCount === 1) {
-					throw new Error("title gen failed");
-				}
-				yield { type: "text", text: "result" };
-				yield { type: "finish", reason: "stop" };
-			},
-		};
-
-		const tool = createTaskTool({
-			db,
-			provider: failTitleProvider,
-			model: "test-model",
-			parentSessionId,
-			projectRoot: "/tmp",
-			systemPrompt: "sys",
-			onEvent: () => {},
-			subagentStatus: new SubagentStatus(),
-		});
-
-		const result = await tool.execute({ description: "My fallback title", prompt: "do something" }, { projectRoot: "/tmp" });
-
-		expect(result.llmOutput).toContain("result");
-	});
-
 	test("formatCall returns description", () => {
 		const tool = createTaskTool({
 			db,
@@ -179,7 +113,7 @@ describe("createTaskTool", () => {
 	test("child session has system prompt and task prompt as messages", async () => {
 		const tool = createTaskTool({
 			db,
-			provider: titleAndAgentProvider("title", "done"),
+			provider: textOnlyProvider("done"),
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
@@ -197,37 +131,22 @@ describe("createTaskTool", () => {
 
 		const messages = getMessages(db, childSessionId);
 
-		// Messages: system + title-gen user + title-gen assistant + task user + agent assistant
-		expect(messages.length).toBeGreaterThanOrEqual(5);
+		// Messages: system + task user + agent assistant
+		expect(messages.length).toBeGreaterThanOrEqual(3);
 		expect(messages[0].role).toBe("system");
 		expect(messages[0].content).toBe("You are a subagent.");
 
-		// Title gen messages
+		// Task prompt (directly after system)
 		expect(messages[1].role).toBe("user");
-		expect(messages[1].metadata?.purpose).toBe("title-generation");
-		expect(messages[2].role).toBe("assistant");
-		expect(messages[2].metadata?.purpose).toBe("title-generation");
-
-		// Task prompt (after title gen)
-		const taskUserMsg = messages.find((m) => m.role === "user" && m.metadata?.source === "agent");
-		expect(taskUserMsg).toBeTruthy();
-		expect(taskUserMsg?.content).toBe("Do the thing");
-		expect(taskUserMsg?.metadata).toEqual({ source: "agent", parentSessionId });
+		expect(messages[1].content).toBe("Do the thing");
+		expect(messages[1].metadata).toEqual({ source: "agent", parentSessionId });
 	});
 
 	test("sets error status when agent loop throws", async () => {
-		// Provider that succeeds for title gen but throws during agent loop
-		let callCount = 0;
 		const failAgentProvider: Provider = {
 			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				callCount++;
-				const lastMsg = opts.messages[opts.messages.length - 1];
-				if (callCount === 1 && lastMsg?.role === "user" && (lastMsg as { content: string }).content.startsWith("Generate")) {
-					yield { type: "text", text: "title" };
-					yield { type: "finish", reason: "stop" };
-					return;
-				}
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield { type: "text", text: "" };
 				throw new Error("agent loop exploded");
 			},
 			beginTurn() {},
@@ -314,129 +233,12 @@ describe("createTaskTool", () => {
 		expect(result.llmOutput).toContain("not a subagent session");
 	});
 
-	test("title generation uses initiator: agent", async () => {
-		const initiators: Array<"user" | "agent" | undefined> = [];
-		const capturingProvider: Provider = {
-			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				initiators.push(opts.initiator);
-				yield { type: "text", text: "title" };
-				yield { type: "finish", reason: "stop" };
-			},
-		};
-
-		const tool = createTaskTool({
-			db,
-			provider: capturingProvider,
-			model: "test-model",
-			parentSessionId,
-			projectRoot: "/tmp",
-			systemPrompt: "sys",
-			onEvent: () => {},
-			subagentStatus: new SubagentStatus(),
-		});
-
-		await tool.execute({ description: "Test", prompt: "do it" }, { projectRoot: "/tmp" });
-
-		// First call is title generation — it must use initiator: "agent"
-		expect(initiators[0]).toBe("agent");
-		// Agent loop calls should also be "agent"
-		for (const i of initiators) {
-			expect(i).toBe("agent");
-		}
-	});
-
-	test("persists title generation exchange in child session", async () => {
-		const tool = createTaskTool({
-			db,
-			provider: titleAndAgentProvider("Explore TypeScript Files", "I found stuff."),
-			model: "test-model",
-			parentSessionId,
-			projectRoot: "/tmp",
-			systemPrompt: "You are a subagent.",
-			onEvent: () => {},
-			subagentStatus: new SubagentStatus(),
-		});
-
-		const result = await tool.execute(
-			{ description: "Explore codebase", prompt: "Find all TS files" },
-			{ projectRoot: "/tmp" },
-		);
-
-		const taskIdMatch = result.llmOutput.match(/\[task_id: ([^\]]+)\]/);
-		expect(taskIdMatch).toBeTruthy();
-		const childSessionId = taskIdMatch?.[1] as string;
-
-		const messages = getMessages(db, childSessionId);
-
-		// Title gen messages should be persisted with purpose: "title-generation" metadata
-		const titleUserMsg = messages.find((m) => m.role === "user" && m.metadata?.purpose === "title-generation");
-		expect(titleUserMsg).toBeTruthy();
-		expect(titleUserMsg?.content as string).toContain("Generate");
-
-		const titleAssistantMsg = messages.find((m) => m.role === "assistant" && m.metadata?.purpose === "title-generation");
-		expect(titleAssistantMsg).toBeTruthy();
-		expect(titleAssistantMsg?.content).toBe("Explore TypeScript Files");
-	});
-
-	test("title generation messages are excluded from agent loop messages", async () => {
-		// Track what messages the provider receives for the agent loop call
-		const agentLoopMessages: Array<{ role: string; content: string | null }> = [];
-		let callCount = 0;
-		const capturingProvider: Provider = {
-			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				callCount++;
-				const lastMsg = opts.messages[opts.messages.length - 1];
-				if (callCount === 1 && lastMsg?.role === "user" && (lastMsg as { content: string }).content.startsWith("Generate")) {
-					yield { type: "text", text: "My Title" };
-					yield { type: "finish", reason: "stop" };
-					return;
-				}
-				// This is the agent loop call — capture messages
-				for (const m of opts.messages) {
-					agentLoopMessages.push({ role: m.role, content: (m as { content: string | null }).content });
-				}
-				yield { type: "text", text: "done" };
-				yield { type: "finish", reason: "stop" };
-			},
-		};
-
-		const tool = createTaskTool({
-			db,
-			provider: capturingProvider,
-			model: "test-model",
-			parentSessionId,
-			projectRoot: "/tmp",
-			systemPrompt: "You are a subagent.",
-			onEvent: () => {},
-			subagentStatus: new SubagentStatus(),
-		});
-
-		await tool.execute({ description: "Test", prompt: "Do something" }, { projectRoot: "/tmp" });
-
-		// Agent loop messages should NOT contain any title-generation messages
-		const hasGenerateMsg = agentLoopMessages.some((m) => m.role === "user" && m.content?.startsWith("Generate"));
-		expect(hasGenerateMsg).toBe(false);
-
-		// Should have system + user(prompt) only
-		expect(agentLoopMessages[0].role).toBe("system");
-		expect(agentLoopMessages[1].role).toBe("user");
-		expect(agentLoopMessages[1].content).toBe("Do something");
-	});
-
 	test("saves and restores provider turn state around subagent execution", async () => {
 		const stateOps: string[] = [];
 		let savedState: unknown = null;
 		const statefulProvider: Provider = {
 			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				const lastMsg = opts.messages[opts.messages.length - 1];
-				if (lastMsg?.role === "user" && (lastMsg as { content: string }).content.startsWith("Generate")) {
-					yield { type: "text", text: "title" };
-					yield { type: "finish", reason: "stop" };
-					return;
-				}
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "agent result" };
 				yield { type: "finish", reason: "stop" };
 			},
@@ -491,7 +293,7 @@ describe("createTaskTool", () => {
 	test("summary includes a timestamp prefix", async () => {
 		const tool = createTaskTool({
 			db,
-			provider: titleAndAgentProvider("title", "result"),
+			provider: textOnlyProvider("result"),
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
@@ -508,17 +310,10 @@ describe("createTaskTool", () => {
 	});
 
 	test("error summary includes a timestamp prefix", async () => {
-		let callCount = 0;
 		const failProvider: Provider = {
 			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
-				callCount++;
-				const lastMsg = opts.messages[opts.messages.length - 1];
-				if (callCount === 1 && lastMsg?.role === "user" && (lastMsg as { content: string }).content.startsWith("Generate")) {
-					yield { type: "text", text: "title" };
-					yield { type: "finish", reason: "stop" };
-					return;
-				}
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield { type: "text", text: "" };
 				throw new Error("boom");
 			},
 			beginTurn() {},
@@ -552,7 +347,7 @@ describe("createTaskTool", () => {
 		const wsMsgs: ServerMessage[] = [];
 		const tool = createTaskTool({
 			db,
-			provider: titleAndAgentProvider("title", "result"),
+			provider: textOnlyProvider("result"),
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
@@ -572,5 +367,75 @@ describe("createTaskTool", () => {
 		const doneMsg = wsMsgs.find((m) => m.type === "subagent_done");
 		expect(doneMsg).toBeTruthy();
 		expect(doneMsg.sessionId).toBe(startMsg.sessionId);
+	});
+
+	test("persists tool metadata and turn summary in child session messages", async () => {
+		// Provider that triggers a bash tool call on first request, then responds with text
+		let callCount = 0;
+		const toolCallingProvider: Provider = {
+			id: "mock",
+			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1 && opts.tools?.length) {
+					// Trigger a bash tool call
+					yield { type: "tool_call_start", index: 0, id: "call_bash_1", name: "bash" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"command":"echo hi"}' };
+					yield { type: "finish", reason: "tool_calls" };
+					return;
+				}
+				yield { type: "text", text: "The command output hi." };
+				yield { type: "finish", reason: "stop" };
+			},
+			beginTurn() {},
+			getTurnSummary() {
+				return " | test-model | agent: 2 | user: 0 | 0.05s";
+			},
+			saveTurnState() {
+				return {};
+			},
+			restoreTurnState() {},
+		};
+
+		const tool = createTaskTool({
+			db,
+			provider: toolCallingProvider,
+			model: "test-model",
+			parentSessionId,
+			projectRoot: "/tmp",
+			systemPrompt: "You are a subagent.",
+			onEvent: () => {},
+			subagentStatus: new SubagentStatus(),
+		});
+
+		const result = await tool.execute(
+			{ description: "Run echo command", prompt: "Run echo hi and report the output" },
+			{ projectRoot: "/tmp" },
+		);
+
+		const taskIdMatch = result.llmOutput.match(/\[task_id: ([^\]]+)\]/);
+		expect(taskIdMatch).toBeTruthy();
+		const childSessionId = taskIdMatch?.[1] as string;
+
+		const messages = getMessages(db, childSessionId);
+
+		// Find the tool message — should have metadata with format_call, ui_output, mergeable
+		const toolMsg = messages.find((m) => m.role === "tool");
+		expect(toolMsg).toBeTruthy();
+		expect(toolMsg?.metadata?.tool_call_id).toBe("call_bash_1");
+		expect(toolMsg?.metadata?.format_call).toBeDefined();
+		// bash tool formatCall returns something like "$ `echo hi`"
+		expect(typeof toolMsg?.metadata?.format_call).toBe("string");
+		// ui_output should be a string (bash produces output)
+		expect(toolMsg?.metadata).toHaveProperty("ui_output");
+		// mergeable should be present
+		expect(toolMsg?.metadata).toHaveProperty("mergeable");
+
+		// Find the last assistant message — should have summary and turn_model
+		const assistantMsgs = messages.filter((m) => m.role === "assistant");
+		const lastAssistant = assistantMsgs[assistantMsgs.length - 1];
+		expect(lastAssistant).toBeTruthy();
+		expect(lastAssistant?.metadata?.summary).toContain("test-model");
+		expect(lastAssistant?.metadata?.summary).toContain("agent: 2");
+		expect(lastAssistant?.metadata?.turn_model).toBe("test-model");
 	});
 });
