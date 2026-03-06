@@ -8,7 +8,13 @@ import { handlePrompt } from "../src/handler";
 import { CURATED_MODELS } from "../src/provider/copilot-models";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { createServer } from "../src/server";
-import { createSession, getSession, updateSessionModel, updateSessionTitle } from "../src/session/repository";
+import {
+	createSession,
+	createSubagentSession,
+	getSession,
+	updateSessionModel,
+	updateSessionTitle,
+} from "../src/session/repository";
 import { createTestDb } from "./helpers";
 
 describe("session model field", () => {
@@ -133,6 +139,32 @@ describe("handleCommand", () => {
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Unknown command");
 	});
+
+	test("subagent command lists recent subagent sessions", () => {
+		const freshDb = createTestDb();
+		const parent = createSession(freshDb, "sys");
+		createSubagentSession(freshDb, parent.id, "Task Alpha", "gpt-5-mini", "sys");
+		createSubagentSession(freshDb, parent.id, "Task Beta", "gpt-5-mini", "sys");
+
+		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.status).toContain("Task Beta");
+			expect(result.status).toContain("Task Alpha");
+		}
+		freshDb.close();
+	});
+
+	test("subagent command returns empty message when no subagents", () => {
+		const freshDb = createTestDb();
+		const parent = createSession(freshDb, "sys");
+		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.status).toContain("No subagent sessions");
+		}
+		freshDb.close();
+	});
 });
 
 describe("HTTP endpoints", () => {
@@ -196,6 +228,19 @@ describe("HTTP endpoints", () => {
 		const body = (await res.json()) as { ok: boolean; error: string };
 		expect(body.ok).toBe(false);
 		expect(body.error).toContain("Unknown command");
+	});
+
+	test("GET /bobai/subagents returns recent subagent sessions", async () => {
+		const parent = createSession(db, "sys");
+		createSubagentSession(db, parent.id, "HTTP Task A", "gpt-5-mini", "sys");
+
+		const res = await fetch(`${baseUrl}/bobai/subagents`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { index: number; title: string; sessionId: string }[];
+		expect(body.length).toBeGreaterThanOrEqual(1);
+		const match = body.find((s) => s.title === "HTTP Task A");
+		expect(match).toBeTruthy();
+		expect(match!.sessionId).toBeTruthy();
 	});
 });
 

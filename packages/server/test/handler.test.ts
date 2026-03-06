@@ -290,6 +290,58 @@ describe("handlePrompt", () => {
 		expect(stored[4].content).toContain("429");
 	});
 
+	test("task tool is available in tool registry (subagent spawning)", async () => {
+		// Provider that requests the "task" tool call
+		let callCount = 0;
+		const taskProvider: Provider = {
+			id: "mock",
+			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					// LLM tries to call the "task" tool
+					yield { type: "tool_call_start", index: 0, id: "call_task", name: "task" };
+					yield {
+						type: "tool_call_delta",
+						index: 0,
+						arguments: JSON.stringify({
+							description: "Test subagent",
+							prompt: "Say hello",
+						}),
+					};
+					yield { type: "finish", reason: "tool_calls" };
+				} else if (callCount <= 3) {
+					// Subagent title gen + agent loop calls
+					yield { type: "text", text: "Hello from subagent" };
+					yield { type: "finish", reason: "stop" };
+				} else {
+					// Parent continues
+					yield { type: "text", text: "Subagent completed" };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+
+		const ws = mockWs();
+		await handlePrompt({ ws, db, provider: taskProvider, model: "test-model", text: "use subagent", projectRoot: "/tmp" });
+
+		const msgs = ws.messages();
+		// Should have a tool_call event for the task tool (not "Unknown tool")
+		const toolCall = msgs.find((m: { type: string; id?: string }) => m.type === "tool_call" && m.id === "call_task");
+		expect(toolCall).toBeTruthy();
+		expect(toolCall.output).toContain("Subagent");
+
+		// Should have a tool_result (not an "Unknown tool" error)
+		const toolResult = msgs.find((m: { type: string; id?: string }) => m.type === "tool_result" && m.id === "call_task");
+		expect(toolResult).toBeTruthy();
+
+		// Child session events should carry sessionId (subagent event routing)
+		const childTokens = msgs.filter((m: { type: string; sessionId?: string }) => m.type === "token" && m.sessionId);
+		expect(childTokens.length).toBeGreaterThan(0);
+
+		// Should complete with done
+		expect(msgs.at(-1).type).toBe("done");
+	});
+
 	test("resume after error includes persisted messages in context", async () => {
 		// First prompt: provider errors after tool call
 		let callCount = 0;
