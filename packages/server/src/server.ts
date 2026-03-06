@@ -6,7 +6,14 @@ import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import { CURATED_MODELS, formatModelCost, formatModelDisplay } from "./provider/copilot-models";
 import type { Provider } from "./provider/provider";
-import { getMessages, getRecentPrompts, listSubagentSessions } from "./session/repository";
+import {
+	getMessages,
+	getMostRecentParentSession,
+	getRecentPrompts,
+	getSession,
+	listSessions,
+	listSubagentSessions,
+} from "./session/repository";
 
 export interface ServerOptions {
 	port: number;
@@ -82,7 +89,7 @@ export function createServer(options: ServerOptions) {
 				}
 				const parentId = url.searchParams.get("parentId");
 				if (!parentId) {
-					return new Response("Missing required query parameter: parentId", { status: 400 });
+					return Response.json({ error: "parentId is required" }, { status: 400 });
 				}
 				const subagents = listSubagentSessions(options.db, parentId);
 				const body = subagents.map((s, i) => ({
@@ -91,6 +98,48 @@ export function createServer(options: ServerOptions) {
 					sessionId: s.id,
 				}));
 				return Response.json(body);
+			}
+
+			// GET /bobai/sessions/recent — most recently updated parent session
+			if (url.pathname === "/bobai/sessions/recent") {
+				if (!options.db) {
+					return new Response("Database not available", { status: 503 });
+				}
+				const session = getMostRecentParentSession(options.db);
+				if (!session) return Response.json(null);
+				return Response.json({ id: session.id, title: session.title, model: session.model });
+			}
+
+			// GET /bobai/sessions — list parent sessions
+			if (url.pathname === "/bobai/sessions") {
+				if (!options.db) {
+					return new Response("Database not available", { status: 503 });
+				}
+				const sessions = listSessions(options.db, 9);
+				const body = sessions.map((s, i) => ({
+					index: i + 1,
+					id: s.id,
+					title: s.title,
+					updatedAt: s.updatedAt,
+				}));
+				return Response.json(body);
+			}
+
+			// GET /bobai/session/:id/load — session metadata + messages
+			const loadMatch = url.pathname.match(/^\/bobai\/session\/([^/]+)\/load$/);
+			if (loadMatch) {
+				if (!options.db) {
+					return new Response("Database not available", { status: 503 });
+				}
+				const session = getSession(options.db, loadMatch[1]);
+				if (!session) {
+					return new Response("Session not found", { status: 404 });
+				}
+				const messages = getMessages(options.db, loadMatch[1]);
+				return Response.json({
+					session: { id: session.id, title: session.title, model: session.model, parentId: session.parentId },
+					messages,
+				});
 			}
 
 			if (staticDir && url.pathname.startsWith("/bobai")) {

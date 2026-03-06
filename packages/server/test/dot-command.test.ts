@@ -9,6 +9,7 @@ import { CURATED_MODELS } from "../src/provider/copilot-models";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { createServer } from "../src/server";
 import {
+	appendMessage,
 	createSession,
 	createSubagentSession,
 	getSession,
@@ -126,11 +127,10 @@ describe("handleCommand", () => {
 		if (!result.ok) expect(result.error).toContain("Title cannot be empty");
 	});
 
-	test("session command returns not implemented", () => {
+	test("session command returns ok (no-op)", () => {
 		const session = createSession(db, "system prompt");
 		const result = handleCommand(db, { command: "session", args: "", sessionId: session.id }, tmpDir);
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.error).toContain("not implemented");
+		expect(result.ok).toBe(true);
 	});
 
 	test("unknown command returns error", () => {
@@ -241,6 +241,79 @@ describe("HTTP endpoints", () => {
 		const match = body.find((s) => s.title === "HTTP Task A");
 		expect(match).toBeTruthy();
 		expect(match?.sessionId).toBeTruthy();
+	});
+
+	test("GET /bobai/sessions returns parent sessions sorted by updated_at", async () => {
+		const freshDb = createTestDb();
+		const s = createServer({ port: 0, db: freshDb });
+		const base = `http://localhost:${s.port}`;
+		const s1 = createSession(freshDb, "sys");
+		updateSessionTitle(freshDb, s1.id, "First");
+		const s2 = createSession(freshDb, "sys");
+		updateSessionTitle(freshDb, s2.id, "Second");
+		// s2 is more recent
+		const res = await fetch(`${base}/bobai/sessions`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { index: number; id: string; title: string | null; updatedAt: string }[];
+		expect(body.length).toBeGreaterThanOrEqual(2);
+		expect(body[0].title).toBe("Second");
+		expect(body[0].index).toBe(1);
+		s.stop(true);
+		freshDb.close();
+	});
+
+	test("GET /bobai/sessions/recent returns most recent parent session", async () => {
+		const freshDb = createTestDb();
+		const s = createServer({ port: 0, db: freshDb });
+		const base = `http://localhost:${s.port}`;
+		createSession(freshDb, "sys");
+		const s2 = createSession(freshDb, "sys");
+		updateSessionTitle(freshDb, s2.id, "Latest");
+		const res = await fetch(`${base}/bobai/sessions/recent`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { id: string; title: string | null; model: string | null } | null;
+		expect(body).not.toBeNull();
+		expect(body?.id).toBe(s2.id);
+		s.stop(true);
+		freshDb.close();
+	});
+
+	test("GET /bobai/sessions/recent returns null when no sessions", async () => {
+		const freshDb = createTestDb();
+		const s = createServer({ port: 0, db: freshDb });
+		const base = `http://localhost:${s.port}`;
+		const res = await fetch(`${base}/bobai/sessions/recent`);
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body).toBeNull();
+		s.stop(true);
+		freshDb.close();
+	});
+
+	test("GET /bobai/session/:id/load returns session metadata and messages", async () => {
+		const freshDb = createTestDb();
+		const s = createServer({ port: 0, db: freshDb });
+		const base = `http://localhost:${s.port}`;
+		const session = createSession(freshDb, "sys");
+		updateSessionTitle(freshDb, session.id, "Test Session");
+		appendMessage(freshDb, session.id, "user", "hello");
+		appendMessage(freshDb, session.id, "assistant", "hi there");
+		const res = await fetch(`${base}/bobai/session/${session.id}/load`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			session: { id: string; title: string; model: string | null; parentId: string | null };
+			messages: { role: string; content: string }[];
+		};
+		expect(body.session.id).toBe(session.id);
+		expect(body.session.title).toBe("Test Session");
+		expect(body.messages.length).toBe(3); // system + user + assistant
+		s.stop(true);
+		freshDb.close();
+	});
+
+	test("GET /bobai/session/:id/load returns 404 for unknown session", async () => {
+		const res = await fetch(`${baseUrl}/bobai/session/nonexistent/load`);
+		expect(res.status).toBe(404);
 	});
 });
 
