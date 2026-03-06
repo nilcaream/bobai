@@ -135,8 +135,11 @@ export async function handlePrompt(req: PromptRequest) {
 		provider.beginTurn?.();
 
 		// Run the agent loop
-		// Capture UI-formatted tool outputs from onEvent (fires before onMessage for the same tool call)
-		const toolUiOutputs = new Map<string, string | null>();
+		// Capture tool metadata from onEvent (fires before onMessage for the same tool call)
+		const toolMeta = new Map<
+			string,
+			{ formatCall?: string; uiOutput?: string | null; mergeable?: boolean; summary?: string }
+		>();
 		await runAgentLoop({
 			provider,
 			model: effectiveModel,
@@ -145,8 +148,18 @@ export async function handlePrompt(req: PromptRequest) {
 			projectRoot,
 			onEvent(event: AgentEvent) {
 				routeEventToWs(ws, event);
+				if (event.type === "tool_call") {
+					const existing = toolMeta.get(event.id) ?? {};
+					toolMeta.set(event.id, { ...existing, formatCall: event.output });
+				}
 				if (event.type === "tool_result") {
-					toolUiOutputs.set(event.id, event.output);
+					const existing = toolMeta.get(event.id) ?? {};
+					toolMeta.set(event.id, {
+						...existing,
+						uiOutput: event.output,
+						mergeable: event.mergeable ?? true,
+						summary: event.summary,
+					});
 				}
 			},
 			onMessage(msg) {
@@ -157,10 +170,13 @@ export async function handlePrompt(req: PromptRequest) {
 					lastAssistantMessageId = stored.id;
 				} else if (msg.role === "tool") {
 					const metadata: Record<string, unknown> = { tool_call_id: msg.tool_call_id };
-					const uiOutput = toolUiOutputs.get(msg.tool_call_id);
-					if (uiOutput !== undefined) {
-						metadata.ui_output = uiOutput;
-						toolUiOutputs.delete(msg.tool_call_id);
+					const captured = toolMeta.get(msg.tool_call_id);
+					if (captured !== undefined) {
+						if (captured.formatCall !== undefined) metadata.format_call = captured.formatCall;
+						if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
+						if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
+						if (captured.summary) metadata.tool_summary = captured.summary;
+						toolMeta.delete(msg.tool_call_id);
 					}
 					appendMessage(db, currentSessionId, "tool", msg.content, metadata);
 				}

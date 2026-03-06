@@ -38,8 +38,8 @@ interface TitleResult {
 }
 
 async function generateTitle(provider: Provider, model: string, prompt: string, signal?: AbortSignal): Promise<TitleResult> {
-	const truncatedPrompt = prompt.length > 500 ? `${prompt.slice(0, 500)}…` : prompt;
-	const userPrompt = `Generate a short title (3-8 words) for this task. Return ONLY the title, nothing else.\n\nTask: ${truncatedPrompt}`;
+	const truncatedPrompt = prompt.length > 1000 ? `${prompt.slice(0, 1000)}...\n\n(truncated)` : prompt;
+	const userPrompt = `Generate a short title (1 sentence, up to 20 words) for this task. Return ONLY the title, nothing else.\n\nTask: ${truncatedPrompt}`;
 	const messages: Message[] = [{ role: "user", content: userPrompt }];
 
 	let title = "";

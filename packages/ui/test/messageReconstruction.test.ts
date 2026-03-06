@@ -209,7 +209,7 @@ describe("reconstructMessages", () => {
 		}
 	});
 
-	test("falls back to raw content when ui_output is null", () => {
+	test("preserves null content when ui_output is explicitly null (task tool)", () => {
 		const stored = [
 			{
 				id: "1",
@@ -228,23 +228,207 @@ describe("reconstructMessages", () => {
 				createdAt: "2026-03-06T01:00:00Z",
 				sortOrder: 1,
 				metadata: {
-					tool_calls: [{ id: "call_1", type: "function", function: { name: "read_file", arguments: '{"path":"x.ts"}' } }],
+					tool_calls: [
+						{
+							id: "call_1",
+							type: "function",
+							function: { name: "task", arguments: '{"description":"Find CPU hog","prompt":"do it"}' },
+						},
+					],
 				},
 			},
 			{
 				id: "3",
 				sessionId: "s",
 				role: "tool" as const,
-				content: "raw content fallback",
+				content: "full subagent response text",
 				createdAt: "2026-03-06T01:00:01Z",
 				sortOrder: 2,
-				metadata: { tool_call_id: "call_1", ui_output: null },
+				metadata: {
+					tool_call_id: "call_1",
+					format_call: "**Subagent** Find CPU hog",
+					ui_output: null,
+					mergeable: false,
+					tool_summary: "2026-03-06 20:28:32 | gpt-5-mini | agent: 3 | tokens: 6614 | 41.26s",
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[0].role === "assistant") {
+			// tool_call content should be overridden by format_call
+			const toolCall = result[0].parts.find((p) => p.type === "tool_call");
+			expect(toolCall!.content).toBe("**Subagent** Find CPU hog");
+			// tool_result content should be null (not the raw subagent response)
+			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
+			expect(toolResult!.content).toBeNull();
+			expect(toolResult!.mergeable).toBe(false);
+			// tool_summary should be passed through as summary on the part
+			expect(toolResult!.summary).toBe("2026-03-06 20:28:32 | gpt-5-mini | agent: 3 | tokens: 6614 | 41.26s");
+		}
+	});
+
+	test("format_call overrides generic tool_call content", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "prompt",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: {
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "bash", arguments: '{"command":"ls -la"}' } }],
+				},
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "file1.txt\nfile2.txt",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					tool_call_id: "call_1",
+					format_call: "`$ ls -la`",
+					ui_output: "$ `ls -la`\n```\nfile1.txt\nfile2.txt\n```",
+					mergeable: true,
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[0].role === "assistant") {
+			const toolCall = result[0].parts.find((p) => p.type === "tool_call");
+			// Should use format_call, not the generic "**bash** {\"command\":\"ls -la\"}"
+			expect(toolCall!.content).toBe("`$ ls -la`");
+			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
+			expect(toolResult!.content).toBe("$ `ls -la`\n```\nfile1.txt\nfile2.txt\n```");
+		}
+	});
+
+	test("falls back to generic tool_call content when format_call absent (backward compat)", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "prompt",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: {
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "bash", arguments: '{"command":"ls"}' } }],
+				},
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "output",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: { tool_call_id: "call_1" },
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[0].role === "assistant") {
+			const toolCall = result[0].parts.find((p) => p.type === "tool_call");
+			// No format_call → uses generic format
+			expect(toolCall!.content).toBe('**bash** {"command":"ls"}');
+		}
+	});
+
+	test("defaults mergeable to true when not in metadata (backward compat)", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "prompt",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: {
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "bash", arguments: '{"command":"ls"}' } }],
+				},
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "output",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: { tool_call_id: "call_1" },
 			},
 		];
 		const result = reconstructMessages(stored);
 		if (result[0].role === "assistant") {
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
-			expect(toolResult!.content).toBe("raw content fallback");
+			expect(toolResult!.mergeable).toBe(true);
+		}
+	});
+
+	test("respects explicit mergeable: true in metadata", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "prompt",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: {
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "bash", arguments: '{"command":"ls"}' } }],
+				},
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "output",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: { tool_call_id: "call_1", ui_output: "$ `ls`\n```\noutput\n```", mergeable: true },
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[0].role === "assistant") {
+			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
+			expect(toolResult!.mergeable).toBe(true);
 		}
 	});
 
@@ -368,8 +552,8 @@ describe("reconstructMessages", () => {
 			expect(result[1].parts[4].type).toBe("text");
 			expect(result[1].parts[4].content).toBe("Here are both files.");
 
-			// Timestamp from first assistant row
-			expect(result[1].timestamp).toBe(expectedLocalTimestamp("2026-03-06T01:00:01Z"));
+			// Timestamp from last assistant row (used for status bar on final panel)
+			expect(result[1].timestamp).toBe(expectedLocalTimestamp("2026-03-06T01:00:05Z"));
 			// Summary/model from last assistant row
 			expect(result[1].summary).toBe("Model: gpt-4o | Cost: 1 PR");
 			expect(result[1].model).toBe("gpt-4o");
