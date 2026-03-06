@@ -107,7 +107,8 @@ export function createServer(options: ServerOptions) {
 				}
 				const session = getMostRecentParentSession(options.db);
 				if (!session) return Response.json(null);
-				return Response.json({ id: session.id, title: session.title, model: session.model });
+				const status = session.model ? formatModelDisplay(session.model, session.promptTokens, options.configDir) : null;
+				return Response.json({ id: session.id, title: session.title, model: session.model, status });
 			}
 
 			// GET /bobai/sessions — list parent sessions
@@ -137,9 +138,11 @@ export function createServer(options: ServerOptions) {
 					return new Response("Session not found", { status: 404 });
 				}
 				const messages = getMessages(options.db, sessionId);
+				const status = session.model ? formatModelDisplay(session.model, session.promptTokens, options.configDir) : null;
 				return Response.json({
 					session: { id: session.id, title: session.title, model: session.model, parentId: session.parentId },
 					messages,
+					status,
 				});
 			}
 

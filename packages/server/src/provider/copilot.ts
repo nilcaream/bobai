@@ -117,6 +117,10 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 			return ` | ${parts.join(" | ")}`;
 		},
 
+		getTurnPromptTokens(): number {
+			return turnLastCallTokens;
+		},
+
 		saveTurnState(): unknown {
 			return {
 				turnStartTime,

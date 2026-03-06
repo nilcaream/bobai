@@ -5,6 +5,7 @@ export interface Session {
 	title: string | null;
 	model: string | null;
 	parentId: string | null;
+	promptTokens: number;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -24,6 +25,7 @@ type SessionRow = {
 	title: string | null;
 	model: string | null;
 	parent_id: string | null;
+	prompt_tokens: number;
 	created_at: string;
 	updated_at: string;
 };
@@ -53,7 +55,7 @@ export function createSession(db: Database, systemPrompt: string): Session {
 		);
 	})();
 
-	return { id, title: null, model: null, parentId: null, createdAt: now, updatedAt: now };
+	return { id, title: null, model: null, parentId: null, promptTokens: 0, createdAt: now, updatedAt: now };
 }
 
 export function appendMessage(
@@ -82,6 +84,14 @@ export function appendMessage(
 	return { id, sessionId, role, content, createdAt: now, sortOrder: row.sort_order, metadata: metadata ?? null };
 }
 
+export function updateMessageMetadata(db: Database, messageId: string, patch: Record<string, unknown>): void {
+	const row = db.prepare("SELECT metadata FROM messages WHERE id = ?").get(messageId) as { metadata: string | null } | null;
+	if (!row) return;
+	const existing = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
+	const merged = { ...existing, ...patch };
+	db.prepare("UPDATE messages SET metadata = ? WHERE id = ?").run(JSON.stringify(merged), messageId);
+}
+
 export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 	const rows = db
 		.prepare(
@@ -102,7 +112,7 @@ export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 
 export function getSession(db: Database, sessionId: string): Session | null {
 	const row = db
-		.prepare("SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE id = ?")
+		.prepare("SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE id = ?")
 		.get(sessionId) as SessionRow | null;
 
 	if (!row) return null;
@@ -111,6 +121,7 @@ export function getSession(db: Database, sessionId: string): Session | null {
 		title: row.title,
 		model: row.model,
 		parentId: row.parent_id,
+		promptTokens: row.prompt_tokens,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -135,8 +146,8 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 
 export function listSessions(db: Database, limit?: number): Session[] {
 	const sql = limit
-		? "SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
-		: "SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
+		? "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
 	const rows = (limit ? db.prepare(sql).all(limit) : db.prepare(sql).all()) as SessionRow[];
 
 	return rows.map((r) => ({
@@ -144,6 +155,7 @@ export function listSessions(db: Database, limit?: number): Session[] {
 		title: r.title,
 		model: r.model,
 		parentId: r.parent_id,
+		promptTokens: r.prompt_tokens,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -155,6 +167,14 @@ export function updateSessionModel(db: Database, sessionId: string, model: strin
 
 export function updateSessionTitle(db: Database, sessionId: string, title: string): void {
 	db.prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?").run(title, new Date().toISOString(), sessionId);
+}
+
+export function updateSessionPromptTokens(db: Database, sessionId: string, promptTokens: number): void {
+	db.prepare("UPDATE sessions SET prompt_tokens = ?, updated_at = ? WHERE id = ?").run(
+		promptTokens,
+		new Date().toISOString(),
+		sessionId,
+	);
 }
 
 export function createSubagentSession(
@@ -186,13 +206,13 @@ export function createSubagentSession(
 		);
 	})();
 
-	return { id, title, model, parentId, createdAt: now, updatedAt: now };
+	return { id, title, model, parentId, promptTokens: 0, createdAt: now, updatedAt: now };
 }
 
 export function listSubagentSessions(db: Database, parentId: string, limit = 9): Session[] {
 	const rows = db
 		.prepare(
-			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?",
+			"SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?",
 		)
 		.all(parentId, limit) as SessionRow[];
 
@@ -201,6 +221,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit = 9):
 		title: r.title,
 		model: r.model,
 		parentId: r.parent_id,
+		promptTokens: r.prompt_tokens,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -209,7 +230,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit = 9):
 export function getMostRecentParentSession(db: Database): Session | null {
 	const row = db
 		.prepare(
-			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
+			"SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
 		)
 		.get() as SessionRow | null;
 
@@ -219,6 +240,7 @@ export function getMostRecentParentSession(db: Database): Session | null {
 		title: row.title,
 		model: row.model,
 		parentId: row.parent_id,
+		promptTokens: row.prompt_tokens,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};

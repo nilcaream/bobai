@@ -84,8 +84,8 @@ function truncateChars(text: string, charLimit: number): string {
 	return text.slice(0, charLimit) + `... (${text.length - charLimit} more chars)`;
 }
 
-const PARENT_DOT_COMMANDS = ["model", "session", "subagent", "title", "view"] as const;
-const SUBAGENT_DOT_COMMANDS = ["session", "subagent", "title", "view"] as const;
+const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
+const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 
 export function App() {
 	const {
@@ -93,6 +93,7 @@ export function App() {
 		connected,
 		isStreaming,
 		sendPrompt,
+		newChat,
 		setModel,
 		title,
 		setTitle,
@@ -109,6 +110,7 @@ export function App() {
 	const [input, setInput] = useState("");
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
+	const defaultStatus = useRef("");
 	const historyEntries = useRef<string[]>([]);
 	const [view, setView] = useState<{ mode: "chat" | "context"; lineLimit: number }>({ mode: "chat", lineLimit: 16 });
 	const [contextMessages, setContextMessages] = useState<ContextMessage[] | null>(null);
@@ -193,7 +195,8 @@ export function App() {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const activeDotCommands = parentId ? SUBAGENT_DOT_COMMANDS : PARENT_DOT_COMMANDS;
+	const isReadOnly = !!parentId || view.mode === "context";
+	const activeDotCommands = isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
 
 	function clearInput() {
 		setInput("");
@@ -224,6 +227,7 @@ export function App() {
 			.then((res) => res.json())
 			.then((data: { models: { index: number; id: string; cost: string }[]; defaultModel: string; defaultStatus: string }) => {
 				setModelList(data.models);
+				defaultStatus.current = data.defaultStatus;
 				setModel((prev) => prev ?? data.defaultModel);
 				setStatus((prev) => prev || data.defaultStatus);
 			})
@@ -285,6 +289,15 @@ export function App() {
 
 		const parsed = parseDotInput(text);
 		if (parsed?.mode === "args" && parsed.command) {
+			// New chat: .new (with trailing space) — same as .new without space
+			if (parsed.command === "new") {
+				newChat();
+				setStatus(defaultStatus.current);
+				setView((prev) => ({ ...prev, mode: "chat" }));
+				clearInput();
+				return;
+			}
+
 			// View command: select by index or cycle when no args
 			if (parsed.command === "view") {
 				const arg = parsed.args.trim();
@@ -390,12 +403,26 @@ export function App() {
 			return;
 		}
 
+		// .new (no space): start a new chat session
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "new") {
+			newChat();
+			setStatus(defaultStatus.current);
+			setView((prev) => ({ ...prev, mode: "chat" }));
+			clearInput();
+			return;
+		}
+
 		// Incomplete or invalid dot command — don't send as prompt
 		if (parsed) return;
 
 		if (parentId) {
-			// Subagent sessions are read-only — only dot commands allowed
 			addErrorMessage("Subagent sessions are read-only");
+			clearInput();
+			return;
+		}
+
+		if (view.mode === "context") {
+			addErrorMessage("Context view is read-only");
 			clearInput();
 			return;
 		}
@@ -515,6 +542,8 @@ export function App() {
 						<div>No matching models</div>
 					);
 			}
+		} else if (parsed.command === "new") {
+			content = "Start a new chat session";
 		} else if (parsed.command === "title") {
 			const titleText = parsed.args.trim();
 			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
@@ -753,7 +782,7 @@ export function App() {
 						adjustHeight();
 					}}
 					onKeyDown={handleKeyDown}
-					placeholder={parentId ? "Dot commands only (read-only session)" : "Type a message..."}
+					placeholder={isReadOnly ? "Dot commands only (read-only)" : "Type a message..."}
 					disabled={!connected || isStreaming}
 				/>
 			</div>

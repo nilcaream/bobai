@@ -178,13 +178,14 @@ export function useWebSocket() {
 			const data = (await res.json()) as {
 				session: { id: string; title: string | null; model: string | null; parentId: string | null };
 				messages: StoredMessage[];
+				status: string | null;
 			};
 			sessionId.current = data.session.id;
 			setTitle(data.session.title);
 			setModel(data.session.model);
 			setParentId(data.session.parentId);
 			setSubagents([]);
-			setStatus("");
+			setStatus(data.status ?? "");
 			setMessages(reconstructMessages(data.messages));
 
 			// Fetch parent title for subagent status bar

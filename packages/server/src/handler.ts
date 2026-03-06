@@ -4,7 +4,15 @@ import { runAgentLoop } from "./agent-loop";
 import { send } from "./protocol";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
-import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
+import {
+	appendMessage,
+	createSession,
+	getMessages,
+	getSession,
+	updateMessageMetadata,
+	updateSessionModel,
+	updateSessionPromptTokens,
+} from "./session/repository";
 import { SubagentStatus } from "./subagent-status";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { bashTool } from "./tool/bash";
@@ -55,6 +63,7 @@ export async function handlePrompt(req: PromptRequest) {
 	let currentSessionId: string | undefined;
 	let sessionObj: { model: string | null; title: string | null } | null = null;
 	let effectiveModel = model;
+	let lastAssistantMessageId: string | null = null;
 
 	try {
 		// Resolve or create session
@@ -73,6 +82,11 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 
 		effectiveModel = sessionObj?.model ?? model;
+
+		// Persist the effective model so session load can reconstruct the status bar
+		if (!sessionObj?.model && currentSessionId) {
+			updateSessionModel(db, currentSessionId, effectiveModel);
+		}
 
 		// Persist the user message
 		appendMessage(db, currentSessionId, "user", text);
@@ -121,6 +135,8 @@ export async function handlePrompt(req: PromptRequest) {
 		provider.beginTurn?.();
 
 		// Run the agent loop
+		// Capture UI-formatted tool outputs from onEvent (fires before onMessage for the same tool call)
+		const toolUiOutputs = new Map<string, string | null>();
 		await runAgentLoop({
 			provider,
 			model: effectiveModel,
@@ -129,19 +145,39 @@ export async function handlePrompt(req: PromptRequest) {
 			projectRoot,
 			onEvent(event: AgentEvent) {
 				routeEventToWs(ws, event);
+				if (event.type === "tool_result") {
+					toolUiOutputs.set(event.id, event.output);
+				}
 			},
 			onMessage(msg) {
 				if (!currentSessionId) return;
 				if (msg.role === "assistant") {
 					const metadata = msg.tool_calls ? { tool_calls: msg.tool_calls } : undefined;
-					appendMessage(db, currentSessionId, "assistant", msg.content ?? "", metadata);
+					const stored = appendMessage(db, currentSessionId, "assistant", msg.content ?? "", metadata);
+					lastAssistantMessageId = stored.id;
 				} else if (msg.role === "tool") {
-					appendMessage(db, currentSessionId, "tool", msg.content, { tool_call_id: msg.tool_call_id });
+					const metadata: Record<string, unknown> = { tool_call_id: msg.tool_call_id };
+					const uiOutput = toolUiOutputs.get(msg.tool_call_id);
+					if (uiOutput !== undefined) {
+						metadata.ui_output = uiOutput;
+						toolUiOutputs.delete(msg.tool_call_id);
+					}
+					appendMessage(db, currentSessionId, "tool", msg.content, metadata);
 				}
 			},
 		});
 
 		const summary = provider.getTurnSummary?.();
+		const promptTokens = provider.getTurnPromptTokens?.() ?? 0;
+		if (currentSessionId && promptTokens > 0) {
+			updateSessionPromptTokens(db, currentSessionId, promptTokens);
+		}
+		if (lastAssistantMessageId && (summary || effectiveModel)) {
+			updateMessageMetadata(db, lastAssistantMessageId, {
+				...(summary ? { summary } : {}),
+				turn_model: effectiveModel,
+			});
+		}
 		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null, summary });
 	} catch (err) {
 		// Persist error as assistant message so agent can resume with context
@@ -150,7 +186,8 @@ export async function handlePrompt(req: PromptRequest) {
 				err instanceof ProviderError
 					? `[Error: Provider error (${err.status}): ${err.body}]`
 					: `[Error: ${(err as Error).message}]`;
-			appendMessage(db, currentSessionId, "assistant", errorText);
+			const errorMsg = appendMessage(db, currentSessionId, "assistant", errorText);
+			lastAssistantMessageId = errorMsg.id;
 		}
 
 		if (err instanceof ProviderError) {
@@ -163,6 +200,16 @@ export async function handlePrompt(req: PromptRequest) {
 		// Send done so UI gets sessionId for resume
 		if (currentSessionId) {
 			const errSummary = provider.getTurnSummary?.();
+			const errPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
+			if (errPromptTokens > 0) {
+				updateSessionPromptTokens(db, currentSessionId, errPromptTokens);
+			}
+			if (lastAssistantMessageId && (errSummary || effectiveModel)) {
+				updateMessageMetadata(db, lastAssistantMessageId, {
+					...(errSummary ? { summary: errSummary } : {}),
+					turn_model: effectiveModel,
+				});
+			}
 			send(ws, {
 				type: "done",
 				sessionId: currentSessionId,

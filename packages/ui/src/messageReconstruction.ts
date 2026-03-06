@@ -11,10 +11,9 @@ export interface StoredMessage {
 }
 
 function formatStoredTimestamp(iso: string): string {
-	return iso
-		.replace("T", " ")
-		.replace(/\.\d+Z$/, "")
-		.replace("Z", "");
+	const d = new Date(iso);
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 export function reconstructMessages(stored: StoredMessage[]): Message[] {
@@ -35,14 +34,14 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 		}
 
 		if (msg.role === "assistant") {
-			const parts: MessagePart[] = [];
+			const newParts: MessagePart[] = [];
 			const toolCalls = msg.metadata?.tool_calls as
 				| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 				| undefined;
 
 			if (toolCalls && toolCalls.length > 0) {
 				for (const tc of toolCalls) {
-					parts.push({
+					newParts.push({
 						type: "tool_call",
 						id: tc.id,
 						content: `**${tc.function.name}** ${tc.function.arguments}`,
@@ -51,25 +50,39 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 			}
 
 			if (msg.content) {
-				parts.push({ type: "text", content: msg.content });
+				newParts.push({ type: "text", content: msg.content });
 			}
 
-			currentAssistant = {
-				role: "assistant",
-				parts,
-				timestamp: formatStoredTimestamp(msg.createdAt),
-			};
-			messages.push(currentAssistant);
+			const summary = msg.metadata?.summary as string | undefined;
+			const model = msg.metadata?.turn_model as string | undefined;
+
+			if (currentAssistant) {
+				// Same turn: merge parts into existing assistant message
+				currentAssistant.parts.push(...newParts);
+				if (summary) currentAssistant.summary = summary;
+				if (model) currentAssistant.model = model;
+			} else {
+				// New turn: create a new assistant message
+				currentAssistant = {
+					role: "assistant",
+					parts: newParts,
+					timestamp: formatStoredTimestamp(msg.createdAt),
+					...(summary ? { summary } : {}),
+					...(model ? { model } : {}),
+				};
+				messages.push(currentAssistant);
+			}
 			continue;
 		}
 
 		if (msg.role === "tool") {
 			const toolCallId = msg.metadata?.tool_call_id as string | undefined;
 			if (currentAssistant && toolCallId) {
+				const uiOutput = msg.metadata?.ui_output as string | null | undefined;
 				currentAssistant.parts.push({
 					type: "tool_result",
 					id: toolCallId,
-					content: msg.content,
+					content: uiOutput ?? msg.content,
 					mergeable: true,
 				});
 			}
