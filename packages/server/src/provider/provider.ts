@@ -67,6 +67,8 @@ export interface Provider {
 	beginTurn?(): void;
 	/** Format accumulated turn stats into a display string (e.g. " | model | agent: 3 | ..."). */
 	getTurnSummary?(): string | undefined;
+	/** Return the prompt token count from the last LLM call in this turn. */
+	getTurnPromptTokens?(): number;
 	/** Save current turn tracking state (so it can be restored after a subagent run). */
 	saveTurnState?(): unknown;
 	/** Restore previously saved turn tracking state. */
