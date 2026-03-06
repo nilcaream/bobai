@@ -54,7 +54,9 @@ function handleModelCommand(db: Database, sessionId: string, args: string, confi
 	}
 	const modelId = CURATED_MODELS[index - 1];
 	updateSessionModel(db, sessionId, modelId);
-	return { ok: true, status: formatModelDisplay(modelId, 0, configDir) };
+	const session = getSession(db, sessionId);
+	const promptTokens = session?.promptTokens ?? 0;
+	return { ok: true, status: formatModelDisplay(modelId, promptTokens, configDir) };
 }
 
 function handleSubagentCommand(db: Database, sessionId: string): CommandResult {

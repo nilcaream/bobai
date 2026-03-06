@@ -224,6 +224,8 @@ body,
 	resize: none;
 	overflow: hidden;
 	max-height: 40vh;
+	caret-shape: block;
+	caret-color: var(--text-primary);
 }
 
 .prompt-input--history {
