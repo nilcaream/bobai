@@ -1,8 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { AgentEvent } from "../src/agent-loop";
+import type { ServerMessage } from "../src/protocol";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
-import { createSession, getMessages, getSession, listSubagentSessions } from "../src/session/repository";
+import { createSession, getMessages, listSubagentSessions } from "../src/session/repository";
 import { SubagentStatus } from "../src/subagent-status";
 import { createTaskTool } from "../src/tool/task";
 import { createTestDb } from "./helpers";
@@ -192,7 +193,7 @@ describe("createTaskTool", () => {
 		// Extract task_id from result to get the exact child session
 		const taskIdMatch = result.llmOutput.match(/\[task_id: ([^\]]+)\]/);
 		expect(taskIdMatch).toBeTruthy();
-		const childSessionId = taskIdMatch![1];
+		const childSessionId = taskIdMatch?.[1] as string;
 
 		const messages = getMessages(db, childSessionId);
 
@@ -210,8 +211,8 @@ describe("createTaskTool", () => {
 		// Task prompt (after title gen)
 		const taskUserMsg = messages.find((m) => m.role === "user" && m.metadata?.source === "agent");
 		expect(taskUserMsg).toBeTruthy();
-		expect(taskUserMsg!.content).toBe("Do the thing");
-		expect(taskUserMsg!.metadata).toEqual({ source: "agent", parentSessionId });
+		expect(taskUserMsg?.content).toBe("Do the thing");
+		expect(taskUserMsg?.metadata).toEqual({ source: "agent", parentSessionId });
 	});
 
 	test("sets error status when agent loop throws", async () => {
@@ -264,7 +265,7 @@ describe("createTaskTool", () => {
 		// Extract task_id and verify error status
 		const taskIdMatch = result.llmOutput.match(/\[task_id: ([^\]]+)\]/);
 		expect(taskIdMatch).toBeTruthy();
-		expect(status.get(taskIdMatch![1])).toBe("error");
+		expect(status.get(taskIdMatch?.[1] as string)).toBe("error");
 
 		// Error summary should include timing and error indicator
 		expect(result.summary).toBeDefined();
@@ -364,18 +365,18 @@ describe("createTaskTool", () => {
 
 		const taskIdMatch = result.llmOutput.match(/\[task_id: ([^\]]+)\]/);
 		expect(taskIdMatch).toBeTruthy();
-		const childSessionId = taskIdMatch![1];
+		const childSessionId = taskIdMatch?.[1] as string;
 
 		const messages = getMessages(db, childSessionId);
 
 		// Title gen messages should be persisted with purpose: "title-generation" metadata
 		const titleUserMsg = messages.find((m) => m.role === "user" && m.metadata?.purpose === "title-generation");
 		expect(titleUserMsg).toBeTruthy();
-		expect(titleUserMsg!.content as string).toContain("Generate");
+		expect(titleUserMsg?.content as string).toContain("Generate");
 
 		const titleAssistantMsg = messages.find((m) => m.role === "assistant" && m.metadata?.purpose === "title-generation");
 		expect(titleAssistantMsg).toBeTruthy();
-		expect(titleAssistantMsg!.content).toBe("Explore TypeScript Files");
+		expect(titleAssistantMsg?.content).toBe("Explore TypeScript Files");
 	});
 
 	test("title generation messages are excluded from agent loop messages", async () => {
@@ -548,7 +549,7 @@ describe("createTaskTool", () => {
 	});
 
 	test("emits subagent_start and subagent_done via sendWs", async () => {
-		const wsMsgs: any[] = [];
+		const wsMsgs: ServerMessage[] = [];
 		const tool = createTaskTool({
 			db,
 			provider: titleAndAgentProvider("title", "result"),

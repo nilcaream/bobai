@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { handlePrompt } from "../src/handler";
+import type { ServerMessage } from "../src/protocol";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { getMessages, listSubagentSessions } from "../src/session/repository";
 import { createTestDb } from "./helpers";
@@ -11,8 +12,8 @@ function mockWs() {
 		send(msg: string) {
 			sent.push(msg);
 		},
-		messages() {
-			return sent.map((s) => JSON.parse(s));
+		messages(): ServerMessage[] {
+			return sent.map((s) => JSON.parse(s) as ServerMessage);
 		},
 	};
 }
@@ -32,7 +33,7 @@ describe("subagent integration", () => {
 		let callCount = 0;
 		const provider: Provider = {
 			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
 					// Parent: call the task tool
@@ -75,7 +76,7 @@ describe("subagent integration", () => {
 		const msgs = ws.messages();
 
 		// Should have completed successfully
-		const done = msgs.find((m: any) => m.type === "done");
+		const done = msgs.find((m) => m.type === "done");
 		expect(done).toBeTruthy();
 
 		// Should have a subagent session in the DB
@@ -91,17 +92,17 @@ describe("subagent integration", () => {
 		expect(childMessages.length).toBeGreaterThanOrEqual(3); // system + user + assistant
 
 		// Parent's final response should reference the subagent result
-		const tokens = msgs.filter((m: any) => m.type === "token" && !m.sessionId);
-		const parentText = tokens.map((t: any) => t.text).join("");
+		const tokens = msgs.filter((m) => m.type === "token" && !m.sessionId);
+		const parentText = tokens.map((t) => ("text" in t ? t.text : "")).join("");
 		expect(parentText).toContain("5 files");
 
 		// Should have emitted subagent_start and subagent_done WS events
-		const startEvent = msgs.find((m: any) => m.type === "subagent_start");
+		const startEvent = msgs.find((m) => m.type === "subagent_start");
 		expect(startEvent).toBeTruthy();
-		expect(startEvent.sessionId).toBe(latestSubagent.id);
+		expect(startEvent?.sessionId).toBe(latestSubagent.id);
 
-		const doneEvent = msgs.find((m: any) => m.type === "subagent_done");
+		const doneEvent = msgs.find((m) => m.type === "subagent_done");
 		expect(doneEvent).toBeTruthy();
-		expect(doneEvent.sessionId).toBe(latestSubagent.id);
+		expect(doneEvent?.sessionId).toBe(latestSubagent.id);
 	});
 });

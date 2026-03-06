@@ -295,7 +295,7 @@ describe("handlePrompt", () => {
 		let callCount = 0;
 		const taskProvider: Provider = {
 			id: "mock",
-			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
 					// LLM tries to call the "task" tool
