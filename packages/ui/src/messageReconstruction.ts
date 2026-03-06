@@ -1,6 +1,6 @@
 import type { Message, MessagePart } from "./useWebSocket";
 
-interface StoredMessage {
+export interface StoredMessage {
 	id: string;
 	sessionId: string;
 	role: "system" | "user" | "assistant" | "tool";

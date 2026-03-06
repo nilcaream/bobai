@@ -213,9 +213,9 @@ describe("session repository", () => {
 	test("getMostRecentParentSession returns the most recently updated parent session", () => {
 		const freshDb = createTestDb();
 		const s1 = createSession(freshDb, "sys");
-		const s2 = createSession(freshDb, "sys");
-		// bump s1 so it becomes more recent
-		appendMessage(freshDb, s1.id, "user", "bump");
+		createSession(freshDb, "sys");
+		// Set s1's updated_at to a future timestamp so it's definitively more recent
+		freshDb.prepare("UPDATE sessions SET updated_at = '2099-01-01T00:00:00.000Z' WHERE id = ?").run(s1.id);
 
 		const recent = getMostRecentParentSession(freshDb);
 		expect(recent).not.toBeNull();

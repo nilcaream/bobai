@@ -59,7 +59,8 @@ function handleModelCommand(db: Database, sessionId: string, args: string, confi
 
 function handleSubagentCommand(db: Database, sessionId: string): CommandResult {
 	// Session existence already validated by handleCommand
-	const session = getSession(db, sessionId)!;
+	const session = getSession(db, sessionId);
+	if (!session) return { ok: false, error: "Session not found" };
 	const parentId = session.parentId ?? sessionId;
 	const subagents = listSubagentSessions(db, parentId);
 	if (subagents.length === 0) {
