@@ -116,7 +116,7 @@ describe("createTaskTool", () => {
 		expect(result.llmOutput).toContain("task_id");
 
 		// Should have created a subagent session
-		const subagents = listSubagentSessions(db);
+		const subagents = listSubagentSessions(db, parentSessionId);
 		expect(subagents.length).toBeGreaterThanOrEqual(1);
 
 		// Status should be "done"

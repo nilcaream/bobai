@@ -234,7 +234,7 @@ describe("HTTP endpoints", () => {
 		const parent = createSession(db, "sys");
 		createSubagentSession(db, parent.id, "HTTP Task A", "gpt-5-mini", "sys");
 
-		const res = await fetch(`${baseUrl}/bobai/subagents`);
+		const res = await fetch(`${baseUrl}/bobai/subagents?parentId=${parent.id}`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { index: number; title: string; sessionId: string }[];
 		expect(body.length).toBeGreaterThanOrEqual(1);
