@@ -1,15 +1,17 @@
-export class SubagentStatus {
-	private statuses = new Map<string, "running" | "done">();
+export type SubagentState = "running" | "done" | "error";
 
-	set(sessionId: string, status: "running" | "done"): void {
+export class SubagentStatus {
+	private statuses = new Map<string, SubagentState>();
+
+	set(sessionId: string, status: SubagentState): void {
 		this.statuses.set(sessionId, status);
 	}
 
-	get(sessionId: string): "running" | "done" | undefined {
+	get(sessionId: string): SubagentState | undefined {
 		return this.statuses.get(sessionId);
 	}
 
-	getAll(): Map<string, "running" | "done"> {
+	getAll(): Map<string, SubagentState> {
 		return new Map(this.statuses);
 	}
 }

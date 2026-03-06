@@ -117,6 +117,40 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 			return ` | ${parts.join(" | ")}`;
 		},
 
+		saveTurnState(): unknown {
+			return {
+				turnStartTime,
+				turnModel,
+				turnAgentCalls,
+				turnUserCalls,
+				turnPremiumCost,
+				turnTokens,
+				turnLastCallTokens,
+				baselineTokens,
+			};
+		},
+
+		restoreTurnState(state: unknown): void {
+			const s = state as {
+				turnStartTime: number;
+				turnModel: string;
+				turnAgentCalls: number;
+				turnUserCalls: number;
+				turnPremiumCost: number;
+				turnTokens: number;
+				turnLastCallTokens: number;
+				baselineTokens: number;
+			};
+			turnStartTime = s.turnStartTime;
+			turnModel = s.turnModel;
+			turnAgentCalls = s.turnAgentCalls;
+			turnUserCalls = s.turnUserCalls;
+			turnPremiumCost = s.turnPremiumCost;
+			turnTokens = s.turnTokens;
+			turnLastCallTokens = s.turnLastCallTokens;
+			baselineTokens = s.baselineTokens;
+		},
+
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			await ensureValidSession();
 			const initiator = options.initiator ?? resolveInitiator(options.messages);

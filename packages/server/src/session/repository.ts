@@ -122,6 +122,8 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 			`SELECT content, MAX(created_at) AS latest, MAX(rowid) AS max_rowid
 			 FROM messages
 			 WHERE role = 'user'
+			   AND (metadata IS NULL OR json_extract(metadata, '$.source') IS NULL OR json_extract(metadata, '$.source') != 'agent')
+			   AND (metadata IS NULL OR json_extract(metadata, '$.purpose') IS NULL)
 			 GROUP BY content
 			 ORDER BY latest DESC, max_rowid DESC
 			 LIMIT ?`,
