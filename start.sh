@@ -11,7 +11,7 @@ log_info() { echo "[INFO] ${*}"; }
 
 # --- Lint ---
 log_info "Running Biome check..."
-(cd "${SERVER_DIR}" && bun run check)
+(cd "${SERVER_DIR}" && bun run check -- --error-on-warnings)
 
 # --- Tests ---
 log_info "Running tests..."
