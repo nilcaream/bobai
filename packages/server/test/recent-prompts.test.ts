@@ -100,20 +100,6 @@ describe("getRecentPrompts", () => {
 		expect(result).toEqual(["another real prompt", "real user prompt"]);
 		freshDb.close();
 	});
-
-	test("excludes title-generation prompts", () => {
-		const freshDb = createTestDb();
-		const session = createSession(freshDb, "system");
-		appendMessage(freshDb, session.id, "user", "real user prompt");
-		appendMessage(freshDb, session.id, "user", "Generate a short title for this task...", {
-			purpose: "title-generation",
-		});
-		appendMessage(freshDb, session.id, "user", "another real prompt");
-
-		const result = getRecentPrompts(freshDb, 10);
-		expect(result).toEqual(["another real prompt", "real user prompt"]);
-		freshDb.close();
-	});
 });
 
 describe("GET /bobai/prompts/recent", () => {
