@@ -209,7 +209,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit = 9):
 export function getMostRecentParentSession(db: Database): Session | null {
 	const row = db
 		.prepare(
-			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC LIMIT 1",
+			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
 		)
 		.get() as SessionRow | null;
 

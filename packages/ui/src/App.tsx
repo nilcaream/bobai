@@ -84,6 +84,9 @@ function truncateChars(text: string, charLimit: number): string {
 	return text.slice(0, charLimit) + `... (${text.length - charLimit} more chars)`;
 }
 
+const PARENT_DOT_COMMANDS = ["model", "session", "subagent", "title", "view"] as const;
+const SUBAGENT_DOT_COMMANDS = ["session", "subagent", "title", "view"] as const;
+
 export function App() {
 	const {
 		messages,
@@ -97,6 +100,9 @@ export function App() {
 		setStatus,
 		subagents,
 		addErrorMessage,
+		parentId,
+		parentTitle,
+		loadSession,
 		getSessionId,
 		setSessionId,
 	} = useWebSocket();
@@ -187,7 +193,12 @@ export function App() {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const DOT_COMMANDS = ["model", "session", "subagent", "title", "view"] as const;
+	const activeDotCommands = parentId ? SUBAGENT_DOT_COMMANDS : PARENT_DOT_COMMANDS;
+
+	function clearInput() {
+		setInput("");
+		if (textareaRef.current) textareaRef.current.style.height = "auto";
+	}
 
 	function parseDotInput(text: string) {
 		if (!text.startsWith(".")) return null;
@@ -195,11 +206,11 @@ export function App() {
 		const spaceIndex = withoutDot.indexOf(" ");
 		if (spaceIndex === -1) {
 			const prefix = withoutDot.toLowerCase();
-			const matches = DOT_COMMANDS.filter((c) => c.startsWith(prefix));
+			const matches = activeDotCommands.filter((c) => c.startsWith(prefix));
 			return { mode: "select" as const, prefix, matches, args: "", command: undefined };
 		}
 		const cmdPart = withoutDot.slice(0, spaceIndex).toLowerCase();
-		const matches = DOT_COMMANDS.filter((c) => c.startsWith(cmdPart));
+		const matches = activeDotCommands.filter((c) => c.startsWith(cmdPart));
 		if (matches.length === 1) {
 			return { mode: "args" as const, prefix: cmdPart, matches, args: withoutDot.slice(spaceIndex + 1), command: matches[0] };
 		}
@@ -219,6 +230,55 @@ export function App() {
 			.catch(() => {});
 	}, []);
 
+	// Load most recent parent session on page reload
+	// biome-ignore lint/correctness/useExhaustiveDependencies: loadSession is stable via useCallback
+	useEffect(() => {
+		fetch("/bobai/sessions/recent")
+			.then((res) => res.json())
+			.then((data: { id: string; title: string | null; model: string | null } | null) => {
+				if (data) {
+					loadSession(data.id);
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	const [sessionList, setSessionList] = useState<
+		{ index: number; id: string; title: string | null; updatedAt: string }[] | null
+	>(null);
+	const [subagentList, setSubagentList] = useState<{ index: number; title: string; sessionId: string }[] | null>(null);
+
+	// Fetch session list for .session panel
+	// biome-ignore lint/correctness/useExhaustiveDependencies: parseDotInput is a local function that depends on activeDotCommands
+	useEffect(() => {
+		const parsed = parseDotInput(input);
+		if (parsed?.mode === "args" && parsed.command === "session") {
+			fetch("/bobai/sessions")
+				.then((res) => res.json())
+				.then((data) => setSessionList(data))
+				.catch(() => setSessionList(null));
+		} else {
+			setSessionList(null);
+		}
+	}, [input, parentId]);
+
+	// Fetch subagent list for .subagent panel
+	// biome-ignore lint/correctness/useExhaustiveDependencies: parseDotInput is a local function that depends on activeDotCommands
+	useEffect(() => {
+		const parsed = parseDotInput(input);
+		if (parsed?.mode === "args" && parsed.command === "subagent") {
+			const sid = getSessionId();
+			if (!sid) return;
+			const targetParentId = parentId ?? sid;
+			fetch(`/bobai/subagents?parentId=${targetParentId}`)
+				.then((res) => res.json())
+				.then((data) => setSubagentList(data))
+				.catch(() => setSubagentList(null));
+		} else {
+			setSubagentList(null);
+		}
+	}, [input, parentId, getSessionId]);
+
 	function submit() {
 		const text = input.trim();
 		if (!text || !connected) return;
@@ -234,8 +294,45 @@ export function App() {
 					if (next === "context") fetchContext();
 					return { ...prev, mode: next };
 				});
-				setInput("");
-				if (textareaRef.current) textareaRef.current.style.height = "auto";
+				clearInput();
+				return;
+			}
+
+			// Session switching: .session <N> or .session (no args = list shown in panel)
+			if (parsed.command === "session") {
+				const arg = parsed.args.trim();
+				if (!arg) {
+					// .session with space but no number — no-op (list is in dot panel)
+					clearInput();
+					return;
+				}
+				const index = Number.parseInt(arg, 10);
+				if (Number.isNaN(index) || index < 1 || !sessionList || index > sessionList.length) {
+					addErrorMessage(`Invalid session index: ${arg}`);
+					clearInput();
+					return;
+				}
+				loadSession(sessionList[index - 1].id);
+				clearInput();
+				return;
+			}
+
+			// Subagent switching: .subagent <N>
+			if (parsed.command === "subagent") {
+				const arg = parsed.args.trim();
+				if (!arg) {
+					// .subagent with space but no number — no-op
+					clearInput();
+					return;
+				}
+				const index = Number.parseInt(arg, 10);
+				if (Number.isNaN(index) || index < 1 || !subagentList || index > subagentList.length) {
+					addErrorMessage(`Invalid subagent index: ${arg}`);
+					clearInput();
+					return;
+				}
+				loadSession(subagentList[index - 1].sessionId);
+				clearInput();
 				return;
 			}
 
@@ -269,8 +366,7 @@ export function App() {
 				.catch(() => {
 					addErrorMessage("Failed to execute command");
 				});
-			setInput("");
-			if (textareaRef.current) textareaRef.current.style.height = "auto";
+			clearInput();
 			return;
 		}
 
@@ -281,23 +377,35 @@ export function App() {
 				if (next === "context") fetchContext();
 				return { ...prev, mode: next };
 			});
-			setInput("");
-			if (textareaRef.current) textareaRef.current.style.height = "auto";
+			clearInput();
+			return;
+		}
+
+		// .session (no space): return to parent if in subagent, no-op if in parent
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session") {
+			if (parentId) {
+				loadSession(parentId);
+			}
+			clearInput();
 			return;
 		}
 
 		// Incomplete or invalid dot command — don't send as prompt
 		if (parsed) return;
 
+		if (parentId) {
+			// Subagent sessions are read-only — only dot commands allowed
+			addErrorMessage("Subagent sessions are read-only");
+			clearInput();
+			return;
+		}
+
 		if (isStreaming) return;
 		autoScroll.current = true;
 		setView((prev) => ({ ...prev, mode: "chat" }));
 		sendPrompt(text);
-		setInput("");
 		setHistoryIndex(-1);
-		if (textareaRef.current) {
-			textareaRef.current.style.height = "auto";
-		}
+		clearInput();
 	}
 
 	function exitHistory(restoreValue: string) {
@@ -411,16 +519,47 @@ export function App() {
 			const titleText = parsed.args.trim();
 			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
 		} else if (parsed.command === "session") {
-			content = "Session switching is not implemented yet";
+			if (!sessionList) {
+				content = "Loading sessions...";
+			} else if (sessionList.length === 0) {
+				content = "No sessions";
+			} else {
+				const filtered = parsed.args ? sessionList.filter((s) => String(s.index).startsWith(parsed.args.trim())) : sessionList;
+				content =
+					filtered.length > 0 ? (
+						filtered.map((s) => (
+							<div key={s.id}>
+								{s.index}:{" "}
+								{s.updatedAt
+									.replace("T", " ")
+									.replace(/\.\d+Z$/, "")
+									.replace("Z", "")}{" "}
+								{s.title ?? ""}
+							</div>
+						))
+					) : (
+						<div>No matching sessions</div>
+					);
+			}
 		} else if (parsed.command === "subagent") {
-			if (subagents.length === 0) {
+			if (!subagentList) {
+				content = "Loading subagents...";
+			} else if (subagentList.length === 0) {
 				content = "No subagent sessions";
 			} else {
-				content = subagents.map((s, i) => (
-					<div key={s.sessionId}>
-						{i + 1}: {s.title} ({s.status})
-					</div>
-				));
+				const filtered = parsed.args
+					? subagentList.filter((s) => String(s.index).startsWith(parsed.args.trim()))
+					: subagentList;
+				content =
+					filtered.length > 0 ? (
+						filtered.map((s) => (
+							<div key={s.sessionId}>
+								{s.index}: {s.title}
+							</div>
+						))
+					) : (
+						<div>No matching subagents</div>
+					);
 			}
 		} else if (parsed.command === "view") {
 			const views = [
@@ -583,7 +722,14 @@ export function App() {
 				<span>
 					<span className="status-bar-label">Bob AI</span> <span className={`status-dot${connected ? "" : " disconnected"}`} />{" "}
 					{connected ? "connected" : "connecting..."}
-					{title && <span className="status-bar-title"> {title}</span>}
+					{parentId ? (
+						<span className="status-bar-title">
+							{" "}
+							{parentTitle ?? "(untitled)"} | {title ?? "(untitled)"}
+						</span>
+					) : (
+						title && <span className="status-bar-title"> {title}</span>
+					)}
 				</span>
 				<span>{status}</span>
 			</div>
@@ -607,7 +753,7 @@ export function App() {
 						adjustHeight();
 					}}
 					onKeyDown={handleKeyDown}
-					placeholder="Type a message..."
+					placeholder={parentId ? "Dot commands only (read-only session)" : "Type a message..."}
 					disabled={!connected || isStreaming}
 				/>
 			</div>

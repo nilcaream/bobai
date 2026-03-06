@@ -59,7 +59,7 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
 				}
-				const messages = getMessages(options.db, contextMatch[1]);
+				const messages = getMessages(options.db, decodeURIComponent(contextMatch[1]));
 				return Response.json(messages);
 			}
 
@@ -131,11 +131,12 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
 				}
-				const session = getSession(options.db, loadMatch[1]);
+				const sessionId = decodeURIComponent(loadMatch[1]);
+				const session = getSession(options.db, sessionId);
 				if (!session) {
 					return new Response("Session not found", { status: 404 });
 				}
-				const messages = getMessages(options.db, loadMatch[1]);
+				const messages = getMessages(options.db, sessionId);
 				return Response.json({
 					session: { id: session.id, title: session.title, model: session.model, parentId: session.parentId },
 					messages,

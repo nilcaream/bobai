@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { reconstructMessages, type StoredMessage } from "./messageReconstruction";
 
 type ServerMessage =
 	| { type: "token"; text: string; sessionId?: string }
@@ -64,6 +65,8 @@ export function useWebSocket() {
 	const [title, setTitle] = useState<string | null>(null);
 	const [status, setStatus] = useState("");
 	const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
+	const [parentId, setParentId] = useState<string | null>(null);
+	const [parentTitle, setParentTitle] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
 
 	useEffect(() => {
@@ -112,6 +115,8 @@ export function useWebSocket() {
 				sessionId.current = msg.sessionId;
 				setModel(msg.model);
 				setTitle(msg.title ?? null);
+				setParentId(null);
+				setParentTitle(null);
 				setMessages((prev) => {
 					const last = prev.at(-1);
 					if (last?.role === "assistant") {
@@ -158,10 +163,43 @@ export function useWebSocket() {
 		setTitle(null);
 		setStatus("");
 		setSubagents([]);
+		setParentId(null);
+		setParentTitle(null);
 	}, []);
 
 	const addErrorMessage = useCallback((text: string) => {
 		setMessages((prev) => appendPart(prev, { type: "text", content: `Error: ${text}` }));
+	}, []);
+
+	const loadSession = useCallback(async (targetId: string) => {
+		try {
+			const res = await fetch(`/bobai/session/${targetId}/load`);
+			if (!res.ok) return;
+			const data = (await res.json()) as {
+				session: { id: string; title: string | null; model: string | null; parentId: string | null };
+				messages: StoredMessage[];
+			};
+			sessionId.current = data.session.id;
+			setTitle(data.session.title);
+			setModel(data.session.model);
+			setParentId(data.session.parentId);
+			setSubagents([]);
+			setStatus("");
+			setMessages(reconstructMessages(data.messages));
+
+			// Fetch parent title for subagent status bar
+			if (data.session.parentId) {
+				const parentRes = await fetch(`/bobai/session/${data.session.parentId}/load`);
+				if (parentRes.ok) {
+					const parentData = await parentRes.json();
+					setParentTitle(parentData.session.title);
+				}
+			} else {
+				setParentTitle(null);
+			}
+		} catch {
+			// Session load failed — leave UI in current state
+		}
 	}, []);
 
 	return {
@@ -178,6 +216,9 @@ export function useWebSocket() {
 		setStatus,
 		subagents,
 		addErrorMessage,
+		parentId,
+		parentTitle,
+		loadSession,
 		getSessionId: () => sessionId.current,
 		setSessionId: (id: string) => {
 			sessionId.current = id;
