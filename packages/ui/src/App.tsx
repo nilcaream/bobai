@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
-import type { MessagePart } from "./useWebSocket";
+import type { MessagePart, SubagentInfo } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
 type Panel =
 	| { type: "text"; content: string }
-	| { type: "tool"; id: string; content: string; completed: boolean; mergeable: boolean };
+	| { type: "tool"; id: string; content: string; completed: boolean; mergeable: boolean; summary?: string };
 
 interface ContextMessage {
 	role: "system" | "user" | "assistant" | "tool";
@@ -39,6 +39,9 @@ function groupParts(parts: MessagePart[]): Panel[] {
 				}
 				panel.completed = true;
 				panel.mergeable = part.mergeable;
+				if (part.summary) {
+					panel.summary = part.summary;
+				}
 			}
 		}
 	}
@@ -92,6 +95,7 @@ export function App() {
 		setTitle,
 		status,
 		setStatus,
+		subagents,
 		addErrorMessage,
 		getSessionId,
 		setSessionId,
@@ -183,7 +187,7 @@ export function App() {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const DOT_COMMANDS = ["model", "session", "title", "view"] as const;
+	const DOT_COMMANDS = ["model", "session", "subagent", "title", "view"] as const;
 
 	function parseDotInput(text: string) {
 		if (!text.startsWith(".")) return null;
@@ -408,6 +412,16 @@ export function App() {
 			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
 		} else if (parsed.command === "session") {
 			content = "Session switching is not implemented yet";
+		} else if (parsed.command === "subagent") {
+			if (subagents.length === 0) {
+				content = "No subagent sessions";
+			} else {
+				content = subagents.map((s, i) => (
+					<div key={s.sessionId}>
+						{i + 1}: {s.title} ({s.status})
+					</div>
+				));
+			}
 		} else if (parsed.command === "view") {
 			const views = [
 				{ index: 1, name: "Chat", desc: "Grouped panels, markdown" },
@@ -462,7 +476,8 @@ export function App() {
 					elements.push(
 						<div key={key++} className="panel panel--tool">
 							<Markdown>{panel.content}</Markdown>
-							{isLast && msg.timestamp && (
+							{panel.summary && <div className="panel-status">{panel.summary}</div>}
+							{!panel.summary && isLast && msg.timestamp && (
 								<div className="panel-status">
 									{msg.timestamp}
 									{msgSummary}
