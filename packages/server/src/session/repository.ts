@@ -133,12 +133,11 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 	return rows.map((r) => r.content);
 }
 
-export function listSessions(db: Database): Session[] {
-	const rows = db
-		.prepare(
-			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC",
-		)
-		.all() as SessionRow[];
+export function listSessions(db: Database, limit?: number): Session[] {
+	const sql = limit
+		? "SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
+	const rows = (limit ? db.prepare(sql).all(limit) : db.prepare(sql).all()) as SessionRow[];
 
 	return rows.map((r) => ({
 		id: r.id,
@@ -190,12 +189,12 @@ export function createSubagentSession(
 	return { id, title, model, parentId, createdAt: now, updatedAt: now };
 }
 
-export function listSubagentSessions(db: Database, limit = 5): Session[] {
+export function listSubagentSessions(db: Database, parentId: string, limit = 9): Session[] {
 	const rows = db
 		.prepare(
-			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NOT NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?",
+			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?",
 		)
-		.all(limit) as SessionRow[];
+		.all(parentId, limit) as SessionRow[];
 
 	return rows.map((r) => ({
 		id: r.id,
@@ -205,4 +204,22 @@ export function listSubagentSessions(db: Database, limit = 5): Session[] {
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
+}
+
+export function getMostRecentParentSession(db: Database): Session | null {
+	const row = db
+		.prepare(
+			"SELECT id, title, model, parent_id, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC LIMIT 1",
+		)
+		.get() as SessionRow | null;
+
+	if (!row) return null;
+	return {
+		id: row.id,
+		title: row.title,
+		model: row.model,
+		parentId: row.parent_id,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+	};
 }

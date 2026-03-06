@@ -80,7 +80,11 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
 				}
-				const subagents = listSubagentSessions(options.db);
+				const parentId = url.searchParams.get("parentId");
+				if (!parentId) {
+					return new Response("Missing required query parameter: parentId", { status: 400 });
+				}
+				const subagents = listSubagentSessions(options.db, parentId);
 				const body = subagents.map((s, i) => ({
 					index: i + 1,
 					title: s.title ?? "(untitled)",

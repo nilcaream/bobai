@@ -79,8 +79,12 @@ describe("subagent integration", () => {
 		const done = msgs.find((m) => m.type === "done");
 		expect(done).toBeTruthy();
 
+		// Get parentId from the done message
+		const parentId = done?.sessionId as string;
+		expect(parentId).toBeTruthy();
+
 		// Should have a subagent session in the DB
-		const subagents = listSubagentSessions(db);
+		const subagents = listSubagentSessions(db, parentId);
 		expect(subagents.length).toBeGreaterThanOrEqual(1);
 
 		// The latest subagent should have the generated title

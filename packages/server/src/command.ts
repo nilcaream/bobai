@@ -32,7 +32,7 @@ export function handleCommand(db: Database, req: CommandRequest, configDir?: str
 		case "title":
 			return withSessionId(handleTitleCommand(db, sessionId, args), sessionId);
 		case "subagent":
-			return withSessionId(handleSubagentCommand(db), sessionId);
+			return withSessionId(handleSubagentCommand(db, sessionId), sessionId);
 		case "session":
 			return { ok: false, error: "Session switching is not implemented yet" };
 		default:
@@ -57,8 +57,13 @@ function handleModelCommand(db: Database, sessionId: string, args: string, confi
 	return { ok: true, status: formatModelDisplay(modelId, 0, configDir) };
 }
 
-function handleSubagentCommand(db: Database): CommandResult {
-	const subagents = listSubagentSessions(db);
+function handleSubagentCommand(db: Database, sessionId: string): CommandResult {
+	const session = getSession(db, sessionId);
+	if (!session) {
+		return { ok: false, error: `Session not found: ${sessionId}` };
+	}
+	const parentId = session.parentId ?? sessionId;
+	const subagents = listSubagentSessions(db, parentId);
 	if (subagents.length === 0) {
 		return { ok: true, status: "No subagent sessions" };
 	}
