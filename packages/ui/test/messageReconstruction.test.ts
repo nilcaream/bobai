@@ -650,6 +650,72 @@ describe("reconstructMessages", () => {
 		}
 	});
 
+	test("places text before tool_calls when assistant message has both", () => {
+		// During streaming, the provider emits text tokens first, then tool_call events.
+		// Reconstruction must match that order: [text, tool_call, tool_result].
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "check memory",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "I'll check the free memory on the system.",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "bash", arguments: '{"command":"free -h"}' } }],
+				},
+			},
+			{
+				id: "4",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "total: 16G used: 8G free: 8G",
+				createdAt: "2026-03-06T01:00:02Z",
+				sortOrder: 3,
+				metadata: { tool_call_id: "call_1", format_call: "`$ free -h`" },
+			},
+			{
+				id: "5",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "You have 8G free.",
+				createdAt: "2026-03-06T01:00:03Z",
+				sortOrder: 4,
+				metadata: { summary: "summary", turn_model: "gpt-4o" },
+			},
+		];
+		const result = reconstructMessages(stored);
+		expect(result).toHaveLength(2);
+		if (result[1].role === "assistant") {
+			// text → tool_call → tool_result → text (final response)
+			expect(result[1].parts).toHaveLength(4);
+			expect(result[1].parts[0].type).toBe("text");
+			expect(result[1].parts[0].content).toBe("I'll check the free memory on the system.");
+			expect(result[1].parts[1].type).toBe("tool_call");
+			expect(result[1].parts[2].type).toBe("tool_result");
+			expect(result[1].parts[3].type).toBe("text");
+			expect(result[1].parts[3].content).toBe("You have 8G free.");
+		}
+	});
+
 	test("handles mixed text and tool calls in sequence", () => {
 		const stored = [
 			{
