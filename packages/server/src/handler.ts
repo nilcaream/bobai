@@ -5,14 +5,20 @@ import { send } from "./protocol";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
 import { appendMessage, createSession, getMessages, getSession } from "./session/repository";
+import { SubagentStatus } from "./subagent-status";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { bashTool } from "./tool/bash";
 import { editFileTool } from "./tool/edit-file";
 import { grepSearchTool } from "./tool/grep-search";
 import { listDirectoryTool } from "./tool/list-directory";
 import { readFileTool } from "./tool/read-file";
+import { createTaskTool } from "./tool/task";
 import { createToolRegistry } from "./tool/tool";
 import { writeFileTool } from "./tool/write-file";
+
+// TODO: Module-level singleton accumulates entries forever. Consider per-session scoping
+// or adding cleanup when subagents complete. Acceptable for now since Task 9 uses DB-based listing.
+const subagentStatus = new SubagentStatus();
 
 export interface PromptRequest {
 	ws: { send: (msg: string) => void };
@@ -22,6 +28,25 @@ export interface PromptRequest {
 	text: string;
 	sessionId?: string;
 	projectRoot: string;
+}
+
+function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
+	if (event.type === "text") {
+		send(ws, { type: "token", text: event.text, sessionId: event.sessionId });
+	} else if (event.type === "tool_call") {
+		send(ws, { type: "tool_call", id: event.id, output: event.output, sessionId: event.sessionId });
+	} else if (event.type === "tool_result") {
+		send(ws, {
+			type: "tool_result",
+			id: event.id,
+			output: event.output,
+			mergeable: event.mergeable,
+			summary: event.summary,
+			sessionId: event.sessionId,
+		});
+	} else if (event.type === "status") {
+		send(ws, { type: "status", text: event.text, sessionId: event.sessionId });
+	}
 }
 
 export async function handlePrompt(req: PromptRequest) {
@@ -68,7 +93,29 @@ export async function handlePrompt(req: PromptRequest) {
 			return { role: m.role as "system" | "user" | "assistant", content: m.content };
 		});
 
-		const tools = createToolRegistry([readFileTool, listDirectoryTool, writeFileTool, editFileTool, grepSearchTool, bashTool]);
+		const taskTool = createTaskTool({
+			db,
+			provider,
+			model: effectiveModel,
+			parentSessionId: currentSessionId,
+			projectRoot,
+			systemPrompt: SYSTEM_PROMPT,
+			onEvent(event) {
+				routeEventToWs(ws, event);
+			},
+			sendWs: (msg) => send(ws, msg),
+			subagentStatus,
+		});
+
+		const tools = createToolRegistry([
+			readFileTool,
+			listDirectoryTool,
+			writeFileTool,
+			editFileTool,
+			grepSearchTool,
+			bashTool,
+			taskTool,
+		]);
 
 		// Signal the provider to start tracking turn stats
 		provider.beginTurn?.();
@@ -81,15 +128,7 @@ export async function handlePrompt(req: PromptRequest) {
 			tools,
 			projectRoot,
 			onEvent(event: AgentEvent) {
-				if (event.type === "text") {
-					send(ws, { type: "token", text: event.text });
-				} else if (event.type === "tool_call") {
-					send(ws, { type: "tool_call", id: event.id, output: event.output });
-				} else if (event.type === "tool_result") {
-					send(ws, { type: "tool_result", id: event.id, output: event.output, mergeable: event.mergeable });
-				} else if (event.type === "status") {
-					send(ws, { type: "status", text: event.text });
-				}
+				routeEventToWs(ws, event);
 			},
 			onMessage(msg) {
 				if (!currentSessionId) return;

@@ -20,6 +20,11 @@ describe("system prompt", () => {
 		expect(SYSTEM_PROMPT).toContain("bash");
 	});
 
+	test("mentions task tool for subagent delegation", () => {
+		expect(SYSTEM_PROMPT).toContain("task");
+		expect(SYSTEM_PROMPT).toContain("subagent");
+	});
+
 	test("does not claim inability to read files", () => {
 		expect(SYSTEM_PROMPT).not.toContain("cannot read");
 		expect(SYSTEM_PROMPT).not.toContain("cannot modify");

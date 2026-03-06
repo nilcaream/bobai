@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { CURATED_MODELS, formatModelDisplay } from "./provider/copilot-models";
-import { createSession, getSession, updateSessionModel, updateSessionTitle } from "./session/repository";
+import { createSession, getSession, listSubagentSessions, updateSessionModel, updateSessionTitle } from "./session/repository";
 import { SYSTEM_PROMPT } from "./system-prompt";
 
 export interface CommandRequest {
@@ -31,6 +31,8 @@ export function handleCommand(db: Database, req: CommandRequest, configDir?: str
 			return withSessionId(handleModelCommand(db, sessionId, args, configDir), sessionId);
 		case "title":
 			return withSessionId(handleTitleCommand(db, sessionId, args), sessionId);
+		case "subagent":
+			return withSessionId(handleSubagentCommand(db), sessionId);
 		case "session":
 			return { ok: false, error: "Session switching is not implemented yet" };
 		default:
@@ -53,6 +55,15 @@ function handleModelCommand(db: Database, sessionId: string, args: string, confi
 	const modelId = CURATED_MODELS[index - 1];
 	updateSessionModel(db, sessionId, modelId);
 	return { ok: true, status: formatModelDisplay(modelId, 0, configDir) };
+}
+
+function handleSubagentCommand(db: Database): CommandResult {
+	const subagents = listSubagentSessions(db);
+	if (subagents.length === 0) {
+		return { ok: true, status: "No subagent sessions" };
+	}
+	const lines = subagents.map((s, i) => `${i + 1}: ${s.title ?? "(untitled)"}`).join("\n");
+	return { ok: true, status: lines };
 }
 
 function handleTitleCommand(db: Database, sessionId: string, args: string): CommandResult {
