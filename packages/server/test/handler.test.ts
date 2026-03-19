@@ -448,4 +448,55 @@ describe("handlePrompt", () => {
 		// Note: sentMessages includes the response added by the agent loop itself at the end
 		expect(sentMessages.at(-2)?.content).toBe("resume");
 	});
+
+	test("injects staged skills as system messages in correct order", async () => {
+		const provider = capturingProvider(["Got it"]);
+		const ws = mockWs();
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "use skills",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+			stagedSkills: [
+				{ name: "skill-a", content: "Content A" },
+				{ name: "skill-b", content: "Content B" },
+			],
+		});
+
+		const sentMessages = provider.captured[0].messages;
+		// messages[0] = system prompt, messages[1] = skill-a, messages[2] = skill-b, messages[3] = user
+		expect(sentMessages[0].role).toBe("system");
+		expect(sentMessages[1].role).toBe("system");
+		expect(sentMessages[1].content).toContain("# Skill: skill-a");
+		expect(sentMessages[1].content).toContain("Content A");
+		expect(sentMessages[2].role).toBe("system");
+		expect(sentMessages[2].content).toContain("# Skill: skill-b");
+		expect(sentMessages[2].content).toContain("Content B");
+		expect(sentMessages[3].role).toBe("user");
+		expect(sentMessages[3].content).toBe("use skills");
+	});
+
+	test("handles empty stagedSkills gracefully", async () => {
+		const provider = capturingProvider(["Hello"]);
+		const ws = mockWs();
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+			stagedSkills: [],
+		});
+
+		const sentMessages = provider.captured[0].messages;
+		// No extra system messages — just system + user + assistant(appended by loop)
+		expect(sentMessages[0].role).toBe("system");
+		expect(sentMessages[1].role).toBe("user");
+		expect(sentMessages[1].content).toBe("hi");
+	});
 });

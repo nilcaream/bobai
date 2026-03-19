@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
+import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
@@ -39,7 +40,7 @@ export interface PromptRequest {
 	sessionId?: string;
 	projectRoot: string;
 	skills: SkillRegistry;
-	stagedSkills?: { name: string; content: string }[];
+	stagedSkills?: StagedSkill[];
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -112,15 +113,13 @@ export async function handlePrompt(req: PromptRequest) {
 			return { role: m.role as "system" | "user" | "assistant", content: m.content };
 		});
 
-		// Inject staged skills as system messages before the conversation
+		// Inject staged skills as system messages after the initial system prompt, before conversation
 		if (stagedSkills && stagedSkills.length > 0) {
-			for (const staged of stagedSkills) {
-				const skillMessage: Message = {
-					role: "system",
-					content: `# Skill: ${staged.name}\n\n${staged.content}`,
-				};
-				messages.splice(1, 0, skillMessage); // After the initial system prompt, before conversation
-			}
+			const skillMessages: Message[] = stagedSkills.map((staged) => ({
+				role: "system" as const,
+				content: `# Skill: ${staged.name}\n\n${staged.content}`,
+			}));
+			messages.splice(1, 0, ...skillMessages);
 		}
 
 		const taskTool = createTaskTool({

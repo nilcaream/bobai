@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
-import type { MessagePart, SubagentInfo } from "./useWebSocket";
+import type { MessagePart, StagedSkill, SubagentInfo } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
 type Panel =
@@ -111,7 +111,7 @@ export function App() {
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
-	const [stagedSkills, setStagedSkills] = useState<{ name: string; content: string }[]>([]);
+	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
 	const defaultStatus = useRef("");
 	const pendingNewTitle = useRef<string | null>(null);
 	const historyEntries = useRef<string[]>([]);
@@ -386,6 +386,7 @@ export function App() {
 			// New chat: .new [optional title]
 			if (parsed.command === "new") {
 				newChat();
+				setStagedSkills([]);
 				setStatus(defaultStatus.current);
 				setView((prev) => ({ ...prev, mode: "chat" }));
 				const newTitle = parsed.args.trim();
@@ -425,6 +426,7 @@ export function App() {
 					return;
 				}
 				loadSession(sessionList[index - 1].id);
+				setStagedSkills([]);
 				clearInput();
 				return;
 			}
@@ -444,6 +446,7 @@ export function App() {
 					return;
 				}
 				loadSession(subagentList[index - 1].sessionId);
+				setStagedSkills([]);
 				clearInput();
 				return;
 			}
@@ -497,6 +500,7 @@ export function App() {
 		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session") {
 			if (parentId) {
 				loadSession(parentId);
+				setStagedSkills([]);
 			}
 			clearInput();
 			return;
@@ -505,6 +509,7 @@ export function App() {
 		// .new (no space): start a new chat session
 		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "new") {
 			newChat();
+			setStagedSkills([]);
 			setStatus(defaultStatus.current);
 			setView((prev) => ({ ...prev, mode: "chat" }));
 			clearInput();

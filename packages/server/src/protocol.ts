@@ -1,9 +1,11 @@
+export type StagedSkill = { name: string; content: string };
+
 // Client → Server
 export type ClientMessage = {
 	type: "prompt";
 	text: string;
 	sessionId?: string;
-	stagedSkills?: { name: string; content: string }[];
+	stagedSkills?: StagedSkill[];
 };
 
 // Server → Client
