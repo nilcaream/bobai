@@ -13,6 +13,7 @@ You have access to the following tools:
 - grep_search: Search file contents for a pattern. Returns matching lines with paths and line numbers.
 - bash: Execute a bash command in the project directory. Use for running tests, builds, linters, git, and other shell operations.
 - task: Launch a subagent to handle complex, multi-step tasks autonomously. Each subagent runs independently with its own tool access (except task). Use for tasks that can run in isolation — exploring code, researching patterns, or implementing discrete features. For exploratory/read-only tasks, instruct the subagent to avoid edit_file and write_file.
+- skill: Load a skill by name to get specialized instructions and workflows. Use when a task matches an available skill's description.
 
 When working with code:
 - Use grep_search to find relevant code before reading entire files.
