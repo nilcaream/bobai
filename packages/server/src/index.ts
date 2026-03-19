@@ -12,6 +12,7 @@ import { resolvePort } from "./port";
 import { initProject } from "./project";
 import { createCopilotProvider, deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
 import { createServer } from "./server";
+import { discoverSkills } from "./skill/skill";
 
 const cli = parseCLI(process.argv.slice(2));
 
@@ -50,6 +51,12 @@ const globalConfig = loadGlobalConfig(globalConfigDir);
 const project = await initProject(process.cwd());
 const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
 
+const skills = discoverSkills([path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")]);
+logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
+for (const skill of skills.list()) {
+	logger.info("SKILL", `  ${skill.name}: ${skill.filePath}`);
+}
+
 let auth = loadAuth(globalConfigDir);
 if (!auth) {
 	auth = await authorize(globalConfigDir);
@@ -66,6 +73,7 @@ const server = createServer({
 	model: config.model,
 	projectRoot: process.cwd(),
 	configDir: globalConfigDir,
+	skills,
 });
 
 logger.info("SERVER", `Project: ${project.id}`);
