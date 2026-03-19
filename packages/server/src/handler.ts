@@ -21,6 +21,7 @@ import { editFileTool } from "./tool/edit-file";
 import { grepSearchTool } from "./tool/grep-search";
 import { listDirectoryTool } from "./tool/list-directory";
 import { readFileTool } from "./tool/read-file";
+import { createSkillTool } from "./tool/skill";
 import { createTaskTool } from "./tool/task";
 import { createToolRegistry } from "./tool/tool";
 import { writeFileTool } from "./tool/write-file";
@@ -124,6 +125,8 @@ export async function handlePrompt(req: PromptRequest) {
 			subagentStatus,
 		});
 
+		const skillTool = createSkillTool(skills);
+
 		const tools = createToolRegistry([
 			readFileTool,
 			listDirectoryTool,
@@ -132,6 +135,7 @@ export async function handlePrompt(req: PromptRequest) {
 			grepSearchTool,
 			bashTool,
 			taskTool,
+			skillTool,
 		]);
 
 		// Signal the provider to start tracking turn stats
