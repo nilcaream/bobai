@@ -4,7 +4,10 @@ import { handlePrompt } from "../src/handler";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 import { getMessages } from "../src/session/repository";
+import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
+
+const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
 function mockWs() {
 	const sent: string[] = [];
@@ -83,7 +86,7 @@ describe("handlePrompt", () => {
 	test("creates new session when no sessionId provided", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
 
 		const msgs = ws.messages();
 		const done = msgs.find((m: { type: string }) => m.type === "done");
@@ -93,7 +96,7 @@ describe("handlePrompt", () => {
 	test("streams tokens then done with sessionId", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello", " world"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
 
 		const msgs = ws.messages();
 		const tokens = msgs.filter((m: { type: string }) => m.type === "token");
@@ -108,7 +111,15 @@ describe("handlePrompt", () => {
 	test("persists user and assistant messages to DB", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["response text"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "my question", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "my question",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
@@ -124,7 +135,15 @@ describe("handlePrompt", () => {
 	test("resumes existing session with sessionId", async () => {
 		const ws1 = mockWs();
 		const provider1 = mockProvider(["first response"]);
-		await handlePrompt({ ws: ws1, db, provider: provider1, model: "test-model", text: "first", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws: ws1,
+			db,
+			provider: provider1,
+			model: "test-model",
+			text: "first",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 		const sessionId = ws1.messages().find((m: { type: string }) => m.type === "done").sessionId;
 
 		const ws2 = mockWs();
@@ -137,6 +156,7 @@ describe("handlePrompt", () => {
 			text: "second",
 			sessionId,
 			projectRoot: "/tmp",
+			skills: emptySkills,
 		});
 
 		// Provider should have received full history (system + user1 + assistant1 + user2)
@@ -158,7 +178,16 @@ describe("handlePrompt", () => {
 	test("sends error for unknown sessionId", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["x"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", sessionId: "nonexistent", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			sessionId: "nonexistent",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		expect(msgs).toHaveLength(1);
@@ -169,7 +198,7 @@ describe("handlePrompt", () => {
 	test("sends error on ProviderError", async () => {
 		const ws = mockWs();
 		const provider = failingProvider(401, "Unauthorized");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
 
 		const msgs = ws.messages();
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
@@ -180,7 +209,15 @@ describe("handlePrompt", () => {
 	test("sends tokens and error when provider errors mid-stream", async () => {
 		const ws = mockWs();
 		const provider = partialFailingProvider(["Hello", " wor"], 500, "Internal Server Error");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "tell me something", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "tell me something",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 
@@ -216,7 +253,15 @@ describe("handlePrompt", () => {
 		};
 
 		const ws = mockWs();
-		await handlePrompt({ ws, db, provider: toolProvider, model: "test-model", text: "what files?", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider: toolProvider,
+			model: "test-model",
+			text: "what files?",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		// Should have tool_call, tool_result, text token(s), and done
@@ -245,7 +290,7 @@ describe("handlePrompt", () => {
 	test("persists error message to DB on provider error", async () => {
 		const ws = mockWs();
 		const provider = failingProvider(429, "Rate limited");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
 
 		const msgs = ws.messages();
 		const done = msgs.find((m: { type: string }) => m.type === "done");
@@ -276,7 +321,7 @@ describe("handlePrompt", () => {
 		};
 
 		const ws = mockWs();
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "list files", projectRoot: "/tmp" });
+		await handlePrompt({ ws, db, provider, model: "test-model", text: "list files", projectRoot: "/tmp", skills: emptySkills });
 
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
@@ -322,7 +367,15 @@ describe("handlePrompt", () => {
 		};
 
 		const ws = mockWs();
-		await handlePrompt({ ws, db, provider: taskProvider, model: "test-model", text: "use subagent", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider: taskProvider,
+			model: "test-model",
+			text: "use subagent",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		// Should have a tool_call event for the task tool (not "Unknown tool")
@@ -360,7 +413,15 @@ describe("handlePrompt", () => {
 		};
 
 		const ws1 = mockWs();
-		await handlePrompt({ ws: ws1, db, provider: failProvider, model: "test-model", text: "list files", projectRoot: "/tmp" });
+		await handlePrompt({
+			ws: ws1,
+			db,
+			provider: failProvider,
+			model: "test-model",
+			text: "list files",
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 		const sessionId = ws1.messages().find((m: { type: string }) => m.type === "done").sessionId;
 
 		// Second prompt: "resume" — provider succeeds
@@ -374,6 +435,7 @@ describe("handlePrompt", () => {
 			text: "resume",
 			sessionId,
 			projectRoot: "/tmp",
+			skills: emptySkills,
 		});
 
 		// Provider should see: system + user + assistant(tool_calls) + tool + assistant(error) + user("resume")

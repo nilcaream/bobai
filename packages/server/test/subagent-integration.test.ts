@@ -4,7 +4,10 @@ import { handlePrompt } from "../src/handler";
 import type { ServerMessage } from "../src/protocol";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { getMessages, listSubagentSessions } from "../src/session/repository";
+import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
+
+const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
 function mockWs() {
 	const sent: string[] = [];
@@ -71,6 +74,7 @@ describe("subagent integration", () => {
 			model: "test-model",
 			text: "Explore the project",
 			projectRoot: "/tmp",
+			skills: emptySkills,
 		});
 
 		const msgs = ws.messages();

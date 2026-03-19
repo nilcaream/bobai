@@ -13,8 +13,9 @@ import {
 	updateSessionModel,
 	updateSessionPromptTokens,
 } from "./session/repository";
+import type { SkillRegistry } from "./skill/skill";
 import { SubagentStatus } from "./subagent-status";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt } from "./system-prompt";
 import { bashTool } from "./tool/bash";
 import { editFileTool } from "./tool/edit-file";
 import { grepSearchTool } from "./tool/grep-search";
@@ -36,6 +37,7 @@ export interface PromptRequest {
 	text: string;
 	sessionId?: string;
 	projectRoot: string;
+	skills: SkillRegistry;
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -58,8 +60,9 @@ function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent &
 }
 
 export async function handlePrompt(req: PromptRequest) {
-	const { ws, db, provider, model, text, sessionId, projectRoot } = req;
+	const { ws, db, provider, model, text, sessionId, projectRoot, skills } = req;
 
+	const systemPrompt = buildSystemPrompt(skills.list());
 	let currentSessionId: string | undefined;
 	let sessionObj: { model: string | null; title: string | null } | null = null;
 	let effectiveModel = model;
@@ -76,7 +79,7 @@ export async function handlePrompt(req: PromptRequest) {
 			currentSessionId = sessionId;
 			sessionObj = session;
 		} else {
-			const session = createSession(db, SYSTEM_PROMPT);
+			const session = createSession(db, systemPrompt);
 			currentSessionId = session.id;
 			sessionObj = session;
 		}
@@ -113,7 +116,7 @@ export async function handlePrompt(req: PromptRequest) {
 			model: effectiveModel,
 			parentSessionId: currentSessionId,
 			projectRoot,
-			systemPrompt: SYSTEM_PROMPT,
+			systemPrompt,
 			onEvent(event) {
 				routeEventToWs(ws, event);
 			},
