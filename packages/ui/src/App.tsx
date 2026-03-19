@@ -110,6 +110,7 @@ export function App() {
 	const [input, setInput] = useState("");
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
+	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const defaultStatus = useRef("");
 	const pendingNewTitle = useRef<string | null>(null);
 	const historyEntries = useRef<string[]>([]);
@@ -274,6 +275,15 @@ export function App() {
 		return { mode: "select" as const, prefix: cmdPart, matches, args: "", command: undefined };
 	}
 
+	function parseSlashInput(text: string) {
+		if (!text.startsWith("/") || isReadOnly) return null;
+		if (!skillList || skillList.length === 0) return null;
+		const withoutSlash = text.slice(1);
+		const prefix = withoutSlash.toLowerCase();
+		const matches = skillList.filter((s) => s.name.toLowerCase().startsWith(prefix));
+		return { prefix, matches };
+	}
+
 	// Fetch models eagerly on mount — needed for status bar and dot panel
 	// biome-ignore lint/correctness/useExhaustiveDependencies: setModel/setStatus are stable React state setters
 	useEffect(() => {
@@ -286,6 +296,14 @@ export function App() {
 				setStatus((prev) => prev || data.defaultStatus);
 			})
 			.catch(() => {});
+	}, []);
+
+	// Fetch skills eagerly on mount — needed for slash command panel
+	useEffect(() => {
+		fetch("/bobai/skills")
+			.then((res) => res.json())
+			.then((data: { name: string; description: string }[]) => setSkillList(data))
+			.catch(() => setSkillList(null));
 	}, []);
 
 	// Load most recent parent session on page reload
@@ -336,6 +354,10 @@ export function App() {
 			setSubagentList(null);
 		}
 	}, [input, parentId, getSessionId]);
+
+	function stageSkill(_name: string) {
+		/* Task 8 */
+	}
 
 	function submit() {
 		const text = input.trim();
@@ -474,6 +496,16 @@ export function App() {
 		// Incomplete or invalid dot command — don't send as prompt
 		if (parsed) return;
 
+		// Slash command: stage a skill
+		const slashParsed = parseSlashInput(text);
+		if (slashParsed) {
+			if (slashParsed.matches.length === 1) {
+				stageSkill(slashParsed.matches[0].name);
+			}
+			clearInput();
+			return;
+		}
+
 		if (parentId) {
 			addErrorMessage("Subagent sessions are read-only");
 			clearInput();
@@ -568,6 +600,12 @@ export function App() {
 				submit();
 				return;
 			}
+			// Slash commands: submit on any Enter (like dot commands)
+			if (parseSlashInput(input)) {
+				e.preventDefault();
+				submit();
+				return;
+			}
 			// Regular prompts: Shift+Enter to submit, bare Enter for newline
 			if (e.shiftKey) {
 				e.preventDefault();
@@ -575,10 +613,10 @@ export function App() {
 			}
 		}
 
-		// Tab submits dot commands; otherwise suppressed (no tab navigation)
+		// Tab submits dot or slash commands; otherwise suppressed (no tab navigation)
 		if (e.key === "Tab") {
 			e.preventDefault();
-			if (parseDotInput(input)) {
+			if (parseDotInput(input) || parseSlashInput(input)) {
 				submit();
 			}
 		}
@@ -671,6 +709,24 @@ export function App() {
 		} else {
 			return null;
 		}
+
+		return <div className="panel panel--dot">{content}</div>;
+	}
+
+	function renderSlashPanel() {
+		const parsed = parseSlashInput(input);
+		if (!parsed) return null;
+
+		const content =
+			parsed.matches.length > 0 ? (
+				parsed.matches.map((s) => (
+					<div key={s.name}>
+						<strong>{s.name}</strong>: {s.description}
+					</div>
+				))
+			) : (
+				<div>No matching skills</div>
+			);
 
 		return <div className="panel panel--dot">{content}</div>;
 	}
@@ -836,6 +892,7 @@ export function App() {
 			</div>
 
 			{renderDotPanel()}
+			{renderSlashPanel()}
 
 			<div className="panel panel--prompt">
 				<textarea
