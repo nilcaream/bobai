@@ -17,6 +17,8 @@ export type SubagentInfo = {
 	status: "running" | "done";
 };
 
+export type StagedSkill = { name: string; content: string };
+
 export type MessagePart =
 	| { type: "text"; content: string }
 	| { type: "tool_call"; id: string; content: string }
@@ -142,12 +144,12 @@ export function useWebSocket() {
 	}, []);
 
 	const sendPrompt = useCallback(
-		(text: string, stagedSkills?: { name: string; content: string }[]) => {
+		(text: string, stagedSkills?: StagedSkill[]) => {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 			if (isStreaming) return;
 			setIsStreaming(true);
 			setMessages((prev) => [...prev, { role: "user", text, timestamp: formatTimestamp() }]);
-			const payload: { type: string; text: string; sessionId?: string; stagedSkills?: { name: string; content: string }[] } = {
+			const payload: { type: string; text: string; sessionId?: string; stagedSkills?: StagedSkill[] } = {
 				type: "prompt",
 				text,
 			};
