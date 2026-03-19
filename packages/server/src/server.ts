@@ -14,6 +14,7 @@ import {
 	listSessions,
 	listSubagentSessions,
 } from "./session/repository";
+import type { SkillRegistry } from "./skill/skill";
 
 export interface ServerOptions {
 	port: number;
@@ -23,6 +24,7 @@ export interface ServerOptions {
 	model?: string;
 	projectRoot?: string;
 	configDir?: string;
+	skills?: SkillRegistry;
 }
 
 export function createServer(options: ServerOptions) {
@@ -178,6 +180,7 @@ export function createServer(options: ServerOptions) {
 							text: msg.text,
 							sessionId: msg.sessionId,
 							projectRoot: options.projectRoot ?? process.cwd(),
+							skills: options.skills ?? { get: () => undefined, list: () => [] },
 						}).catch((err) => {
 							send(ws, { type: "error", message: "Unexpected error" });
 							console.error("Unhandled error in handlePrompt:", err);

@@ -1,33 +1,63 @@
 import { describe, expect, test } from "bun:test";
-import { SYSTEM_PROMPT } from "../src/system-prompt";
+import type { Skill } from "../src/skill/skill";
+import { buildSystemPrompt, SYSTEM_PROMPT } from "../src/system-prompt";
 
-describe("system prompt", () => {
+describe("SYSTEM_PROMPT constant", () => {
 	test("is a non-empty string", () => {
 		expect(typeof SYSTEM_PROMPT).toBe("string");
 		expect(SYSTEM_PROMPT.length).toBeGreaterThan(50);
 	});
+});
+
+describe("buildSystemPrompt", () => {
+	test("returns base prompt when no skills provided", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).toBe(SYSTEM_PROMPT);
+	});
 
 	test("identifies as Bob AI", () => {
-		expect(SYSTEM_PROMPT).toContain("Bob AI");
+		const result = buildSystemPrompt([]);
+		expect(result).toContain("Bob AI");
 	});
 
 	test("mentions available tools", () => {
-		expect(SYSTEM_PROMPT).toContain("read_file");
-		expect(SYSTEM_PROMPT).toContain("list_directory");
-		expect(SYSTEM_PROMPT).toContain("write_file");
-		expect(SYSTEM_PROMPT).toContain("edit_file");
-		expect(SYSTEM_PROMPT).toContain("grep_search");
-		expect(SYSTEM_PROMPT).toContain("bash");
+		const result = buildSystemPrompt([]);
+		expect(result).toContain("read_file");
+		expect(result).toContain("list_directory");
+		expect(result).toContain("write_file");
+		expect(result).toContain("edit_file");
+		expect(result).toContain("grep_search");
+		expect(result).toContain("bash");
 	});
 
 	test("mentions task tool for subagent delegation", () => {
-		expect(SYSTEM_PROMPT).toContain("task");
-		expect(SYSTEM_PROMPT).toContain("subagent");
+		const result = buildSystemPrompt([]);
+		expect(result).toContain("task");
+		expect(result).toContain("subagent");
 	});
 
 	test("does not claim inability to read files", () => {
-		expect(SYSTEM_PROMPT).not.toContain("cannot read");
-		expect(SYSTEM_PROMPT).not.toContain("cannot modify");
-		expect(SYSTEM_PROMPT).not.toContain("no access to the project");
+		const result = buildSystemPrompt([]);
+		expect(result).not.toContain("cannot read");
+		expect(result).not.toContain("cannot modify");
+		expect(result).not.toContain("no access to the project");
+	});
+
+	test("appends skill listing when skills are provided", () => {
+		const skills: Skill[] = [
+			{ name: "tdd", description: "Test-driven development workflow", content: "...", filePath: "/a/SKILL.md" },
+			{ name: "debugging", description: "Systematic debugging approach", content: "...", filePath: "/b/SKILL.md" },
+		];
+		const result = buildSystemPrompt(skills);
+		expect(result).toContain("## Available Skills");
+		expect(result).toContain("- **tdd**: Test-driven development workflow");
+		expect(result).toContain("- **debugging**: Systematic debugging approach");
+		expect(result).toContain("skill");
+	});
+
+	test("skill listing mentions the skill tool", () => {
+		const skills: Skill[] = [{ name: "test", description: "A test skill", content: "...", filePath: "/a/SKILL.md" }];
+		const result = buildSystemPrompt(skills);
+		expect(result).toContain("skill");
 	});
 });

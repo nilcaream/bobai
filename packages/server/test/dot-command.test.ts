@@ -16,6 +16,7 @@ import {
 	updateSessionModel,
 	updateSessionTitle,
 } from "../src/session/repository";
+import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
 
 describe("session model field", () => {
@@ -319,6 +320,7 @@ describe("HTTP endpoints", () => {
 
 describe("handlePrompt respects session model", () => {
 	let db: Database;
+	const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
 	beforeAll(() => {
 		db = createTestDb();
@@ -349,7 +351,16 @@ describe("handlePrompt respects session model", () => {
 			},
 		};
 
-		await handlePrompt({ ws, db, provider, model: "gpt-5-mini", text: "hello", sessionId: session.id, projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "gpt-5-mini",
+			text: "hello",
+			sessionId: session.id,
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		expect(captured[0].model).toBe("claude-sonnet-4.6");
 	});
@@ -374,7 +385,16 @@ describe("handlePrompt respects session model", () => {
 			},
 		};
 
-		await handlePrompt({ ws, db, provider, model: "gpt-5-mini", text: "hello", sessionId: session.id, projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "gpt-5-mini",
+			text: "hello",
+			sessionId: session.id,
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		expect(captured[0].model).toBe("gpt-5-mini");
 	});
@@ -398,7 +418,16 @@ describe("handlePrompt respects session model", () => {
 			},
 		};
 
-		await handlePrompt({ ws, db, provider, model: "gpt-5-mini", text: "hello", sessionId: session.id, projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "gpt-5-mini",
+			text: "hello",
+			sessionId: session.id,
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = sent.map((s) => JSON.parse(s));
 		const done = msgs.find((m: { type: string }) => m.type === "done");
@@ -424,7 +453,16 @@ describe("handlePrompt respects session model", () => {
 			},
 		};
 
-		await handlePrompt({ ws, db, provider, model: "gpt-5-mini", text: "hello", sessionId: session.id, projectRoot: "/tmp" });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "gpt-5-mini",
+			text: "hello",
+			sessionId: session.id,
+			projectRoot: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = sent.map((s) => JSON.parse(s));
 		const done = msgs.find((m: { type: string }) => m.type === "done");

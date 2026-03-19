@@ -1,3 +1,5 @@
+import type { Skill } from "./skill/skill";
+
 export const SYSTEM_PROMPT = `You are Bob AI, a coding assistant.
 
 You help developers write, understand, debug, and improve code. You give clear, direct answers. When a question is ambiguous, you ask for clarification rather than guess.
@@ -18,3 +20,17 @@ When working with code:
 - Use edit_file for modifying existing files and write_file for creating new ones.
 - After making changes, run relevant tests or builds to verify correctness.
 - Use the task tool for complex multi-step work that can be delegated to a subagent.`;
+
+export function buildSystemPrompt(skills: Skill[]): string {
+	if (skills.length === 0) return SYSTEM_PROMPT;
+
+	const listing = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+
+	return `${SYSTEM_PROMPT}
+
+## Available Skills
+
+Use the \`skill\` tool to load a skill when a task matches its description. Skills provide specialized instructions and workflows.
+
+${listing}`;
+}
