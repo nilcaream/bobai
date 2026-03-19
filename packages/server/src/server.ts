@@ -45,6 +45,22 @@ export function createServer(options: ServerOptions) {
 				return Response.json({ status: "ok" });
 			}
 
+			// GET /bobai/skills — list available skills
+			if (url.pathname === "/bobai/skills") {
+				const skillList = options.skills?.list() ?? [];
+				return Response.json(skillList.map((s) => ({ name: s.name, description: s.description })));
+			}
+
+			// POST /bobai/skill — get skill content by name
+			if (url.pathname === "/bobai/skill" && req.method === "POST") {
+				const body = (await req.json()) as { name: string };
+				const skill = options.skills?.get(body.name);
+				if (!skill) {
+					return new Response("Skill not found", { status: 404 });
+				}
+				return Response.json({ name: skill.name, description: skill.description, content: skill.content });
+			}
+
 			if (url.pathname === "/bobai/prompts/recent") {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
