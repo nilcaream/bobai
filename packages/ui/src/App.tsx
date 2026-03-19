@@ -111,6 +111,7 @@ export function App() {
 	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
+	const [stagedSkills, setStagedSkills] = useState<{ name: string; content: string }[]>([]);
 	const defaultStatus = useRef("");
 	const pendingNewTitle = useRef<string | null>(null);
 	const historyEntries = useRef<string[]>([]);
@@ -355,8 +356,25 @@ export function App() {
 		}
 	}, [input, parentId, getSessionId]);
 
-	function stageSkill(_name: string) {
-		/* Task 8 */
+	function stageSkill(name: string) {
+		// Deduplicate
+		if (stagedSkills.some((s) => s.name === name)) return;
+		fetch("/bobai/skill", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name }),
+		})
+			.then((res) => {
+				if (!res.ok) return;
+				return res.json();
+			})
+			.then((data) => {
+				if (!data) return;
+				setStagedSkills((prev) => [...prev, { name: data.name, content: data.content }]);
+			})
+			.catch(() => {
+				// Silently ignore
+			});
 	}
 
 	function submit() {
@@ -521,7 +539,8 @@ export function App() {
 		if (isStreaming) return;
 		autoScroll.current = true;
 		setView((prev) => ({ ...prev, mode: "chat" }));
-		sendPrompt(text);
+		sendPrompt(text, stagedSkills.length > 0 ? stagedSkills : undefined);
+		setStagedSkills([]);
 		setHistoryIndex(-1);
 		clearInput();
 	}
@@ -567,6 +586,12 @@ export function App() {
 				exitHistory(historyEntries.current[historyIndex]);
 				return;
 			}
+			return;
+		}
+
+		if (e.key === "Escape" && stagedSkills.length > 0 && !parseDotInput(input)) {
+			e.preventDefault();
+			setStagedSkills([]);
 			return;
 		}
 
@@ -891,6 +916,14 @@ export function App() {
 				{view.mode === "chat" ? renderPanels() : renderContextPanels()}
 			</div>
 
+			{stagedSkills.length > 0 && (
+				<div className="panel panel--dot">
+					<div>Staged skills: {stagedSkills.map((s) => s.name).join(", ")}</div>
+					<div style={{ fontSize: "0.85em", opacity: 0.7 }}>
+						Skills will be included with your next prompt. Press Esc to clear.
+					</div>
+				</div>
+			)}
 			{renderDotPanel()}
 			{renderSlashPanel()}
 

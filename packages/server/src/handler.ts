@@ -39,6 +39,7 @@ export interface PromptRequest {
 	sessionId?: string;
 	projectRoot: string;
 	skills: SkillRegistry;
+	stagedSkills?: { name: string; content: string }[];
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -61,7 +62,7 @@ function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent &
 }
 
 export async function handlePrompt(req: PromptRequest) {
-	const { ws, db, provider, model, text, sessionId, projectRoot, skills } = req;
+	const { ws, db, provider, model, text, sessionId, projectRoot, skills, stagedSkills } = req;
 
 	const systemPrompt = buildSystemPrompt(skills.list());
 	let currentSessionId: string | undefined;
@@ -110,6 +111,17 @@ export async function handlePrompt(req: PromptRequest) {
 			}
 			return { role: m.role as "system" | "user" | "assistant", content: m.content };
 		});
+
+		// Inject staged skills as system messages before the conversation
+		if (stagedSkills && stagedSkills.length > 0) {
+			for (const staged of stagedSkills) {
+				const skillMessage: Message = {
+					role: "system",
+					content: `# Skill: ${staged.name}\n\n${staged.content}`,
+				};
+				messages.splice(1, 0, skillMessage); // After the initial system prompt, before conversation
+			}
+		}
 
 		const taskTool = createTaskTool({
 			db,
