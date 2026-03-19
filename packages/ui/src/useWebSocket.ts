@@ -142,14 +142,20 @@ export function useWebSocket() {
 	}, []);
 
 	const sendPrompt = useCallback(
-		(text: string) => {
+		(text: string, stagedSkills?: { name: string; content: string }[]) => {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 			if (isStreaming) return;
 			setIsStreaming(true);
 			setMessages((prev) => [...prev, { role: "user", text, timestamp: formatTimestamp() }]);
-			const payload: { type: string; text: string; sessionId?: string } = { type: "prompt", text };
+			const payload: { type: string; text: string; sessionId?: string; stagedSkills?: { name: string; content: string }[] } = {
+				type: "prompt",
+				text,
+			};
 			if (sessionId.current) {
 				payload.sessionId = sessionId.current;
+			}
+			if (stagedSkills && stagedSkills.length > 0) {
+				payload.stagedSkills = stagedSkills;
 			}
 			ws.current.send(JSON.stringify(payload));
 		},

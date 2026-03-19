@@ -197,6 +197,7 @@ export function createServer(options: ServerOptions) {
 							sessionId: msg.sessionId,
 							projectRoot: options.projectRoot ?? process.cwd(),
 							skills: options.skills ?? { get: () => undefined, list: () => [] },
+							stagedSkills: msg.stagedSkills,
 						}).catch((err) => {
 							send(ws, { type: "error", message: "Unexpected error" });
 							console.error("Unhandled error in handlePrompt:", err);

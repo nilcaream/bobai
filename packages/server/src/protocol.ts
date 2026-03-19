@@ -1,5 +1,10 @@
 // Client → Server
-export type ClientMessage = { type: "prompt"; text: string; sessionId?: string };
+export type ClientMessage = {
+	type: "prompt";
+	text: string;
+	sessionId?: string;
+	stagedSkills?: { name: string; content: string }[];
+};
 
 // Server → Client
 export type ServerMessage =
