@@ -4,6 +4,7 @@
 - **Commit messages must follow Conventional Commits exactly.** Use the `<type>(<scope>): <summary>` format, keep the summary under 72 characters, and ensure the type reflects the change (`feat`, `fix`, `chore`, etc.).
 - **Never include personally identifiable information**—avoid names, usernames, hostnames, or any other PII in tracked files, commit messages, or pull requests.
 - Use the `bobai` identifier (or `BobAI` when CamelCase is required) for directories, packages, and code symbols; avoid other spellings such as `bob-ai`.
+- **Never commit plan or design docs** (`docs/plans/`). They are local working notes that go stale fast; the directory is gitignored.
 
 ## Product Priorities
 - Favor features that expose session context composition (prompt tokens, tool usage, system prompt footprint) so users always see what the agent sees.
