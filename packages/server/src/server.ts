@@ -1,11 +1,13 @@
 import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { type CommandRequest, handleCommand } from "./command";
+import { compactMessagesWithStats } from "./compaction/engine";
+import { createCompactionRegistry } from "./compaction/registry";
 import { handlePrompt } from "./handler";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
-import { CURATED_MODELS, formatModelCost, formatModelDisplay } from "./provider/copilot-models";
-import type { Provider } from "./provider/provider";
+import { CURATED_MODELS, formatModelCost, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
+import type { AssistantMessage, Provider } from "./provider/provider";
 import {
 	getMessages,
 	getMostRecentParentSession,
@@ -72,14 +74,76 @@ export function createServer(options: ServerOptions) {
 				return Response.json(prompts);
 			}
 
-			// Context endpoint: GET /bobai/session/:id/context
+			// Context endpoint: GET /bobai/session/:id/context[?compacted=true]
 			const contextMatch = url.pathname.match(/^\/bobai\/session\/([^/]+)\/context$/);
 			if (contextMatch) {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
 				}
-				const messages = getMessages(options.db, decodeURIComponent(contextMatch[1]));
-				return Response.json(messages);
+				const sessionId = decodeURIComponent(contextMatch[1]);
+				const storedMessages = getMessages(options.db, sessionId);
+
+				if (url.searchParams.get("compacted") !== "true") {
+					return Response.json(storedMessages);
+				}
+
+				// Compacted view: convert to Message[], run compaction, return with stats
+				const session = getSession(options.db, sessionId);
+				const promptTokens = session?.promptTokens ?? 0;
+				const modelId = session?.model ?? options.model ?? "";
+				const modelConfigs = loadModelsConfig();
+				const modelConfig = modelConfigs.find((m) => m.id === modelId);
+				const contextWindow = modelConfig?.contextWindow ?? 0;
+
+				const messages = storedMessages.map((m) => {
+					if (m.role === "tool" && m.metadata?.tool_call_id) {
+						return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
+					}
+					if (m.role === "assistant" && m.metadata?.tool_calls) {
+						return {
+							role: "assistant" as const,
+							content: m.content || null,
+							tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
+						};
+					}
+					return { role: m.role as "system" | "user" | "assistant", content: m.content };
+				});
+
+				if (contextWindow <= 0 || promptTokens <= 0) {
+					return Response.json({ messages: storedMessages, stats: null, reason: "no context pressure data" });
+				}
+
+				const tools = createCompactionRegistry();
+				const { messages: compacted, stats } = compactMessagesWithStats({
+					messages,
+					context: { promptTokens, contextWindow },
+					tools,
+				});
+
+				// Convert compacted Message[] back to a StoredMessage-like shape for the UI
+				const compactedStored = compacted.map((m, i) => {
+					if (m.role === "tool") {
+						const toolMsg = m as { role: "tool"; content: string; tool_call_id: string };
+						// Find original stored message to preserve metadata
+						const original = storedMessages.find((s) => s.role === "tool" && s.metadata?.tool_call_id === toolMsg.tool_call_id);
+						return {
+							...(original ?? { id: `compacted-${i}`, role: "tool", createdAt: "" }),
+							content: toolMsg.content,
+							metadata: { ...original?.metadata, tool_call_id: toolMsg.tool_call_id },
+						};
+					}
+					return (
+						storedMessages[i] ?? {
+							id: `msg-${i}`,
+							role: m.role,
+							content: (m as { content: string }).content ?? "",
+							createdAt: "",
+							metadata: null,
+						}
+					);
+				});
+
+				return Response.json({ messages: compactedStored, stats });
 			}
 
 			if (url.pathname === "/bobai/models") {

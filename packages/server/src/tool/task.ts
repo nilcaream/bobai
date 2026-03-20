@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
-import { compactMessages } from "../compaction/engine";
+import { compactMessagesWithStats } from "../compaction/engine";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
@@ -169,11 +169,17 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			const childModelConfig = childModelConfigs.find((m) => m.id === model);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
 			if (childContextWindow > 0 && childPromptTokens > 0) {
-				const compacted = compactMessages({
+				const { messages: compacted, stats } = compactMessagesWithStats({
 					messages,
 					context: { promptTokens: childPromptTokens, contextWindow: childContextWindow },
 					tools: childTools,
 				});
+				if (stats.compacted > 0) {
+					const pct = Math.round(stats.contextPressure * 100);
+					console.error(
+						`[compaction] subagent ${childSessionId}: ${stats.compacted}/${stats.totalToolMessages} tool messages compacted (${stats.superseded} superseded), pressure=${pct}%`,
+					);
+				}
 				messages.length = 0;
 				messages.push(...compacted);
 			}

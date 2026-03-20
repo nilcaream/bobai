@@ -13,6 +13,18 @@ export interface CompactionOptions {
 	tools: ToolRegistry;
 }
 
+/** Statistics about what the compaction engine did on a given run. */
+export interface CompactionStats {
+	/** Number of tool messages that were compacted (including superseded). */
+	compacted: number;
+	/** Number of tool messages that were superseded by heuristic rules. */
+	superseded: number;
+	/** Context pressure at time of compaction (0.0-1.0). */
+	contextPressure: number;
+	/** Total tool messages in the input. */
+	totalToolMessages: number;
+}
+
 /**
  * Build a lookup from tool_call_id → { toolName, resistance } by walking
  * assistant messages that contain tool_calls.
@@ -73,6 +85,18 @@ function buildCallArgsMap(messages: Message[]): Map<string, Record<string, unkno
  * This is a pure function — the input array is not mutated.
  */
 export function compactMessages(options: CompactionOptions): Message[] {
+	return compactMessagesInternal(options).messages;
+}
+
+/**
+ * Same as compactMessages but also returns statistics about what was compacted.
+ * Use this when you need observability into compaction decisions.
+ */
+export function compactMessagesWithStats(options: CompactionOptions): { messages: Message[]; stats: CompactionStats } {
+	return compactMessagesInternal(options);
+}
+
+function compactMessagesInternal(options: CompactionOptions): { messages: Message[]; stats: CompactionStats } {
 	const { messages, context, tools } = options;
 
 	// Supersession detection runs unconditionally — it's about semantic
@@ -82,8 +106,19 @@ export function compactMessages(options: CompactionOptions): Message[] {
 
 	const contextPressure = computeContextPressure(context);
 
+	// Count total tool messages for stats
+	const totalToolMessages = messages.filter((m) => m.role === "tool").length;
+	const emptyStats: CompactionStats = {
+		compacted: 0,
+		superseded: 0,
+		contextPressure,
+		totalToolMessages,
+	};
+
 	// No compaction needed and no supersessions → pass through
-	if (contextPressure <= 0 && supersessionMap.size === 0) return messages;
+	if (contextPressure <= 0 && supersessionMap.size === 0) {
+		return { messages, stats: emptyStats };
+	}
 
 	const toolCallMap = buildToolCallMap(messages, tools);
 	const callArgsMap = buildCallArgsMap(messages);
@@ -97,9 +132,13 @@ export function compactMessages(options: CompactionOptions): Message[] {
 			: new Map<number, number>();
 
 	// Nothing to compact and no supersessions
-	if (strengths.size === 0 && supersessionMap.size === 0) return messages;
+	if (strengths.size === 0 && supersessionMap.size === 0) {
+		return { messages, stats: emptyStats };
+	}
 
 	const result: Message[] = [];
+	let compactedCount = 0;
+	let supersededCount = 0;
 
 	for (let i = 0; i < messages.length; i++) {
 		const msg = messages[i]!;
@@ -118,6 +157,8 @@ export function compactMessages(options: CompactionOptions): Message[] {
 		const baseStrength = strengths.get(i);
 
 		if (supersessionReason !== undefined) {
+			supersededCount++;
+			compactedCount++;
 			// Superseded message: if we have context pressure, boost the strength
 			// and apply normal compaction. If no pressure, use the superseded marker.
 			if (baseStrength !== undefined && baseStrength > 0) {
@@ -145,6 +186,7 @@ export function compactMessages(options: CompactionOptions): Message[] {
 		}
 
 		// Normal compaction (not superseded, but has strength)
+		compactedCount++;
 		const tool = tools.get(toolName);
 		let compacted: string;
 		if (tool?.compact) {
@@ -160,5 +202,13 @@ export function compactMessages(options: CompactionOptions): Message[] {
 		});
 	}
 
-	return result;
+	return {
+		messages: result,
+		stats: {
+			compacted: compactedCount,
+			superseded: supersededCount,
+			contextPressure,
+			totalToolMessages,
+		},
+	};
 }
