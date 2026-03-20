@@ -3,7 +3,7 @@ import type { ToolDefinition } from "../provider/provider";
 
 export interface ToolContext {
 	projectRoot: string;
-	/** Additional directories the read-only tools (read_file, grep_search, list_directory) may access. */
+	/** Additional directories the read-only tools (read_file, grep_search, list_directory, file_search) may access. */
 	accessibleDirectories?: string[];
 }
 

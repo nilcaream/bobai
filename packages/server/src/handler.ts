@@ -20,6 +20,7 @@ import { SubagentStatus } from "./subagent-status";
 import { buildSystemPrompt } from "./system-prompt";
 import { bashTool } from "./tool/bash";
 import { editFileTool } from "./tool/edit-file";
+import { fileSearchTool } from "./tool/file-search";
 import { grepSearchTool } from "./tool/grep-search";
 import { listDirectoryTool } from "./tool/list-directory";
 import { readFileTool } from "./tool/read-file";
@@ -176,6 +177,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const tools = createToolRegistry([
 			readFileTool,
 			listDirectoryTool,
+			fileSearchTool,
 			writeFileTool,
 			editFileTool,
 			grepSearchTool,

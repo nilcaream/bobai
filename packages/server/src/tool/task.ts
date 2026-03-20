@@ -6,6 +6,7 @@ import { appendMessage, createSubagentSession, getMessages, getSession, updateMe
 import type { SubagentStatus } from "../subagent-status";
 import { bashTool } from "./bash";
 import { editFileTool } from "./edit-file";
+import { fileSearchTool } from "./file-search";
 import { grepSearchTool } from "./grep-search";
 import { listDirectoryTool } from "./list-directory";
 import { readFileTool } from "./read-file";
@@ -150,6 +151,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			const childTools = createToolRegistry([
 				readFileTool,
 				listDirectoryTool,
+				fileSearchTool,
 				writeFileTool,
 				editFileTool,
 				grepSearchTool,
