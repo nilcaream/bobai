@@ -1,0 +1,121 @@
+import fs from "node:fs";
+import path from "node:path";
+import type { Tool, ToolContext, ToolResult } from "./tool";
+import { isPathAccessible } from "./tool";
+
+const MAX_RESULTS = 1000;
+
+export const fileSearchTool: Tool = {
+	definition: {
+		type: "function",
+		function: {
+			name: "file_search",
+			description:
+				"Search for files by name pattern using glob syntax. Returns file paths matching the pattern. " +
+				"Use '**/' prefix for recursive search (e.g. '**/*.ts' finds all TypeScript files). " +
+				"The path parameter narrows the search to a subdirectory. " +
+				"Case sensitivity follows the filesystem (case-sensitive on Linux, case-insensitive on macOS).",
+			parameters: {
+				type: "object",
+				properties: {
+					pattern: {
+						type: "string",
+						description: "Glob pattern to match file names (e.g. '**/*.ts', 'src/**/test_*.py', '**/*.{json,yaml}')",
+					},
+					path: {
+						type: "string",
+						description: "Directory to search within, relative to the project root. Defaults to '.' (project root).",
+					},
+				},
+				required: ["pattern"],
+			},
+		},
+	},
+
+	mergeable: true,
+
+	formatCall(args: Record<string, unknown>): string {
+		const pattern = typeof args.pattern === "string" ? args.pattern : "";
+		return `▸ Searching ${pattern}`;
+	},
+
+	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+		const pattern = typeof args.pattern === "string" ? args.pattern : "";
+		if (pattern.length === 0) {
+			return {
+				llmOutput: "Error: 'pattern' argument is required and must be a non-empty string",
+				uiOutput: null,
+				mergeable: true,
+			};
+		}
+
+		const dirPath = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
+		const resolved = path.resolve(ctx.projectRoot, dirPath);
+
+		if (!isPathAccessible(resolved, ctx)) {
+			return {
+				llmOutput: `Error: path '${dirPath}' resolves outside the project root`,
+				uiOutput: null,
+				mergeable: true,
+			};
+		}
+
+		// Validate the directory exists and is actually a directory
+		try {
+			const stat = fs.statSync(resolved);
+			if (!stat.isDirectory()) {
+				return {
+					llmOutput: `Error: '${dirPath}' is not a directory`,
+					uiOutput: null,
+					mergeable: true,
+				};
+			}
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException).code;
+			if (code === "ENOENT") {
+				return {
+					llmOutput: `Error: directory not found: ${dirPath}`,
+					uiOutput: null,
+					mergeable: true,
+				};
+			}
+			return {
+				llmOutput: `Error: ${(err as Error).message}`,
+				uiOutput: null,
+				mergeable: true,
+			};
+		}
+
+		// Use Bun.Glob to scan for matching files
+		const glob = new Bun.Glob(pattern);
+		const files: string[] = [];
+		let capped = false;
+
+		for await (const file of glob.scan({ cwd: resolved, onlyFiles: true })) {
+			if (files.length >= MAX_RESULTS) {
+				capped = true;
+				break;
+			}
+			files.push(file);
+		}
+
+		if (files.length === 0) {
+			return {
+				llmOutput: `No files found matching pattern "${pattern}" in ${dirPath}.`,
+				uiOutput: `▸ Searching ${pattern} (0 files found)`,
+				mergeable: true,
+			};
+		}
+
+		let llmOutput = files.join("\n");
+		if (capped) {
+			llmOutput += "\n(Results capped at 1000. Narrow your pattern.)";
+		}
+
+		return {
+			llmOutput,
+			uiOutput: `▸ Searching ${pattern} (${files.length} files found)`,
+			mergeable: true,
+		};
+	},
+};
