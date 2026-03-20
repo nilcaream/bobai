@@ -31,8 +31,8 @@ function toolResult(id: string, content: string): Message {
 /** Create a minimal tool registry with no custom compact methods. */
 function emptyRegistry(): ToolRegistry {
 	return {
+		definitions: [],
 		get: () => undefined,
-		entries: () => [],
 	};
 }
 
