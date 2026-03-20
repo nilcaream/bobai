@@ -53,6 +53,24 @@ describe("readFileTool", () => {
 		expect(result.llmOutput).toContain("outside");
 	});
 
+	test("allows reading files in accessibleDirectories", async () => {
+		const extraDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-read-extra-"));
+		fs.writeFileSync(path.join(extraDir, "extra.txt"), "extra content");
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir] };
+		const result = await readFileTool.execute({ path: path.join(extraDir, "extra.txt") }, ctxWithExtra);
+		expect(result.llmOutput).toContain("1: extra content");
+		fs.rmSync(extraDir, { recursive: true, force: true });
+	});
+
+	test("rejects paths outside both projectRoot and accessibleDirectories", async () => {
+		const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-read-outside-"));
+		fs.writeFileSync(path.join(outsideDir, "secret.txt"), "secret");
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [] };
+		const result = await readFileTool.execute({ path: path.join(outsideDir, "secret.txt") }, ctxWithExtra);
+		expect(result.llmOutput).toContain("outside");
+		fs.rmSync(outsideDir, { recursive: true, force: true });
+	});
+
 	test("returns error when path is missing", async () => {
 		const result = await readFileTool.execute({}, ctx);
 		expect(result.llmOutput).toContain("path");

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Tool, ToolContext, ToolResult } from "./tool";
+import { isPathAccessible } from "./tool";
 
 export const listDirectoryTool: Tool = {
 	definition: {
@@ -33,7 +34,7 @@ export const listDirectoryTool: Tool = {
 		const dirPath = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
 
 		const resolved = path.resolve(ctx.projectRoot, dirPath);
-		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
+		if (!isPathAccessible(resolved, ctx)) {
 			return {
 				llmOutput: `Error: path '${dirPath}' resolves outside the project root`,
 				uiOutput: `Error: path '${dirPath}' resolves outside the project root`,

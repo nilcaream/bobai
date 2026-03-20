@@ -15,6 +15,7 @@ export interface AgentLoopOptions {
 	messages: Message[];
 	tools: ToolRegistry;
 	projectRoot: string;
+	accessibleDirectories?: string[];
 	maxIterations?: number;
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
@@ -29,7 +30,7 @@ interface AccumulatedToolCall {
 }
 
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
-	const { provider, model, tools, projectRoot, onEvent, onMessage, signal, initiator } = options;
+	const { provider, model, tools, projectRoot, accessibleDirectories, onEvent, onMessage, signal, initiator } = options;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
 	// Working copy of messages — starts with what was passed in
@@ -125,7 +126,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				uiOutput = `Unknown tool: ${tc.function.name}`;
 			} else {
 				try {
-					const result = await tool.execute(args, { projectRoot });
+					const result = await tool.execute(args, { projectRoot, accessibleDirectories });
 					llmOutput = result.llmOutput;
 					uiOutput = result.uiOutput;
 					mergeable = result.mergeable;

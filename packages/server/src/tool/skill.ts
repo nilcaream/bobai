@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { SkillRegistry } from "../skill/skill";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 
@@ -48,7 +49,8 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 				return { llmOutput: msg, uiOutput: msg, mergeable: true };
 			}
 
-			const llmOutput = `# Skill: ${skill.name}\n\n${skill.content}\n\n---\nSource: ${skill.filePath}`;
+			const baseDir = path.dirname(skill.filePath);
+			const llmOutput = `# Skill: ${skill.name}\n\n${skill.content}\n\n---\nSource: ${skill.filePath}\nBase directory: ${baseDir} (use to construct absolute paths when reading files referenced by this skill)`;
 			const uiOutput = `▸ Loaded ${skill.name} skill`;
 
 			return { llmOutput, uiOutput, mergeable: true };

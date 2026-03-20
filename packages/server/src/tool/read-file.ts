@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Tool, ToolContext, ToolResult } from "./tool";
+import { isPathAccessible } from "./tool";
 
 const DEFAULT_LINE_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -55,7 +56,7 @@ export const readFileTool: Tool = {
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, filePath);
-		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
+		if (!isPathAccessible(resolved, ctx)) {
 			return {
 				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
 				uiOutput: `Error: path '${filePath}' resolves outside the project root`,

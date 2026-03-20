@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import type { StagedSkill } from "./protocol";
@@ -40,6 +41,7 @@ export interface PromptRequest {
 	sessionId?: string;
 	projectRoot: string;
 	skills: SkillRegistry;
+	skillDirectories?: string[];
 	stagedSkills?: StagedSkill[];
 }
 
@@ -63,7 +65,7 @@ function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent &
 }
 
 export async function handlePrompt(req: PromptRequest) {
-	const { ws, db, provider, model, text, sessionId, projectRoot, skills, stagedSkills } = req;
+	const { ws, db, provider, model, text, sessionId, projectRoot, skills, skillDirectories, stagedSkills } = req;
 
 	const systemPrompt = buildSystemPrompt(skills.list());
 	let currentSessionId: string | undefined;
@@ -101,7 +103,11 @@ export async function handlePrompt(req: PromptRequest) {
 				const toolCallId = crypto.randomUUID();
 				const formatCall = `▸ Loading ${staged.name} skill`;
 				const uiOutput = `▸ Loaded ${staged.name} skill`;
-				const llmContent = `# Skill: ${staged.name}\n\n${staged.content}`;
+				const registeredSkill = skills.get(staged.name);
+				const baseDirHint = registeredSkill
+					? `\n\n---\nSource: ${registeredSkill.filePath}\nBase directory: ${path.dirname(registeredSkill.filePath)} (use to construct absolute paths when reading files referenced by this skill)`
+					: "";
+				const llmContent = `# Skill: ${staged.name}\n\n${staged.content}${baseDirHint}`;
 
 				// Persist assistant message with tool_calls metadata
 				appendMessage(db, currentSessionId, "assistant", "", {
@@ -156,6 +162,7 @@ export async function handlePrompt(req: PromptRequest) {
 			model: effectiveModel,
 			parentSessionId: currentSessionId,
 			projectRoot,
+			accessibleDirectories: skillDirectories,
 			systemPrompt,
 			onEvent(event) {
 				routeEventToWs(ws, event);
@@ -192,6 +199,7 @@ export async function handlePrompt(req: PromptRequest) {
 			messages,
 			tools,
 			projectRoot,
+			accessibleDirectories: skillDirectories,
 			onEvent(event: AgentEvent) {
 				routeEventToWs(ws, event);
 				if (event.type === "tool_call") {

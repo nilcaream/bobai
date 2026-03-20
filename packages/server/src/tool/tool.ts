@@ -1,7 +1,23 @@
+import path from "node:path";
 import type { ToolDefinition } from "../provider/provider";
 
 export interface ToolContext {
 	projectRoot: string;
+	/** Additional directories the read-only tools (read_file, grep_search, list_directory) may access. */
+	accessibleDirectories?: string[];
+}
+
+/** Check whether a resolved absolute path falls within the project root or any accessible directory. */
+export function isPathAccessible(resolved: string, ctx: ToolContext): boolean {
+	if (resolved === ctx.projectRoot || resolved.startsWith(ctx.projectRoot + path.sep)) {
+		return true;
+	}
+	for (const dir of ctx.accessibleDirectories ?? []) {
+		if (resolved === dir || resolved.startsWith(dir + path.sep)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 export interface ToolResult {
