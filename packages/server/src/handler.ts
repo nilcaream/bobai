@@ -2,8 +2,10 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
+import { compactMessages } from "./compaction/engine";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
+import { loadModelsConfig } from "./provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { ProviderError } from "./provider/provider";
 import {
@@ -185,6 +187,23 @@ export async function handlePrompt(req: PromptRequest) {
 			taskTool,
 			skillTool,
 		]);
+
+		// Compact old/irrelevant tool outputs before sending to the LLM.
+		// Uses the session's last known prompt token count and the model's context window.
+		const currentSession = getSession(db, currentSessionId);
+		const sessionPromptTokens = currentSession?.promptTokens ?? 0;
+		const modelConfigs = loadModelsConfig();
+		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
+		const contextWindow = modelConfig?.contextWindow ?? 0;
+		if (contextWindow > 0 && sessionPromptTokens > 0) {
+			const compacted = compactMessages({
+				messages,
+				context: { promptTokens: sessionPromptTokens, contextWindow },
+				tools,
+			});
+			messages.length = 0;
+			messages.push(...compacted);
+		}
 
 		// Signal the provider to start tracking turn stats
 		provider.beginTurn?.();

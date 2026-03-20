@@ -20,7 +20,13 @@ When working with code:
 - Read files to understand context before making changes.
 - Use edit_file for modifying existing files and write_file for creating new ones.
 - After making changes, run relevant tests or builds to verify correctness.
-- Use the task tool for complex multi-step work that can be delegated to a subagent.`;
+- Use the task tool for complex multi-step work that can be delegated to a subagent.
+
+## Context Compaction
+
+Some tool outputs in this conversation may have been compacted to manage context size. Compacted outputs are marked with "# COMPACTED" followed by a short description of what was removed. If you need the full output, you can re-invoke the tool. The original data is not lost — it has been summarized for efficiency.
+
+Do not mention compaction to the user unless they ask about it.`;
 
 export function buildSystemPrompt(skills: Skill[]): string {
 	if (skills.length === 0) return SYSTEM_PROMPT;

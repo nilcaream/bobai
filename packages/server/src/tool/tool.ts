@@ -31,8 +31,12 @@ export interface ToolResult {
 export interface Tool {
 	definition: ToolDefinition;
 	mergeable: boolean;
+	/** How strongly this tool's output resists compaction (0.0-1.0). Default: 0.3. */
+	compactionResistance?: number;
 	formatCall(args: Record<string, unknown>): string;
 	execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
+	/** Custom compaction strategy. Falls back to default (head + truncation) if not implemented. */
+	compact?(output: string, strength: number, callArgs: Record<string, unknown>): string;
 }
 
 export interface ToolRegistry {

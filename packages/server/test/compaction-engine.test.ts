@@ -1,0 +1,611 @@
+import { describe, expect, test } from "bun:test";
+import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
+import { type CompactionOptions, compactMessages } from "../src/compaction/engine";
+import { DEFAULT_RESISTANCE, DEFAULT_THRESHOLD } from "../src/compaction/strength";
+import type { Message } from "../src/provider/provider";
+import type { ToolRegistry } from "../src/tool/tool";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function createMockRegistry(
+	tools: Record<
+		string,
+		{
+			resistance?: number;
+			compact?: (output: string, strength: number, args: Record<string, unknown>) => string;
+		}
+	>,
+): ToolRegistry {
+	return {
+		definitions: [],
+		get(name: string) {
+			const t = tools[name];
+			if (!t) return undefined;
+			return {
+				definition: {
+					type: "function" as const,
+					function: { name, description: "", parameters: { type: "object", properties: {}, required: [] } },
+				},
+				mergeable: true,
+				compactionResistance: t.resistance,
+				compact: t.compact,
+				formatCall: () => "",
+				execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: true }),
+			} as any;
+		},
+	};
+}
+
+const emptyRegistry = createMockRegistry({});
+
+/** Context that produces zero pressure (usage well below threshold). */
+function lowPressureContext() {
+	return { promptTokens: 100, contextWindow: 10_000 };
+}
+
+/** Context that produces high pressure (usage well above threshold). */
+function highPressureContext() {
+	return { promptTokens: 9_000, contextWindow: 10_000 };
+}
+
+/** Build a standard assistant message with one tool call. */
+function assistantWithToolCall(toolCallId: string, toolName: string, args: string = "{}"): Message {
+	return {
+		role: "assistant",
+		content: null,
+		tool_calls: [{ id: toolCallId, type: "function", function: { name: toolName, arguments: args } }],
+	};
+}
+
+/** Build a tool result message. */
+function toolResult(toolCallId: string, content: string): Message {
+	return { role: "tool", content, tool_call_id: toolCallId };
+}
+
+/** Generate a multi-line string with the given number of lines. */
+function multilineOutput(lineCount: number): string {
+	return Array.from({ length: lineCount }, (_, i) => `line ${i + 1}`).join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("compactMessages", () => {
+	// =======================================================================
+	// No-op scenarios
+	// =======================================================================
+	describe("no-op scenarios", () => {
+		test("returns original messages when context pressure is 0 (below threshold)", () => {
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hello" },
+				assistantWithToolCall("tc1", "read_file"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: lowPressureContext(),
+				tools: createMockRegistry({ read_file: {} }),
+			});
+			expect(result).toBe(messages); // same reference — no work done
+		});
+
+		test("returns original messages when there are no tool messages", () => {
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hi" },
+				{ role: "assistant", content: "hello" },
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: emptyRegistry,
+			});
+			// No tool messages → computeMessageStrengths returns empty map → early return
+			expect(result).toBe(messages);
+		});
+
+		test("returns original messages when only system/user/assistant messages exist", () => {
+			const messages: Message[] = [
+				{ role: "system", content: "system prompt" },
+				{ role: "user", content: "question" },
+				{ role: "assistant", content: "answer" },
+				{ role: "user", content: "follow-up" },
+				{ role: "assistant", content: "another answer" },
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: emptyRegistry,
+			});
+			expect(result).toBe(messages);
+		});
+
+		test("does not modify system messages", () => {
+			const systemMsg: Message = { role: "system", content: "important system instructions" };
+			const messages: Message[] = [
+				systemMsg,
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			expect(result[0]).toBe(systemMsg);
+			expect((result[0] as any).content).toBe("important system instructions");
+		});
+
+		test("does not modify user messages", () => {
+			const userMsg: Message = { role: "user", content: "my precious input" };
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				userMsg,
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			expect(result[1]).toBe(userMsg);
+		});
+
+		test("does not modify assistant messages", () => {
+			const assistantMsg = assistantWithToolCall("tc1", "bash");
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "go" },
+				assistantMsg,
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			expect(result[2]).toBe(assistantMsg);
+		});
+	});
+
+	// =======================================================================
+	// Compaction scenarios
+	// =======================================================================
+	describe("compaction scenarios", () => {
+		test("compacts tool messages when above threshold", () => {
+			const originalContent = multilineOutput(50);
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", originalContent),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			const toolMsg = result[3] as any;
+			expect(toolMsg.role).toBe("tool");
+			expect(toolMsg.content).not.toBe(originalContent);
+			expect(toolMsg.content.length).toBeLessThan(originalContent.length);
+		});
+
+		test("uses tool-specific compactionResistance from registry", () => {
+			const output = multilineOutput(100);
+			// Low resistance → more compaction
+			const lowResistanceMessages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "lowres"),
+				toolResult("tc1", output),
+			];
+			const lowResult = compactMessages({
+				messages: lowResistanceMessages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ lowres: { resistance: 0.0 } }),
+			});
+
+			// High resistance → less compaction
+			const highResistanceMessages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc2", "highres"),
+				toolResult("tc2", output),
+			];
+			const highResult = compactMessages({
+				messages: highResistanceMessages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ highres: { resistance: 0.9 } }),
+			});
+
+			const lowContent = (lowResult[2] as any).content as string;
+			const highContent = (highResult[2] as any).content as string;
+			// Lower resistance → more truncation → shorter output
+			expect(lowContent.length).toBeLessThan(highContent.length);
+		});
+
+		test("falls back to DEFAULT_RESISTANCE (0.3) for unknown tools", () => {
+			const output = multilineOutput(100);
+			// Tool "mystery" is NOT in the registry — should use DEFAULT_RESISTANCE
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "mystery"),
+				toolResult("tc1", output),
+			];
+			// Compare with a known tool at DEFAULT_RESISTANCE
+			const knownMessages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc2", "known"),
+				toolResult("tc2", output),
+			];
+			const unknownResult = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: emptyRegistry, // "mystery" not found → DEFAULT_RESISTANCE
+			});
+			const knownResult = compactMessages({
+				messages: knownMessages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ known: { resistance: DEFAULT_RESISTANCE } }),
+			});
+			const unknownContent = (unknownResult[2] as any).content as string;
+			const knownContent = (knownResult[2] as any).content as string;
+			// Both use the same resistance so they retain the same number of lines.
+			// The only difference is the tool name in the truncation notice.
+			const unknownLines = unknownContent.split("\n");
+			const knownLines = knownContent.split("\n");
+			expect(unknownLines.length).toBe(knownLines.length);
+			// Both contain the COMPACTION_MARKER
+			expect(unknownContent).toContain(COMPACTION_MARKER);
+			expect(knownContent).toContain(COMPACTION_MARKER);
+		});
+
+		test("uses tool's custom compact() method when available", () => {
+			const customMarker = "CUSTOM_COMPACTED";
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "special"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({
+					special: {
+						compact: (output, strength, _args) => `${customMarker}: strength=${strength.toFixed(2)}`,
+					},
+				}),
+			});
+			const content = (result[2] as any).content as string;
+			expect(content).toContain(customMarker);
+			expect(content).not.toContain(COMPACTION_MARKER);
+		});
+
+		test("falls back to defaultCompact when no custom compact method", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "plain"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ plain: {} }), // no compact method
+			});
+			const content = (result[2] as any).content as string;
+			expect(content).toContain(COMPACTION_MARKER);
+		});
+
+		test("compacted output contains COMPACTION_MARKER", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			const content = (result[2] as any).content as string;
+			expect(content).toContain(COMPACTION_MARKER);
+		});
+
+		test("preserves tool_call_id in compacted messages", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc-unique-123", "bash"),
+				toolResult("tc-unique-123", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			const toolMsg = result[2] as any;
+			expect(toolMsg.tool_call_id).toBe("tc-unique-123");
+		});
+
+		test("does not mutate the original messages array (creates a new one)", () => {
+			const originalContent = multilineOutput(50);
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", originalContent),
+			];
+			const messagesCopy = [...messages];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			// Result is a different array
+			expect(result).not.toBe(messages);
+			// Original array unchanged
+			expect(messages).toEqual(messagesCopy);
+			// Original tool message content unchanged
+			expect((messages[2] as any).content).toBe(originalContent);
+		});
+	});
+
+	// =======================================================================
+	// Conversation flow
+	// =======================================================================
+	describe("conversation flow", () => {
+		test("system + user + assistant with tool_calls + tool result: only tool result gets compacted", () => {
+			const sysContent = "You are an assistant.";
+			const userContent = "Please read the file.";
+			const assistantMsg = assistantWithToolCall("tc1", "read_file", '{"path":"foo.ts"}');
+			const toolContent = multilineOutput(80);
+
+			const messages: Message[] = [
+				{ role: "system", content: sysContent },
+				{ role: "user", content: userContent },
+				assistantMsg,
+				toolResult("tc1", toolContent),
+			];
+
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ read_file: {} }),
+			});
+
+			expect(result).toHaveLength(4);
+			// System, user, assistant are untouched (same reference)
+			expect(result[0]).toBe(messages[0]);
+			expect(result[1]).toBe(messages[1]);
+			expect(result[2]).toBe(messages[2]);
+			// Tool result is compacted
+			const compacted = result[3] as any;
+			expect(compacted.role).toBe("tool");
+			expect(compacted.content).not.toBe(toolContent);
+			expect(compacted.content).toContain(COMPACTION_MARKER);
+		});
+
+		test("older tool messages get stronger compaction than newer ones", () => {
+			// Build a longer conversation: tool messages at index 2 and 5
+			const messages: Message[] = [
+				{ role: "user", content: "step 1" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(100)), // index 2 — older
+				{ role: "user", content: "step 2" },
+				assistantWithToolCall("tc2", "bash"),
+				toolResult("tc2", multilineOutput(100)), // index 5 — newer
+			];
+
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+
+			const olderContent = (result[2] as any).content as string;
+			const newerContent = (result[5] as any).content as string;
+
+			// Older message at lower index → higher age → stronger compaction → shorter
+			expect(olderContent.length).toBeLessThanOrEqual(newerContent.length);
+		});
+
+		test("multiple tool calls in single assistant message all get correct tool name lookup", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "do stuff" },
+				{
+					role: "assistant",
+					content: null,
+					tool_calls: [
+						{ id: "tc1", type: "function", function: { name: "read_file", arguments: '{"path":"a.ts"}' } },
+						{ id: "tc2", type: "function", function: { name: "bash", arguments: '{"command":"ls"}' } },
+					],
+				},
+				toolResult("tc1", multilineOutput(60)),
+				toolResult("tc2", multilineOutput(60)),
+			];
+
+			let readFileCalled = false;
+			let bashCalled = false;
+
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({
+					read_file: {
+						compact: (output, strength, args) => {
+							readFileCalled = true;
+							expect(args).toEqual({ path: "a.ts" });
+							return `read_file_compacted: ${strength.toFixed(2)}`;
+						},
+					},
+					bash: {
+						compact: (output, strength, args) => {
+							bashCalled = true;
+							expect(args).toEqual({ command: "ls" });
+							return `bash_compacted: ${strength.toFixed(2)}`;
+						},
+					},
+				}),
+			});
+
+			expect(readFileCalled).toBe(true);
+			expect(bashCalled).toBe(true);
+			expect((result[2] as any).content).toContain("read_file_compacted");
+			expect((result[3] as any).content).toContain("bash_compacted");
+		});
+	});
+
+	// =======================================================================
+	// Edge cases
+	// =======================================================================
+	describe("edge cases", () => {
+		test("tool with invalid JSON arguments gets empty object", () => {
+			let receivedArgs: Record<string, unknown> | undefined;
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "broken", "NOT VALID JSON{{{"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({
+					broken: {
+						compact: (_output, _strength, args) => {
+							receivedArgs = args;
+							return "compacted";
+						},
+					},
+				}),
+			});
+			expect(receivedArgs).toEqual({});
+			expect((result[2] as any).content).toBe("compacted");
+		});
+
+		test("empty messages array returns empty array", () => {
+			const result = compactMessages({
+				messages: [],
+				context: highPressureContext(),
+				tools: emptyRegistry,
+			});
+			expect(result).toEqual([]);
+		});
+
+		test("single tool message with high pressure gets compacted", () => {
+			// Even a minimal conversation with just a tool result (unusual but possible)
+			const messages: Message[] = [assistantWithToolCall("tc1", "bash"), toolResult("tc1", multilineOutput(50))];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: {} }),
+			});
+			const toolMsg = result[1] as any;
+			expect(toolMsg.content).toContain(COMPACTION_MARKER);
+		});
+
+		test("tool message referencing tool not in registry uses defaultCompact with 'unknown' name", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "ghost_tool"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			// ghost_tool is NOT in the registry
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: emptyRegistry,
+			});
+			const content = (result[2] as any).content as string;
+			// defaultCompact is called with toolName = "unknown" since the tool_call_id
+			// won't be found in toolCallMap (assistant message references ghost_tool which
+			// registry doesn't know). The toolCallMap still records it with "ghost_tool" as
+			// name since buildToolCallMap only checks tools.get for resistance, not existence.
+			// Wait — let me re-check: buildToolCallMap calls tools.get(tc.function.name).
+			// If undefined, resistance = DEFAULT_RESISTANCE. The entry IS added to the map
+			// with toolName = "ghost_tool". So defaultCompact gets "ghost_tool".
+			expect(content).toContain(COMPACTION_MARKER);
+			expect(content).toContain("ghost_tool");
+		});
+
+		test("context pressure at exact threshold produces no compaction", () => {
+			// DEFAULT_THRESHOLD is 0.4, so at exactly 40% usage → pressure = 0
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: { promptTokens: 4_000, contextWindow: 10_000 }, // exactly 0.4
+				tools: createMockRegistry({ bash: {} }),
+			});
+			expect(result).toBe(messages); // no compaction
+		});
+
+		test("context pressure just above threshold produces compaction", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: { promptTokens: 4_100, contextWindow: 10_000 }, // 0.41 > 0.4 threshold
+				tools: createMockRegistry({ bash: {} }),
+			});
+			expect(result).not.toBe(messages); // compaction occurred
+		});
+
+		test("custom compact receives correct strength and call args", () => {
+			let capturedStrength: number | undefined;
+			let capturedArgs: Record<string, unknown> | undefined;
+			let capturedOutput: string | undefined;
+
+			const toolOutput = multilineOutput(50);
+			const callArgs = '{"file":"test.ts","line":42}';
+
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "inspector", callArgs),
+				toolResult("tc1", toolOutput),
+			];
+
+			compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({
+					inspector: {
+						compact: (output, strength, args) => {
+							capturedOutput = output;
+							capturedStrength = strength;
+							capturedArgs = args;
+							return "inspected";
+						},
+					},
+				}),
+			});
+
+			expect(capturedOutput).toBe(toolOutput);
+			expect(capturedStrength).toBeGreaterThan(0);
+			expect(capturedStrength).toBeLessThanOrEqual(1);
+			expect(capturedArgs).toEqual({ file: "test.ts", line: 42 });
+		});
+
+		test("contextWindow of 0 produces no compaction", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(50)),
+			];
+			const result = compactMessages({
+				messages,
+				context: { promptTokens: 1000, contextWindow: 0 },
+				tools: createMockRegistry({ bash: {} }),
+			});
+			expect(result).toBe(messages);
+		});
+	});
+});
