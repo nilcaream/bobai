@@ -141,7 +141,8 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 	let supersededCount = 0;
 
 	for (let i = 0; i < messages.length; i++) {
-		const msg = messages[i]!;
+		const msg = messages[i];
+		if (!msg) continue;
 
 		if (msg.role !== "tool") {
 			result.push(msg);

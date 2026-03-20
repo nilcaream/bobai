@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
-import {
-	type CompactionOptions,
-	type CompactionStats,
-	compactMessages,
-	compactMessagesWithStats,
-} from "../src/compaction/engine";
+import { compactMessages, compactMessagesWithStats } from "../src/compaction/engine";
 import { createCompactionRegistry } from "../src/compaction/registry";
 import type { Message } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
@@ -183,8 +178,11 @@ describe("compactMessagesWithStats", () => {
 
 		expect(plain.length).toBe(withStats.length);
 		for (let i = 0; i < plain.length; i++) {
-			expect(plain[i]!.role).toBe(withStats[i]!.role);
-			expect((plain[i] as { content: string | null }).content).toBe((withStats[i] as { content: string | null }).content);
+			const p = plain[i];
+			const w = withStats[i];
+			if (!p || !w) throw new Error(`Missing message at index ${i}`);
+			expect(p.role).toBe(w.role);
+			expect((p as { content: string | null }).content).toBe((w as { content: string | null }).content);
 		}
 	});
 });
@@ -238,7 +236,8 @@ describe("createCompactionRegistry", () => {
 	test("skill stub has custom compact() method", () => {
 		const skill = registry.get("skill");
 		expect(skill?.compact).toBeDefined();
-		const result = skill!.compact!("full skill content here", 0.8, { name: "tdd" });
+		if (!skill?.compact) throw new Error("skill compact() should be defined");
+		const result = skill.compact("full skill content here", 0.8, { name: "tdd" });
 		expect(result).toContain(COMPACTION_MARKER);
 		expect(result).toContain("tdd");
 		expect(result).toContain("Re-invoke");
@@ -273,23 +272,26 @@ describe("createCompactionRegistry", () => {
 	});
 
 	test("file_search compact() retains summary info", () => {
-		const tool = registry.get("file_search")!;
+		const tool = registry.get("file_search");
+		if (!tool?.compact) throw new Error("file_search compact() should be defined");
 		const output = "Found 5 files:\n/src/a.ts\n/src/b.ts\n/src/c.ts\n/src/d.ts\n/src/e.ts";
-		const compacted = tool.compact!(output, 0.8, { pattern: "*.ts" });
+		const compacted = tool.compact(output, 0.8, { pattern: "*.ts" });
 		expect(compacted).toContain(COMPACTION_MARKER);
 	});
 
 	test("bash compact() retains command and exit info", () => {
-		const tool = registry.get("bash")!;
+		const tool = registry.get("bash");
+		if (!tool?.compact) throw new Error("bash compact() should be defined");
 		const output = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10";
-		const compacted = tool.compact!(output, 0.8, { command: "ls -la" });
+		const compacted = tool.compact(output, 0.8, { command: "ls -la" });
 		expect(compacted).toContain(COMPACTION_MARKER);
 	});
 
 	test("read_file compact() retains file info", () => {
-		const tool = registry.get("read_file")!;
+		const tool = registry.get("read_file");
+		if (!tool?.compact) throw new Error("read_file compact() should be defined");
 		const lines = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join("\n");
-		const compacted = tool.compact!(lines, 0.8, { file_path: "src/main.ts" });
+		const compacted = tool.compact(lines, 0.8, { file_path: "src/main.ts" });
 		expect(compacted).toContain(COMPACTION_MARKER);
 	});
 

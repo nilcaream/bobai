@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
-import { type CompactionOptions, compactMessages } from "../src/compaction/engine";
-import { DEFAULT_RESISTANCE, DEFAULT_THRESHOLD } from "../src/compaction/strength";
-import type { Message } from "../src/provider/provider";
+import { compactMessages } from "../src/compaction/engine";
+import { DEFAULT_RESISTANCE } from "../src/compaction/strength";
+import type { Message, SystemMessage, ToolMessage } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
 
 // ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ function createMockRegistry(
 				compact: t.compact,
 				formatCall: () => "",
 				execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: true }),
-			} as any;
+			} as ReturnType<ToolRegistry["get"]>;
 		},
 	};
 }
@@ -138,7 +138,7 @@ describe("compactMessages", () => {
 				tools: createMockRegistry({ bash: {} }),
 			});
 			expect(result[0]).toBe(systemMsg);
-			expect((result[0] as any).content).toBe("important system instructions");
+			expect((result[0] as SystemMessage).content).toBe("important system instructions");
 		});
 
 		test("does not modify user messages", () => {
@@ -191,7 +191,7 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({ bash: {} }),
 			});
-			const toolMsg = result[3] as any;
+			const toolMsg = result[3] as ToolMessage;
 			expect(toolMsg.role).toBe("tool");
 			expect(toolMsg.content).not.toBe(originalContent);
 			expect(toolMsg.content.length).toBeLessThan(originalContent.length);
@@ -223,8 +223,8 @@ describe("compactMessages", () => {
 				tools: createMockRegistry({ highres: { resistance: 0.9 } }),
 			});
 
-			const lowContent = (lowResult[2] as any).content as string;
-			const highContent = (highResult[2] as any).content as string;
+			const lowContent = (lowResult[2] as ToolMessage).content;
+			const highContent = (highResult[2] as ToolMessage).content;
 			// Lower resistance → more truncation → shorter output
 			expect(lowContent.length).toBeLessThan(highContent.length);
 		});
@@ -253,8 +253,8 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({ known: { resistance: DEFAULT_RESISTANCE } }),
 			});
-			const unknownContent = (unknownResult[2] as any).content as string;
-			const knownContent = (knownResult[2] as any).content as string;
+			const unknownContent = (unknownResult[2] as ToolMessage).content;
+			const knownContent = (knownResult[2] as ToolMessage).content;
 			// Both use the same resistance so they retain the same number of lines.
 			// The only difference is the tool name in the truncation notice.
 			const unknownLines = unknownContent.split("\n");
@@ -277,11 +277,11 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({
 					special: {
-						compact: (output, strength, _args) => `${customMarker}: strength=${strength.toFixed(2)}`,
+						compact: (_output, strength, _args) => `${customMarker}: strength=${strength.toFixed(2)}`,
 					},
 				}),
 			});
-			const content = (result[2] as any).content as string;
+			const content = (result[2] as ToolMessage).content;
 			expect(content).toContain(customMarker);
 			expect(content).not.toContain(COMPACTION_MARKER);
 		});
@@ -297,7 +297,7 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({ plain: {} }), // no compact method
 			});
-			const content = (result[2] as any).content as string;
+			const content = (result[2] as ToolMessage).content;
 			expect(content).toContain(COMPACTION_MARKER);
 		});
 
@@ -312,7 +312,7 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({ bash: {} }),
 			});
-			const content = (result[2] as any).content as string;
+			const content = (result[2] as ToolMessage).content;
 			expect(content).toContain(COMPACTION_MARKER);
 		});
 
@@ -327,7 +327,7 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({ bash: {} }),
 			});
-			const toolMsg = result[2] as any;
+			const toolMsg = result[2] as ToolMessage;
 			expect(toolMsg.tool_call_id).toBe("tc-unique-123");
 		});
 
@@ -349,7 +349,7 @@ describe("compactMessages", () => {
 			// Original array unchanged
 			expect(messages).toEqual(messagesCopy);
 			// Original tool message content unchanged
-			expect((messages[2] as any).content).toBe(originalContent);
+			expect((messages[2] as ToolMessage).content).toBe(originalContent);
 		});
 	});
 
@@ -382,7 +382,7 @@ describe("compactMessages", () => {
 			expect(result[1]).toBe(messages[1]);
 			expect(result[2]).toBe(messages[2]);
 			// Tool result is compacted
-			const compacted = result[3] as any;
+			const compacted = result[3] as ToolMessage;
 			expect(compacted.role).toBe("tool");
 			expect(compacted.content).not.toBe(toolContent);
 			expect(compacted.content).toContain(COMPACTION_MARKER);
@@ -405,8 +405,8 @@ describe("compactMessages", () => {
 				tools: createMockRegistry({ bash: {} }),
 			});
 
-			const olderContent = (result[2] as any).content as string;
-			const newerContent = (result[5] as any).content as string;
+			const olderContent = (result[2] as ToolMessage).content;
+			const newerContent = (result[5] as ToolMessage).content;
 
 			// Older message at lower index → higher age → stronger compaction → shorter
 			expect(olderContent.length).toBeLessThanOrEqual(newerContent.length);
@@ -435,14 +435,14 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({
 					read_file: {
-						compact: (output, strength, args) => {
+						compact: (_output, strength, args) => {
 							readFileCalled = true;
 							expect(args).toEqual({ path: "a.ts" });
 							return `read_file_compacted: ${strength.toFixed(2)}`;
 						},
 					},
 					bash: {
-						compact: (output, strength, args) => {
+						compact: (_output, strength, args) => {
 							bashCalled = true;
 							expect(args).toEqual({ command: "ls" });
 							return `bash_compacted: ${strength.toFixed(2)}`;
@@ -453,8 +453,8 @@ describe("compactMessages", () => {
 
 			expect(readFileCalled).toBe(true);
 			expect(bashCalled).toBe(true);
-			expect((result[2] as any).content).toContain("read_file_compacted");
-			expect((result[3] as any).content).toContain("bash_compacted");
+			expect((result[2] as ToolMessage).content).toContain("read_file_compacted");
+			expect((result[3] as ToolMessage).content).toContain("bash_compacted");
 		});
 	});
 
@@ -482,7 +482,7 @@ describe("compactMessages", () => {
 				}),
 			});
 			expect(receivedArgs).toEqual({});
-			expect((result[2] as any).content).toBe("compacted");
+			expect((result[2] as ToolMessage).content).toBe("compacted");
 		});
 
 		test("empty messages array returns empty array", () => {
@@ -502,7 +502,7 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: createMockRegistry({ bash: {} }),
 			});
-			const toolMsg = result[1] as any;
+			const toolMsg = result[1] as ToolMessage;
 			expect(toolMsg.content).toContain(COMPACTION_MARKER);
 		});
 
@@ -518,7 +518,7 @@ describe("compactMessages", () => {
 				context: highPressureContext(),
 				tools: emptyRegistry,
 			});
-			const content = (result[2] as any).content as string;
+			const content = (result[2] as ToolMessage).content;
 			// defaultCompact is called with toolName = "unknown" since the tool_call_id
 			// won't be found in toolCallMap (assistant message references ghost_tool which
 			// registry doesn't know). The toolCallMap still records it with "ghost_tool" as
