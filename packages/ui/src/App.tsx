@@ -594,12 +594,6 @@ export function App() {
 			return;
 		}
 
-		if (e.key === "Escape" && stagedSkills.length > 0 && !parseDotInput(input)) {
-			e.preventDefault();
-			setStagedSkills([]);
-			return;
-		}
-
 		// Not in history mode: UP at position 0 enters history mode
 		if (e.key === "ArrowUp" && e.currentTarget.selectionStart === 0) {
 			e.preventDefault();
@@ -922,11 +916,13 @@ export function App() {
 			</div>
 
 			{stagedSkills.length > 0 && (
-				<div className="panel panel--dot">
-					<div>Staged skills: {stagedSkills.map((s) => s.name).join(", ")}</div>
-					<div style={{ fontSize: "0.85em", opacity: 0.7 }}>
-						Skills will be included with your next prompt. Press Esc to clear.
-					</div>
+				<div className="panel panel--tool">
+					{stagedSkills.map((s, i) => (
+						<div key={s.name}>
+							{`▸ Staging ${s.name} skill`}
+							{i < stagedSkills.length - 1 ? "  " : ""}
+						</div>
+					))}
 				</div>
 			)}
 			{renderDotPanel()}
