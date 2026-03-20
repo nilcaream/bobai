@@ -449,7 +449,7 @@ describe("handlePrompt", () => {
 		expect(sentMessages.at(-2)?.content).toBe("resume");
 	});
 
-	test("injects staged skills as system messages in correct order", async () => {
+	test("persists staged skills as tool call/result pairs and sends prompt_echo", async () => {
 		const provider = capturingProvider(["Got it"]);
 		const ws = mockWs();
 		await handlePrompt({
@@ -466,17 +466,72 @@ describe("handlePrompt", () => {
 			],
 		});
 
+		// --- DB persistence checks ---
+		const done = ws.messages().find((m: { type: string }) => m.type === "done");
+		const stored = getMessages(db, done.sessionId);
+
+		// system + (assistant+tool for skill-a) + (assistant+tool for skill-b) + user + assistant
+		expect(stored).toHaveLength(7);
+		expect(stored[0].role).toBe("system");
+
+		// Skill A: assistant with tool_calls + tool result
+		expect(stored[1].role).toBe("assistant");
+		const skillAToolCalls = stored[1].metadata?.tool_calls as Array<{ id: string; function: { name: string } }>;
+		expect(skillAToolCalls).toHaveLength(1);
+		expect(skillAToolCalls[0].function.name).toBe("skill");
+		expect(stored[2].role).toBe("tool");
+		expect(stored[2].content).toContain("# Skill: skill-a");
+		expect(stored[2].content).toContain("Content A");
+		expect(stored[2].metadata?.tool_call_id).toBe(skillAToolCalls[0].id);
+		expect(stored[2].metadata?.format_call).toBe("▸ Loading skill-a skill");
+		expect(stored[2].metadata?.ui_output).toBe("▸ Loaded skill-a skill");
+		expect(stored[2].metadata?.mergeable).toBe(true);
+
+		// Skill B
+		expect(stored[3].role).toBe("assistant");
+		expect(stored[4].role).toBe("tool");
+		expect(stored[4].content).toContain("# Skill: skill-b");
+
+		// User message after skills
+		expect(stored[5].role).toBe("user");
+		expect(stored[5].content).toBe("use skills");
+
+		// --- LLM receives skill content as tool messages ---
 		const sentMessages = provider.captured[0].messages;
-		// messages[0] = system prompt, messages[1] = skill-a, messages[2] = skill-b, messages[3] = user
+		// system + assistant(tool_calls A) + tool(A) + assistant(tool_calls B) + tool(B) + user + assistant(appended by loop)
 		expect(sentMessages[0].role).toBe("system");
-		expect(sentMessages[1].role).toBe("system");
-		expect(sentMessages[1].content).toContain("# Skill: skill-a");
-		expect(sentMessages[1].content).toContain("Content A");
-		expect(sentMessages[2].role).toBe("system");
-		expect(sentMessages[2].content).toContain("# Skill: skill-b");
-		expect(sentMessages[2].content).toContain("Content B");
-		expect(sentMessages[3].role).toBe("user");
-		expect(sentMessages[3].content).toBe("use skills");
+		expect(sentMessages[1].role).toBe("assistant");
+		expect(sentMessages[2].role).toBe("tool");
+		expect(sentMessages[2].content).toContain("Content A");
+		expect(sentMessages[3].role).toBe("assistant");
+		expect(sentMessages[4].role).toBe("tool");
+		expect(sentMessages[4].content).toContain("Content B");
+		expect(sentMessages[5].role).toBe("user");
+		expect(sentMessages[5].content).toBe("use skills");
+
+		// --- WebSocket event checks ---
+		const msgs = ws.messages();
+
+		// Should have tool_call + tool_result pairs for each skill
+		const toolCalls = msgs.filter((m: { type: string }) => m.type === "tool_call");
+		const toolResults = msgs.filter((m: { type: string }) => m.type === "tool_result");
+		expect(toolCalls).toHaveLength(2);
+		expect(toolResults).toHaveLength(2);
+		expect(toolCalls[0].output).toBe("▸ Loading skill-a skill");
+		expect(toolResults[0].output).toBe("▸ Loaded skill-a skill");
+		expect(toolResults[0].mergeable).toBe(true);
+
+		// Should have prompt_echo
+		const echo = msgs.find((m: { type: string }) => m.type === "prompt_echo");
+		expect(echo).toBeTruthy();
+		expect(echo.text).toBe("use skills");
+
+		// prompt_echo should come after tool events and before tokens
+		const echoIdx = msgs.indexOf(echo);
+		const lastToolResultIdx = msgs.lastIndexOf(toolResults[1]);
+		const firstTokenIdx = msgs.findIndex((m: { type: string }) => m.type === "token");
+		expect(echoIdx).toBeGreaterThan(lastToolResultIdx);
+		expect(echoIdx).toBeLessThan(firstTokenIdx);
 	});
 
 	test("handles empty stagedSkills gracefully", async () => {

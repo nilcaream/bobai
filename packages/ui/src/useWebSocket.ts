@@ -5,6 +5,7 @@ type ServerMessage =
 	| { type: "token"; text: string; sessionId?: string }
 	| { type: "tool_call"; id: string; output: string; sessionId?: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
+	| { type: "prompt_echo"; text: string }
 	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string; sessionId?: string }
 	| { type: "status"; text: string; sessionId?: string }
@@ -137,6 +138,10 @@ export function useWebSocket() {
 			if (msg.type === "status") {
 				setStatus(msg.text);
 			}
+
+			if (msg.type === "prompt_echo") {
+				setMessages((prev) => [...prev, { role: "user", text: msg.text, timestamp: formatTimestamp() }]);
+			}
 		};
 
 		ws.current = socket;
@@ -148,27 +153,13 @@ export function useWebSocket() {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 			if (isStreaming) return;
 			setIsStreaming(true);
-			setMessages((prev) => {
-				const next = [...prev];
-				// Inject a "Loading skill" panel before the user message so it appears
-				// in the conversation like any other merged tool panel.
-				if (stagedSkills && stagedSkills.length > 0) {
-					const loadingLines = stagedSkills.map((s) => `▸ Loading ${s.name} skill`).join("  \n");
-					next.push({
-						role: "assistant",
-						parts: [
-							{
-								type: "tool_result" as const,
-								id: `staged-skills-${Date.now()}`,
-								content: loadingLines,
-								mergeable: true,
-							},
-						],
-					});
-				}
-				next.push({ role: "user", text, timestamp: formatTimestamp() });
-				return next;
-			});
+			// When staged skills are present, the server sends prompt_echo after skill
+			// tool panels so the user message appears in the correct visual order.
+			// Without staged skills, add the user message immediately for instant feedback.
+			const hasSkills = stagedSkills && stagedSkills.length > 0;
+			if (!hasSkills) {
+				setMessages((prev) => [...prev, { role: "user", text, timestamp: formatTimestamp() }]);
+			}
 			const payload: { type: string; text: string; sessionId?: string; stagedSkills?: StagedSkill[] } = {
 				type: "prompt",
 				text,
@@ -176,7 +167,7 @@ export function useWebSocket() {
 			if (sessionId.current) {
 				payload.sessionId = sessionId.current;
 			}
-			if (stagedSkills && stagedSkills.length > 0) {
+			if (hasSkills) {
 				payload.stagedSkills = stagedSkills;
 			}
 			ws.current.send(JSON.stringify(payload));
