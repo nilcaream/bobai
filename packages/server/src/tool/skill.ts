@@ -1,4 +1,5 @@
 import path from "node:path";
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { SkillRegistry } from "../skill/skill";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 
@@ -30,6 +31,13 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 			},
 		},
 		mergeable: true,
+		compactionResistance: 0.2,
+
+		compact(_output: string, _strength: number, callArgs: Record<string, unknown>): string {
+			const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";
+			return `${COMPACTION_MARKER} skill '${name}' was loaded and applied. Re-invoke with skill('${name}') if needed.`;
+		},
+
 		formatCall(args: Record<string, unknown>): string {
 			return `▸ Loading ${args.name ?? "unknown"} skill`;
 		},

@@ -25,6 +25,8 @@ export const listDirectoryTool: Tool = {
 
 	mergeable: true,
 
+	compactionResistance: 0.1,
+
 	formatCall(args: Record<string, unknown>): string {
 		const dir = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
 		return `▸ Listing ${dir}`;
