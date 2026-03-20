@@ -16,6 +16,7 @@ export type ServerMessage =
 	| { type: "status"; text: string; sessionId?: string }
 	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string; sessionId?: string }
+	| { type: "prompt_echo"; text: string }
 	| { type: "subagent_start"; sessionId: string; title: string }
 	| { type: "subagent_done"; sessionId: string };
 

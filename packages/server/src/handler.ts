@@ -94,6 +94,43 @@ export async function handlePrompt(req: PromptRequest) {
 			updateSessionModel(db, currentSessionId, effectiveModel);
 		}
 
+		// Persist staged skills as real tool call/result pairs BEFORE the user message
+		// so they appear in the correct order in conversation history and survive reload.
+		if (stagedSkills && stagedSkills.length > 0) {
+			for (const staged of stagedSkills) {
+				const toolCallId = crypto.randomUUID();
+				const formatCall = `▸ Loading ${staged.name} skill`;
+				const uiOutput = `▸ Loaded ${staged.name} skill`;
+				const llmContent = `# Skill: ${staged.name}\n\n${staged.content}`;
+
+				// Persist assistant message with tool_calls metadata
+				appendMessage(db, currentSessionId, "assistant", "", {
+					tool_calls: [
+						{
+							id: toolCallId,
+							type: "function",
+							function: { name: "skill", arguments: JSON.stringify({ name: staged.name }) },
+						},
+					],
+				});
+
+				// Persist tool result message
+				appendMessage(db, currentSessionId, "tool", llmContent, {
+					tool_call_id: toolCallId,
+					format_call: formatCall,
+					ui_output: uiOutput,
+					mergeable: true,
+				});
+
+				// Emit events for live UI rendering
+				routeEventToWs(ws, { type: "tool_call", id: toolCallId, output: formatCall });
+				routeEventToWs(ws, { type: "tool_result", id: toolCallId, output: uiOutput, mergeable: true });
+			}
+
+			// Send prompt_echo so client adds user message after skill panels
+			send(ws, { type: "prompt_echo", text });
+		}
+
 		// Persist the user message
 		appendMessage(db, currentSessionId, "user", text);
 
@@ -112,15 +149,6 @@ export async function handlePrompt(req: PromptRequest) {
 			}
 			return { role: m.role as "system" | "user" | "assistant", content: m.content };
 		});
-
-		// Inject staged skills as system messages after the initial system prompt, before conversation
-		if (stagedSkills && stagedSkills.length > 0) {
-			const skillMessages: Message[] = stagedSkills.map((staged) => ({
-				role: "system" as const,
-				content: `# Skill: ${staged.name}\n\n${staged.content}`,
-			}));
-			messages.splice(1, 0, ...skillMessages);
-		}
 
 		const taskTool = createTaskTool({
 			db,
