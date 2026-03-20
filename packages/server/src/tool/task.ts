@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
+import { compactMessages } from "../compaction/engine";
+import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
 import type { SubagentStatus } from "../subagent-status";
@@ -157,6 +159,23 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				grepSearchTool,
 				bashTool,
 			]);
+
+			// Compact old tool outputs for resumed subagent sessions.
+			// New sessions have no tool messages yet, so this is a no-op.
+			const childSession = getSession(db, childSessionId);
+			const childPromptTokens = childSession?.promptTokens ?? 0;
+			const childModelConfigs = loadModelsConfig();
+			const childModelConfig = childModelConfigs.find((m) => m.id === model);
+			const childContextWindow = childModelConfig?.contextWindow ?? 0;
+			if (childContextWindow > 0 && childPromptTokens > 0) {
+				const compacted = compactMessages({
+					messages,
+					context: { promptTokens: childPromptTokens, contextWindow: childContextWindow },
+					tools: childTools,
+				});
+				messages.length = 0;
+				messages.push(...compacted);
+			}
 
 			// Run agent loop with provider turn state isolation
 			let newMessages: Message[];
