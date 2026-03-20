@@ -554,4 +554,50 @@ describe("handlePrompt", () => {
 		expect(sentMessages[1].role).toBe("user");
 		expect(sentMessages[1].content).toBe("hi");
 	});
+
+	test("staged skill llmContent includes base directory hint when skill is in registry", async () => {
+		const skillRegistry: SkillRegistry = {
+			get: (name) =>
+				name === "writing"
+					? {
+							name: "writing",
+							description: "Writing skill",
+							content: "Write well.",
+							filePath: "/home/user/.config/bobai/skills/writing/SKILL.md",
+						}
+					: undefined,
+			list: () => [
+				{
+					name: "writing",
+					description: "Writing skill",
+					content: "Write well.",
+					filePath: "/home/user/.config/bobai/skills/writing/SKILL.md",
+				},
+			],
+		};
+
+		const provider = capturingProvider(["OK"]);
+		const ws = mockWs();
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "use writing",
+			projectRoot: "/tmp",
+			skills: skillRegistry,
+			stagedSkills: [{ name: "writing", content: "Write well." }],
+		});
+
+		const done = ws.messages().find((m: { type: string }) => m.type === "done");
+		const stored = getMessages(db, done.sessionId);
+
+		// The tool result for the staged skill should contain the base directory hint
+		const skillToolMsg = stored.find(
+			(m: { role: string; content: string }) => m.role === "tool" && m.content.includes("# Skill: writing"),
+		);
+		expect(skillToolMsg).toBeTruthy();
+		expect(skillToolMsg?.content).toContain("Base directory: /home/user/.config/bobai/skills/writing");
+		expect(skillToolMsg?.content).toContain("Source: /home/user/.config/bobai/skills/writing/SKILL.md");
+	});
 });

@@ -25,6 +25,7 @@ export interface ServerOptions {
 	projectRoot?: string;
 	configDir?: string;
 	skills?: SkillRegistry;
+	skillDirectories?: string[];
 }
 
 export function createServer(options: ServerOptions) {
@@ -197,6 +198,7 @@ export function createServer(options: ServerOptions) {
 							sessionId: msg.sessionId,
 							projectRoot: options.projectRoot ?? process.cwd(),
 							skills: options.skills ?? { get: () => undefined, list: () => [] },
+							skillDirectories: options.skillDirectories,
 							stagedSkills: msg.stagedSkills,
 						}).catch((err) => {
 							send(ws, { type: "error", message: "Unexpected error" });

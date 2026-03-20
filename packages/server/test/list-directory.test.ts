@@ -57,6 +57,24 @@ describe("listDirectoryTool", () => {
 		expect(result.llmOutput).toContain("outside");
 	});
 
+	test("allows listing accessibleDirectories", async () => {
+		const extraDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-list-extra-"));
+		fs.writeFileSync(path.join(extraDir, "extra.txt"), "e");
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir] };
+		const result = await listDirectoryTool.execute({ path: extraDir }, ctxWithExtra);
+		expect(result.llmOutput).toContain("extra.txt");
+		fs.rmSync(extraDir, { recursive: true, force: true });
+	});
+
+	test("rejects listing directories outside both projectRoot and accessibleDirectories", async () => {
+		const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-list-outside-"));
+		fs.writeFileSync(path.join(outsideDir, "secret.txt"), "s");
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [] };
+		const result = await listDirectoryTool.execute({ path: outsideDir }, ctxWithExtra);
+		expect(result.llmOutput).toContain("outside");
+		fs.rmSync(outsideDir, { recursive: true, force: true });
+	});
+
 	test("returns error when path is a file, not a directory", async () => {
 		const result = await listDirectoryTool.execute({ path: "file-a.txt" }, ctx);
 		expect(result.llmOutput).toContain("not a directory");

@@ -50,6 +50,7 @@ describe("createSkillTool", () => {
 		expect(result.llmOutput).toContain("# TDD");
 		expect(result.llmOutput).toContain("Write tests first.");
 		expect(result.llmOutput).toContain("/skills/tdd/SKILL.md");
+		expect(result.llmOutput).toContain("Base directory: /skills/tdd");
 	});
 
 	test("execute returns error for unknown skill", async () => {

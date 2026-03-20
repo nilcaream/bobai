@@ -25,6 +25,7 @@ export interface TaskToolDeps {
 	model: string;
 	parentSessionId: string;
 	projectRoot: string;
+	accessibleDirectories?: string[];
 	systemPrompt: string;
 	signal?: AbortSignal;
 	onEvent: (event: AgentEvent & { sessionId?: string }) => void;
@@ -33,7 +34,19 @@ export interface TaskToolDeps {
 }
 
 export function createTaskTool(deps: TaskToolDeps): Tool {
-	const { db, provider, model, parentSessionId, projectRoot, systemPrompt, signal, onEvent, sendWs, subagentStatus } = deps;
+	const {
+		db,
+		provider,
+		model,
+		parentSessionId,
+		projectRoot,
+		accessibleDirectories,
+		systemPrompt,
+		signal,
+		onEvent,
+		sendWs,
+		subagentStatus,
+	} = deps;
 
 	return {
 		definition: {
@@ -162,6 +175,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					messages,
 					tools: childTools,
 					projectRoot,
+					accessibleDirectories,
 					signal,
 					initiator: "agent",
 					onEvent(event: AgentEvent) {

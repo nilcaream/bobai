@@ -51,7 +51,8 @@ const globalConfig = loadGlobalConfig(globalConfigDir);
 const project = await initProject(process.cwd());
 const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
 
-const skills = discoverSkills([path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")]);
+const skillDirectories = [path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")];
+const skills = discoverSkills(skillDirectories);
 logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
 for (const skill of skills.list()) {
 	logger.info("SKILL", `  ${skill.name}: ${skill.filePath}`);
@@ -74,6 +75,7 @@ const server = createServer({
 	projectRoot: process.cwd(),
 	configDir: globalConfigDir,
 	skills,
+	skillDirectories,
 });
 
 logger.info("SERVER", `Project: ${project.id}`);
