@@ -56,7 +56,8 @@ function extractInvocations(messages: Message[]): ToolInvocation[] {
 	// Second pass: collect tool result messages
 	const invocations: ToolInvocation[] = [];
 	for (let i = 0; i < messages.length; i++) {
-		const msg = messages[i]!;
+		const msg = messages[i];
+		if (!msg) continue;
 		if (msg.role !== "tool") continue;
 
 		const toolMsg = msg as { role: "tool"; content: string; tool_call_id: string };
@@ -115,7 +116,8 @@ function detectRetryCorrection(invocations: ToolInvocation[]): Supersession[] {
 		if (group.length <= 1) continue;
 		// All except the last are superseded
 		for (let i = 0; i < group.length - 1; i++) {
-			const inv = group[i]!;
+			const inv = group[i];
+			if (!inv) continue;
 			supersessions.push({
 				toolCallId: inv.toolCallId,
 				reason: `superseded by later ${inv.toolName} call with same args`,
@@ -231,7 +233,8 @@ function detectSearchRefinement(invocations: ToolInvocation[]): Supersession[] {
 		if (group.length <= 1) continue;
 		// All except the last are superseded
 		for (let i = 0; i < group.length - 1; i++) {
-			const inv = group[i]!;
+			const inv = group[i];
+			if (!inv) continue;
 			supersessions.push({
 				toolCallId: inv.toolCallId,
 				reason: `superseded by later ${inv.toolName} refinement`,

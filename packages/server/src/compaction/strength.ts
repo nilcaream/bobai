@@ -75,8 +75,8 @@ export function computeMessageStrengths(
 	const total = messages.length;
 
 	for (let i = 0; i < total; i++) {
-		const msg = messages[i]!;
-		if (msg.role !== "tool") continue;
+		const msg = messages[i];
+		if (!msg || msg.role !== "tool") continue;
 
 		const toolCallId = (msg as { tool_call_id: string }).tool_call_id;
 		const age = computeAge(i, total);

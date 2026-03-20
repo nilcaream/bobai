@@ -124,25 +124,25 @@ describe("defaultCompact", () => {
 
 	test("truncation notice contains COMPACTION_MARKER", () => {
 		const result = defaultCompact(lines(10), 0.5, "bash");
-		const lastLine = result.split("\n").at(-1)!;
+		const lastLine = result.split("\n").at(-1) ?? "";
 		expect(lastLine).toContain(COMPACTION_MARKER);
 	});
 
 	test("truncation notice contains the tool name", () => {
 		const result = defaultCompact(lines(10), 0.5, "my-special-tool");
-		const lastLine = result.split("\n").at(-1)!;
+		const lastLine = result.split("\n").at(-1) ?? "";
 		expect(lastLine).toContain("my-special-tool");
 	});
 
 	test("truncation notice contains the correct number of removed lines", () => {
 		// 10 lines, strength 0.5 → keep 5 → removed 5
 		const result = defaultCompact(lines(10), 0.5, "bash");
-		const lastLine = result.split("\n").at(-1)!;
+		const lastLine = result.split("\n").at(-1) ?? "";
 		expect(lastLine).toContain("5 more lines");
 
 		// 20 lines, strength 1.0 → keep 3 → removed 17
 		const result2 = defaultCompact(lines(20), 1.0, "bash");
-		const lastLine2 = result2.split("\n").at(-1)!;
+		const lastLine2 = result2.split("\n").at(-1) ?? "";
 		expect(lastLine2).toContain("17 more lines");
 	});
 });

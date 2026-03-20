@@ -51,8 +51,8 @@ describe("detectSupersessions", () => {
 			];
 			const result = detectSupersessions(messages);
 			expect(result).toHaveLength(1);
-			expect(result[0]!.toolCallId).toBe("c1");
-			expect(result[0]!.reason).toContain("superseded by later read_file");
+			expect(result[0]?.toolCallId).toBe("c1");
+			expect(result[0]?.reason).toContain("superseded by later read_file");
 		});
 
 		test("detects duplicate bash with same command", () => {
@@ -64,7 +64,7 @@ describe("detectSupersessions", () => {
 			];
 			const result = detectSupersessions(messages);
 			expect(result).toHaveLength(1);
-			expect(result[0]!.toolCallId).toBe("c1");
+			expect(result[0]?.toolCallId).toBe("c1");
 		});
 
 		test("does not flag calls with different args", () => {
@@ -106,7 +106,7 @@ describe("detectSupersessions", () => {
 			const result = detectSupersessions(messages);
 			const staleRead = result.find((s) => s.toolCallId === "c1");
 			expect(staleRead).toBeDefined();
-			expect(staleRead!.reason).toContain("stale read");
+			expect(staleRead?.reason).toContain("stale read");
 		});
 
 		test("detects read before write_file on same file", () => {
@@ -153,7 +153,7 @@ describe("detectSupersessions", () => {
 			];
 			const result = detectSupersessions(messages);
 			expect(result.find((s) => s.toolCallId === "c1")).toBeDefined();
-			expect(result.find((s) => s.toolCallId === "c1")!.reason).toContain("failed bash");
+			expect(result.find((s) => s.toolCallId === "c1")?.reason).toContain("failed bash");
 		});
 
 		test("does not flag exit code 0", () => {
@@ -172,7 +172,7 @@ describe("detectSupersessions", () => {
 				toolResult("c1", "Command timed out after 30s"),
 			];
 			const result = detectSupersessions(messages);
-			expect(result.find((s) => s.toolCallId === "c1")!.reason).toContain("timed out");
+			expect(result.find((s) => s.toolCallId === "c1")?.reason).toContain("timed out");
 		});
 
 		test("detects exit code on second-to-last line", () => {
@@ -197,7 +197,7 @@ describe("detectSupersessions", () => {
 			];
 			const result = detectSupersessions(messages);
 			expect(result.find((s) => s.toolCallId === "c1")).toBeDefined();
-			expect(result.find((s) => s.toolCallId === "c1")!.reason).toContain("refinement");
+			expect(result.find((s) => s.toolCallId === "c1")?.reason).toContain("refinement");
 		});
 
 		test("detects multiple grep_search calls", () => {
@@ -308,22 +308,22 @@ describe("compactMessages with supersession", () => {
 			| { content: string }
 			| undefined;
 		expect(c1Result).toBeDefined();
-		expect(c1Result!.content).toContain(COMPACTION_MARKER);
-		expect(c1Result!.content).toContain("superseded");
+		expect(c1Result?.content).toContain(COMPACTION_MARKER);
+		expect(c1Result?.content).toContain("superseded");
 
 		// c2's tool result should be untouched
 		const c2Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c2") as
 			| { content: string }
 			| undefined;
 		expect(c2Result).toBeDefined();
-		expect(c2Result!.content).toBe("new content");
+		expect(c2Result?.content).toBe("new content");
 	});
 
 	test("superseded messages get boosted strength under pressure", () => {
 		const messages: Message[] = [
 			{ role: "system", content: "system" },
 			assistantToolCall("c1", "bash", { command: "make" }),
-			toolResult("c1", Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n") + "\nexit code: 1"),
+			toolResult("c1", `${Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n")}\nexit code: 1`),
 			assistantToolCall("c2", "bash", { command: "make" }),
 			toolResult("c2", "ok\nexit code: 0"),
 		];
@@ -339,7 +339,7 @@ describe("compactMessages with supersession", () => {
 			| { content: string }
 			| undefined;
 		expect(c1Result).toBeDefined();
-		expect(c1Result!.content).toContain(COMPACTION_MARKER);
+		expect(c1Result?.content).toContain(COMPACTION_MARKER);
 	});
 
 	test("non-superseded messages are unchanged when no pressure", () => {
@@ -358,7 +358,7 @@ describe("compactMessages with supersession", () => {
 		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
 			| { content: string }
 			| undefined;
-		expect(c1Result!.content).toBe("content");
+		expect(c1Result?.content).toBe("content");
 	});
 
 	test("system and user messages are never modified by supersession", () => {
@@ -402,13 +402,13 @@ describe("compactMessages with supersession", () => {
 		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
 			| { content: string }
 			| undefined;
-		expect(c1Result!.content).toContain(COMPACTION_MARKER);
+		expect(c1Result?.content).toContain(COMPACTION_MARKER);
 
 		// c3 is fresh — should be untouched
 		const c3Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c3") as
 			| { content: string }
 			| undefined;
-		expect(c3Result!.content).toBe("updated code");
+		expect(c3Result?.content).toBe("updated code");
 	});
 
 	test("failed bash superseded even with low pressure", () => {
@@ -427,7 +427,7 @@ describe("compactMessages with supersession", () => {
 		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
 			| { content: string }
 			| undefined;
-		expect(c1Result!.content).toContain(COMPACTION_MARKER);
-		expect(c1Result!.content).toContain("failed bash");
+		expect(c1Result?.content).toContain(COMPACTION_MARKER);
+		expect(c1Result?.content).toContain("failed bash");
 	});
 });

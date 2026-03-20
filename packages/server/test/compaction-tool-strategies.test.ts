@@ -110,7 +110,8 @@ describe("tools without custom compact()", () => {
 // ---------------------------------------------------------------------------
 
 describe("file_search compact()", () => {
-	const compact = fileSearchTool.compact!;
+	if (!fileSearchTool.compact) throw new Error("expected compact on file_search");
+	const compact = fileSearchTool.compact;
 
 	test("preserves error messages", () => {
 		const output = "Error: invalid glob pattern";
@@ -182,7 +183,8 @@ describe("file_search compact()", () => {
 // ---------------------------------------------------------------------------
 
 describe("grep_search compact()", () => {
-	const compact = grepSearchTool.compact!;
+	if (!grepSearchTool.compact) throw new Error("expected compact on grep_search");
+	const compact = grepSearchTool.compact;
 
 	test("preserves 'No matches found.' exactly", () => {
 		expect(compact("No matches found.", 0.8, { pattern: "foo" })).toBe("No matches found.");
@@ -234,7 +236,8 @@ describe("grep_search compact()", () => {
 
 describe("skill compact()", () => {
 	const tool = makeSkillTool();
-	const compact = tool.compact!;
+	if (!tool.compact) throw new Error("expected compact on skill");
+	const compact = tool.compact;
 
 	test("always produces COMPACTED marker regardless of strength", () => {
 		const output = "# TDD\n\nWrite tests first.\n\nLong content here...";
@@ -272,7 +275,8 @@ describe("skill compact()", () => {
 // ---------------------------------------------------------------------------
 
 describe("read_file compact()", () => {
-	const compact = readFileTool.compact!;
+	if (!readFileTool.compact) throw new Error("expected compact on read_file");
+	const compact = readFileTool.compact;
 
 	test("preserves error messages", () => {
 		const output = "Error: file not found";
@@ -288,7 +292,7 @@ describe("read_file compact()", () => {
 		// 7 lines, strength 0.1 → keepPerSide = max(3, floor(7*0.9/2)) = max(3,3) = 3, 3*2=6 < 7, compacts
 		// 7 lines, strength 0.0 → keepPerSide = max(3, floor(7*1.0/2)) = max(3,3) = 3, 3*2=6 < 7, compacts
 		// Use a case where it won't compact:
-		const output = makeLines(7);
+		const _output = makeLines(7);
 		// strength 0 with 7 lines → keepPerSide = max(3, floor(7/2)) = max(3,3)=3, 6 < 7 → still compacts!
 		// Actually we need keepPerSide*2 >= total: e.g. 6 lines, strength anything → total <= 6 returns early
 		// For 8 lines: keepPerSide = max(3, floor(8*1.0/2))=4, 8 >= 8 → no compaction
@@ -329,7 +333,8 @@ describe("read_file compact()", () => {
 // ---------------------------------------------------------------------------
 
 describe("bash compact()", () => {
-	const compact = bashTool.compact!;
+	if (!bashTool.compact) throw new Error("expected compact on bash");
+	const compact = bashTool.compact;
 
 	test("preserves error messages", () => {
 		const output = "Error: command not found";
