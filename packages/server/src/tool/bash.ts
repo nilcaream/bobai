@@ -1,3 +1,4 @@
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -28,6 +29,41 @@ export const bashTool: Tool = {
 	},
 
 	mergeable: false,
+
+	compactionResistance: 0.5,
+
+	compact(output: string, strength: number, callArgs: Record<string, unknown>): string {
+		const command = typeof callArgs.command === "string" ? callArgs.command : "?";
+		// Don't compact error messages or very short output
+		if (output.startsWith("Error")) return output;
+
+		const lines = output.split("\n");
+		const total = lines.length;
+		if (total <= 6) return output;
+
+		// Detect and preserve trailing status (exit code, timeout notice)
+		let trailer = "";
+		let contentLines = lines;
+		const lastLine = lines[total - 1] ?? "";
+
+		if (lastLine.startsWith("exit code:") || lastLine.startsWith("Command timed out")) {
+			trailer = `\n${lastLine}`;
+			// Check for empty line before the status line
+			const secondLast = total >= 2 ? (lines[total - 2] ?? "") : "";
+			contentLines = secondLast === "" ? lines.slice(0, -2) : lines.slice(0, -1);
+		}
+
+		const contentTotal = contentLines.length;
+		if (contentTotal <= 6) return output;
+
+		const keepPerSide = Math.max(3, Math.floor((contentTotal * (1 - strength)) / 2));
+		if (keepPerSide * 2 >= contentTotal) return output;
+
+		const head = contentLines.slice(0, keepPerSide).join("\n");
+		const tail = contentLines.slice(-keepPerSide).join("\n");
+		const removed = contentTotal - keepPerSide * 2;
+		return `${head}\n${COMPACTION_MARKER} ${removed} lines from bash('${command}') omitted\n${tail}${trailer}`;
+	},
 
 	formatCall(args: Record<string, unknown>): string {
 		const command = typeof args.command === "string" ? args.command : "?";

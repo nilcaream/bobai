@@ -28,6 +28,8 @@ export const writeFileTool: Tool = {
 
 	mergeable: true,
 
+	compactionResistance: 0.7,
+
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";
 		return `▸ Writing ${filePath}`;

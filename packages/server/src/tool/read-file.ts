@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { isPathAccessible } from "./tool";
 
@@ -35,6 +36,27 @@ export const readFileTool: Tool = {
 	},
 
 	mergeable: true,
+
+	compactionResistance: 0.4,
+
+	compact(output: string, strength: number, callArgs: Record<string, unknown>): string {
+		const filePath = typeof callArgs.path === "string" ? callArgs.path : "unknown";
+		// Don't compact error messages
+		if (output.startsWith("Error:")) return output;
+
+		const lines = output.split("\n");
+		const total = lines.length;
+		// Need at least 6 lines to do head/tail compaction (3+3)
+		if (total <= 6) return output;
+
+		const keepPerSide = Math.max(3, Math.floor((total * (1 - strength)) / 2));
+		if (keepPerSide * 2 >= total) return output;
+
+		const head = lines.slice(0, keepPerSide).join("\n");
+		const tail = lines.slice(-keepPerSide).join("\n");
+		const removed = total - keepPerSide * 2;
+		return `${head}\n${COMPACTION_MARKER} ${removed} lines from read_file('${filePath}') omitted. Re-read to see full content.\n${tail}`;
+	},
 
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";
