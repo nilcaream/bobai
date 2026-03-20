@@ -30,7 +30,7 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 		},
 		mergeable: true,
 		formatCall(args: Record<string, unknown>): string {
-			return `**Skill** ${args.name ?? "unknown"}`;
+			return `▸ Loading ${args.name ?? "unknown"} skill`;
 		},
 		async execute(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
 			const name = args.name;
@@ -49,7 +49,7 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 			}
 
 			const llmOutput = `# Skill: ${skill.name}\n\n${skill.content}\n\n---\nSource: ${skill.filePath}`;
-			const uiOutput = `Loaded skill: **${skill.name}**`;
+			const uiOutput = `▸ Loaded ${skill.name} skill`;
 
 			return { llmOutput, uiOutput, mergeable: true };
 		},

@@ -60,10 +60,9 @@ describe("createSkillTool", () => {
 		expect(result.llmOutput).toContain("debugging");
 	});
 
-	test("formatCall shows skill name", () => {
+	test("formatCall shows skill name with consistent format", () => {
 		const tool = createSkillTool(registry);
-		const formatted = tool.formatCall({ name: "tdd" });
-		expect(formatted).toContain("tdd");
+		expect(tool.formatCall({ name: "tdd" })).toBe("▸ Loading tdd skill");
 	});
 
 	test("is mergeable", () => {

@@ -148,7 +148,27 @@ export function useWebSocket() {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 			if (isStreaming) return;
 			setIsStreaming(true);
-			setMessages((prev) => [...prev, { role: "user", text, timestamp: formatTimestamp() }]);
+			setMessages((prev) => {
+				const next = [...prev];
+				// Inject a "Loading skill" panel before the user message so it appears
+				// in the conversation like any other merged tool panel.
+				if (stagedSkills && stagedSkills.length > 0) {
+					const loadingLines = stagedSkills.map((s) => `▸ Loading ${s.name} skill`).join("  \n");
+					next.push({
+						role: "assistant",
+						parts: [
+							{
+								type: "tool_result" as const,
+								id: `staged-skills-${Date.now()}`,
+								content: loadingLines,
+								mergeable: true,
+							},
+						],
+					});
+				}
+				next.push({ role: "user", text, timestamp: formatTimestamp() });
+				return next;
+			});
 			const payload: { type: string; text: string; sessionId?: string; stagedSkills?: StagedSkill[] } = {
 				type: "prompt",
 				text,
