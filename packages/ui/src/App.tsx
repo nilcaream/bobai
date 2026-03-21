@@ -75,8 +75,12 @@ function truncateContent(text: string, lineLimit: number): string {
 	if (lineLimit <= 0) return text;
 	const lines = text.split("\n");
 	if (lines.length <= lineLimit) return text;
-	const remaining = lines.length - lineLimit;
-	return lines.slice(0, lineLimit).join("\n") + `\n... (${remaining} more lines)`;
+	const headCount = 20;
+	const tailCount = 20;
+	const omitted = lines.length - headCount - tailCount;
+	const head = lines.slice(0, headCount).join("\n");
+	const tail = lines.slice(-tailCount).join("\n");
+	return `${head}\n... (${omitted} more lines)\n${tail}`;
 }
 
 function truncateChars(text: string, charLimit: number): string {
@@ -115,7 +119,7 @@ export function App() {
 	const defaultStatus = useRef("");
 	const pendingNewTitle = useRef<string | null>(null);
 	const historyEntries = useRef<string[]>([]);
-	const [view, setView] = useState<{ mode: "chat" | "context"; lineLimit: number }>({ mode: "chat", lineLimit: 16 });
+	const [view, setView] = useState<{ mode: "chat" | "context"; lineLimit: number }>({ mode: "chat", lineLimit: 48 });
 	const [contextMessages, setContextMessages] = useState<ContextMessage[] | null>(null);
 	const savedDraft = useRef("");
 	const fetchGen = useRef(0);
