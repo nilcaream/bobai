@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
-import { compactMessagesWithStats } from "./compaction/engine";
+import { compactMessages } from "./compaction/engine";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
@@ -196,17 +196,11 @@ export async function handlePrompt(req: PromptRequest) {
 		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
-			const { messages: compacted, stats } = compactMessagesWithStats({
+			const compacted = compactMessages({
 				messages,
 				context: { promptTokens: sessionPromptTokens, contextWindow },
 				tools,
 			});
-			if (stats.compacted > 0) {
-				const pct = Math.round(stats.contextPressure * 100);
-				console.error(
-					`[compaction] ${stats.compacted}/${stats.totalToolMessages} tool messages compacted (${stats.superseded} superseded), pressure=${pct}%`,
-				);
-			}
 			messages.length = 0;
 			messages.push(...compacted);
 		}

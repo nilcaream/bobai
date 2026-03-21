@@ -130,14 +130,14 @@ describe("compactMessagesWithStats", () => {
 			edit_file: { resistance: 0.8 },
 		});
 
-		// Even with low pressure, supersession should be detected
+		// Low pressure → no compaction at all (supersession gated behind pressure)
 		const { stats: lowStats } = compactMessagesWithStats({
 			messages,
 			context: lowPressureContext(),
 			tools: registry,
 		});
-		expect(lowStats.superseded).toBeGreaterThanOrEqual(1);
-		expect(lowStats.compacted).toBeGreaterThanOrEqual(1);
+		expect(lowStats.superseded).toBe(0);
+		expect(lowStats.compacted).toBe(0);
 
 		// With high pressure, superseded + pressure-based compaction
 		const { stats: highStats } = compactMessagesWithStats({
