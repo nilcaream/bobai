@@ -288,7 +288,7 @@ describe("SUPERSESSION_STRENGTH_BOOST", () => {
 // ---------------------------------------------------------------------------
 
 describe("compactMessages with supersession", () => {
-	test("superseded messages get COMPACTED marker even with no context pressure", () => {
+	test("superseded messages are NOT compacted when context pressure is zero", () => {
 		const messages: Message[] = [
 			{ role: "system", content: "system" },
 			assistantToolCall("c1", "read_file", { path: "/src/foo.ts" }),
@@ -303,20 +303,8 @@ describe("compactMessages with supersession", () => {
 			tools: emptyRegistry(),
 		});
 
-		// c1's tool result should be superseded
-		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
-			| { content: string }
-			| undefined;
-		expect(c1Result).toBeDefined();
-		expect(c1Result?.content).toContain(COMPACTION_MARKER);
-		expect(c1Result?.content).toContain("superseded");
-
-		// c2's tool result should be untouched
-		const c2Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c2") as
-			| { content: string }
-			| undefined;
-		expect(c2Result).toBeDefined();
-		expect(c2Result?.content).toBe("new content");
+		// At zero pressure nothing is compacted — original array returned
+		expect(result).toBe(messages);
 	});
 
 	test("superseded messages get boosted strength under pressure", () => {
@@ -381,37 +369,44 @@ describe("compactMessages with supersession", () => {
 		expect(result[1]).toEqual({ role: "user", content: "user message" });
 	});
 
-	test("stale read detected and marked across edit", () => {
+	test("stale read is only compacted when pressure exists", () => {
+		const longContent = Array.from({ length: 50 }, (_, i) => `line ${i}`).join("\n");
 		const messages: Message[] = [
 			{ role: "system", content: "system" },
 			assistantToolCall("c1", "read_file", { path: "/app.ts" }),
-			toolResult("c1", "original code"),
+			toolResult("c1", longContent),
 			assistantToolCall("c2", "edit_file", { path: "/app.ts" }),
 			toolResult("c2", "edit applied"),
 			assistantToolCall("c3", "read_file", { path: "/app.ts" }),
 			toolResult("c3", "updated code"),
 		];
 
-		const result = compactMessages({
+		// Low pressure → nothing compacted
+		const lowResult = compactMessages({
 			messages,
 			context: { promptTokens: 100, contextWindow: 10000 },
 			tools: emptyRegistry(),
 		});
+		expect(lowResult).toBe(messages);
 
-		// c1 should be superseded (stale read before edit + retry with c3)
-		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
+		// High pressure → c1 superseded and compacted
+		const highResult = compactMessages({
+			messages,
+			context: { promptTokens: 8000, contextWindow: 10000 },
+			tools: emptyRegistry(),
+		});
+		const c1Result = highResult.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
 			| { content: string }
 			| undefined;
 		expect(c1Result?.content).toContain(COMPACTION_MARKER);
 
-		// c3 is fresh — should be untouched
-		const c3Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c3") as
+		const c3Result = highResult.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c3") as
 			| { content: string }
 			| undefined;
 		expect(c3Result?.content).toBe("updated code");
 	});
 
-	test("failed bash superseded even with low pressure", () => {
+	test("failed bash is NOT compacted at low pressure", () => {
 		const messages: Message[] = [
 			{ role: "system", content: "system" },
 			assistantToolCall("c1", "bash", { command: "deploy" }),
@@ -424,10 +419,7 @@ describe("compactMessages with supersession", () => {
 			tools: emptyRegistry(),
 		});
 
-		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
-			| { content: string }
-			| undefined;
-		expect(c1Result?.content).toContain(COMPACTION_MARKER);
-		expect(c1Result?.content).toContain("failed bash");
+		// No pressure → pass through unchanged
+		expect(result).toBe(messages);
 	});
 });

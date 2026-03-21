@@ -2,7 +2,7 @@ import type { AssistantMessage, Message } from "../provider/provider";
 import type { ToolRegistry } from "../tool/tool";
 import { defaultCompact } from "./default-strategy";
 import { computeContextPressure, computeMessageStrengths, DEFAULT_RESISTANCE, type StrengthContext } from "./strength";
-import { buildSupersessionMap, detectSupersessions, SUPERSESSION_STRENGTH_BOOST, supersededMarker } from "./supersession";
+import { buildSupersessionMap, detectSupersessions, SUPERSESSION_STRENGTH_BOOST } from "./supersession";
 
 export interface CompactionOptions {
 	/** Full message array (as loaded from DB). */
@@ -77,8 +77,12 @@ function buildCallArgsMap(messages: Message[]): Map<string, Record<string, unkno
  *
  * Returns a new message array with tool outputs compacted according to
  * their strength (context pressure × age × resistance). Superseded messages
- * (detected by heuristic rules) are compacted more aggressively — even when
- * context pressure is below threshold.
+ * (detected by heuristic rules) receive a strength boost and are compacted
+ * more aggressively.
+ *
+ * All compaction — including supersession — is gated behind context pressure.
+ * When pressure is zero the full conversation is more valuable to the LLM
+ * than saving tokens.
  *
  * System, user, and assistant messages are never modified.
  *
@@ -99,11 +103,6 @@ export function compactMessagesWithStats(options: CompactionOptions): { messages
 function compactMessagesInternal(options: CompactionOptions): { messages: Message[]; stats: CompactionStats } {
 	const { messages, context, tools } = options;
 
-	// Supersession detection runs unconditionally — it's about semantic
-	// relevance, not context pressure.
-	const supersessions = detectSupersessions(messages);
-	const supersessionMap = buildSupersessionMap(supersessions);
-
 	const contextPressure = computeContextPressure(context);
 
 	// Count total tool messages for stats
@@ -115,23 +114,24 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 		totalToolMessages,
 	};
 
-	// No compaction needed and no supersessions → pass through
-	if (contextPressure <= 0 && supersessionMap.size === 0) {
+	// No pressure → return everything unchanged. The LLM benefits from the
+	// full context when there is room in the window.
+	if (contextPressure <= 0) {
 		return { messages, stats: emptyStats };
 	}
+
+	// Supersession detection only runs when there is pressure.
+	const supersessions = detectSupersessions(messages);
+	const supersessionMap = buildSupersessionMap(supersessions);
 
 	const toolCallMap = buildToolCallMap(messages, tools);
 	const callArgsMap = buildCallArgsMap(messages);
 
-	// Compute base strengths (may be empty if no context pressure)
-	const strengths =
-		contextPressure > 0
-			? computeMessageStrengths(messages, contextPressure, (toolCallId: string) => {
-					return toolCallMap.get(toolCallId)?.resistance ?? DEFAULT_RESISTANCE;
-				})
-			: new Map<number, number>();
+	const strengths = computeMessageStrengths(messages, contextPressure, (toolCallId: string) => {
+		return toolCallMap.get(toolCallId)?.resistance ?? DEFAULT_RESISTANCE;
+	});
 
-	// Nothing to compact and no supersessions
+	// Nothing to compact — no tool messages with strength and no supersessions.
 	if (strengths.size === 0 && supersessionMap.size === 0) {
 		return { messages, stats: emptyStats };
 	}
@@ -160,23 +160,13 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 		if (supersessionReason !== undefined) {
 			supersededCount++;
 			compactedCount++;
-			// Superseded message: if we have context pressure, boost the strength
-			// and apply normal compaction. If no pressure, use the superseded marker.
-			if (baseStrength !== undefined && baseStrength > 0) {
-				const boostedStrength = Math.min(1, baseStrength * SUPERSESSION_STRENGTH_BOOST);
-				const tool = tools.get(toolName);
-				const compacted = tool?.compact
-					? tool.compact(toolMsg.content, boostedStrength, callArgs)
-					: defaultCompact(toolMsg.content, boostedStrength, toolName);
-				result.push({ role: "tool", content: compacted, tool_call_id: toolMsg.tool_call_id });
-			} else {
-				// No pressure but still superseded → replace with marker
-				result.push({
-					role: "tool",
-					content: supersededMarker(toolName, supersessionReason),
-					tool_call_id: toolMsg.tool_call_id,
-				});
-			}
+			// Superseded message under pressure: boost the strength and compact.
+			const boostedStrength = Math.min(1, (baseStrength ?? 0.5) * SUPERSESSION_STRENGTH_BOOST);
+			const tool = tools.get(toolName);
+			const compacted = tool?.compact
+				? tool.compact(toolMsg.content, boostedStrength, callArgs)
+				: defaultCompact(toolMsg.content, boostedStrength, toolName);
+			result.push({ role: "tool", content: compacted, tool_call_id: toolMsg.tool_call_id });
 			continue;
 		}
 
