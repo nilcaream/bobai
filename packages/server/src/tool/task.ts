@@ -136,7 +136,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 
 			// Load child session messages
 			const stored = getMessages(db, childSessionId);
-			const messages: Message[] = stored.map((m) => {
+			let messages: Message[] = stored.map((m) => {
 				if (m.role === "tool" && m.metadata?.tool_call_id) {
 					return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
 				}
@@ -169,13 +169,11 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			const childModelConfig = childModelConfigs.find((m) => m.id === model);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
 			if (childContextWindow > 0 && childPromptTokens > 0) {
-				const compacted = compactMessages({
+				messages = compactMessages({
 					messages,
 					context: { promptTokens: childPromptTokens, contextWindow: childContextWindow },
 					tools: childTools,
 				});
-				messages.length = 0;
-				messages.push(...compacted);
 			}
 
 			// Run agent loop with provider turn state isolation
