@@ -145,7 +145,7 @@ export async function handlePrompt(req: PromptRequest) {
 
 		// Load full conversation history and convert to Message[]
 		const stored = getMessages(db, currentSessionId);
-		const messages: Message[] = stored.map((m) => {
+		let messages: Message[] = stored.map((m) => {
 			if (m.role === "tool" && m.metadata?.tool_call_id) {
 				return { role: "tool", content: m.content, tool_call_id: m.metadata.tool_call_id as string };
 			}
@@ -196,13 +196,11 @@ export async function handlePrompt(req: PromptRequest) {
 		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
-			const compacted = compactMessages({
+			messages = compactMessages({
 				messages,
 				context: { promptTokens: sessionPromptTokens, contextWindow },
 				tools,
 			});
-			messages.length = 0;
-			messages.push(...compacted);
 		}
 
 		// Signal the provider to start tracking turn stats

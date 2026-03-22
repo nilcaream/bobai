@@ -608,4 +608,76 @@ describe("compactMessages", () => {
 			expect(result).toBe(messages);
 		});
 	});
+
+	describe("same-reference safety", () => {
+		test("reassigning from compactMessages when pressure is zero preserves messages", () => {
+			// Regression test: when compactMessages returns the same array reference
+			// (pressure = 0), the old mutate-then-refill pattern
+			//   messages.length = 0; messages.push(...compacted)
+			// would empty the array because compacted IS messages.
+			// The fix is to reassign: messages = compactMessages(...)
+			const original: Message[] = [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hello" },
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", "some output"),
+			];
+
+			// Low pressure → engine returns same reference
+			const result = compactMessages({
+				messages: original,
+				context: lowPressureContext(),
+				tools: createMockRegistry({ bash: { resistance: 0.5 } }),
+			});
+
+			// The result IS the same reference (engine optimization)
+			expect(result).toBe(original);
+
+			// Simulate the fixed handler pattern: reassign, don't mutate
+			let messages = [...original];
+			messages = compactMessages({
+				messages,
+				context: lowPressureContext(),
+				tools: createMockRegistry({ bash: { resistance: 0.5 } }),
+			});
+
+			// All messages preserved
+			expect(messages).toHaveLength(4);
+			expect(messages[0]).toEqual({ role: "system", content: "sys" });
+			expect(messages[1]).toEqual({ role: "user", content: "hello" });
+		});
+
+		test("the old mutate-then-refill pattern would empty the array (documents the bug)", () => {
+			// This test documents what the bug did, proving the fix was necessary
+			const original: Message[] = [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "hello" },
+			];
+
+			const result = compactMessages({
+				messages: original,
+				context: lowPressureContext(),
+				tools: emptyRegistry,
+			});
+
+			// Same reference when pressure is zero
+			expect(result).toBe(original);
+
+			// Simulate the OLD buggy pattern:
+			const buggyMessages = [...original];
+			const compacted = compactMessages({
+				messages: buggyMessages,
+				context: lowPressureContext(),
+				tools: emptyRegistry,
+			});
+			// compacted IS buggyMessages (same ref)
+			expect(compacted).toBe(buggyMessages);
+			// The old code did: buggyMessages.length = 0; buggyMessages.push(...compacted)
+			// Which would empty both since they're the same array
+			buggyMessages.length = 0;
+			expect(compacted).toHaveLength(0); // compacted is now also empty!
+			buggyMessages.push(...compacted);
+			expect(buggyMessages).toHaveLength(0); // bug: all messages lost
+		});
+	});
 });
