@@ -390,9 +390,12 @@ describe("compactMessages with supersession", () => {
 		expect(lowResult).toBe(messages);
 
 		// High pressure → c1 superseded and compacted
+		// (Quadratic age reduces strength for recent messages, so we need
+		// higher pressure to ensure the superseded c1 result is compacted
+		// enough to exceed the MIN_COMPACTION_SAVINGS threshold.)
 		const highResult = compactMessages({
 			messages,
-			context: { promptTokens: 8000, contextWindow: 10000 },
+			context: { promptTokens: 9500, contextWindow: 10000 },
 			tools: emptyRegistry(),
 		});
 		const c1Result = highResult.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
