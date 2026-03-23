@@ -37,7 +37,8 @@ export function computeContextPressure(ctx: StrengthContext): number {
  */
 export function computeAge(messageIndex: number, totalMessages: number): number {
 	if (totalMessages <= 1) return 0;
-	return 1 - messageIndex / (totalMessages - 1);
+	const linearAge = 1 - messageIndex / (totalMessages - 1);
+	return linearAge * linearAge;
 }
 
 /** Default compaction resistance for tools that don't declare one. */

@@ -86,19 +86,20 @@ describe("computeAge", () => {
 		expect(computeAge(9, 10)).toBe(0);
 	});
 
-	test("middle message has age 0.5", () => {
-		// index 5 out of 11 total: 1 - 5/10 = 0.5
-		expect(computeAge(5, 11)).toBeCloseTo(0.5, 10);
+	test("middle message has quadratic age 0.25", () => {
+		// index 5 out of 11 total: (1 - 5/10)^2 = 0.25
+		expect(computeAge(5, 11)).toBeCloseTo(0.25, 10);
 	});
 
-	test("age decreases linearly with index", () => {
+	test("age follows quadratic curve", () => {
 		const total = 5;
 		const ages = Array.from({ length: total }, (_, i) => computeAge(i, total));
-		// [1.0, 0.75, 0.5, 0.25, 0.0]
+		// [(1-0/4)^2, (1-1/4)^2, (1-2/4)^2, (1-3/4)^2, (1-4/4)^2]
+		// [1.0, 0.5625, 0.25, 0.0625, 0.0]
 		expect(ages[0]).toBe(1);
-		expect(ages[1]).toBeCloseTo(0.75, 10);
-		expect(ages[2]).toBeCloseTo(0.5, 10);
-		expect(ages[3]).toBeCloseTo(0.25, 10);
+		expect(ages[1]).toBeCloseTo(0.5625, 10);
+		expect(ages[2]).toBeCloseTo(0.25, 10);
+		expect(ages[3]).toBeCloseTo(0.0625, 10);
 		expect(ages[4]).toBe(0);
 	});
 });
@@ -200,13 +201,13 @@ describe("computeMessageStrengths", () => {
 		expect(result.has(1)).toBe(true);
 		expect(result.has(3)).toBe(true);
 
-		// index 1, total 5: age = 1 - 1/4 = 0.75
-		// strength = 1.0 * (0.75 + 1.0) / 2 = 0.875
-		expect(result.get(1)).toBeCloseTo(0.875, 10);
+		// index 1, total 5: age = (1 - 1/4)^2 = 0.5625
+		// strength = 1.0 * (0.5625 + 1.0) / 2 = 0.78125
+		expect(result.get(1)).toBeCloseTo(0.78125, 10);
 
-		// index 3, total 5: age = 1 - 3/4 = 0.25
-		// strength = 1.0 * (0.25 + 1.0) / 2 = 0.625
-		expect(result.get(3)).toBeCloseTo(0.625, 10);
+		// index 3, total 5: age = (1 - 3/4)^2 = 0.0625
+		// strength = 1.0 * (0.0625 + 1.0) / 2 = 0.53125
+		expect(result.get(3)).toBeCloseTo(0.53125, 10);
 	});
 
 	test("uses getResistance callback with correct tool_call_id", () => {
@@ -225,12 +226,12 @@ describe("computeMessageStrengths", () => {
 
 		expect(calledWith).toEqual(["call_alpha", "call_beta"]);
 
-		// index 0, total 2: age = 1 - 0/1 = 1.0
+		// index 0, total 2: age = (1 - 0/1)^2 = 1.0
 		// call_alpha resistance=0.8, compactability=0.2
 		// strength = 1.0 * (1.0 + 0.2) / 2 = 0.6
 		expect(result.get(0)).toBeCloseTo(0.6, 10);
 
-		// index 1, total 2: age = 1 - 1/1 = 0.0
+		// index 1, total 2: age = (1 - 1/1)^2 = 0.0
 		// call_beta resistance=0.2, compactability=0.8
 		// strength = 1.0 * (0.0 + 0.8) / 2 = 0.4
 		expect(result.get(1)).toBeCloseTo(0.4, 10);
@@ -270,17 +271,17 @@ describe("computeMessageStrengths", () => {
 
 		const result = computeMessageStrengths(messages, 0.8, (id) => resistanceMap[id] ?? DEFAULT_RESISTANCE);
 
-		// index 1, total 6: age = 1 - 1/5 = 0.8
+		// index 1, total 6: age = (1 - 1/5)^2 = 0.64
 		// read_file resistance=0.0, compactability=1.0
-		// strength = 0.8 * (0.8 + 1.0) / 2 = 0.8 * 0.9 = 0.72
-		expect(result.get(1)).toBeCloseTo(0.72, 10);
+		// strength = 0.8 * (0.64 + 1.0) / 2 = 0.8 * 0.82 = 0.656
+		expect(result.get(1)).toBeCloseTo(0.656, 10);
 
-		// index 3, total 6: age = 1 - 3/5 = 0.4
+		// index 3, total 6: age = (1 - 3/5)^2 = 0.16
 		// write_file resistance=0.5, compactability=0.5
-		// strength = 0.8 * (0.4 + 0.5) / 2 = 0.8 * 0.45 = 0.36
-		expect(result.get(3)).toBeCloseTo(0.36, 10);
+		// strength = 0.8 * (0.16 + 0.5) / 2 = 0.8 * 0.33 = 0.264
+		expect(result.get(3)).toBeCloseTo(0.264, 10);
 
-		// index 5, total 6: age = 1 - 5/5 = 0.0
+		// index 5, total 6: age = (1 - 5/5)^2 = 0.0
 		// bash resistance=1.0, compactability=0.0
 		// strength = 0.8 * (0.0 + 0.0) / 2 = 0.0 -> excluded
 		expect(result.has(5)).toBe(false);
