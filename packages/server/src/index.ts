@@ -76,6 +76,8 @@ const server = createServer({
 	configDir: globalConfigDir,
 	skills,
 	skillDirectories,
+	logger,
+	logDir,
 });
 
 logger.info("SERVER", `Project: ${project.id}`);

@@ -2,7 +2,9 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
+import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
+import type { Logger } from "./log/logger";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
@@ -46,6 +48,8 @@ export interface PromptRequest {
 	skills: SkillRegistry;
 	skillDirectories?: string[];
 	stagedSkills?: StagedSkill[];
+	logger?: Logger;
+	logDir?: string;
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -196,11 +200,19 @@ export async function handlePrompt(req: PromptRequest) {
 		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
+			const beforeCompaction = messages;
 			messages = compactMessages({
 				messages,
 				context: { promptTokens: sessionPromptTokens, contextWindow },
 				tools,
 			});
+			// Write debug dump if compaction actually changed something
+			if (messages !== beforeCompaction && req.logDir) {
+				const { preFile } = writeCompactionDump(req.logDir, beforeCompaction, messages, "pre-prompt");
+				if (preFile && req.logger) {
+					req.logger.debug("COMPACTION", `pre-prompt dump: ${preFile}`);
+				}
+			}
 		}
 
 		// Signal the provider to start tracking turn stats
