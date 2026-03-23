@@ -86,15 +86,16 @@ describe("compactMessagesWithStats", () => {
 	});
 
 	test("counts compacted messages accurately under high pressure", () => {
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
 			assistantWithToolCall("tc1", "file_search"),
-			toolMessage("tc1", "file1\nfile2\nfile3"),
+			toolMessage("tc1", longOutput),
 			assistantWithToolCall("tc2", "bash"),
-			toolMessage("tc2", "some output"),
+			toolMessage("tc2", longOutput),
 			{ role: "user", content: "ok" },
 			assistantWithToolCall("tc3", "edit_file"),
-			toolMessage("tc3", "edited successfully"),
+			toolMessage("tc3", longOutput),
 		];
 		const registry = createMockRegistry({
 			file_search: { resistance: 0.1 },
@@ -116,14 +117,15 @@ describe("compactMessagesWithStats", () => {
 	test("counts superseded messages in stats", () => {
 		// Supersession: re-read after edit (read → edit → read same file)
 		// Note: the supersession rules use "path" as the primary arg key
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
 			assistantWithToolCall("tc1", "read_file", JSON.stringify({ path: "foo.ts" })),
-			toolMessage("tc1", "original content"),
+			toolMessage("tc1", longOutput),
 			assistantWithToolCall("tc2", "edit_file", JSON.stringify({ path: "foo.ts" })),
-			toolMessage("tc2", "edit applied"),
+			toolMessage("tc2", longOutput),
 			assistantWithToolCall("tc3", "read_file", JSON.stringify({ path: "foo.ts" })),
-			toolMessage("tc3", "updated content"),
+			toolMessage("tc3", longOutput),
 		];
 		const registry = createMockRegistry({
 			read_file: { resistance: 0.4 },
@@ -297,14 +299,15 @@ describe("createCompactionRegistry", () => {
 
 	test("registry can be used with compactMessages", () => {
 		// Integration test: make sure the registry works end-to-end
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
 			assistantWithToolCall("tc1", "file_search", JSON.stringify({ pattern: "*.ts" })),
-			toolMessage("tc1", "Found 3 files:\n/a.ts\n/b.ts\n/c.ts"),
+			toolMessage("tc1", longOutput),
 			assistantWithToolCall("tc2", "skill", JSON.stringify({ name: "tdd" })),
-			toolMessage("tc2", "# Skill: TDD\n\nLots of content here about test-driven development..."),
+			toolMessage("tc2", longOutput),
 			assistantWithToolCall("tc3", "edit_file", JSON.stringify({ file_path: "src/main.ts" })),
-			toolMessage("tc3", "Edit applied successfully"),
+			toolMessage("tc3", longOutput),
 		];
 
 		const { messages: result, stats } = compactMessagesWithStats({
