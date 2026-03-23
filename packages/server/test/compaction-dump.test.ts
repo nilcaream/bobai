@@ -54,7 +54,7 @@ describe("writeCompactionDump", () => {
 		fs.rmSync(TEST_DIR, { recursive: true, force: true });
 	});
 
-	test("writes paired pre/post files with correct naming pattern", () => {
+	test("writes paired pre/post files with correct naming pattern and same random suffix", () => {
 		const before: Message[] = [
 			{ role: "system", content: "sys" },
 			{ role: "user", content: "hello" },
@@ -68,6 +68,11 @@ describe("writeCompactionDump", () => {
 
 		expect(preFile).toMatch(/^comp-\d{8}_\d{9}-pre-prompt-[a-z0-9]{4}-0\.txt$/);
 		expect(postFile).toMatch(/^comp-\d{8}_\d{9}-pre-prompt-[a-z0-9]{4}-1\.txt$/);
+
+		// Pre and post files must share the same prefix (timestamp + suffix + random)
+		const prePrefix = preFile.replace(/-0\.txt$/, "");
+		const postPrefix = postFile.replace(/-1\.txt$/, "");
+		expect(prePrefix).toBe(postPrefix);
 	});
 
 	test("pre file contains original messages", () => {

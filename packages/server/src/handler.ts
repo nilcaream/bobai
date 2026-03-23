@@ -201,6 +201,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const modelConfigs = loadModelsConfig();
 		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
+		const rawMessages = [...messages];
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
 			const beforeCompaction = messages;
 			messages = compactMessages({
@@ -234,6 +235,7 @@ export async function handlePrompt(req: PromptRequest) {
 			projectRoot,
 			accessibleDirectories: skillDirectories,
 			contextWindow,
+			rawMessages,
 			logger: req.logger,
 			logDir: req.logDir,
 			onEvent(event: AgentEvent) {
