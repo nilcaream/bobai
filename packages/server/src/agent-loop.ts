@@ -1,7 +1,52 @@
+import { writeCompactionDump } from "./compaction/dump";
+import { compactMessages } from "./compaction/engine";
+import type { Logger } from "./log/logger";
 import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
 
 const DEFAULT_MAX_ITERATIONS = 20;
+
+export const EMERGENCY_THRESHOLD = 0.85;
+export const EMERGENCY_COMPACTION_THRESHOLD = 0.4;
+
+export function shouldEmergencyCompact(promptTokens: number, contextWindow: number): boolean {
+	if (contextWindow <= 0 || promptTokens <= 0) return false;
+	return promptTokens / contextWindow >= EMERGENCY_THRESHOLD;
+}
+
+export function emergencyCompactConversation(
+	conversation: Message[],
+	promptTokens: number,
+	contextWindow: number,
+	tools: ToolRegistry,
+	logDir?: string,
+	logger?: Logger,
+): Message[] {
+	if (!shouldEmergencyCompact(promptTokens, contextWindow)) return conversation;
+
+	const beforeEmergency = [...conversation];
+	const compacted = compactMessages({
+		messages: conversation,
+		context: {
+			promptTokens,
+			contextWindow,
+			threshold: EMERGENCY_COMPACTION_THRESHOLD,
+		},
+		tools,
+	});
+
+	if (compacted !== conversation) {
+		if (logDir) {
+			const { preFile } = writeCompactionDump(logDir, beforeEmergency, compacted, "emergency");
+			if (preFile && logger) {
+				logger.info("COMPACTION", `emergency mid-loop compaction: ${preFile}`);
+			}
+		}
+		return compacted;
+	}
+
+	return conversation;
+}
 
 export type AgentEvent =
 	| { type: "text"; text: string }
@@ -19,6 +64,9 @@ export interface AgentLoopOptions {
 	maxIterations?: number;
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
+	contextWindow?: number;
+	logger?: Logger;
+	logDir?: string;
 	onEvent: (event: AgentEvent) => void;
 	onMessage: (msg: Message) => void;
 }
@@ -143,6 +191,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			conversation.push(toolMsg);
 			newMessages.push(toolMsg);
 			onMessage(toolMsg);
+		}
+
+		// Emergency compaction: if we've crossed 85% context usage, compact before next iteration
+		if (options.contextWindow && options.contextWindow > 0) {
+			const currentPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
+			const compacted = emergencyCompactConversation(
+				conversation,
+				currentPromptTokens,
+				options.contextWindow,
+				tools,
+				options.logDir,
+				options.logger,
+			);
+			if (compacted !== conversation) {
+				conversation.length = 0;
+				conversation.push(...compacted);
+			}
 		}
 
 		// Loop continues — provider will be called again with updated conversation

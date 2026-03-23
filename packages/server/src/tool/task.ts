@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
 import { compactMessages } from "../compaction/engine";
+import type { Logger } from "../log/logger";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
@@ -34,6 +35,8 @@ export interface TaskToolDeps {
 	onEvent: (event: AgentEvent & { sessionId?: string }) => void;
 	sendWs?: (msg: import("../protocol").ServerMessage) => void;
 	subagentStatus: SubagentStatus;
+	logger?: Logger;
+	logDir?: string;
 }
 
 export function createTaskTool(deps: TaskToolDeps): Tool {
@@ -49,6 +52,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		onEvent,
 		sendWs,
 		subagentStatus,
+		logger,
+		logDir,
 	} = deps;
 
 	return {
@@ -198,6 +203,9 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					accessibleDirectories,
 					signal,
 					initiator: "agent",
+					contextWindow: childContextWindow,
+					logger,
+					logDir,
 					onEvent(event: AgentEvent) {
 						onEvent({ ...event, sessionId: childSessionId });
 						if (event.type === "tool_call") {
