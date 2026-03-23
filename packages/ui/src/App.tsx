@@ -20,6 +20,42 @@ interface CompactionStats {
 	totalToolMessages: number;
 }
 
+interface CompactionDetail {
+	age: number;
+	resistance: number;
+	strength: number;
+	wasCompacted: boolean;
+	supersededReason?: string;
+	belowMinSavings?: boolean;
+}
+
+function formatToolHeader(toolCallId: string, toolName: string, detail: CompactionDetail | undefined): string {
+	const parts = ["tool", toolCallId, toolName];
+
+	if (!detail) {
+		parts.push("no detail available");
+		return parts.join(" | ");
+	}
+
+	parts.push(`age=${detail.age.toFixed(3)}`);
+	parts.push(`resist=${detail.resistance}`);
+	parts.push(`strength=${detail.strength.toFixed(3)}`);
+
+	if (detail.supersededReason) {
+		parts.push(`SUPERSEDED: ${detail.supersededReason}`);
+	} else if (detail.wasCompacted) {
+		parts.push("compacted");
+	} else if (detail.belowMinSavings) {
+		parts.push("savings below minimum");
+	} else if (detail.strength <= 0) {
+		parts.push("no pressure");
+	} else {
+		parts.push("kept (low strength)");
+	}
+
+	return parts.join(" | ");
+}
+
 function groupParts(parts: MessagePart[]): Panel[] {
 	// Pass 1: Create panels for each part
 	const raw: Panel[] = [];
@@ -134,9 +170,11 @@ export function App() {
 		lineLimit: 48,
 	});
 	const [contextMessages, setContextMessages] = useState<ContextMessage[] | null>(null);
-	const [compactionData, setCompactionData] = useState<{ messages: ContextMessage[]; stats: CompactionStats | null } | null>(
-		null,
-	);
+	const [compactionData, setCompactionData] = useState<{
+		messages: ContextMessage[];
+		stats: CompactionStats | null;
+		details: Record<string, CompactionDetail> | null;
+	} | null>(null);
 	const savedDraft = useRef("");
 	const fetchGen = useRef(0);
 	const messagesRef = useRef<HTMLDivElement>(null);
@@ -260,9 +298,15 @@ export function App() {
 		}
 		fetch(`/bobai/session/${sid}/context?compacted=true`)
 			.then((res) => res.json())
-			.then((data: { messages: ContextMessage[]; stats: CompactionStats | null }) => {
-				setCompactionData({ messages: data.messages, stats: data.stats });
-			})
+			.then(
+				(data: {
+					messages: ContextMessage[];
+					stats: CompactionStats | null;
+					details: Record<string, CompactionDetail> | null;
+				}) => {
+					setCompactionData({ messages: data.messages, stats: data.stats, details: data.details ?? null });
+				},
+			)
 			.catch(() => setCompactionData(null));
 	}, [getSessionId]);
 
@@ -933,6 +977,83 @@ export function App() {
 		return elements;
 	}
 
+	function renderCompactionMessagePanels(
+		msgs: ContextMessage[],
+		details: Record<string, CompactionDetail> | null,
+		limit: number,
+		startKey: number,
+	): { elements: React.ReactNode[]; nextKey: number } {
+		const elements: React.ReactNode[] = [];
+		let key = startKey;
+
+		// Build a map from tool_call_id -> tool function name
+		const toolCallNames = new Map<string, string>();
+		for (const msg of msgs) {
+			if (msg.role === "assistant" && msg.metadata?.tool_calls) {
+				const calls = msg.metadata.tool_calls as Array<{ id: string; function: { name: string } }>;
+				for (const tc of calls) {
+					toolCallNames.set(tc.id, tc.function.name);
+				}
+			}
+		}
+
+		for (const msg of msgs) {
+			if (msg.role === "system") {
+				elements.push(
+					<div key={key++} className="panel panel--context">
+						<div className="context-header">system | excluded from compaction</div>
+						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+					</div>,
+				);
+			} else if (msg.role === "user") {
+				elements.push(
+					<div key={key++} className="panel panel--context">
+						<div className="context-header">user | excluded from compaction</div>
+						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+					</div>,
+				);
+			} else if (msg.role === "assistant") {
+				const toolCalls = msg.metadata?.tool_calls as
+					| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
+					| undefined;
+
+				if (toolCalls && toolCalls.length > 0) {
+					for (const tc of toolCalls) {
+						elements.push(
+							<div key={key++} className="panel panel--context">
+								<div className="context-header">{`assistant | ${tc.id} | excluded from compaction`}</div>
+								<pre className="context-body">{truncateChars(`${tc.function.name}(${tc.function.arguments})`, 512)}</pre>
+							</div>,
+						);
+					}
+				}
+
+				if (msg.content) {
+					elements.push(
+						<div key={key++} className="panel panel--context">
+							<div className="context-header">assistant | excluded from compaction</div>
+							<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+						</div>,
+					);
+				}
+			} else if (msg.role === "tool") {
+				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
+				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
+				const detail = toolCallId && details ? details[toolCallId] : undefined;
+				const header = formatToolHeader(toolCallId ?? "", toolName, detail);
+				const rawContent = msg.content || "(no output)";
+				elements.push(
+					<div key={key++} className="panel panel--context">
+						<div className="context-header">{header}</div>
+						<pre className="context-body">{truncateContent(rawContent, limit)}</pre>
+					</div>,
+				);
+			}
+		}
+
+		return { elements, nextKey: key };
+	}
+
 	function renderCompactionPanels() {
 		if (!compactionData) {
 			return [
@@ -941,7 +1062,7 @@ export function App() {
 				</div>,
 			];
 		}
-		const { elements } = renderRawMessagePanels(compactionData.messages, view.lineLimit, 0);
+		const { elements } = renderCompactionMessagePanels(compactionData.messages, compactionData.details, view.lineLimit, 0);
 		return elements;
 	}
 
