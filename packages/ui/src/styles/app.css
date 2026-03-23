@@ -100,7 +100,15 @@ body,
 	white-space: normal;
 }
 
-.context-raw {
+.context-header {
+	font-weight: 700;
+	color: var(--text-status);
+	border-bottom: 1px solid var(--text-muted);
+	padding-bottom: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.context-body {
 	white-space: pre-wrap;
 	word-break: break-all;
 	margin: 0;

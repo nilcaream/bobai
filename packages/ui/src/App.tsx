@@ -870,13 +870,15 @@ export function App() {
 			if (msg.role === "system") {
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<pre className="context-raw">{`# system\n\n${truncateContent(msg.content, limit)}`}</pre>
+						<div className="context-header">system</div>
+						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
 					</div>,
 				);
 			} else if (msg.role === "user") {
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<pre className="context-raw">{`# user\n\n${truncateContent(msg.content, limit)}`}</pre>
+						<div className="context-header">user</div>
+						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
 					</div>,
 				);
 			} else if (msg.role === "assistant") {
@@ -888,7 +890,8 @@ export function App() {
 					for (const tc of toolCalls) {
 						elements.push(
 							<div key={key++} className="panel panel--context">
-								<pre className="context-raw">{`# assistant | ${tc.id}\n\n${truncateChars(`${tc.function.name}(${tc.function.arguments})`, 512)}`}</pre>
+								<div className="context-header">{`assistant | ${tc.id}`}</div>
+								<pre className="context-body">{truncateChars(`${tc.function.name}(${tc.function.arguments})`, 512)}</pre>
 							</div>,
 						);
 					}
@@ -897,7 +900,8 @@ export function App() {
 				if (msg.content) {
 					elements.push(
 						<div key={key++} className="panel panel--context">
-							<pre className="context-raw">{`# assistant\n\n${truncateContent(msg.content, limit)}`}</pre>
+							<div className="context-header">assistant</div>
+							<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
 						</div>,
 					);
 				}
@@ -907,7 +911,8 @@ export function App() {
 				const rawContent = msg.content || "(no output)";
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<pre className="context-raw">{`# tool | ${toolCallId ?? ""} | ${toolName}\n\n${truncateContent(rawContent, limit)}`}</pre>
+						<div className="context-header">{`tool | ${toolCallId ?? ""} | ${toolName}`}</div>
+						<pre className="context-body">{truncateContent(rawContent, limit)}</pre>
 					</div>,
 				);
 			}
@@ -936,21 +941,7 @@ export function App() {
 				</div>,
 			];
 		}
-		const elements: React.ReactNode[] = [];
-		let key = 0;
-
-		// Stats header
-		if (compactionData.stats) {
-			const s = compactionData.stats;
-			elements.push(
-				<div key={key++} className="panel panel--context">
-					<pre className="context-raw">{`# compaction stats\n\npressure: ${(s.contextPressure * 100).toFixed(1)}%\ncompacted: ${s.compacted} / ${s.totalToolMessages} tool messages\nsuperseded: ${s.superseded}`}</pre>
-				</div>,
-			);
-		}
-
-		const { elements: msgElements } = renderRawMessagePanels(compactionData.messages, view.lineLimit, key);
-		elements.push(...msgElements);
+		const { elements } = renderRawMessagePanels(compactionData.messages, view.lineLimit, 0);
 		return elements;
 	}
 
