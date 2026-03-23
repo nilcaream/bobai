@@ -166,6 +166,97 @@ describe("compactMessagesWithStats", () => {
 		expect(stats.contextPressure).toBeCloseTo(0.75, 2);
 	});
 
+	test("returns per-message details keyed by tool_call_id", () => {
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			assistantWithToolCall("tc1", "file_search", JSON.stringify({ pattern: "*.ts" })),
+			toolMessage("tc1", longOutput),
+			assistantWithToolCall("tc2", "bash", JSON.stringify({ command: "ls" })),
+			toolMessage("tc2", longOutput),
+			assistantWithToolCall("tc3", "edit_file", JSON.stringify({ file_path: "src/main.ts" })),
+			toolMessage("tc3", longOutput),
+		];
+		const registry = createMockRegistry({
+			file_search: { resistance: 0.1 },
+			bash: { resistance: 0.5 },
+			edit_file: { resistance: 0.8 },
+		});
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		expect(details).toBeInstanceOf(Map);
+		expect(details.size).toBe(3);
+
+		for (const id of ["tc1", "tc2", "tc3"]) {
+			const detail = details.get(id);
+			expect(detail).toBeDefined();
+			if (!detail) throw new Error(`Missing detail for ${id}`);
+			expect(typeof detail.age).toBe("number");
+			expect(typeof detail.resistance).toBe("number");
+			expect(typeof detail.strength).toBe("number");
+			expect(typeof detail.wasCompacted).toBe("boolean");
+		}
+
+		// file_search (low resistance) should have higher strength than edit_file (high resistance)
+		const fsDetail = details.get("tc1");
+		const editDetail = details.get("tc3");
+		if (!fsDetail || !editDetail) throw new Error("Missing details");
+		expect(fsDetail.resistance).toBe(0.1);
+		expect(editDetail.resistance).toBe(0.8);
+		expect(fsDetail.strength).toBeGreaterThan(editDetail.strength);
+	});
+
+	test("returns empty details map when no compaction needed", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			{ role: "user", content: "hello" },
+			assistantWithToolCall("tc1", "bash"),
+			toolMessage("tc1", "output"),
+		];
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: lowPressureContext(),
+			tools: emptyRegistry,
+		});
+		expect(details).toBeInstanceOf(Map);
+		expect(details.size).toBe(0);
+	});
+
+	test("details can be serialized to plain object for JSON response", () => {
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			assistantWithToolCall("tc1", "file_search", JSON.stringify({ pattern: "*.ts" })),
+			toolMessage("tc1", longOutput),
+			assistantWithToolCall("tc2", "bash", JSON.stringify({ command: "ls" })),
+			toolMessage("tc2", longOutput),
+		];
+		const registry = createMockRegistry({
+			file_search: { resistance: 0.1 },
+			bash: { resistance: 0.5 },
+		});
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		// Simulate what server.ts does: convert Map to plain object
+		const detailsObj = Object.fromEntries(details);
+
+		// Should be JSON-serializable
+		const json = JSON.stringify(detailsObj);
+		const parsed = JSON.parse(json);
+		expect(typeof parsed).toBe("object");
+		expect(parsed.tc1).toBeDefined();
+		expect(parsed.tc2).toBeDefined();
+		expect(typeof parsed.tc1.wasCompacted).toBe("boolean");
+	});
+
 	test("compactMessages returns same result as compactMessagesWithStats.messages", () => {
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
