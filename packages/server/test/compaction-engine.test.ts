@@ -876,4 +876,83 @@ describe("CompactionDetail", () => {
 
 		expect(details.size).toBe(0);
 	});
+
+	test("includes savedChars when compaction is applied", () => {
+		const longContent = `${"x".repeat(50)}\n`.repeat(200);
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "read_file", '{"path":"a.ts"}'),
+			toolResult("tc1", longContent),
+		];
+		const registry = createMockRegistry({ read_file: { resistance: 0.2 } });
+		const { details, messages: result } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+		const d1 = details.get("tc1");
+		expect(d1?.wasCompacted).toBe(true);
+		expect(d1?.savedChars).toBeDefined();
+		expect(d1?.savedChars).toBeGreaterThan(0);
+		// Verify savedChars matches actual savings
+		const resultContent = (result.find((m) => m.role === "tool") as { content: string }).content;
+		expect(d1?.savedChars).toBe(longContent.length - resultContent.length);
+	});
+
+	test("savedChars is undefined when compaction not applied", () => {
+		const shortContent = "short";
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "bash"),
+			toolResult("tc1", shortContent),
+		];
+		const registry = createMockRegistry({ bash: { resistance: 0.1 } });
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+		const d1 = details.get("tc1");
+		expect(d1?.wasCompacted).toBe(false);
+		expect(d1?.savedChars).toBeUndefined();
+	});
+
+	test("includes supersededBy when message is superseded", () => {
+		const longContent = "x\n".repeat(200);
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "read_file", '{"path":"foo.ts"}'),
+			toolResult("tc1", longContent),
+			{ role: "user", content: "again" },
+			assistantWithToolCall("tc2", "read_file", '{"path":"foo.ts"}'),
+			toolResult("tc2", longContent),
+		];
+		const registry = createMockRegistry({ read_file: { resistance: 0.2 } });
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+		const d1 = details.get("tc1");
+		expect(d1?.supersededBy).toBe("tc2");
+		const d2 = details.get("tc2");
+		expect(d2?.supersededBy).toBeUndefined();
+	});
+
+	test("supersededBy is undefined for failed bash (self-supersession)", () => {
+		const longContent = `${Array.from({ length: 200 }, (_, i) => `line ${i}`).join("\n")}\nexit code: 1`;
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "bash", '{"command":"make"}'),
+			toolResult("tc1", longContent),
+		];
+		const registry = createMockRegistry({ bash: { resistance: 0.5 } });
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+		const d1 = details.get("tc1");
+		expect(d1?.supersededBy).toBeUndefined();
+	});
 });

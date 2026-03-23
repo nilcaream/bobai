@@ -53,6 +53,7 @@ describe("detectSupersessions", () => {
 			expect(result).toHaveLength(1);
 			expect(result[0]?.toolCallId).toBe("c1");
 			expect(result[0]?.reason).toContain("superseded by later read_file");
+			expect(result[0]?.supersedingId).toBe("c2");
 		});
 
 		test("detects duplicate bash with same command", () => {
@@ -65,6 +66,7 @@ describe("detectSupersessions", () => {
 			const result = detectSupersessions(messages);
 			expect(result).toHaveLength(1);
 			expect(result[0]?.toolCallId).toBe("c1");
+			expect(result[0]?.supersedingId).toBe("c2");
 		});
 
 		test("does not flag calls with different args", () => {
@@ -76,6 +78,43 @@ describe("detectSupersessions", () => {
 			];
 			const result = detectSupersessions(messages);
 			expect(result).toHaveLength(0);
+		});
+
+		test("does not flag read_file calls with different from/to ranges", () => {
+			const messages: Message[] = [
+				assistantToolCall("c1", "read_file", { path: "/src/server.ts", from: 169, to: 184 }),
+				toolResult("c1", "lines 169-184"),
+				assistantToolCall("c2", "read_file", { path: "/src/server.ts", from: 244, to: 280 }),
+				toolResult("c2", "lines 244-280"),
+			];
+			const result = detectSupersessions(messages);
+			const retries = result.filter((s) => s.reason.includes("superseded by later read_file"));
+			expect(retries).toHaveLength(0);
+		});
+
+		test("still flags read_file calls with same path AND same from/to", () => {
+			const messages: Message[] = [
+				assistantToolCall("c1", "read_file", { path: "/src/foo.ts", from: 1, to: 50 }),
+				toolResult("c1", "content v1"),
+				assistantToolCall("c2", "read_file", { path: "/src/foo.ts", from: 1, to: 50 }),
+				toolResult("c2", "content v2"),
+			];
+			const result = detectSupersessions(messages);
+			expect(result).toHaveLength(1);
+			expect(result[0]?.toolCallId).toBe("c1");
+			expect(result[0]?.supersedingId).toBe("c2");
+		});
+
+		test("full-file read and partial read of same file are in different groups", () => {
+			const messages: Message[] = [
+				assistantToolCall("c1", "read_file", { path: "/src/foo.ts" }),
+				toolResult("c1", "full file content"),
+				assistantToolCall("c2", "read_file", { path: "/src/foo.ts", from: 10, to: 20 }),
+				toolResult("c2", "partial content"),
+			];
+			const result = detectSupersessions(messages);
+			const retries = result.filter((s) => s.reason.includes("superseded by later read_file"));
+			expect(retries).toHaveLength(0);
 		});
 
 		test("keeps only the last of 3+ duplicate calls", () => {
@@ -92,6 +131,11 @@ describe("detectSupersessions", () => {
 			expect(ids).toContain("c1");
 			expect(ids).toContain("c2");
 			expect(ids).not.toContain("c3");
+			// Both c1 and c2 should point to c3 as the superseder
+			const c1 = result.find((s) => s.toolCallId === "c1");
+			const c2 = result.find((s) => s.toolCallId === "c2");
+			expect(c1?.supersedingId).toBe("c3");
+			expect(c2?.supersedingId).toBe("c3");
 		});
 	});
 
@@ -107,6 +151,7 @@ describe("detectSupersessions", () => {
 			const staleRead = result.find((s) => s.toolCallId === "c1");
 			expect(staleRead).toBeDefined();
 			expect(staleRead?.reason).toContain("stale read");
+			expect(staleRead?.supersedingId).toBe("c2");
 		});
 
 		test("detects read before write_file on same file", () => {
@@ -117,7 +162,9 @@ describe("detectSupersessions", () => {
 				toolResult("c2", "written"),
 			];
 			const result = detectSupersessions(messages);
-			expect(result.find((s) => s.toolCallId === "c1")).toBeDefined();
+			const staleRead = result.find((s) => s.toolCallId === "c1");
+			expect(staleRead).toBeDefined();
+			expect(staleRead?.supersedingId).toBe("c2");
 		});
 
 		test("does not flag read AFTER edit", () => {
@@ -152,8 +199,10 @@ describe("detectSupersessions", () => {
 				toolResult("c1", "error: something failed\nexit code: 1"),
 			];
 			const result = detectSupersessions(messages);
-			expect(result.find((s) => s.toolCallId === "c1")).toBeDefined();
-			expect(result.find((s) => s.toolCallId === "c1")?.reason).toContain("failed bash");
+			const failed = result.find((s) => s.toolCallId === "c1");
+			expect(failed).toBeDefined();
+			expect(failed?.reason).toContain("failed bash");
+			expect(failed?.supersedingId).toBeUndefined();
 		});
 
 		test("does not flag exit code 0", () => {
@@ -171,8 +220,9 @@ describe("detectSupersessions", () => {
 				assistantToolCall("c1", "bash", { command: "sleep 100" }),
 				toolResult("c1", "Command timed out after 30s"),
 			];
-			const result = detectSupersessions(messages);
-			expect(result.find((s) => s.toolCallId === "c1")?.reason).toContain("timed out");
+			const timedOut = detectSupersessions(messages).find((s) => s.toolCallId === "c1");
+			expect(timedOut?.reason).toContain("timed out");
+			expect(timedOut?.supersedingId).toBeUndefined();
 		});
 
 		test("detects exit code on second-to-last line", () => {
@@ -196,8 +246,10 @@ describe("detectSupersessions", () => {
 				toolResult("c2", "src/a.ts"),
 			];
 			const result = detectSupersessions(messages);
-			expect(result.find((s) => s.toolCallId === "c1")).toBeDefined();
-			expect(result.find((s) => s.toolCallId === "c1")?.reason).toContain("refinement");
+			const c1 = result.find((s) => s.toolCallId === "c1");
+			expect(c1).toBeDefined();
+			expect(c1?.reason).toContain("refinement");
+			expect(c1?.supersedingId).toBe("c2");
 		});
 
 		test("detects multiple grep_search calls", () => {
@@ -208,7 +260,9 @@ describe("detectSupersessions", () => {
 				toolResult("c2", "a.ts:1: TODO fix this"),
 			];
 			const result = detectSupersessions(messages);
-			expect(result.find((s) => s.toolCallId === "c1")).toBeDefined();
+			const c1 = result.find((s) => s.toolCallId === "c1");
+			expect(c1).toBeDefined();
+			expect(c1?.supersedingId).toBe("c2");
 		});
 
 		test("does not flag single search call", () => {
@@ -322,12 +376,13 @@ describe("compactMessages with supersession", () => {
 			tools: emptyRegistry(),
 		});
 
-		// c1 is superseded (retry + failed bash) — should be compacted aggressively
+		// c1 is superseded (retry + failed bash) — should be replaced with a one-liner marker
 		const c1Result = result.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c1") as
 			| { content: string }
 			| undefined;
 		expect(c1Result).toBeDefined();
 		expect(c1Result?.content).toContain(COMPACTION_MARKER);
+		expect(c1Result?.content).toContain("output superseded:");
 	});
 
 	test("non-superseded messages are unchanged when no pressure", () => {
@@ -402,6 +457,7 @@ describe("compactMessages with supersession", () => {
 			| { content: string }
 			| undefined;
 		expect(c1Result?.content).toContain(COMPACTION_MARKER);
+		expect(c1Result?.content).toContain("output superseded:");
 
 		const c3Result = highResult.find((m) => m.role === "tool" && (m as { tool_call_id: string }).tool_call_id === "c3") as
 			| { content: string }
