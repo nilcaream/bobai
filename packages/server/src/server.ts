@@ -4,6 +4,7 @@ import { type CommandRequest, handleCommand } from "./command";
 import { compactMessagesWithStats } from "./compaction/engine";
 import { createCompactionRegistry } from "./compaction/registry";
 import { handlePrompt } from "./handler";
+import type { Logger } from "./log/logger";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import { CURATED_MODELS, formatModelCost, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
@@ -28,6 +29,8 @@ export interface ServerOptions {
 	configDir?: string;
 	skills?: SkillRegistry;
 	skillDirectories?: string[];
+	logger?: Logger;
+	logDir?: string;
 }
 
 export function createServer(options: ServerOptions) {
@@ -264,6 +267,8 @@ export function createServer(options: ServerOptions) {
 							skills: options.skills ?? { get: () => undefined, list: () => [] },
 							skillDirectories: options.skillDirectories,
 							stagedSkills: msg.stagedSkills,
+							logger: options.logger,
+							logDir: options.logDir,
 						}).catch((err) => {
 							send(ws, { type: "error", message: "Unexpected error" });
 							console.error("Unhandled error in handlePrompt:", err);
