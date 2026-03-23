@@ -155,13 +155,13 @@ describe("compactMessagesWithStats", () => {
 			assistantWithToolCall("tc1", "bash"),
 			toolMessage("tc1", "output"),
 		];
-		// 90% usage → effective pressure = (0.9 - 0.4) / (1.0 - 0.4) = 0.833...
+		// 90% usage → effective pressure = (0.9 - 0.6) / (1.0 - 0.6) = 0.75
 		const { stats } = compactMessagesWithStats({
 			messages,
 			context: { promptTokens: 9_000, contextWindow: 10_000 },
 			tools: emptyRegistry,
 		});
-		expect(stats.contextPressure).toBeCloseTo(0.833, 2);
+		expect(stats.contextPressure).toBeCloseTo(0.75, 2);
 	});
 
 	test("compactMessages returns same result as compactMessagesWithStats.messages", () => {
