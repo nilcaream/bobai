@@ -173,6 +173,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			const childModelConfigs = loadModelsConfig();
 			const childModelConfig = childModelConfigs.find((m) => m.id === model);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
+			const rawMessages = [...messages];
 			if (childContextWindow > 0 && childPromptTokens > 0) {
 				messages = compactMessages({
 					messages,
@@ -204,6 +205,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					signal,
 					initiator: "agent",
 					contextWindow: childContextWindow,
+					rawMessages,
 					logger,
 					logDir,
 					onEvent(event: AgentEvent) {

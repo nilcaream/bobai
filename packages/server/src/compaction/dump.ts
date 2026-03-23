@@ -27,11 +27,10 @@ export function formatMessageForDump(msg: Message): string {
 	return `role: ${msg.role}\n\n${msg.content}`;
 }
 
-function dumpFilename(suffix: string, index: number): string {
+function dumpFilename(suffix: string, rand: string, index: number): string {
 	const ts = localTimestamp().replace(/[-: .]/g, "");
 	const date = ts.slice(0, 8);
 	const time = ts.slice(8);
-	const rand = Math.random().toString(36).substring(2, 6);
 	return `comp-${date}_${time}-${suffix}-${rand}-${index}.txt`;
 }
 
@@ -59,8 +58,9 @@ export function writeCompactionDump(
 	try {
 		fs.mkdirSync(logDir, { recursive: true });
 
-		const preFilename = dumpFilename(suffix, 0);
-		const postFilename = dumpFilename(suffix, 1);
+		const rand = Math.random().toString(36).substring(2, 6);
+		const preFilename = dumpFilename(suffix, rand, 0);
+		const postFilename = dumpFilename(suffix, rand, 1);
 
 		fs.writeFileSync(path.join(logDir, preFilename), formatDump(before));
 		fs.writeFileSync(path.join(logDir, postFilename), formatDump(after));

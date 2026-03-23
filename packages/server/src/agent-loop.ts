@@ -7,7 +7,6 @@ import type { ToolRegistry } from "./tool/tool";
 const DEFAULT_MAX_ITERATIONS = 20;
 
 export const EMERGENCY_THRESHOLD = 0.85;
-export const EMERGENCY_COMPACTION_THRESHOLD = 0.4;
 
 export function shouldEmergencyCompact(promptTokens: number, contextWindow: number): boolean {
 	if (contextWindow <= 0 || promptTokens <= 0) return false;
@@ -30,7 +29,6 @@ export function emergencyCompactConversation(
 		context: {
 			promptTokens,
 			contextWindow,
-			threshold: EMERGENCY_COMPACTION_THRESHOLD,
 		},
 		tools,
 	});
@@ -65,6 +63,8 @@ export interface AgentLoopOptions {
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
 	contextWindow?: number;
+	/** Original uncompacted messages from DB, for emergency compaction input. */
+	rawMessages?: Message[];
 	logger?: Logger;
 	logDir?: string;
 	onEvent: (event: AgentEvent) => void;
@@ -193,18 +193,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			onMessage(toolMsg);
 		}
 
-		// Emergency compaction: if we've crossed 85% context usage, compact before next iteration
-		if (options.contextWindow && options.contextWindow > 0) {
+		// Emergency compaction: if we've crossed 85% context usage, compact from raw data before next iteration
+		if (options.contextWindow && options.contextWindow > 0 && options.rawMessages) {
 			const currentPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
+			const rawPlusNew = [...options.rawMessages, ...newMessages];
 			const compacted = emergencyCompactConversation(
-				conversation,
+				rawPlusNew,
 				currentPromptTokens,
 				options.contextWindow,
 				tools,
 				options.logDir,
 				options.logger,
 			);
-			if (compacted !== conversation) {
+			if (compacted !== rawPlusNew) {
 				conversation.length = 0;
 				conversation.push(...compacted);
 			}

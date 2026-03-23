@@ -1,10 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-	EMERGENCY_COMPACTION_THRESHOLD,
-	EMERGENCY_THRESHOLD,
-	emergencyCompactConversation,
-	shouldEmergencyCompact,
-} from "../src/agent-loop";
+import { EMERGENCY_THRESHOLD, emergencyCompactConversation, shouldEmergencyCompact } from "../src/agent-loop";
 import type { Message } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
 
@@ -67,10 +62,6 @@ describe("shouldEmergencyCompact", () => {
 	test("threshold constant is 0.85", () => {
 		expect(EMERGENCY_THRESHOLD).toBe(0.85);
 	});
-
-	test("compaction threshold constant is 0.4", () => {
-		expect(EMERGENCY_COMPACTION_THRESHOLD).toBe(0.4);
-	});
 });
 
 // ---------------------------------------------------------------------------
@@ -78,7 +69,7 @@ describe("shouldEmergencyCompact", () => {
 // ---------------------------------------------------------------------------
 
 describe("emergencyCompactConversation", () => {
-	test("applies compaction with threshold 0.4 when above 85%", () => {
+	test("applies compaction with default threshold when above 85%", () => {
 		const conversation = buildConversation();
 		const result = emergencyCompactConversation(
 			conversation,
