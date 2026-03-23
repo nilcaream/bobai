@@ -764,7 +764,9 @@ describe("compactMessages", () => {
 
 describe("CompactionDetail", () => {
 	test("returns detail for each tool message", () => {
-		const longContent = "x\n".repeat(200);
+		// Use large content (50 chars/line × 200 lines = 10KB) to ensure
+		// compaction savings comfortably exceed MIN_COMPACTION_SAVINGS (128 chars).
+		const longContent = `${"x".repeat(50)}\n`.repeat(200);
 		const messages: Message[] = [
 			{ role: "user", content: "go" },
 			assistantWithToolCall("tc1", "read_file", '{"path":"a.ts"}'),
@@ -792,12 +794,15 @@ describe("CompactionDetail", () => {
 		expect(d1.resistance).toBe(0.2);
 		expect(d1.age).toBeGreaterThanOrEqual(0);
 		expect(d1.age).toBeLessThanOrEqual(1);
+		expect(d1.strength).toBeGreaterThan(0);
+		expect(d1.wasCompacted).toBe(true);
 
 		const d2 = details.get("tc2") as CompactionDetail;
 		expect(d2).toBeDefined();
 		expect(d2.resistance).toBe(0.5);
 		expect(d2.age).toBeGreaterThanOrEqual(0);
 		expect(d2.age).toBeLessThanOrEqual(1);
+		expect(d2.strength).toBeGreaterThan(0);
 	});
 
 	test("marks superseded messages with reason", () => {
