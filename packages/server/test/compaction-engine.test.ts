@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
-import { compactMessages, compactMessagesWithStats, MIN_COMPACTION_SAVINGS } from "../src/compaction/engine";
+import {
+	type CompactionDetail,
+	compactMessages,
+	compactMessagesWithStats,
+	MIN_COMPACTION_SAVINGS,
+} from "../src/compaction/engine";
 import { DEFAULT_RESISTANCE } from "../src/compaction/strength";
 import type { Message, SystemMessage, ToolMessage } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
@@ -750,5 +755,120 @@ describe("compactMessages", () => {
 			// Should be the exact same object reference since we kept the original
 			expect(toolMsg).toBe(originalToolMsg);
 		});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// CompactionDetail tests
+// ---------------------------------------------------------------------------
+
+describe("CompactionDetail", () => {
+	test("returns detail for each tool message", () => {
+		const longContent = "x\n".repeat(200);
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "read_file", '{"path":"a.ts"}'),
+			toolResult("tc1", longContent),
+			{ role: "user", content: "more" },
+			assistantWithToolCall("tc2", "bash", '{"command":"ls"}'),
+			toolResult("tc2", longContent),
+		];
+
+		const registry = createMockRegistry({
+			read_file: { resistance: 0.2 },
+			bash: { resistance: 0.5 },
+		});
+
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		expect(details.size).toBe(2);
+
+		const d1 = details.get("tc1") as CompactionDetail;
+		expect(d1).toBeDefined();
+		expect(d1.resistance).toBe(0.2);
+		expect(d1.age).toBeGreaterThanOrEqual(0);
+		expect(d1.age).toBeLessThanOrEqual(1);
+
+		const d2 = details.get("tc2") as CompactionDetail;
+		expect(d2).toBeDefined();
+		expect(d2.resistance).toBe(0.5);
+		expect(d2.age).toBeGreaterThanOrEqual(0);
+		expect(d2.age).toBeLessThanOrEqual(1);
+	});
+
+	test("marks superseded messages with reason", () => {
+		const longContent = "x\n".repeat(200);
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "read_file", '{"path":"foo.ts"}'),
+			toolResult("tc1", longContent),
+			{ role: "user", content: "again" },
+			assistantWithToolCall("tc2", "read_file", '{"path":"foo.ts"}'),
+			toolResult("tc2", longContent),
+		];
+
+		const registry = createMockRegistry({ read_file: { resistance: 0.2 } });
+
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const d1 = details.get("tc1") as CompactionDetail;
+		expect(d1).toBeDefined();
+		expect(d1.supersededReason).toBeDefined();
+		expect(typeof d1.supersededReason).toBe("string");
+		expect(d1.supersededReason!.length).toBeGreaterThan(0);
+
+		// The second (latest) read should NOT be superseded
+		const d2 = details.get("tc2") as CompactionDetail;
+		expect(d2).toBeDefined();
+		expect(d2.supersededReason).toBeUndefined();
+	});
+
+	test("marks belowMinSavings when savings are too small", () => {
+		const shortContent = "short output";
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "bash"),
+			toolResult("tc1", shortContent),
+		];
+
+		const registry = createMockRegistry({ bash: { resistance: 0.1 } });
+
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const d1 = details.get("tc1") as CompactionDetail;
+		expect(d1).toBeDefined();
+		expect(d1.wasCompacted).toBe(false);
+		expect(d1.belowMinSavings).toBe(true);
+	});
+
+	test("returns empty details when pressure is zero", () => {
+		const longContent = "x\n".repeat(200);
+		const messages: Message[] = [
+			{ role: "user", content: "go" },
+			assistantWithToolCall("tc1", "bash"),
+			toolResult("tc1", longContent),
+		];
+
+		const registry = createMockRegistry({ bash: {} });
+
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: lowPressureContext(),
+			tools: registry,
+		});
+
+		expect(details.size).toBe(0);
 	});
 });

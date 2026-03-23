@@ -1,7 +1,13 @@
 import type { AssistantMessage, Message } from "../provider/provider";
 import type { ToolRegistry } from "../tool/tool";
 import { defaultCompact } from "./default-strategy";
-import { computeContextPressure, computeMessageStrengths, DEFAULT_RESISTANCE, type StrengthContext } from "./strength";
+import {
+	computeAge,
+	computeContextPressure,
+	computeMessageStrengths,
+	DEFAULT_RESISTANCE,
+	type StrengthContext,
+} from "./strength";
 import { buildSupersessionMap, detectSupersessions, SUPERSESSION_STRENGTH_BOOST } from "./supersession";
 
 /** Minimum character savings required for compaction to be applied.
@@ -29,6 +35,22 @@ export interface CompactionStats {
 	contextPressure: number;
 	/** Total tool messages in the input. */
 	totalToolMessages: number;
+}
+
+/** Per-message compaction decision detail, keyed by tool_call_id. */
+export interface CompactionDetail {
+	/** Quadratic age factor (0.0-1.0). Higher = older. */
+	age: number;
+	/** Tool's declared compaction resistance (0.0-1.0). */
+	resistance: number;
+	/** Final compaction strength before any supersession boost (0.0-1.0). */
+	strength: number;
+	/** Whether this message's content was actually modified by compaction. */
+	wasCompacted: boolean;
+	/** If superseded, the reason string from the supersession detector. */
+	supersededReason?: string;
+	/** If compaction was skipped because savings were below MIN_COMPACTION_SAVINGS. */
+	belowMinSavings?: boolean;
 }
 
 /**
@@ -102,11 +124,19 @@ export function compactMessages(options: CompactionOptions): Message[] {
  * Same as compactMessages but also returns statistics about what was compacted.
  * Use this when you need observability into compaction decisions.
  */
-export function compactMessagesWithStats(options: CompactionOptions): { messages: Message[]; stats: CompactionStats } {
+export function compactMessagesWithStats(options: CompactionOptions): {
+	messages: Message[];
+	stats: CompactionStats;
+	details: Map<string, CompactionDetail>;
+} {
 	return compactMessagesInternal(options);
 }
 
-function compactMessagesInternal(options: CompactionOptions): { messages: Message[]; stats: CompactionStats } {
+function compactMessagesInternal(options: CompactionOptions): {
+	messages: Message[];
+	stats: CompactionStats;
+	details: Map<string, CompactionDetail>;
+} {
 	const { messages, context, tools } = options;
 
 	const contextPressure = computeContextPressure(context);
@@ -123,7 +153,7 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 	// No pressure → return everything unchanged. The LLM benefits from the
 	// full context when there is room in the window.
 	if (contextPressure <= 0) {
-		return { messages, stats: emptyStats };
+		return { messages, stats: emptyStats, details: new Map() };
 	}
 
 	// Supersession detection only runs when there is pressure.
@@ -139,10 +169,11 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 
 	// Nothing to compact — no tool messages with strength and no supersessions.
 	if (strengths.size === 0 && supersessionMap.size === 0) {
-		return { messages, stats: emptyStats };
+		return { messages, stats: emptyStats, details: new Map() };
 	}
 
 	const result: Message[] = [];
+	const details = new Map<string, CompactionDetail>();
 	let compactedCount = 0;
 	let supersededCount = 0;
 
@@ -162,6 +193,7 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 
 		const supersessionReason = supersessionMap.get(toolMsg.tool_call_id);
 		const baseStrength = strengths.get(i);
+		const age = computeAge(i, messages.length);
 
 		if (supersessionReason !== undefined) {
 			// Superseded message under pressure: boost the strength and compact.
@@ -176,8 +208,23 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 				supersededCount++;
 				compactedCount++;
 				result.push({ role: "tool", content: compacted, tool_call_id: toolMsg.tool_call_id });
+				details.set(toolMsg.tool_call_id, {
+					age,
+					resistance: info?.resistance ?? DEFAULT_RESISTANCE,
+					strength: baseStrength ?? 0.5,
+					wasCompacted: true,
+					supersededReason: supersessionReason,
+				});
 			} else {
 				result.push(msg);
+				details.set(toolMsg.tool_call_id, {
+					age,
+					resistance: info?.resistance ?? DEFAULT_RESISTANCE,
+					strength: baseStrength ?? 0.5,
+					wasCompacted: false,
+					supersededReason: supersessionReason,
+					belowMinSavings: true,
+				});
 			}
 			continue;
 		}
@@ -185,6 +232,12 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 		if (baseStrength === undefined || baseStrength <= 0) {
 			// Not superseded and no compaction needed
 			result.push(msg);
+			details.set(toolMsg.tool_call_id, {
+				age,
+				resistance: info?.resistance ?? DEFAULT_RESISTANCE,
+				strength: baseStrength ?? 0,
+				wasCompacted: false,
+			});
 			continue;
 		}
 
@@ -205,8 +258,21 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 				content: compacted,
 				tool_call_id: toolMsg.tool_call_id,
 			});
+			details.set(toolMsg.tool_call_id, {
+				age,
+				resistance: info?.resistance ?? DEFAULT_RESISTANCE,
+				strength: baseStrength,
+				wasCompacted: true,
+			});
 		} else {
 			result.push(msg);
+			details.set(toolMsg.tool_call_id, {
+				age,
+				resistance: info?.resistance ?? DEFAULT_RESISTANCE,
+				strength: baseStrength,
+				wasCompacted: false,
+				belowMinSavings: true,
+			});
 		}
 	}
 
@@ -218,5 +284,6 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 			contextPressure,
 			totalToolMessages,
 		},
+		details,
 	};
 }
