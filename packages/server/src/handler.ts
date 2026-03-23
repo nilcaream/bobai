@@ -171,6 +171,8 @@ export async function handlePrompt(req: PromptRequest) {
 			projectRoot,
 			accessibleDirectories: skillDirectories,
 			systemPrompt,
+			logger: req.logger,
+			logDir: req.logDir,
 			onEvent(event) {
 				routeEventToWs(ws, event);
 			},
@@ -231,6 +233,9 @@ export async function handlePrompt(req: PromptRequest) {
 			tools,
 			projectRoot,
 			accessibleDirectories: skillDirectories,
+			contextWindow,
+			logger: req.logger,
+			logDir: req.logDir,
 			onEvent(event: AgentEvent) {
 				routeEventToWs(ws, event);
 				if (event.type === "tool_call") {
