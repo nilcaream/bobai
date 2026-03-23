@@ -311,7 +311,7 @@ describe("compactMessages with supersession", () => {
 		const messages: Message[] = [
 			{ role: "system", content: "system" },
 			assistantToolCall("c1", "bash", { command: "make" }),
-			toolResult("c1", `${Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n")}\nexit code: 1`),
+			toolResult("c1", `${Array.from({ length: 200 }, (_, i) => `line ${i}`).join("\n")}\nexit code: 1`),
 			assistantToolCall("c2", "bash", { command: "make" }),
 			toolResult("c2", "ok\nexit code: 0"),
 		];

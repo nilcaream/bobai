@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
-import { compactMessages } from "../src/compaction/engine";
+import { compactMessages, compactMessagesWithStats, MIN_COMPACTION_SAVINGS } from "../src/compaction/engine";
 import { DEFAULT_RESISTANCE } from "../src/compaction/strength";
 import type { Message, SystemMessage, ToolMessage } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
@@ -179,7 +179,7 @@ describe("compactMessages", () => {
 	// =======================================================================
 	describe("compaction scenarios", () => {
 		test("compacts tool messages when above threshold", () => {
-			const originalContent = multilineOutput(50);
+			const originalContent = multilineOutput(200);
 			const messages: Message[] = [
 				{ role: "system", content: "sys" },
 				{ role: "user", content: "go" },
@@ -290,7 +290,7 @@ describe("compactMessages", () => {
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "plain"),
-				toolResult("tc1", multilineOutput(50)),
+				toolResult("tc1", multilineOutput(200)),
 			];
 			const result = compactMessages({
 				messages,
@@ -305,7 +305,7 @@ describe("compactMessages", () => {
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
-				toolResult("tc1", multilineOutput(50)),
+				toolResult("tc1", multilineOutput(200)),
 			];
 			const result = compactMessages({
 				messages,
@@ -361,7 +361,7 @@ describe("compactMessages", () => {
 			const sysContent = "You are an assistant.";
 			const userContent = "Please read the file.";
 			const assistantMsg = assistantWithToolCall("tc1", "read_file", '{"path":"foo.ts"}');
-			const toolContent = multilineOutput(80);
+			const toolContent = multilineOutput(200);
 
 			const messages: Message[] = [
 				{ role: "system", content: sysContent },
@@ -496,7 +496,7 @@ describe("compactMessages", () => {
 
 		test("single tool message with high pressure gets compacted", () => {
 			// Even a minimal conversation with just a tool result (unusual but possible)
-			const messages: Message[] = [assistantWithToolCall("tc1", "bash"), toolResult("tc1", multilineOutput(50))];
+			const messages: Message[] = [assistantWithToolCall("tc1", "bash"), toolResult("tc1", multilineOutput(200))];
 			const result = compactMessages({
 				messages,
 				context: highPressureContext(),
@@ -510,7 +510,7 @@ describe("compactMessages", () => {
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "ghost_tool"),
-				toolResult("tc1", multilineOutput(50)),
+				toolResult("tc1", multilineOutput(200)),
 			];
 			// ghost_tool is NOT in the registry
 			const result = compactMessages({
@@ -678,6 +678,77 @@ describe("compactMessages", () => {
 			expect(compacted).toHaveLength(0); // compacted is now also empty!
 			buggyMessages.push(...compacted);
 			expect(buggyMessages).toHaveLength(0); // bug: all messages lost
+		});
+	});
+
+	// =======================================================================
+	// Minimum compaction savings threshold
+	// =======================================================================
+	describe("minimum compaction savings threshold", () => {
+		test("MIN_COMPACTION_SAVINGS is 128", () => {
+			expect(MIN_COMPACTION_SAVINGS).toBe(128);
+		});
+
+		test("skips compaction when savings are below MIN_COMPACTION_SAVINGS", () => {
+			const shortContent = "src\ntarget\nnode_modules";
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				assistantWithToolCall("tc1", "list_directory", '{"path":"/project"}'),
+				toolResult("tc1", shortContent),
+			];
+			// High pressure — would normally compact
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ list_directory: { resistance: 0.1 } }),
+			});
+			const toolMsg = result.find((m) => m.role === "tool") as { content: string };
+			expect(toolMsg.content).toBe(shortContent);
+		});
+
+		test("applies compaction when savings exceed MIN_COMPACTION_SAVINGS", () => {
+			const longContent = "line content here\n".repeat(100); // ~1800 chars
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				assistantWithToolCall("tc1", "list_directory", '{"path":"/project"}'),
+				toolResult("tc1", longContent),
+			];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ list_directory: { resistance: 0.1 } }),
+			});
+			const toolMsg = result.find((m) => m.role === "tool") as { content: string };
+			expect(toolMsg.content).not.toBe(longContent);
+		});
+
+		test("compactedCount excludes messages skipped due to minimum savings", () => {
+			const shortContent = "abc";
+			const messages: Message[] = [
+				{ role: "system", content: "sys" },
+				assistantWithToolCall("tc1", "list_directory", "{}"),
+				toolResult("tc1", shortContent),
+			];
+			const { stats } = compactMessagesWithStats({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ list_directory: { resistance: 0.1 } }),
+			});
+			expect(stats.compacted).toBe(0);
+		});
+
+		test("preserves original message reference when savings are below threshold", () => {
+			const shortContent = "short output";
+			const originalToolMsg = toolResult("tc1", shortContent);
+			const messages: Message[] = [{ role: "system", content: "sys" }, assistantWithToolCall("tc1", "bash"), originalToolMsg];
+			const result = compactMessages({
+				messages,
+				context: highPressureContext(),
+				tools: createMockRegistry({ bash: { resistance: 0.1 } }),
+			});
+			const toolMsg = result.find((m) => m.role === "tool");
+			// Should be the exact same object reference since we kept the original
+			expect(toolMsg).toBe(originalToolMsg);
 		});
 	});
 });

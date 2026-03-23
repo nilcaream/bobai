@@ -4,6 +4,12 @@ import { defaultCompact } from "./default-strategy";
 import { computeContextPressure, computeMessageStrengths, DEFAULT_RESISTANCE, type StrengthContext } from "./strength";
 import { buildSupersessionMap, detectSupersessions, SUPERSESSION_STRENGTH_BOOST } from "./supersession";
 
+/** Minimum character savings required for compaction to be applied.
+ * If compacting saves fewer than this many characters, the original
+ * content is kept. Prevents cases where the COMPACTED marker is
+ * nearly as long as the original content. */
+export const MIN_COMPACTION_SAVINGS = 128;
+
 export interface CompactionOptions {
 	/** Full message array (as loaded from DB). */
 	messages: Message[];
@@ -158,15 +164,21 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 		const baseStrength = strengths.get(i);
 
 		if (supersessionReason !== undefined) {
-			supersededCount++;
-			compactedCount++;
 			// Superseded message under pressure: boost the strength and compact.
 			const boostedStrength = Math.min(1, (baseStrength ?? 0.5) * SUPERSESSION_STRENGTH_BOOST);
 			const tool = tools.get(toolName);
 			const compacted = tool?.compact
 				? tool.compact(toolMsg.content, boostedStrength, callArgs)
 				: defaultCompact(toolMsg.content, boostedStrength, toolName);
-			result.push({ role: "tool", content: compacted, tool_call_id: toolMsg.tool_call_id });
+
+			// Only apply compaction if it saves enough characters
+			if (toolMsg.content.length - compacted.length >= MIN_COMPACTION_SAVINGS) {
+				supersededCount++;
+				compactedCount++;
+				result.push({ role: "tool", content: compacted, tool_call_id: toolMsg.tool_call_id });
+			} else {
+				result.push(msg);
+			}
 			continue;
 		}
 
@@ -177,7 +189,6 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 		}
 
 		// Normal compaction (not superseded, but has strength)
-		compactedCount++;
 		const tool = tools.get(toolName);
 		let compacted: string;
 		if (tool?.compact) {
@@ -186,11 +197,17 @@ function compactMessagesInternal(options: CompactionOptions): { messages: Messag
 			compacted = defaultCompact(toolMsg.content, baseStrength, toolName);
 		}
 
-		result.push({
-			role: "tool",
-			content: compacted,
-			tool_call_id: toolMsg.tool_call_id,
-		});
+		// Only apply compaction if it saves enough characters
+		if (toolMsg.content.length - compacted.length >= MIN_COMPACTION_SAVINGS) {
+			compactedCount++;
+			result.push({
+				role: "tool",
+				content: compacted,
+				tool_call_id: toolMsg.tool_call_id,
+			});
+		} else {
+			result.push(msg);
+		}
 	}
 
 	return {
