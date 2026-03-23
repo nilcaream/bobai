@@ -828,7 +828,7 @@ describe("CompactionDetail", () => {
 		expect(d1).toBeDefined();
 		expect(d1.supersededReason).toBeDefined();
 		expect(typeof d1.supersededReason).toBe("string");
-		expect(d1.supersededReason!.length).toBeGreaterThan(0);
+		expect(d1.supersededReason?.length).toBeGreaterThan(0);
 
 		// The second (latest) read should NOT be superseded
 		const d2 = details.get("tc2") as CompactionDetail;
