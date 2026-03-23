@@ -113,11 +113,15 @@ export function createServer(options: ServerOptions) {
 				});
 
 				if (contextWindow <= 0 || promptTokens <= 0) {
-					return Response.json({ messages: storedMessages, stats: null, reason: "no context pressure data" });
+					return Response.json({ messages: storedMessages, stats: null, details: null, reason: "no context pressure data" });
 				}
 
 				const tools = createCompactionRegistry();
-				const { messages: compacted, stats } = compactMessagesWithStats({
+				const {
+					messages: compacted,
+					stats,
+					details,
+				} = compactMessagesWithStats({
 					messages,
 					context: { promptTokens, contextWindow },
 					tools,
@@ -146,7 +150,7 @@ export function createServer(options: ServerOptions) {
 					);
 				});
 
-				return Response.json({ messages: compactedStored, stats });
+				return Response.json({ messages: compactedStored, stats, details: Object.fromEntries(details) });
 			}
 
 			if (url.pathname === "/bobai/models") {
