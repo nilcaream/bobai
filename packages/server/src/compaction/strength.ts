@@ -12,8 +12,8 @@ export interface StrengthContext {
 	threshold?: number;
 }
 
-/** Default threshold: compaction activates when context usage exceeds 40%. */
-export const DEFAULT_THRESHOLD = 0.4;
+/** Default threshold: compaction activates when context usage exceeds 60%. */
+export const DEFAULT_THRESHOLD = 0.6;
 
 /**
  * Compute the effective context pressure (0.0-1.0).

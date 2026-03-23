@@ -18,22 +18,22 @@ describe("computeContextPressure", () => {
 		expect(computeContextPressure({ promptTokens: 100, contextWindow: -1000 })).toBe(0);
 	});
 
-	test("returns 0 when usage is below default threshold (40%)", () => {
-		expect(computeContextPressure({ promptTokens: 300, contextWindow: 1000 })).toBe(0);
+	test("returns 0 when usage is below default threshold (60%)", () => {
+		expect(computeContextPressure({ promptTokens: 500, contextWindow: 1000 })).toBe(0);
 	});
 
 	test("returns 0 when usage is exactly at threshold", () => {
-		expect(computeContextPressure({ promptTokens: 400, contextWindow: 1000 })).toBe(0);
+		expect(computeContextPressure({ promptTokens: 600, contextWindow: 1000 })).toBe(0);
 	});
 
 	test("returns positive when usage is above threshold", () => {
-		const pressure = computeContextPressure({ promptTokens: 500, contextWindow: 1000 });
+		const pressure = computeContextPressure({ promptTokens: 700, contextWindow: 1000 });
 		expect(pressure).toBeGreaterThan(0);
 	});
 
 	test("scales linearly from 0 to 1 between threshold and full", () => {
-		// At 70% usage with default 40% threshold: (0.7 - 0.4) / (1 - 0.4) = 0.5
-		const pressure = computeContextPressure({ promptTokens: 700, contextWindow: 1000 });
+		// At 80% usage with default 60% threshold: (0.8 - 0.6) / (1 - 0.6) = 0.5
+		const pressure = computeContextPressure({ promptTokens: 800, contextWindow: 1000 });
 		expect(pressure).toBeCloseTo(0.5, 10);
 	});
 
@@ -58,14 +58,14 @@ describe("computeContextPressure", () => {
 		expect(pressure).toBeCloseTo(0.5, 10);
 	});
 
-	test("usage at 70% with default threshold gives 0.5", () => {
-		// (0.7 - 0.4) / (1 - 0.4) = 0.3 / 0.6 = 0.5
+	test("usage at 70% with default threshold gives 0.25", () => {
+		// (0.7 - 0.6) / (1 - 0.6) = 0.1 / 0.4 = 0.25
 		const pressure = computeContextPressure({ promptTokens: 700, contextWindow: 1000 });
-		expect(pressure).toBeCloseTo(0.5, 10);
+		expect(pressure).toBeCloseTo(0.25, 10);
 	});
 
-	test("DEFAULT_THRESHOLD is 0.4", () => {
-		expect(DEFAULT_THRESHOLD).toBe(0.4);
+	test("DEFAULT_THRESHOLD is 0.6", () => {
+		expect(DEFAULT_THRESHOLD).toBe(0.6);
 	});
 });
 
