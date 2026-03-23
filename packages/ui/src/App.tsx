@@ -13,6 +13,13 @@ interface ContextMessage {
 	metadata: Record<string, unknown> | null;
 }
 
+interface CompactionStats {
+	compacted: number;
+	superseded: number;
+	contextPressure: number;
+	totalToolMessages: number;
+}
+
 function groupParts(parts: MessagePart[]): Panel[] {
 	// Pass 1: Create panels for each part
 	const raw: Panel[] = [];
@@ -88,6 +95,9 @@ function truncateChars(text: string, charLimit: number): string {
 	return text.slice(0, charLimit) + `... (${text.length - charLimit} more chars)`;
 }
 
+const VIEW_MODES = ["chat", "context", "compaction"] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
+
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 
@@ -119,8 +129,14 @@ export function App() {
 	const defaultStatus = useRef("");
 	const pendingNewTitle = useRef<string | null>(null);
 	const historyEntries = useRef<string[]>([]);
-	const [view, setView] = useState<{ mode: "chat" | "context"; lineLimit: number }>({ mode: "chat", lineLimit: 48 });
+	const [view, setView] = useState<{ mode: ViewMode; lineLimit: number }>({
+		mode: "chat",
+		lineLimit: 48,
+	});
 	const [contextMessages, setContextMessages] = useState<ContextMessage[] | null>(null);
+	const [compactionData, setCompactionData] = useState<{ messages: ContextMessage[]; stats: CompactionStats | null } | null>(
+		null,
+	);
 	const savedDraft = useRef("");
 	const fetchGen = useRef(0);
 	const messagesRef = useRef<HTMLDivElement>(null);
@@ -236,13 +252,27 @@ export function App() {
 			.catch(() => setContextMessages(null));
 	}, [getSessionId]);
 
+	const fetchCompactedContext = useCallback(() => {
+		const sid = getSessionId();
+		if (!sid) {
+			setCompactionData(null);
+			return;
+		}
+		fetch(`/bobai/session/${sid}/context?compacted=true`)
+			.then((res) => res.json())
+			.then((data: { messages: ContextMessage[]; stats: CompactionStats | null }) => {
+				setCompactionData({ messages: data.messages, stats: data.stats });
+			})
+			.catch(() => setCompactionData(null));
+	}, [getSessionId]);
+
 	// Adjust textarea height when navigating history
 	// biome-ignore lint/correctness/useExhaustiveDependencies: adjustHeight is stable via useCallback
 	useEffect(() => {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const isReadOnly = !!parentId || view.mode === "context";
+	const isReadOnly = !!parentId || view.mode === "context" || view.mode === "compaction";
 	const activeDotCommands = isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
 
 	function clearInput() {
@@ -405,10 +435,12 @@ export function App() {
 			// View command: select by index or cycle when no args
 			if (parsed.command === "view") {
 				const arg = parsed.args.trim();
-				const viewMap: Record<string, "chat" | "context"> = { "1": "chat", "2": "context" };
+				const viewMap: Record<string, ViewMode> = { "1": "chat", "2": "context", "3": "compaction" };
 				setView((prev) => {
-					const next = arg ? (viewMap[arg] ?? prev.mode) : prev.mode === "chat" ? "context" : "chat";
+					const currentIdx = VIEW_MODES.indexOf(prev.mode);
+					const next = arg ? (viewMap[arg] ?? prev.mode) : VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length];
 					if (next === "context") fetchContext();
+					if (next === "compaction") fetchCompactedContext();
 					return { ...prev, mode: next };
 				});
 				clearInput();
@@ -492,8 +524,10 @@ export function App() {
 		// View command without space (e.g. ".view", ".v", ".vi", ".vie")
 		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "view") {
 			setView((prev) => {
-				const next = prev.mode === "chat" ? "context" : "chat";
+				const currentIdx = VIEW_MODES.indexOf(prev.mode);
+				const next = VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length];
 				if (next === "context") fetchContext();
+				if (next === "compaction") fetchCompactedContext();
 				return { ...prev, mode: next };
 			});
 			clearInput();
@@ -539,8 +573,8 @@ export function App() {
 			return;
 		}
 
-		if (view.mode === "context") {
-			addErrorMessage("Context view is read-only");
+		if (view.mode === "context" || view.mode === "compaction") {
+			addErrorMessage("Read-only view");
 			clearInput();
 			return;
 		}
@@ -727,7 +761,8 @@ export function App() {
 		} else if (parsed.command === "view") {
 			const views = [
 				{ index: 1, name: "Chat", desc: "Grouped panels, markdown" },
-				{ index: 2, name: "Context", desc: "Raw LLM context, one panel per message" },
+				{ index: 2, name: "Context", desc: "Raw DB messages, plain text" },
+				{ index: 3, name: "Compaction", desc: "Compacted view (what LLM sees)" },
 			];
 			content = views.map((v) => (
 				<div key={v.index}>
@@ -812,22 +847,17 @@ export function App() {
 		return elements;
 	}
 
-	function renderContextPanels() {
-		if (!contextMessages) {
-			return [
-				<div key="empty" className="panel panel--context">
-					No session context available.
-				</div>,
-			];
-		}
-
+	function renderRawMessagePanels(
+		msgs: ContextMessage[],
+		limit: number,
+		startKey: number,
+	): { elements: React.ReactNode[]; nextKey: number } {
 		const elements: React.ReactNode[] = [];
-		let key = 0;
-		const limit = view.lineLimit;
+		let key = startKey;
 
-		// Build a map from tool_call_id → tool function name
+		// Build a map from tool_call_id -> tool function name
 		const toolCallNames = new Map<string, string>();
-		for (const msg of contextMessages) {
+		for (const msg of msgs) {
 			if (msg.role === "assistant" && msg.metadata?.tool_calls) {
 				const calls = msg.metadata.tool_calls as Array<{ id: string; function: { name: string } }>;
 				for (const tc of calls) {
@@ -836,19 +866,17 @@ export function App() {
 			}
 		}
 
-		for (const msg of contextMessages) {
+		for (const msg of msgs) {
 			if (msg.role === "system") {
-				const body = truncateContent(msg.content, limit);
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<Markdown>{`# system\n\n${body}`}</Markdown>
+						<pre className="context-raw">{`# system\n\n${truncateContent(msg.content, limit)}`}</pre>
 					</div>,
 				);
 			} else if (msg.role === "user") {
-				const body = truncateContent(msg.content, limit);
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<Markdown>{`# user\n\n${body}`}</Markdown>
+						<pre className="context-raw">{`# user\n\n${truncateContent(msg.content, limit)}`}</pre>
 					</div>,
 				);
 			} else if (msg.role === "assistant") {
@@ -857,43 +885,72 @@ export function App() {
 					| undefined;
 
 				if (toolCalls && toolCalls.length > 0) {
-					// Each tool call gets its own panel
 					for (const tc of toolCalls) {
-						const header = `# assistant | ${tc.id}`;
-						const callStr = `${tc.function.name}(${tc.function.arguments})`;
-						const body = truncateChars(callStr, 512);
 						elements.push(
 							<div key={key++} className="panel panel--context">
-								<Markdown>{`${header}\n\n${body}`}</Markdown>
+								<pre className="context-raw">{`# assistant | ${tc.id}\n\n${truncateChars(`${tc.function.name}(${tc.function.arguments})`, 512)}`}</pre>
 							</div>,
 						);
 					}
 				}
 
-				// Text-only assistant message (no tool calls)
 				if (msg.content) {
-					const body = truncateContent(msg.content, limit);
 					elements.push(
 						<div key={key++} className="panel panel--context">
-							<Markdown>{`# assistant\n\n${body}`}</Markdown>
+							<pre className="context-raw">{`# assistant\n\n${truncateContent(msg.content, limit)}`}</pre>
 						</div>,
 					);
 				}
 			} else if (msg.role === "tool") {
 				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
 				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
-				const header = `# tool | ${toolCallId ?? ""} | ${toolName}`;
 				const rawContent = msg.content || "(no output)";
-				const body = `\`\`\`\n${truncateContent(rawContent, limit)}\n\`\`\``;
-
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<Markdown>{`${header}\n\n${body}`}</Markdown>
+						<pre className="context-raw">{`# tool | ${toolCallId ?? ""} | ${toolName}\n\n${truncateContent(rawContent, limit)}`}</pre>
 					</div>,
 				);
 			}
 		}
 
+		return { elements, nextKey: key };
+	}
+
+	function renderContextPanels() {
+		if (!contextMessages) {
+			return [
+				<div key="empty" className="panel panel--context">
+					No session context available.
+				</div>,
+			];
+		}
+		const { elements } = renderRawMessagePanels(contextMessages, view.lineLimit, 0);
+		return elements;
+	}
+
+	function renderCompactionPanels() {
+		if (!compactionData) {
+			return [
+				<div key="empty" className="panel panel--context">
+					No compaction data available.
+				</div>,
+			];
+		}
+		const elements: React.ReactNode[] = [];
+		let key = 0;
+
+		// Stats header
+		if (compactionData.stats) {
+			const s = compactionData.stats;
+			elements.push(
+				<div key={key++} className="panel panel--context">
+					<pre className="context-raw">{`# compaction stats\n\npressure: ${(s.contextPressure * 100).toFixed(1)}%\ncompacted: ${s.compacted} / ${s.totalToolMessages} tool messages\nsuperseded: ${s.superseded}`}</pre>
+				</div>,
+			);
+		}
+
+		const { elements: msgElements } = renderRawMessagePanels(compactionData.messages, view.lineLimit, key);
+		elements.push(...msgElements);
 		return elements;
 	}
 
@@ -916,7 +973,7 @@ export function App() {
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
-				{view.mode === "chat" ? renderPanels() : renderContextPanels()}
+				{view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels()}
 			</div>
 
 			{stagedSkills.length > 0 && (
