@@ -8,7 +8,7 @@ import {
 	DEFAULT_RESISTANCE,
 	type StrengthContext,
 } from "./strength";
-import { buildSupersessionMap, detectSupersessions, SUPERSESSION_STRENGTH_BOOST } from "./supersession";
+import { buildSupersessionMap, detectSupersessions, supersededMarker } from "./supersession";
 
 /** Minimum character savings required for compaction to be applied.
  * If compacting saves fewer than this many characters, the original
@@ -51,6 +51,10 @@ export interface CompactionDetail {
 	supersededReason?: string;
 	/** If compaction was skipped because savings were below MIN_COMPACTION_SAVINGS. */
 	belowMinSavings?: boolean;
+	/** Characters saved by compaction (original.length - compacted.length). Only set when wasCompacted=true. */
+	savedChars?: number;
+	/** The tool_call_id that supersedes this message. Only set when superseded. */
+	supersededBy?: string;
 }
 
 /**
@@ -105,8 +109,8 @@ function buildCallArgsMap(messages: Message[]): Map<string, Record<string, unkno
  *
  * Returns a new message array with tool outputs compacted according to
  * their strength (context pressure × age × resistance). Superseded messages
- * (detected by heuristic rules) receive a strength boost and are compacted
- * more aggressively.
+ * (detected by heuristic rules) are replaced with a short marker indicating
+ * that the output has been superseded.
  *
  * All compaction — including supersession — is gated behind context pressure.
  * When pressure is zero the full conversation is more valuable to the LLM
@@ -160,6 +164,13 @@ function compactMessagesInternal(options: CompactionOptions): {
 	const supersessions = detectSupersessions(messages);
 	const supersessionMap = buildSupersessionMap(supersessions);
 
+	const supersedingIdMap = new Map<string, string>();
+	for (const s of supersessions) {
+		if (s.supersedingId) {
+			supersedingIdMap.set(s.toolCallId, s.supersedingId);
+		}
+	}
+
 	const toolCallMap = buildToolCallMap(messages, tools);
 	const callArgsMap = buildCallArgsMap(messages);
 
@@ -196,34 +207,32 @@ function compactMessagesInternal(options: CompactionOptions): {
 		const age = computeAge(i, messages.length);
 
 		if (supersessionReason !== undefined) {
-			// Superseded message under pressure: boost the strength and compact.
-			const boostedStrength = Math.min(1, (baseStrength ?? 0.5) * SUPERSESSION_STRENGTH_BOOST);
-			const tool = tools.get(toolName);
-			const compacted = tool?.compact
-				? tool.compact(toolMsg.content, boostedStrength, callArgs)
-				: defaultCompact(toolMsg.content, boostedStrength, toolName);
+			// Superseded message: replace with a one-liner marker.
+			const marker = supersededMarker(toolName, supersessionReason);
 
-			// Only apply compaction if it saves enough characters
-			if (toolMsg.content.length - compacted.length >= MIN_COMPACTION_SAVINGS) {
+			if (toolMsg.content.length - marker.length >= MIN_COMPACTION_SAVINGS) {
 				supersededCount++;
 				compactedCount++;
-				result.push({ role: "tool", content: compacted, tool_call_id: toolMsg.tool_call_id });
+				result.push({ role: "tool", content: marker, tool_call_id: toolMsg.tool_call_id });
 				details.set(toolMsg.tool_call_id, {
 					age,
 					resistance: info?.resistance ?? DEFAULT_RESISTANCE,
-					strength: baseStrength ?? 0.5,
+					strength: baseStrength ?? 0,
 					wasCompacted: true,
 					supersededReason: supersessionReason,
+					savedChars: toolMsg.content.length - marker.length,
+					supersededBy: supersedingIdMap.get(toolMsg.tool_call_id),
 				});
 			} else {
 				result.push(msg);
 				details.set(toolMsg.tool_call_id, {
 					age,
 					resistance: info?.resistance ?? DEFAULT_RESISTANCE,
-					strength: baseStrength ?? 0.5,
+					strength: baseStrength ?? 0,
 					wasCompacted: false,
 					supersededReason: supersessionReason,
 					belowMinSavings: true,
+					supersededBy: supersedingIdMap.get(toolMsg.tool_call_id),
 				});
 			}
 			continue;
@@ -263,6 +272,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				resistance: info?.resistance ?? DEFAULT_RESISTANCE,
 				strength: baseStrength,
 				wasCompacted: true,
+				savedChars: toolMsg.content.length - compacted.length,
 			});
 		} else {
 			result.push(msg);

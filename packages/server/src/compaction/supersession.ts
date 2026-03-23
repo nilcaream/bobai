@@ -8,6 +8,8 @@ import { COMPACTION_MARKER } from "./default-strategy";
 export interface Supersession {
 	toolCallId: string;
 	reason: string;
+	/** The tool_call_id of the call that supersedes this one. Undefined for self-supersession (e.g. failed bash). */
+	supersedingId?: string;
 }
 
 /**
@@ -103,7 +105,13 @@ function detectRetryCorrection(invocations: ToolInvocation[]): Supersession[] {
 		const argValue = inv.args[primaryKey];
 		if (typeof argValue !== "string") continue;
 
-		const groupKey = `${inv.toolName}:${argValue}`;
+		let groupKey = `${inv.toolName}:${argValue}`;
+		// For read_file, include from/to in the key so different ranges aren't grouped
+		if (inv.toolName === "read_file") {
+			const from = inv.args.from;
+			const to = inv.args.to;
+			groupKey = `${groupKey}:${from ?? ""}:${to ?? ""}`;
+		}
 		const group = groups.get(groupKey);
 		if (group) {
 			group.push(inv);
@@ -114,13 +122,16 @@ function detectRetryCorrection(invocations: ToolInvocation[]): Supersession[] {
 
 	for (const [, group] of groups) {
 		if (group.length <= 1) continue;
-		// All except the last are superseded
+		// All except the last are superseded; the last element is the superseder
+		const superseder = group[group.length - 1];
+		if (!superseder) continue;
 		for (let i = 0; i < group.length - 1; i++) {
 			const inv = group[i];
 			if (!inv) continue;
 			supersessions.push({
 				toolCallId: inv.toolCallId,
 				reason: `superseded by later ${inv.toolName} call with same args`,
+				supersedingId: superseder.toolCallId,
 			});
 		}
 	}
@@ -135,8 +146,8 @@ function detectRetryCorrection(invocations: ToolInvocation[]): Supersession[] {
 function detectStaleReads(invocations: ToolInvocation[]): Supersession[] {
 	const supersessions: Supersession[] = [];
 
-	// Collect all file paths that were written/edited, with the latest invocation index
-	const writtenPaths = new Map<string, number>(); // path → latest resultIndex
+	// Collect all file paths that were written/edited, with the latest invocation index and its toolCallId
+	const writtenPaths = new Map<string, { resultIndex: number; toolCallId: string }>();
 
 	for (const inv of invocations) {
 		if (inv.toolName !== "write_file" && inv.toolName !== "edit_file") continue;
@@ -144,8 +155,8 @@ function detectStaleReads(invocations: ToolInvocation[]): Supersession[] {
 		if (!path) continue;
 
 		const existing = writtenPaths.get(path);
-		if (existing === undefined || inv.resultIndex > existing) {
-			writtenPaths.set(path, inv.resultIndex);
+		if (existing === undefined || inv.resultIndex > existing.resultIndex) {
+			writtenPaths.set(path, { resultIndex: inv.resultIndex, toolCallId: inv.toolCallId });
 		}
 	}
 
@@ -155,11 +166,12 @@ function detectStaleReads(invocations: ToolInvocation[]): Supersession[] {
 		const path = typeof inv.args.path === "string" ? inv.args.path : null;
 		if (!path) continue;
 
-		const writeIdx = writtenPaths.get(path);
-		if (writeIdx !== undefined && inv.resultIndex < writeIdx) {
+		const writeInfo = writtenPaths.get(path);
+		if (writeInfo !== undefined && inv.resultIndex < writeInfo.resultIndex) {
 			supersessions.push({
 				toolCallId: inv.toolCallId,
 				reason: `stale read: file was later modified by edit_file or write_file`,
+				supersedingId: writeInfo.toolCallId,
 			});
 		}
 	}
@@ -231,13 +243,16 @@ function detectSearchRefinement(invocations: ToolInvocation[]): Supersession[] {
 
 	for (const [, group] of groups) {
 		if (group.length <= 1) continue;
-		// All except the last are superseded
+		// All except the last are superseded; the last element is the superseder
+		const superseder = group[group.length - 1];
+		if (!superseder) continue;
 		for (let i = 0; i < group.length - 1; i++) {
 			const inv = group[i];
 			if (!inv) continue;
 			supersessions.push({
 				toolCallId: inv.toolCallId,
 				reason: `superseded by later ${inv.toolName} refinement`,
+				supersedingId: superseder.toolCallId,
 			});
 		}
 	}

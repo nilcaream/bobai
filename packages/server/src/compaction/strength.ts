@@ -29,8 +29,9 @@ export function computeContextPressure(ctx: StrengthContext): number {
 
 /**
  * Compute the age factor for a tool message (0.0-1.0).
- * Older messages approach 1.0; newer messages approach 0.0.
- * Only tool messages have meaningful age — system/user/assistant messages return 0.
+ * Uses a quadratic curve (age²) so recent messages are strongly protected
+ * while old messages are compacted aggressively. Messages in the most recent
+ * 30% of the conversation get an effective age factor below 0.09.
  *
  * @param messageIndex - Zero-based index in the full message array
  * @param totalMessages - Total number of messages in the conversation

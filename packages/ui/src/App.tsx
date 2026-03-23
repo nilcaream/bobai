@@ -27,6 +27,8 @@ interface CompactionDetail {
 	wasCompacted: boolean;
 	supersededReason?: string;
 	belowMinSavings?: boolean;
+	savedChars?: number;
+	supersededBy?: string;
 }
 
 function formatToolHeader(toolCallId: string, toolName: string, detail: CompactionDetail | undefined): string {
@@ -38,13 +40,22 @@ function formatToolHeader(toolCallId: string, toolName: string, detail: Compacti
 	}
 
 	parts.push(`age=${detail.age.toFixed(3)}`);
-	parts.push(`resist=${detail.resistance}`);
+	parts.push(`resistance=${detail.resistance}`);
 	parts.push(`strength=${detail.strength.toFixed(3)}`);
 
 	if (detail.supersededReason) {
-		parts.push(`SUPERSEDED: ${detail.supersededReason}`);
+		const savings = detail.savedChars !== undefined ? ` | saved ${detail.savedChars} chars` : "";
+		if (detail.supersededBy) {
+			parts.push(`superseded by ${detail.supersededBy}${savings}`);
+		} else {
+			parts.push(`superseded${savings}`);
+		}
 	} else if (detail.wasCompacted) {
-		parts.push("compacted");
+		if (detail.savedChars !== undefined) {
+			parts.push(`compacted (saved ${detail.savedChars} chars)`);
+		} else {
+			parts.push("compacted");
+		}
 	} else if (detail.belowMinSavings) {
 		parts.push("savings below minimum");
 	} else if (detail.strength <= 0) {
