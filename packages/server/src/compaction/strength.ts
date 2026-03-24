@@ -28,18 +28,35 @@ export function computeContextPressure(ctx: StrengthContext): number {
 }
 
 /**
+ * Position in the conversation (0.0-1.0, from oldest to newest) where the
+ * age curve transitions from "mostly compactable" to "mostly protected".
+ * At 0.7 the newest 30% of messages are strongly protected.
+ */
+export const AGE_INFLECTION = 0.7;
+
+/**
+ * Controls steepness of the S-curve around the inflection point.
+ * Higher values produce a sharper transition; 8 gives a moderate gradient
+ * spanning roughly 15% of the conversation on each side of the inflection.
+ */
+export const AGE_STEEPNESS = 8;
+
+/**
  * Compute the age factor for a tool message (0.0-1.0).
- * Uses a quadratic curve (age²) so recent messages are strongly protected
- * while old messages are compacted aggressively. Messages in the most recent
- * 30% of the conversation get an effective age factor below 0.09.
+ * Uses an arctan S-curve centered at {@link AGE_INFLECTION} so that messages
+ * beyond the inflection (older) are aggressively compactable while messages
+ * before it (newer) are strongly protected.
  *
  * @param messageIndex - Zero-based index in the full message array
  * @param totalMessages - Total number of messages in the conversation
  */
 export function computeAge(messageIndex: number, totalMessages: number): number {
 	if (totalMessages <= 1) return 0;
-	const linearAge = 1 - messageIndex / (totalMessages - 1);
-	return linearAge * linearAge;
+	const position = messageIndex / (totalMessages - 1); // 0 = oldest, 1 = newest
+	const raw = Math.atan(AGE_STEEPNESS * (AGE_INFLECTION - position));
+	const rawMin = Math.atan(AGE_STEEPNESS * (AGE_INFLECTION - 1)); // at position = 1
+	const rawMax = Math.atan(AGE_STEEPNESS * AGE_INFLECTION); // at position = 0
+	return (raw - rawMin) / (rawMax - rawMin);
 }
 
 /** Default compaction resistance for tools that don't declare one. */
@@ -48,7 +65,11 @@ export const DEFAULT_RESISTANCE = 0.3;
 /**
  * Compute the final compaction strength for a single tool message.
  *
- * strength = effective_cp × weighted_average(age, 1 - resistance)
+ * strength = contextPressure × age × compactability
+ *
+ * The multiplicative formula ensures that recent messages (age ≈ 0) have
+ * near-zero strength regardless of tool resistance, while old messages
+ * with low resistance are compacted aggressively.
  *
  * @param contextPressure - Effective context pressure (0.0-1.0), from computeContextPressure()
  * @param age - Message age factor (0.0-1.0), from computeAge()
@@ -58,9 +79,7 @@ export const DEFAULT_RESISTANCE = 0.3;
 export function computeStrength(contextPressure: number, age: number, resistance: number): number {
 	if (contextPressure <= 0) return 0;
 	const compactability = 1 - resistance;
-	// Weighted average of age and compactability (equal weight)
-	const factor = (age + compactability) / 2;
-	return Math.min(1, contextPressure * factor);
+	return Math.min(1, contextPressure * age * compactability);
 }
 
 /**
