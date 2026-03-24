@@ -34,6 +34,8 @@ export const editFileTool: Tool = {
 
 	compactionResistance: 0.8,
 
+	compactableArgs: ["old_string", "new_string"],
+
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";
 		const oldString = typeof args.old_string === "string" ? args.old_string : "";

@@ -16,6 +16,7 @@ interface ContextMessage {
 interface CompactionStats {
 	compacted: number;
 	superseded: number;
+	assistantArgsCompacted: number;
 	contextPressure: number;
 	totalToolMessages: number;
 }
@@ -28,6 +29,7 @@ interface CompactionDetail {
 	supersededReason?: string;
 	belowMinSavings?: boolean;
 	savedChars?: number;
+	savedArgsChars?: number;
 	supersededBy?: string;
 }
 
@@ -45,17 +47,23 @@ function formatToolHeader(toolCallId: string, toolName: string, detail: Compacti
 
 	if (detail.supersededReason) {
 		const savings = detail.savedChars !== undefined ? ` | saved ${detail.savedChars} chars` : "";
+		const argsSavings = detail.savedArgsChars !== undefined ? ` + ${detail.savedArgsChars} args` : "";
 		if (detail.supersededBy) {
-			parts.push(`superseded by ${detail.supersededBy}${savings}`);
+			parts.push(`superseded by ${detail.supersededBy}${savings}${argsSavings}`);
 		} else {
-			parts.push(`superseded${savings}`);
+			parts.push(`superseded${savings}${argsSavings}`);
 		}
 	} else if (detail.wasCompacted) {
 		if (detail.savedChars !== undefined) {
-			parts.push(`compacted (saved ${detail.savedChars} chars)`);
+			const argsSavings = detail.savedArgsChars !== undefined ? ` + ${detail.savedArgsChars} args` : "";
+			parts.push(`compacted (saved ${detail.savedChars} chars${argsSavings})`);
+		} else if (detail.savedArgsChars !== undefined) {
+			parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
 		} else {
 			parts.push("compacted");
 		}
+	} else if (detail.savedArgsChars !== undefined) {
+		parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
 	} else if (detail.belowMinSavings) {
 		parts.push("savings below minimum");
 	} else if (detail.strength <= 0) {

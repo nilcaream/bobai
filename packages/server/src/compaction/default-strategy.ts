@@ -35,3 +35,33 @@ export function defaultCompact(output: string, strength: number, toolName: strin
 	const removed = totalLines - keepCount;
 	return `${kept}\n${COMPACTION_MARKER} ${removed} more lines from ${toolName} output truncated`;
 }
+
+/**
+ * Compact a tool_call argument value (e.g. the `content` field of a write_file call).
+ *
+ * Same line-based truncation as defaultCompact but with a marker that identifies
+ * the field as an argument rather than tool output.
+ *
+ * @param value - The argument string value
+ * @param strength - Compaction strength (0.0-1.0)
+ * @param toolName - Name of the tool (for the notice)
+ * @param argName - Name of the argument field (for the notice)
+ * @returns The compacted value, or the original if no compaction needed
+ */
+export function compactArgument(value: string, strength: number, toolName: string, argName: string): string {
+	if (strength <= 0) return value;
+
+	const lines = value.split("\n");
+	const totalLines = lines.length;
+
+	if (totalLines <= MIN_KEEP_LINES) return value;
+
+	const keepRatio = 1 - strength;
+	const keepCount = Math.max(MIN_KEEP_LINES, Math.floor(totalLines * keepRatio));
+
+	if (keepCount >= totalLines) return value;
+
+	const kept = lines.slice(0, keepCount).join("\n");
+	const removed = totalLines - keepCount;
+	return `${kept}\n${COMPACTION_MARKER} ${removed} lines from ${toolName} ${argName} argument omitted`;
+}

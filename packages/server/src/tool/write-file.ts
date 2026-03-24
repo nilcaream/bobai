@@ -30,6 +30,8 @@ export const writeFileTool: Tool = {
 
 	compactionResistance: 0.7,
 
+	compactableArgs: ["content"],
+
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";
 		return `▸ Writing ${filePath}`;

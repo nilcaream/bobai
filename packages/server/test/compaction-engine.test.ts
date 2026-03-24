@@ -20,6 +20,7 @@ function createMockRegistry(
 		{
 			resistance?: number;
 			compact?: (output: string, strength: number, args: Record<string, unknown>) => string;
+			compactableArgs?: string[];
 		}
 	>,
 ): ToolRegistry {
@@ -36,6 +37,7 @@ function createMockRegistry(
 				mergeable: true,
 				compactionResistance: t.resistance,
 				compact: t.compact,
+				compactableArgs: t.compactableArgs,
 				formatCall: () => "",
 				execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: true }),
 			} as ReturnType<ToolRegistry["get"]>;
@@ -996,5 +998,257 @@ describe("CompactionDetail", () => {
 		});
 		const d1 = details.get("tc1");
 		expect(d1?.supersededBy).toBeUndefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Assistant tool_call argument compaction
+// ---------------------------------------------------------------------------
+
+describe("assistant tool_call argument compaction", () => {
+	/** Large content string that will be used as a write_file content argument. */
+	const largeContent = Array.from({ length: 200 }, (_, i) => `file line ${i + 1}`).join("\n");
+
+	/** Build a write_file assistant message with large content in the arguments. */
+	function writeFileAssistant(toolCallId: string, filePath: string, content: string): Message {
+		return {
+			role: "assistant",
+			content: null,
+			tool_calls: [
+				{
+					id: toolCallId,
+					type: "function",
+					function: {
+						name: "write_file",
+						arguments: JSON.stringify({ path: filePath, content }),
+					},
+				},
+			],
+		};
+	}
+
+	/** Build an edit_file assistant message with large old_string/new_string in arguments. */
+	function editFileAssistant(toolCallId: string, filePath: string, oldStr: string, newStr: string): Message {
+		return {
+			role: "assistant",
+			content: null,
+			tool_calls: [
+				{
+					id: toolCallId,
+					type: "function",
+					function: {
+						name: "edit_file",
+						arguments: JSON.stringify({ path: filePath, old_string: oldStr, new_string: newStr }),
+					},
+				},
+			],
+		};
+	}
+
+	test("compacts write_file content argument under pressure", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			writeFileAssistant("tc1", "big.md", largeContent),
+			toolResult("tc1", "Wrote 3000 bytes to big.md"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		// The assistant message should have been modified
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.path).toBe("big.md"); // path preserved
+		expect(args.content).toContain("# COMPACTED"); // content compacted
+		expect(args.content.length).toBeLessThan(largeContent.length);
+	});
+
+	test("compacts edit_file old_string and new_string arguments under pressure", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			editFileAssistant("tc1", "big.ts", largeContent, largeContent),
+			toolResult("tc1", "Edited big.ts"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			edit_file: { resistance: 0.8, compactableArgs: ["old_string", "new_string"] },
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.path).toBe("big.ts");
+		expect(args.old_string).toContain("# COMPACTED");
+		expect(args.new_string).toContain("# COMPACTED");
+	});
+
+	test("does not compact arguments when no pressure", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			writeFileAssistant("tc1", "big.md", largeContent),
+			toolResult("tc1", "Wrote bytes"),
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const result = compactMessages({
+			messages,
+			context: lowPressureContext(),
+			tools: registry,
+		});
+
+		// Should be the same reference (no changes)
+		expect(result).toBe(messages);
+	});
+
+	test("does not compact arguments for tools without compactableArgs", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			assistantWithToolCall("tc1", "bash", JSON.stringify({ command: "echo hello" })),
+			toolResult("tc1", multilineOutput(200)),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			bash: { resistance: 0.5 },
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		// Assistant message should be unchanged (bash has no compactableArgs)
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		expect(assistantMsg.tool_calls?.[0]?.function.arguments).toBe(JSON.stringify({ command: "echo hello" }));
+	});
+
+	test("preserves non-compactable argument fields", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			writeFileAssistant("tc1", "important/path.md", largeContent),
+			toolResult("tc1", "Wrote bytes"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.path).toBe("important/path.md");
+	});
+
+	test("stats include assistantArgsCompacted count", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			writeFileAssistant("tc1", "a.md", largeContent),
+			toolResult("tc1", "Wrote bytes"),
+			writeFileAssistant("tc2", "b.md", largeContent),
+			toolResult("tc2", "Wrote bytes"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const { stats } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		expect(stats.assistantArgsCompacted).toBeGreaterThanOrEqual(1);
+	});
+
+	test("details include savedArgsChars", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			writeFileAssistant("tc1", "big.md", largeContent),
+			toolResult("tc1", "Wrote bytes"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const { details } = compactMessagesWithStats({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const d = details.get("tc1");
+		expect(d).toBeDefined();
+		expect(d?.savedArgsChars).toBeDefined();
+		expect(d?.savedArgsChars ?? 0).toBeGreaterThan(0);
+	});
+
+	test("superseded write_file gets arguments aggressively compacted", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			// First write
+			writeFileAssistant("tc1", "foo.md", largeContent),
+			toolResult("tc1", "Wrote bytes"),
+			// Second write to same file (supersedes first)
+			writeFileAssistant("tc2", "foo.md", largeContent),
+			toolResult("tc2", "Wrote bytes"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		// The first (superseded) assistant's content arg should be heavily compacted
+		const firstAssistant = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(firstAssistant.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.content).toContain("# COMPACTED");
+
+		// The second (superseding) one may also be compacted but less aggressively
+		const secondAssistant = result[3] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args2 = JSON.parse(secondAssistant.tool_calls?.[0]?.function.arguments ?? "{}");
+		// Second is recent so may or may not be compacted depending on age
+		expect(args2.path).toBe("foo.md");
+	});
+
+	test("skips argument compaction when savings below MIN_COMPACTION_SAVINGS", () => {
+		// Small content that won't save enough when compacted
+		const smallContent = "line1\nline2\nline3\nline4";
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			writeFileAssistant("tc1", "tiny.md", smallContent),
+			toolResult("tc1", "Wrote bytes"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			write_file: { resistance: 0.7, compactableArgs: ["content"] },
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		// Arguments should be unchanged since savings < 128 chars
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.content).toBe(smallContent);
 	});
 });
