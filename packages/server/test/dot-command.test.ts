@@ -31,19 +31,19 @@ describe("session model field", () => {
 	});
 
 	test("new session has null model", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		expect(session.model).toBeNull();
 	});
 
 	test("updateSessionModel sets the model", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		updateSessionModel(db, session.id, "claude-sonnet-4.6");
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe("claude-sonnet-4.6");
 	});
 
 	test("getSession returns model field", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const fetched = getSession(db, session.id);
 		expect(fetched).toHaveProperty("model");
 		expect(fetched?.model).toBeNull();
@@ -62,7 +62,7 @@ describe("session title update", () => {
 	});
 
 	test("updateSessionTitle sets the title", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		updateSessionTitle(db, session.id, "My Chat");
 		const updated = getSession(db, session.id);
 		expect(updated?.title).toBe("My Chat");
@@ -84,7 +84,7 @@ describe("handleCommand", () => {
 	});
 
 	test("model command updates session model and returns status", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -96,7 +96,7 @@ describe("handleCommand", () => {
 	});
 
 	test("model command rejects invalid index", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const result = handleCommand(db, { command: "model", args: "99", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Invalid model index");
@@ -114,7 +114,7 @@ describe("handleCommand", () => {
 	});
 
 	test("title command updates session title", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const result = handleCommand(db, { command: "title", args: "My Chat Title", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 		const updated = getSession(db, session.id);
@@ -122,20 +122,20 @@ describe("handleCommand", () => {
 	});
 
 	test("title command rejects empty title", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const result = handleCommand(db, { command: "title", args: "", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Title cannot be empty");
 	});
 
 	test("session command returns ok (no-op)", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const result = handleCommand(db, { command: "session", args: "", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 	});
 
 	test("unknown command returns error", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const result = handleCommand(db, { command: "foo", args: "", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Unknown command");
@@ -143,9 +143,9 @@ describe("handleCommand", () => {
 
 	test("subagent command lists recent subagent sessions", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
-		createSubagentSession(freshDb, parent.id, "Task Alpha", "gpt-5-mini", "sys");
-		createSubagentSession(freshDb, parent.id, "Task Beta", "gpt-5-mini", "sys");
+		const parent = createSession(freshDb);
+		createSubagentSession(freshDb, parent.id, "Task Alpha", "gpt-5-mini");
+		createSubagentSession(freshDb, parent.id, "Task Beta", "gpt-5-mini");
 
 		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
 		expect(result.ok).toBe(true);
@@ -158,7 +158,7 @@ describe("handleCommand", () => {
 
 	test("subagent command returns empty message when no subagents", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
+		const parent = createSession(freshDb);
 		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -204,7 +204,7 @@ describe("HTTP endpoints", () => {
 	});
 
 	test("POST /bobai/command executes model command and returns status", async () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -219,7 +219,7 @@ describe("HTTP endpoints", () => {
 	});
 
 	test("POST /bobai/command returns error for bad command", async () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -232,8 +232,8 @@ describe("HTTP endpoints", () => {
 	});
 
 	test("GET /bobai/subagents returns recent subagent sessions", async () => {
-		const parent = createSession(db, "sys");
-		createSubagentSession(db, parent.id, "HTTP Task A", "gpt-5-mini", "sys");
+		const parent = createSession(db);
+		createSubagentSession(db, parent.id, "HTTP Task A", "gpt-5-mini");
 
 		const res = await fetch(`${baseUrl}/bobai/subagents?parentId=${parent.id}`);
 		expect(res.status).toBe(200);
@@ -248,9 +248,9 @@ describe("HTTP endpoints", () => {
 		const freshDb = createTestDb();
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
-		const s1 = createSession(freshDb, "sys");
+		const s1 = createSession(freshDb);
 		updateSessionTitle(freshDb, s1.id, "First");
-		const s2 = createSession(freshDb, "sys");
+		const s2 = createSession(freshDb);
 		updateSessionTitle(freshDb, s2.id, "Second");
 		// s2 is more recent
 		const res = await fetch(`${base}/bobai/sessions`);
@@ -267,8 +267,8 @@ describe("HTTP endpoints", () => {
 		const freshDb = createTestDb();
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
-		createSession(freshDb, "sys");
-		const s2 = createSession(freshDb, "sys");
+		createSession(freshDb);
+		const s2 = createSession(freshDb);
 		updateSessionTitle(freshDb, s2.id, "Latest");
 		const res = await fetch(`${base}/bobai/sessions/recent`);
 		expect(res.status).toBe(200);
@@ -295,7 +295,7 @@ describe("HTTP endpoints", () => {
 		const freshDb = createTestDb();
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
-		const session = createSession(freshDb, "sys");
+		const session = createSession(freshDb);
 		updateSessionTitle(freshDb, session.id, "Test Session");
 		appendMessage(freshDb, session.id, "user", "hello");
 		appendMessage(freshDb, session.id, "assistant", "hi there");
@@ -307,7 +307,7 @@ describe("HTTP endpoints", () => {
 		};
 		expect(body.session.id).toBe(session.id);
 		expect(body.session.title).toBe("Test Session");
-		expect(body.messages.length).toBe(3); // system + user + assistant
+		expect(body.messages.length).toBe(2); // user + assistant
 		s.stop(true);
 		freshDb.close();
 	});
@@ -331,7 +331,7 @@ describe("handlePrompt respects session model", () => {
 	});
 
 	test("uses session model when set", async () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		updateSessionModel(db, session.id, "claude-sonnet-4.6");
 
 		const captured: ProviderOptions[] = [];
@@ -366,7 +366,7 @@ describe("handlePrompt respects session model", () => {
 	});
 
 	test("falls back to default model when session model is null", async () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 
 		const captured: ProviderOptions[] = [];
 		const provider: Provider = {
@@ -400,7 +400,7 @@ describe("handlePrompt respects session model", () => {
 	});
 
 	test("done message includes session model when set", async () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		updateSessionModel(db, session.id, "claude-opus-4.6");
 
 		const provider: Provider = {
@@ -435,7 +435,7 @@ describe("handlePrompt respects session model", () => {
 	});
 
 	test("done message includes session title", async () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		updateSessionTitle(db, session.id, "Test Title");
 
 		const provider: Provider = {

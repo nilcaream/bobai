@@ -18,6 +18,7 @@ import {
 	listSubagentSessions,
 } from "./session/repository";
 import type { SkillRegistry } from "./skill/skill";
+import { buildSystemPrompt } from "./system-prompt";
 
 export interface ServerOptions {
 	port: number;
@@ -86,8 +87,27 @@ export function createServer(options: ServerOptions) {
 				const sessionId = decodeURIComponent(contextMatch[1]);
 				const storedMessages = getMessages(options.db, sessionId);
 
+				// Build a fresh system prompt with current skills
+				const skills = options.skills ?? { list: () => [], get: () => undefined };
+				const systemPrompt = buildSystemPrompt(skills.list());
+
+				// BACKWARD COMPAT: Sessions created before the dynamic system prompt change
+				// stored the system message in the DB at sort_order 0. Strip it — we always
+				// prepend a fresh one below. Remove this filter once all legacy sessions are gone.
+				const conversationMessages = storedMessages.filter((m) => m.role !== "system");
+
 				if (url.searchParams.get("compacted") !== "true") {
-					return Response.json(storedMessages);
+					// Non-compacted (context) view: prepend dynamic system prompt as a synthetic StoredMessage
+					const systemMessage = {
+						id: "system-dynamic",
+						sessionId,
+						role: "system" as const,
+						content: systemPrompt,
+						createdAt: new Date().toISOString(),
+						sortOrder: -1,
+						metadata: null,
+					};
+					return Response.json([systemMessage, ...conversationMessages]);
 				}
 
 				// Compacted view: convert to Message[], run compaction, return with stats
@@ -98,22 +118,40 @@ export function createServer(options: ServerOptions) {
 				const modelConfig = modelConfigs.find((m) => m.id === modelId);
 				const contextWindow = modelConfig?.contextWindow ?? 0;
 
-				const messages = storedMessages.map((m) => {
-					if (m.role === "tool" && m.metadata?.tool_call_id) {
-						return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
-					}
-					if (m.role === "assistant" && m.metadata?.tool_calls) {
-						return {
-							role: "assistant" as const,
-							content: m.content || null,
-							tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
-						};
-					}
-					return { role: m.role as "system" | "user" | "assistant", content: m.content };
-				});
+				const messages = [
+					{ role: "system" as const, content: systemPrompt },
+					...conversationMessages.map((m) => {
+						if (m.role === "tool" && m.metadata?.tool_call_id) {
+							return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
+						}
+						if (m.role === "assistant" && m.metadata?.tool_calls) {
+							return {
+								role: "assistant" as const,
+								content: m.content || null,
+								tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
+							};
+						}
+						return { role: m.role as "user" | "assistant", content: m.content };
+					}),
+				];
 
 				if (contextWindow <= 0 || promptTokens <= 0) {
-					return Response.json({ messages: storedMessages, stats: null, details: null, reason: "no context pressure data" });
+					// No pressure data — return the dynamic system prompt + conversation messages as-is
+					const systemMessage = {
+						id: "system-dynamic",
+						sessionId,
+						role: "system" as const,
+						content: systemPrompt,
+						createdAt: new Date().toISOString(),
+						sortOrder: -1,
+						metadata: null,
+					};
+					return Response.json({
+						messages: [systemMessage, ...conversationMessages],
+						stats: null,
+						details: null,
+						reason: "no context pressure data",
+					});
 				}
 
 				const tools = createCompactionRegistry();
@@ -127,20 +165,36 @@ export function createServer(options: ServerOptions) {
 					tools,
 				});
 
-				// Convert compacted Message[] back to a StoredMessage-like shape for the UI
+				// Convert compacted Message[] back to a StoredMessage-like shape for the UI.
+				// Index 0 is the dynamic system prompt; conversation messages start at index 1.
 				const compactedStored = compacted.map((m, i) => {
+					if (i === 0 && m.role === "system") {
+						return {
+							id: "system-dynamic",
+							sessionId,
+							role: "system" as const,
+							content: m.content,
+							createdAt: new Date().toISOString(),
+							sortOrder: -1,
+							metadata: null,
+						};
+					}
 					if (m.role === "tool") {
 						const toolMsg = m as { role: "tool"; content: string; tool_call_id: string };
 						// Find original stored message to preserve metadata
-						const original = storedMessages.find((s) => s.role === "tool" && s.metadata?.tool_call_id === toolMsg.tool_call_id);
+						const original = conversationMessages.find(
+							(s) => s.role === "tool" && s.metadata?.tool_call_id === toolMsg.tool_call_id,
+						);
 						return {
 							...(original ?? { id: `compacted-${i}`, role: "tool", createdAt: "" }),
 							content: toolMsg.content,
 							metadata: { ...original?.metadata, tool_call_id: toolMsg.tool_call_id },
 						};
 					}
+					// For non-tool messages, use the corresponding conversation message (offset by 1 for system prompt)
+					const convIdx = i - 1;
 					return (
-						storedMessages[i] ?? {
+						conversationMessages[convIdx] ?? {
 							id: `msg-${i}`,
 							role: m.role,
 							content: (m as { content: string }).content ?? "",
@@ -227,7 +281,11 @@ export function createServer(options: ServerOptions) {
 				if (!session) {
 					return new Response("Session not found", { status: 404 });
 				}
-				const messages = getMessages(options.db, sessionId);
+				const messages = getMessages(options.db, sessionId)
+					// BACKWARD COMPAT: Strip legacy stored system messages from old sessions.
+					// The system prompt is now dynamic, not persisted. Remove this filter
+					// once all legacy sessions are gone.
+					.filter((m) => m.role !== "system");
 				const status = session.model ? formatModelDisplay(session.model, session.promptTokens, options.configDir) : null;
 				return Response.json({
 					session: { id: session.id, title: session.title, model: session.model, parentId: session.parentId },

@@ -39,21 +39,11 @@ type MessageRow = {
 	metadata: string | null;
 };
 
-export function createSession(db: Database, systemPrompt: string): Session {
+export function createSession(db: Database): Session {
 	const id = crypto.randomUUID();
 	const now = new Date().toISOString();
 
-	db.transaction(() => {
-		db.prepare("INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)").run(id, null, now, now);
-		db.prepare("INSERT INTO messages (id, session_id, role, content, created_at, sort_order) VALUES (?, ?, ?, ?, ?, ?)").run(
-			crypto.randomUUID(),
-			id,
-			"system",
-			systemPrompt,
-			now,
-			0,
-		);
-	})();
+	db.prepare("INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)").run(id, null, now, now);
 
 	return { id, title: null, model: null, parentId: null, promptTokens: 0, createdAt: now, updatedAt: now };
 }
@@ -182,29 +172,18 @@ export function createSubagentSession(
 	parentId: string,
 	title: string,
 	model: string,
-	systemPrompt: string,
 ): Session & { parentId: string } {
 	const id = crypto.randomUUID();
 	const now = new Date().toISOString();
 
-	db.transaction(() => {
-		db.prepare("INSERT INTO sessions (id, title, model, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-			id,
-			title,
-			model,
-			parentId,
-			now,
-			now,
-		);
-		db.prepare("INSERT INTO messages (id, session_id, role, content, created_at, sort_order) VALUES (?, ?, ?, ?, ?, ?)").run(
-			crypto.randomUUID(),
-			id,
-			"system",
-			systemPrompt,
-			now,
-			0,
-		);
-	})();
+	db.prepare("INSERT INTO sessions (id, title, model, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+		id,
+		title,
+		model,
+		parentId,
+		now,
+		now,
+	);
 
 	return { id, title, model, parentId, promptTokens: 0, createdAt: now, updatedAt: now };
 }

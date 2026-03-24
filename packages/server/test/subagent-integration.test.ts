@@ -97,7 +97,7 @@ describe("subagent integration", () => {
 
 		// Child session should have messages
 		const childMessages = getMessages(db, latestSubagent.id);
-		expect(childMessages.length).toBeGreaterThanOrEqual(3); // system + user + assistant
+		expect(childMessages.length).toBeGreaterThanOrEqual(2); // user + assistant (system prompt is dynamic, not stored)
 
 		// Parent's final response should reference the subagent result
 		const tokens = msgs.filter((m) => m.type === "token" && !m.sessionId);
