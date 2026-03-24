@@ -999,7 +999,6 @@ export function App() {
 	function renderCompactionMessagePanels(
 		msgs: ContextMessage[],
 		details: Record<string, CompactionDetail> | null,
-		limit: number,
 		startKey: number,
 	): { elements: React.ReactNode[]; nextKey: number } {
 		const elements: React.ReactNode[] = [];
@@ -1021,14 +1020,14 @@ export function App() {
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">system | excluded from compaction</div>
-						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+						<pre className="context-body">{msg.content}</pre>
 					</div>,
 				);
 			} else if (msg.role === "user") {
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">user | excluded from compaction</div>
-						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+						<pre className="context-body">{msg.content}</pre>
 					</div>,
 				);
 			} else if (msg.role === "assistant") {
@@ -1041,7 +1040,7 @@ export function App() {
 						elements.push(
 							<div key={key++} className="panel panel--context">
 								<div className="context-header">{`assistant | ${tc.id} | excluded from compaction`}</div>
-								<pre className="context-body">{truncateChars(`${tc.function.name}(${tc.function.arguments})`, 512)}</pre>
+								<pre className="context-body">{`${tc.function.name}(${tc.function.arguments})`}</pre>
 							</div>,
 						);
 					}
@@ -1051,7 +1050,7 @@ export function App() {
 					elements.push(
 						<div key={key++} className="panel panel--context">
 							<div className="context-header">assistant | excluded from compaction</div>
-							<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+							<pre className="context-body">{msg.content}</pre>
 						</div>,
 					);
 				}
@@ -1064,7 +1063,7 @@ export function App() {
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">{header}</div>
-						<pre className="context-body">{truncateContent(rawContent, limit)}</pre>
+						<pre className="context-body">{rawContent}</pre>
 					</div>,
 				);
 			}
@@ -1081,7 +1080,7 @@ export function App() {
 				</div>,
 			];
 		}
-		const { elements } = renderCompactionMessagePanels(compactionData.messages, compactionData.details, view.lineLimit, 0);
+		const { elements } = renderCompactionMessagePanels(compactionData.messages, compactionData.details, 0);
 		return elements;
 	}
 
