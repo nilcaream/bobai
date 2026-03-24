@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+	AGE_INFLECTION,
+	AGE_STEEPNESS,
 	computeAge,
 	computeContextPressure,
 	computeMessageStrengths,
@@ -86,21 +88,39 @@ describe("computeAge", () => {
 		expect(computeAge(9, 10)).toBe(0);
 	});
 
-	test("middle message has quadratic age 0.25", () => {
-		// index 5 out of 11 total: (1 - 5/10)^2 = 0.25
-		expect(computeAge(5, 11)).toBeCloseTo(0.25, 10);
+	test("AGE_INFLECTION is 0.7", () => {
+		expect(AGE_INFLECTION).toBe(0.7);
 	});
 
-	test("age follows quadratic curve", () => {
+	test("AGE_STEEPNESS is 8", () => {
+		expect(AGE_STEEPNESS).toBe(8);
+	});
+
+	test("age follows arctan S-curve", () => {
 		const total = 5;
 		const ages = Array.from({ length: total }, (_, i) => computeAge(i, total));
-		// [(1-0/4)^2, (1-1/4)^2, (1-2/4)^2, (1-3/4)^2, (1-4/4)^2]
-		// [1.0, 0.5625, 0.25, 0.0625, 0.0]
-		expect(ages[0]).toBe(1);
-		expect(ages[1]).toBeCloseTo(0.5625, 10);
-		expect(ages[2]).toBeCloseTo(0.25, 10);
-		expect(ages[3]).toBeCloseTo(0.0625, 10);
-		expect(ages[4]).toBe(0);
+		// With inflection=0.7 and steepness=8, the S-curve protects the newest 30%
+		// and aggressively compacts older messages.
+		// positions: [0.0, 0.25, 0.5, 0.75, 1.0]
+		expect(ages[0]).toBe(1); // oldest
+		expect(ages[1]).toBeCloseTo(0.9633, 3); // position 0.25: still very old
+		expect(ages[2]).toBeCloseTo(0.8514, 3); // position 0.5: above inflection, high age
+		expect(ages[3]).toBeCloseTo(0.3095, 3); // position 0.75: just past inflection, drops sharply
+		expect(ages[4]).toBe(0); // newest
+	});
+
+	test("messages near inflection point have age close to 0.5", () => {
+		// Position 0.7 is the inflection. In a 101-message conversation,
+		// index 70 has position 0.7.
+		const age = computeAge(70, 101);
+		expect(age).toBeCloseTo(0.5, 1);
+	});
+
+	test("arctan curve gives sharper transition than quadratic", () => {
+		// At position 0.5 (mid-conversation), quadratic gives 0.25 (low age),
+		// but arctan with inflection=0.7 gives ~0.85 (high age) — much more aggressive.
+		const age = computeAge(5, 11); // position 0.5
+		expect(age).toBeGreaterThan(0.8);
 	});
 });
 
@@ -114,33 +134,33 @@ describe("computeStrength", () => {
 	});
 
 	test("full pressure, oldest message (age=1), zero resistance gives 1.0", () => {
-		// 1.0 * (1.0 + 1.0) / 2 = 1.0
+		// 1.0 * 1.0 * 1.0 = 1.0
 		expect(computeStrength(1, 1, 0)).toBe(1);
 	});
 
-	test("full pressure, newest message (age=0), zero resistance gives 0.5", () => {
-		// 1.0 * (0.0 + 1.0) / 2 = 0.5
-		expect(computeStrength(1, 0, 0)).toBeCloseTo(0.5, 10);
+	test("full pressure, newest message (age=0), zero resistance gives 0.0", () => {
+		// 1.0 * 0.0 * 1.0 = 0.0 — age gates everything
+		expect(computeStrength(1, 0, 0)).toBe(0);
 	});
 
-	test("full pressure, oldest message (age=1), full resistance gives 0.5", () => {
-		// 1.0 * (1.0 + 0.0) / 2 = 0.5
-		expect(computeStrength(1, 1, 1)).toBeCloseTo(0.5, 10);
+	test("full pressure, oldest message (age=1), full resistance gives 0.0", () => {
+		// 1.0 * 1.0 * 0.0 = 0.0 — resistance gates everything
+		expect(computeStrength(1, 1, 1)).toBe(0);
 	});
 
 	test("full pressure, newest message (age=0), full resistance gives 0.0", () => {
-		// 1.0 * (0.0 + 0.0) / 2 = 0.0
+		// 1.0 * 0.0 * 0.0 = 0.0
 		expect(computeStrength(1, 0, 1)).toBe(0);
 	});
 
 	test("half pressure scales result by half", () => {
-		// 0.5 * (1.0 + 1.0) / 2 = 0.5
+		// 0.5 * 1.0 * 1.0 = 0.5
 		expect(computeStrength(0.5, 1, 0)).toBeCloseTo(0.5, 10);
 	});
 
 	test("clamped to max 1.0", () => {
 		// contextPressure=2 is out of normal range but tests clamping
-		// 2.0 * (1.0 + 1.0) / 2 = 2.0 -> clamped to 1.0
+		// 2.0 * 1.0 * 1.0 = 2.0 -> clamped to 1.0
 		expect(computeStrength(2, 1, 0)).toBe(1);
 	});
 
@@ -150,8 +170,15 @@ describe("computeStrength", () => {
 
 	test("default resistance value produces expected strength", () => {
 		// Full pressure, oldest message, default resistance 0.3
-		// 1.0 * (1.0 + 0.7) / 2 = 0.85
-		expect(computeStrength(1, 1, DEFAULT_RESISTANCE)).toBeCloseTo(0.85, 10);
+		// 1.0 * 1.0 * 0.7 = 0.7
+		expect(computeStrength(1, 1, DEFAULT_RESISTANCE)).toBeCloseTo(0.7, 10);
+	});
+
+	test("age=0 always produces strength=0 regardless of resistance", () => {
+		// This is the key property of the multiplicative formula
+		for (const resistance of [0, 0.1, 0.3, 0.5, 0.8, 1.0]) {
+			expect(computeStrength(1.0, 0, resistance)).toBe(0);
+		}
 	});
 });
 
@@ -201,13 +228,17 @@ describe("computeMessageStrengths", () => {
 		expect(result.has(1)).toBe(true);
 		expect(result.has(3)).toBe(true);
 
-		// index 1, total 5: age = (1 - 1/4)^2 = 0.5625
-		// strength = 1.0 * (0.5625 + 1.0) / 2 = 0.78125
-		expect(result.get(1)).toBeCloseTo(0.78125, 10);
+		// index 1, total 5: arctan age ≈ 0.9633, resistance=0, compactability=1.0
+		// strength = 1.0 * 0.9633 * 1.0 ≈ 0.9633
+		const strength1 = result.get(1);
+		expect(strength1).toBeDefined();
+		expect(strength1).toBeCloseTo(0.9633, 3);
 
-		// index 3, total 5: age = (1 - 3/4)^2 = 0.0625
-		// strength = 1.0 * (0.0625 + 1.0) / 2 = 0.53125
-		expect(result.get(3)).toBeCloseTo(0.53125, 10);
+		// index 3, total 5: arctan age ≈ 0.3095, resistance=0, compactability=1.0
+		// strength = 1.0 * 0.3095 * 1.0 ≈ 0.3095
+		const strength3 = result.get(3);
+		expect(strength3).toBeDefined();
+		expect(strength3).toBeCloseTo(0.3095, 3);
 	});
 
 	test("uses getResistance callback with correct tool_call_id", () => {
@@ -226,15 +257,15 @@ describe("computeMessageStrengths", () => {
 
 		expect(calledWith).toEqual(["call_alpha", "call_beta"]);
 
-		// index 0, total 2: age = (1 - 0/1)^2 = 1.0
+		// index 0, total 2: arctan age = 1.0 (oldest)
 		// call_alpha resistance=0.8, compactability=0.2
-		// strength = 1.0 * (1.0 + 0.2) / 2 = 0.6
-		expect(result.get(0)).toBeCloseTo(0.6, 10);
+		// strength = 1.0 * 1.0 * 0.2 = 0.2
+		expect(result.get(0)).toBeCloseTo(0.2, 10);
 
-		// index 1, total 2: age = (1 - 1/1)^2 = 0.0
+		// index 1, total 2: arctan age = 0.0 (newest)
 		// call_beta resistance=0.2, compactability=0.8
-		// strength = 1.0 * (0.0 + 0.8) / 2 = 0.4
-		expect(result.get(1)).toBeCloseTo(0.4, 10);
+		// strength = 1.0 * 0.0 * 0.8 = 0.0 -> excluded
+		expect(result.has(1)).toBe(false);
 	});
 
 	test("does not include entries with zero strength", () => {
@@ -243,7 +274,7 @@ describe("computeMessageStrengths", () => {
 		];
 
 		// totalMessages=1 -> age=0, resistance=1 -> compactability=0
-		// strength = 1.0 * (0 + 0) / 2 = 0 -> excluded
+		// strength = 1.0 * 0 * 0 = 0 -> excluded
 		const result = computeMessageStrengths(messages, 1.0, () => 1);
 		expect(result.size).toBe(0);
 	});
@@ -271,19 +302,20 @@ describe("computeMessageStrengths", () => {
 
 		const result = computeMessageStrengths(messages, 0.8, (id) => resistanceMap[id] ?? DEFAULT_RESISTANCE);
 
-		// index 1, total 6: age = (1 - 1/5)^2 = 0.64
-		// read_file resistance=0.0, compactability=1.0
-		// strength = 0.8 * (0.64 + 1.0) / 2 = 0.8 * 0.82 = 0.656
-		expect(result.get(1)).toBeCloseTo(0.656, 10);
+		// index 1, total 6: arctan age ≈ 0.9734, resistance=0.0, compactability=1.0
+		// strength = 0.8 * 0.9734 * 1.0 ≈ 0.7787
+		const strength1 = result.get(1);
+		expect(strength1).toBeDefined();
+		expect(strength1).toBeCloseTo(0.7787, 3);
 
-		// index 3, total 6: age = (1 - 3/5)^2 = 0.16
-		// write_file resistance=0.5, compactability=0.5
-		// strength = 0.8 * (0.16 + 0.5) / 2 = 0.8 * 0.33 = 0.264
-		expect(result.get(3)).toBeCloseTo(0.264, 10);
+		// index 3, total 6: arctan age ≈ 0.7201, resistance=0.5, compactability=0.5
+		// strength = 0.8 * 0.7201 * 0.5 ≈ 0.2880
+		const strength3 = result.get(3);
+		expect(strength3).toBeDefined();
+		expect(strength3).toBeCloseTo(0.288, 3);
 
-		// index 5, total 6: age = (1 - 5/5)^2 = 0.0
-		// bash resistance=1.0, compactability=0.0
-		// strength = 0.8 * (0.0 + 0.0) / 2 = 0.0 -> excluded
+		// index 5, total 6: arctan age = 0.0, resistance=1.0, compactability=0.0
+		// strength = 0.8 * 0.0 * 0.0 = 0.0 -> excluded
 		expect(result.has(5)).toBe(false);
 	});
 });

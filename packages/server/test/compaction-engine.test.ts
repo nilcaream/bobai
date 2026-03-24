@@ -74,6 +74,24 @@ function multilineOutput(lineCount: number): string {
 	return Array.from({ length: lineCount }, (_, i) => `line ${i + 1}`).join("\n");
 }
 
+/**
+ * Trailing messages appended after tool results so that tool messages
+ * are not at the newest position (age=0 → strength=0). The multiplicative
+ * formula (cp × age × compactability) correctly protects the newest messages
+ * from compaction, but test fixtures need trailing context to push tool
+ * messages into the compactable zone.
+ */
+const TRAILING_CONTEXT: Message[] = [
+	{ role: "user", content: "continue" },
+	{ role: "assistant", content: "ok" },
+	{ role: "user", content: "continue" },
+	{ role: "assistant", content: "ok" },
+	{ role: "user", content: "continue" },
+	{ role: "assistant", content: "ok" },
+	{ role: "user", content: "continue" },
+	{ role: "assistant", content: "ok" },
+];
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -190,6 +208,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
 				toolResult("tc1", originalContent),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -209,6 +228,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "lowres"),
 				toolResult("tc1", output),
+				...TRAILING_CONTEXT,
 			];
 			const lowResult = compactMessages({
 				messages: lowResistanceMessages,
@@ -221,6 +241,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc2", "highres"),
 				toolResult("tc2", output),
+				...TRAILING_CONTEXT,
 			];
 			const highResult = compactMessages({
 				messages: highResistanceMessages,
@@ -241,12 +262,14 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "mystery"),
 				toolResult("tc1", output),
+				...TRAILING_CONTEXT,
 			];
 			// Compare with a known tool at DEFAULT_RESISTANCE
 			const knownMessages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc2", "known"),
 				toolResult("tc2", output),
+				...TRAILING_CONTEXT,
 			];
 			const unknownResult = compactMessages({
 				messages,
@@ -276,6 +299,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "special"),
 				toolResult("tc1", multilineOutput(50)),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -296,6 +320,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "plain"),
 				toolResult("tc1", multilineOutput(200)),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -311,6 +336,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
 				toolResult("tc1", multilineOutput(200)),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -342,6 +368,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
 				toolResult("tc1", originalContent),
+				...TRAILING_CONTEXT,
 			];
 			const messagesCopy = [...messages];
 			const result = compactMessages({
@@ -373,6 +400,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: userContent },
 				assistantMsg,
 				toolResult("tc1", toolContent),
+				...TRAILING_CONTEXT,
 			];
 
 			const result = compactMessages({
@@ -381,7 +409,7 @@ describe("compactMessages", () => {
 				tools: createMockRegistry({ read_file: {} }),
 			});
 
-			expect(result).toHaveLength(4);
+			expect(result).toHaveLength(4 + TRAILING_CONTEXT.length);
 			// System, user, assistant are untouched (same reference)
 			expect(result[0]).toBe(messages[0]);
 			expect(result[1]).toBe(messages[1]);
@@ -430,6 +458,7 @@ describe("compactMessages", () => {
 				},
 				toolResult("tc1", multilineOutput(60)),
 				toolResult("tc2", multilineOutput(60)),
+				...TRAILING_CONTEXT,
 			];
 
 			let readFileCalled = false;
@@ -473,6 +502,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "broken", "NOT VALID JSON{{{"),
 				toolResult("tc1", multilineOutput(50)),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -501,7 +531,11 @@ describe("compactMessages", () => {
 
 		test("single tool message with high pressure gets compacted", () => {
 			// Even a minimal conversation with just a tool result (unusual but possible)
-			const messages: Message[] = [assistantWithToolCall("tc1", "bash"), toolResult("tc1", multilineOutput(200))];
+			const messages: Message[] = [
+				assistantWithToolCall("tc1", "bash"),
+				toolResult("tc1", multilineOutput(200)),
+				...TRAILING_CONTEXT,
+			];
 			const result = compactMessages({
 				messages,
 				context: highPressureContext(),
@@ -516,6 +550,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "ghost_tool"),
 				toolResult("tc1", multilineOutput(200)),
+				...TRAILING_CONTEXT,
 			];
 			// ghost_tool is NOT in the registry
 			const result = compactMessages({
@@ -555,6 +590,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
 				toolResult("tc1", multilineOutput(50)),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -576,6 +612,7 @@ describe("compactMessages", () => {
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "inspector", callArgs),
 				toolResult("tc1", toolOutput),
+				...TRAILING_CONTEXT,
 			];
 
 			compactMessages({
@@ -717,6 +754,7 @@ describe("compactMessages", () => {
 				{ role: "system", content: "sys" },
 				assistantWithToolCall("tc1", "list_directory", '{"path":"/project"}'),
 				toolResult("tc1", longContent),
+				...TRAILING_CONTEXT,
 			];
 			const result = compactMessages({
 				messages,
@@ -774,6 +812,7 @@ describe("CompactionDetail", () => {
 			{ role: "user", content: "more" },
 			assistantWithToolCall("tc2", "bash", '{"command":"ls"}'),
 			toolResult("tc2", longContent),
+			...TRAILING_CONTEXT,
 		];
 
 		const registry = createMockRegistry({
@@ -842,6 +881,7 @@ describe("CompactionDetail", () => {
 			{ role: "user", content: "go" },
 			assistantWithToolCall("tc1", "bash"),
 			toolResult("tc1", shortContent),
+			...TRAILING_CONTEXT,
 		];
 
 		const registry = createMockRegistry({ bash: { resistance: 0.1 } });
@@ -883,6 +923,7 @@ describe("CompactionDetail", () => {
 			{ role: "user", content: "go" },
 			assistantWithToolCall("tc1", "read_file", '{"path":"a.ts"}'),
 			toolResult("tc1", longContent),
+			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({ read_file: { resistance: 0.2 } });
 		const { details, messages: result } = compactMessagesWithStats({
@@ -905,6 +946,7 @@ describe("CompactionDetail", () => {
 			{ role: "user", content: "go" },
 			assistantWithToolCall("tc1", "bash"),
 			toolResult("tc1", shortContent),
+			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({ bash: { resistance: 0.1 } });
 		const { details } = compactMessagesWithStats({
