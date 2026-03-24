@@ -1,6 +1,6 @@
 import type { AssistantMessage, Message } from "../provider/provider";
 import type { ToolRegistry } from "../tool/tool";
-import { defaultCompact } from "./default-strategy";
+import { compactArgument, defaultCompact } from "./default-strategy";
 import {
 	computeAge,
 	computeContextPressure,
@@ -31,6 +31,8 @@ export interface CompactionStats {
 	compacted: number;
 	/** Number of tool messages that were superseded by heuristic rules. */
 	superseded: number;
+	/** Number of assistant tool_call argument sets that were compacted. */
+	assistantArgsCompacted: number;
 	/** Context pressure at time of compaction (0.0-1.0). */
 	contextPressure: number;
 	/** Total tool messages in the input. */
@@ -39,7 +41,7 @@ export interface CompactionStats {
 
 /** Per-message compaction decision detail, keyed by tool_call_id. */
 export interface CompactionDetail {
-	/** Quadratic age factor (0.0-1.0). Higher = older. */
+	/** Age factor (0.0-1.0). Higher = older. */
 	age: number;
 	/** Tool's declared compaction resistance (0.0-1.0). */
 	resistance: number;
@@ -53,6 +55,8 @@ export interface CompactionDetail {
 	belowMinSavings?: boolean;
 	/** Characters saved by compaction (original.length - compacted.length). Only set when wasCompacted=true. */
 	savedChars?: number;
+	/** Characters saved by compacting assistant tool_call arguments for this tool_call_id. */
+	savedArgsChars?: number;
 	/** The tool_call_id that supersedes this message. Only set when superseded. */
 	supersededBy?: string;
 }
@@ -150,6 +154,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 	const emptyStats: CompactionStats = {
 		compacted: 0,
 		superseded: 0,
+		assistantArgsCompacted: 0,
 		contextPressure,
 		totalToolMessages,
 	};
@@ -178,6 +183,19 @@ function compactMessagesInternal(options: CompactionOptions): {
 		return toolCallMap.get(toolCallId)?.resistance ?? DEFAULT_RESISTANCE;
 	});
 
+	// Build tool_call_id → { index, strength } for assistant argument compaction.
+	// This lets us look up the strength that would apply to a tool_call's paired response.
+	const toolCallStrengths = new Map<string, number>();
+	for (let i = 0; i < messages.length; i++) {
+		const msg = messages[i];
+		if (msg?.role !== "tool") continue;
+		const toolMsg = msg as { role: "tool"; tool_call_id: string };
+		const strength = strengths.get(i);
+		if (strength !== undefined) {
+			toolCallStrengths.set(toolMsg.tool_call_id, strength);
+		}
+	}
+
 	// Nothing to compact — no tool messages with strength and no supersessions.
 	if (strengths.size === 0 && supersessionMap.size === 0) {
 		return { messages, stats: emptyStats, details: new Map() };
@@ -187,11 +205,89 @@ function compactMessagesInternal(options: CompactionOptions): {
 	const details = new Map<string, CompactionDetail>();
 	let compactedCount = 0;
 	let supersededCount = 0;
+	let assistantArgsCompactedCount = 0;
 
 	for (let i = 0; i < messages.length; i++) {
 		const msg = messages[i];
 		if (!msg) continue;
 
+		// --- Assistant messages: compact tool_call arguments ---
+		if (msg.role === "assistant") {
+			const assistantMsg = msg as AssistantMessage;
+			if (!assistantMsg.tool_calls?.length) {
+				result.push(msg);
+				continue;
+			}
+
+			let anyArgModified = false;
+			const clonedCalls = assistantMsg.tool_calls.map((tc) => {
+				const tool = tools.get(tc.function.name);
+				if (!tool?.compactableArgs?.length) return tc;
+
+				const strength = toolCallStrengths.get(tc.id);
+				const isSupersseded = supersessionMap.has(tc.id);
+
+				// No pressure on this call and not superseded → skip
+				if ((strength === undefined || strength <= 0) && !isSupersseded) return tc;
+
+				const effectiveStrength = isSupersseded ? Math.max(strength ?? 0, 0.9) : (strength ?? 0);
+
+				let args: Record<string, unknown>;
+				try {
+					args = JSON.parse(tc.function.arguments);
+				} catch {
+					return tc;
+				}
+
+				let modified = false;
+				let savedInThisCall = 0;
+				for (const field of tool.compactableArgs) {
+					const val = args[field];
+					if (typeof val !== "string") continue;
+					const compacted = compactArgument(val, effectiveStrength, tc.function.name, field);
+					if (val.length - compacted.length >= MIN_COMPACTION_SAVINGS) {
+						savedInThisCall += val.length - compacted.length;
+						args[field] = compacted;
+						modified = true;
+					}
+				}
+
+				if (modified) {
+					anyArgModified = true;
+					// Record savedArgsChars on the existing detail (or create a placeholder).
+					const existing = details.get(tc.id);
+					if (existing) {
+						existing.savedArgsChars = savedInThisCall;
+					} else {
+						// Detail will be properly filled when we process the paired tool message.
+						// Store a partial entry so we don't lose the savings count.
+						details.set(tc.id, {
+							age: 0,
+							resistance: tool.compactionResistance ?? DEFAULT_RESISTANCE,
+							strength: effectiveStrength,
+							wasCompacted: false,
+							savedArgsChars: savedInThisCall,
+						});
+					}
+					return {
+						...tc,
+						function: { ...tc.function, arguments: JSON.stringify(args) },
+					};
+				}
+
+				return tc;
+			});
+
+			if (anyArgModified) {
+				assistantArgsCompactedCount++;
+				result.push({ ...assistantMsg, tool_calls: clonedCalls });
+			} else {
+				result.push(msg);
+			}
+			continue;
+		}
+
+		// --- Non-tool, non-assistant messages: pass through ---
 		if (msg.role !== "tool") {
 			result.push(msg);
 			continue;
@@ -205,6 +301,10 @@ function compactMessagesInternal(options: CompactionOptions): {
 		const supersessionReason = supersessionMap.get(toolMsg.tool_call_id);
 		const baseStrength = strengths.get(i);
 		const age = computeAge(i, messages.length);
+
+		// Preserve savedArgsChars from assistant argument compaction if already recorded.
+		const priorDetail = details.get(toolMsg.tool_call_id);
+		const savedArgsChars = priorDetail?.savedArgsChars;
 
 		if (supersessionReason !== undefined) {
 			// Superseded message: replace with a one-liner marker.
@@ -221,6 +321,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 					wasCompacted: true,
 					supersededReason: supersessionReason,
 					savedChars: toolMsg.content.length - marker.length,
+					savedArgsChars,
 					supersededBy: supersedingIdMap.get(toolMsg.tool_call_id),
 				});
 			} else {
@@ -232,6 +333,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 					wasCompacted: false,
 					supersededReason: supersessionReason,
 					belowMinSavings: true,
+					savedArgsChars,
 					supersededBy: supersedingIdMap.get(toolMsg.tool_call_id),
 				});
 			}
@@ -246,6 +348,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				resistance: info?.resistance ?? DEFAULT_RESISTANCE,
 				strength: baseStrength ?? 0,
 				wasCompacted: false,
+				savedArgsChars,
 			});
 			continue;
 		}
@@ -273,6 +376,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				strength: baseStrength,
 				wasCompacted: true,
 				savedChars: toolMsg.content.length - compacted.length,
+				savedArgsChars,
 			});
 		} else {
 			result.push(msg);
@@ -282,6 +386,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				strength: baseStrength,
 				wasCompacted: false,
 				belowMinSavings: true,
+				savedArgsChars,
 			});
 		}
 	}
@@ -291,6 +396,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 		stats: {
 			compacted: compactedCount,
 			superseded: supersededCount,
+			assistantArgsCompacted: assistantArgsCompactedCount,
 			contextPressure,
 			totalToolMessages,
 		},

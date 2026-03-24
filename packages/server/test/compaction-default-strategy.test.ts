@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COMPACTION_MARKER, defaultCompact } from "../src/compaction/default-strategy";
+import { COMPACTION_MARKER, compactArgument, defaultCompact } from "../src/compaction/default-strategy";
 
 /** Helper: build a string with the given number of lines. */
 function lines(n: number): string {
@@ -144,5 +144,37 @@ describe("defaultCompact", () => {
 		const result2 = defaultCompact(lines(20), 1.0, "bash");
 		const lastLine2 = result2.split("\n").at(-1) ?? "";
 		expect(lastLine2).toContain("17 more lines");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// compactArgument
+// ---------------------------------------------------------------------------
+
+describe("compactArgument", () => {
+	test("returns value unchanged when strength is 0", () => {
+		const value = lines(10);
+		expect(compactArgument(value, 0, "write_file", "content")).toBe(value);
+	});
+
+	test("truncates value and includes argument-specific marker", () => {
+		const value = lines(20);
+		const result = compactArgument(value, 0.5, "write_file", "content");
+		expect(result).toContain(COMPACTION_MARKER);
+		expect(result).toContain("write_file");
+		expect(result).toContain("content argument");
+		expect(result.length).toBeLessThan(value.length);
+	});
+
+	test("marker mentions tool and argument name", () => {
+		const result = compactArgument(lines(20), 0.8, "edit_file", "old_string");
+		const lastLine = result.split("\n").at(-1) ?? "";
+		expect(lastLine).toContain("edit_file");
+		expect(lastLine).toContain("old_string argument");
+	});
+
+	test("returns value unchanged when fewer than MIN_KEEP_LINES", () => {
+		const value = lines(2);
+		expect(compactArgument(value, 1.0, "write_file", "content")).toBe(value);
 	});
 });

@@ -37,6 +37,8 @@ export interface Tool {
 	execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 	/** Custom compaction strategy. Falls back to default (head + truncation) if not implemented. */
 	compact?(output: string, strength: number, callArgs: Record<string, unknown>): string;
+	/** Argument fields whose values may be compacted in assistant tool_call messages (e.g. ["content"] for write_file). */
+	compactableArgs?: string[];
 }
 
 export interface ToolRegistry {
