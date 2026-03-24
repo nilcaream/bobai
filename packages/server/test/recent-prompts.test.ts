@@ -23,7 +23,7 @@ describe("getRecentPrompts", () => {
 
 	test("returns user prompts in most-recent-first order", () => {
 		const freshDb = createTestDb();
-		const session = createSession(freshDb, "system");
+		const session = createSession(freshDb);
 		appendMessage(freshDb, session.id, "user", "first");
 		appendMessage(freshDb, session.id, "user", "second");
 		appendMessage(freshDb, session.id, "user", "third");
@@ -35,7 +35,7 @@ describe("getRecentPrompts", () => {
 
 	test("deduplicates — same prompt sent twice returns once at most recent position", () => {
 		const freshDb = createTestDb();
-		const session = createSession(freshDb, "system");
+		const session = createSession(freshDb);
 		appendMessage(freshDb, session.id, "user", "hello");
 		appendMessage(freshDb, session.id, "user", "world");
 		appendMessage(freshDb, session.id, "user", "hello");
@@ -48,7 +48,7 @@ describe("getRecentPrompts", () => {
 
 	test("respects limit parameter", () => {
 		const freshDb = createTestDb();
-		const session = createSession(freshDb, "system");
+		const session = createSession(freshDb);
 		appendMessage(freshDb, session.id, "user", "a");
 		appendMessage(freshDb, session.id, "user", "b");
 		appendMessage(freshDb, session.id, "user", "c");
@@ -62,7 +62,7 @@ describe("getRecentPrompts", () => {
 
 	test("only returns user messages, not system/assistant/tool", () => {
 		const freshDb = createTestDb();
-		const session = createSession(freshDb, "system prompt");
+		const session = createSession(freshDb);
 		appendMessage(freshDb, session.id, "user", "user question");
 		appendMessage(freshDb, session.id, "assistant", "assistant reply");
 		appendMessage(freshDb, session.id, "tool", "tool output");
@@ -75,10 +75,10 @@ describe("getRecentPrompts", () => {
 
 	test("works across multiple sessions", () => {
 		const freshDb = createTestDb();
-		const s1 = createSession(freshDb, "system");
+		const s1 = createSession(freshDb);
 		appendMessage(freshDb, s1.id, "user", "from session 1");
 
-		const s2 = createSession(freshDb, "system");
+		const s2 = createSession(freshDb);
 		appendMessage(freshDb, s2.id, "user", "from session 2");
 
 		const result = getRecentPrompts(freshDb, 10);
@@ -88,7 +88,7 @@ describe("getRecentPrompts", () => {
 
 	test("excludes agent-sourced prompts (subagent task prompts)", () => {
 		const freshDb = createTestDb();
-		const session = createSession(freshDb, "system");
+		const session = createSession(freshDb);
 		appendMessage(freshDb, session.id, "user", "real user prompt");
 		appendMessage(freshDb, session.id, "user", "subagent task prompt", {
 			source: "agent",
@@ -120,7 +120,7 @@ describe("GET /bobai/prompts/recent", () => {
 	});
 
 	test("returns JSON array of recent prompts", async () => {
-		const session = createSession(db, "system");
+		const session = createSession(db);
 		appendMessage(db, session.id, "user", "test prompt");
 
 		const res = await fetch(`${baseUrl}/bobai/prompts/recent`);
@@ -136,7 +136,7 @@ describe("GET /bobai/prompts/recent", () => {
 		const s = createServer({ port: 0, db: freshDb });
 		const url = `http://localhost:${s.port}`;
 
-		const session = createSession(freshDb, "system");
+		const session = createSession(freshDb);
 		for (let i = 0; i < 5; i++) {
 			appendMessage(freshDb, session.id, "user", `prompt ${i}`);
 		}
@@ -161,7 +161,7 @@ describe("GET /bobai/prompts/recent", () => {
 		const s = createServer({ port: 0, db: freshDb });
 		const url = `http://localhost:${s.port}`;
 
-		const session = createSession(freshDb, "system");
+		const session = createSession(freshDb);
 		for (let i = 0; i < 15; i++) {
 			appendMessage(freshDb, session.id, "user", `prompt ${i}`);
 		}

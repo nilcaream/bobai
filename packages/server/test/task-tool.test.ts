@@ -34,7 +34,7 @@ describe("createTaskTool", () => {
 	beforeAll(() => {
 		db = createTestDb();
 		// Create a parent session so FK constraints are satisfied
-		const parent = createSession(db, "system prompt");
+		const parent = createSession(db);
 		parentSessionId = parent.id;
 	});
 
@@ -131,15 +131,13 @@ describe("createTaskTool", () => {
 
 		const messages = getMessages(db, childSessionId);
 
-		// Messages: system + task user + agent assistant
-		expect(messages.length).toBeGreaterThanOrEqual(3);
-		expect(messages[0].role).toBe("system");
-		expect(messages[0].content).toBe("You are a subagent.");
+		// Messages: task user + agent assistant (system prompt is dynamic, not stored)
+		expect(messages.length).toBeGreaterThanOrEqual(2);
 
-		// Task prompt (directly after system)
-		expect(messages[1].role).toBe("user");
-		expect(messages[1].content).toBe("Do the thing");
-		expect(messages[1].metadata).toEqual({ source: "agent", parentSessionId });
+		// Task prompt is first message
+		expect(messages[0].role).toBe("user");
+		expect(messages[0].content).toBe("Do the thing");
+		expect(messages[0].metadata).toEqual({ source: "agent", parentSessionId });
 	});
 
 	test("sets error status when agent loop throws", async () => {

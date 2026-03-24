@@ -119,7 +119,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				childSessionId = taskId;
 			} else {
 				// Create child session with description as title
-				const child = createSubagentSession(db, parentSessionId, description, model, systemPrompt);
+				const child = createSubagentSession(db, parentSessionId, description, model);
 				childSessionId = child.id;
 
 				// Add the task prompt as a user message with agent metadata
@@ -141,19 +141,27 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 
 			// Load child session messages
 			const stored = getMessages(db, childSessionId);
-			let messages: Message[] = stored.map((m) => {
-				if (m.role === "tool" && m.metadata?.tool_call_id) {
-					return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
-				}
-				if (m.role === "assistant" && m.metadata?.tool_calls) {
-					return {
-						role: "assistant" as const,
-						content: m.content || null,
-						tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
-					};
-				}
-				return { role: m.role as "system" | "user" | "assistant", content: m.content };
-			});
+			let messages: Message[] = stored
+				// BACKWARD COMPAT: Sessions created before the dynamic system prompt change
+				// stored a system message in the DB. Skip it — we always prepend a fresh one below.
+				// Remove this filter once all legacy subagent sessions are gone.
+				.filter((m) => m.role !== "system")
+				.map((m) => {
+					if (m.role === "tool" && m.metadata?.tool_call_id) {
+						return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
+					}
+					if (m.role === "assistant" && m.metadata?.tool_calls) {
+						return {
+							role: "assistant" as const,
+							content: m.content || null,
+							tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
+						};
+					}
+					return { role: m.role as "user" | "assistant", content: m.content };
+				});
+
+			// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
+			messages.unshift({ role: "system", content: systemPrompt });
 
 			// Build tool registry without the task tool itself (no recursion)
 			const childTools = createToolRegistry([

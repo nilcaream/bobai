@@ -22,47 +22,42 @@ describe("session repository", () => {
 		db.close();
 	});
 
-	test("createSession inserts session and system prompt", () => {
-		const session = createSession(db, "You are a test assistant.");
+	test("createSession inserts session with no messages", () => {
+		const session = createSession(db);
 		expect(session.id).toBeTruthy();
 		expect(session.title).toBeNull();
 		expect(session.createdAt).toBeTruthy();
 
 		const messages = getMessages(db, session.id);
-		expect(messages).toHaveLength(1);
-		expect(messages[0].role).toBe("system");
-		expect(messages[0].content).toBe("You are a test assistant.");
-		expect(messages[0].sortOrder).toBe(0);
+		expect(messages).toHaveLength(0);
 	});
 
 	test("appendMessage adds messages with incrementing sort_order", () => {
-		const session = createSession(db, "system prompt");
+		const session = createSession(db);
 		appendMessage(db, session.id, "user", "hello");
 		appendMessage(db, session.id, "assistant", "hi there");
 
 		const messages = getMessages(db, session.id);
-		expect(messages).toHaveLength(3);
-		expect(messages[0].role).toBe("system");
+		expect(messages).toHaveLength(2);
+		expect(messages[0].role).toBe("user");
 		expect(messages[0].sortOrder).toBe(0);
-		expect(messages[1].role).toBe("user");
+		expect(messages[1].role).toBe("assistant");
 		expect(messages[1].sortOrder).toBe(1);
-		expect(messages[2].role).toBe("assistant");
-		expect(messages[2].sortOrder).toBe(2);
 	});
 
 	test("getMessages returns messages ordered by sort_order", () => {
-		const session = createSession(db, "system");
+		const session = createSession(db);
 		appendMessage(db, session.id, "user", "first");
 		appendMessage(db, session.id, "assistant", "second");
 		appendMessage(db, session.id, "user", "third");
 
 		const messages = getMessages(db, session.id);
 		const contents = messages.map((m) => m.content);
-		expect(contents).toEqual(["system", "first", "second", "third"]);
+		expect(contents).toEqual(["first", "second", "third"]);
 	});
 
 	test("getSession returns session by id", () => {
-		const created = createSession(db, "sys");
+		const created = createSession(db);
 		const found = getSession(db, created.id);
 		expect(found).not.toBeNull();
 		expect(found?.id).toBe(created.id);
@@ -74,10 +69,10 @@ describe("session repository", () => {
 
 	test("listSessions returns sessions ordered by updated_at descending", () => {
 		const freshDb = createTestDb();
-		const s1 = createSession(freshDb, "sys");
+		const s1 = createSession(freshDb);
 		// Append a message to s1 to bump updated_at
 		appendMessage(freshDb, s1.id, "user", "bump");
-		const s2 = createSession(freshDb, "sys");
+		const s2 = createSession(freshDb);
 
 		const sessions = listSessions(freshDb);
 		// s2 was created after s1's update, so s2 is first
@@ -87,7 +82,7 @@ describe("session repository", () => {
 	});
 
 	test("appendMessage updates session updated_at", () => {
-		const session = createSession(db, "sys");
+		const session = createSession(db);
 		const before = session.updatedAt;
 		// Small delay to ensure timestamp difference
 		const start = performance.now();
@@ -100,7 +95,7 @@ describe("session repository", () => {
 	});
 
 	test("appendMessage stores and retrieves metadata", () => {
-		const session = createSession(db, "sys");
+		const session = createSession(db);
 		const toolCalls = [{ id: "call_1", type: "function", function: { name: "read_file", arguments: '{"path":"x"}' } }];
 		appendMessage(db, session.id, "assistant", "", { tool_calls: toolCalls });
 
@@ -111,7 +106,7 @@ describe("session repository", () => {
 	});
 
 	test("appendMessage supports tool role with tool_call_id metadata", () => {
-		const session = createSession(db, "sys");
+		const session = createSession(db);
 		appendMessage(db, session.id, "tool", "file contents", { tool_call_id: "call_1" });
 
 		const messages = getMessages(db, session.id);
@@ -122,31 +117,28 @@ describe("session repository", () => {
 	});
 
 	test("appendMessage returns null metadata when none provided", () => {
-		const session = createSession(db, "sys");
+		const session = createSession(db);
 		appendMessage(db, session.id, "user", "hello");
 		const messages = getMessages(db, session.id);
 		const userMsg = messages.find((m) => m.role === "user");
 		expect(userMsg?.metadata).toBeNull();
 	});
 
-	test("createSubagentSession creates a session with parent_id and system prompt", () => {
-		const parent = createSession(db, "sys");
-		const child = createSubagentSession(db, parent.id, "Exploring codebase", "gpt-5-mini", "You are a subagent.");
+	test("createSubagentSession creates a session with parent_id", () => {
+		const parent = createSession(db);
+		const child = createSubagentSession(db, parent.id, "Exploring codebase", "gpt-5-mini");
 		expect(child.id).toBeTruthy();
 		expect(child.title).toBe("Exploring codebase");
 		expect(child.parentId).toBe(parent.id);
 
-		// Should have system prompt as first message
 		const messages = getMessages(db, child.id);
-		expect(messages).toHaveLength(1);
-		expect(messages[0].role).toBe("system");
-		expect(messages[0].content).toBe("You are a subagent.");
+		expect(messages).toHaveLength(0);
 	});
 
 	test("listSessions excludes subagent sessions", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
-		createSubagentSession(freshDb, parent.id, "Child task", "m", "sys");
+		const parent = createSession(freshDb);
+		createSubagentSession(freshDb, parent.id, "Child task", "m");
 
 		const sessions = listSessions(freshDb);
 		expect(sessions).toHaveLength(1); // only the parent
@@ -156,10 +148,10 @@ describe("session repository", () => {
 
 	test("listSubagentSessions returns only subagent sessions ordered by updated_at", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
-		const c1 = createSubagentSession(freshDb, parent.id, "Task A", "gpt-5-mini", "sys");
+		const parent = createSession(freshDb);
+		const c1 = createSubagentSession(freshDb, parent.id, "Task A", "gpt-5-mini");
 		appendMessage(freshDb, c1.id, "user", "bump"); // bump c1's updated_at
-		const c2 = createSubagentSession(freshDb, parent.id, "Task B", "gpt-5-mini", "sys");
+		const c2 = createSubagentSession(freshDb, parent.id, "Task B", "gpt-5-mini");
 
 		const subagents = listSubagentSessions(freshDb, parent.id, 5);
 		expect(subagents).toHaveLength(2);
@@ -173,10 +165,10 @@ describe("session repository", () => {
 
 	test("listSubagentSessions respects limit", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
-		createSubagentSession(freshDb, parent.id, "A", "m", "sys");
-		createSubagentSession(freshDb, parent.id, "B", "m", "sys");
-		createSubagentSession(freshDb, parent.id, "C", "m", "sys");
+		const parent = createSession(freshDb);
+		createSubagentSession(freshDb, parent.id, "A", "m");
+		createSubagentSession(freshDb, parent.id, "B", "m");
+		createSubagentSession(freshDb, parent.id, "C", "m");
 
 		const subagents = listSubagentSessions(freshDb, parent.id, 2);
 		expect(subagents).toHaveLength(2);
@@ -185,7 +177,7 @@ describe("session repository", () => {
 
 	test("listSubagentSessions does not return regular sessions", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
+		const parent = createSession(freshDb);
 		const subagents = listSubagentSessions(freshDb, parent.id);
 		expect(subagents).toHaveLength(0);
 		freshDb.close();
@@ -193,11 +185,11 @@ describe("session repository", () => {
 
 	test("listSubagentSessions filters by parentId", () => {
 		const freshDb = createTestDb();
-		const parent1 = createSession(freshDb, "sys");
-		const parent2 = createSession(freshDb, "sys");
-		createSubagentSession(freshDb, parent1.id, "P1 Child A", "m", "sys");
-		createSubagentSession(freshDb, parent1.id, "P1 Child B", "m", "sys");
-		createSubagentSession(freshDb, parent2.id, "P2 Child A", "m", "sys");
+		const parent1 = createSession(freshDb);
+		const parent2 = createSession(freshDb);
+		createSubagentSession(freshDb, parent1.id, "P1 Child A", "m");
+		createSubagentSession(freshDb, parent1.id, "P1 Child B", "m");
+		createSubagentSession(freshDb, parent2.id, "P2 Child A", "m");
 
 		const p1Subagents = listSubagentSessions(freshDb, parent1.id);
 		expect(p1Subagents).toHaveLength(2);
@@ -212,8 +204,8 @@ describe("session repository", () => {
 
 	test("getMostRecentParentSession returns the most recently updated parent session", () => {
 		const freshDb = createTestDb();
-		const s1 = createSession(freshDb, "sys");
-		createSession(freshDb, "sys");
+		const s1 = createSession(freshDb);
+		createSession(freshDb);
 		// Set s1's updated_at to a future timestamp so it's definitively more recent
 		freshDb.prepare("UPDATE sessions SET updated_at = '2099-01-01T00:00:00.000Z' WHERE id = ?").run(s1.id);
 
@@ -232,8 +224,8 @@ describe("session repository", () => {
 
 	test("getMostRecentParentSession excludes subagent sessions", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb, "sys");
-		const child = createSubagentSession(freshDb, parent.id, "Child", "m", "sys");
+		const parent = createSession(freshDb);
+		const child = createSubagentSession(freshDb, parent.id, "Child", "m");
 		// bump child so it's more recent than parent
 		appendMessage(freshDb, child.id, "user", "bump");
 
@@ -245,9 +237,9 @@ describe("session repository", () => {
 
 	test("listSessions with limit parameter", () => {
 		const freshDb = createTestDb();
-		createSession(freshDb, "sys");
-		createSession(freshDb, "sys");
-		createSession(freshDb, "sys");
+		createSession(freshDb);
+		createSession(freshDb);
+		createSession(freshDb);
 
 		const limited = listSessions(freshDb, 2);
 		expect(limited).toHaveLength(2);

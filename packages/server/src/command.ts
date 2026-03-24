@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { CURATED_MODELS, formatModelDisplay } from "./provider/copilot-models";
 import { createSession, getSession, listSubagentSessions, updateSessionModel, updateSessionTitle } from "./session/repository";
-import { SYSTEM_PROMPT } from "./system-prompt";
 
 export interface CommandRequest {
 	command: string;
@@ -17,7 +16,7 @@ export function handleCommand(db: Database, req: CommandRequest, configDir?: str
 
 	// Create a session on the fly if none exists yet
 	if (!sessionId) {
-		const session = createSession(db, SYSTEM_PROMPT);
+		const session = createSession(db);
 		sessionId = session.id;
 	} else {
 		const session = getSession(db, sessionId);

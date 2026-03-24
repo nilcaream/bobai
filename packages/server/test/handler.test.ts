@@ -124,12 +124,11 @@ describe("handlePrompt", () => {
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
 
-		expect(stored).toHaveLength(3); // system + user + assistant
-		expect(stored[0].role).toBe("system");
-		expect(stored[1].role).toBe("user");
-		expect(stored[1].content).toBe("my question");
-		expect(stored[2].role).toBe("assistant");
-		expect(stored[2].content).toBe("response text");
+		expect(stored).toHaveLength(2); // user + assistant (system prompt is dynamic, not stored)
+		expect(stored[0].role).toBe("user");
+		expect(stored[0].content).toBe("my question");
+		expect(stored[1].role).toBe("assistant");
+		expect(stored[1].content).toBe("response text");
 	});
 
 	test("resumes existing session with sessionId", async () => {
@@ -170,9 +169,9 @@ describe("handlePrompt", () => {
 		expect(sentMessages[3].content).toBe("second");
 		expect(sentMessages[4].content).toBe("second response");
 
-		// DB should have 5 messages total
+		// DB should have 4 messages total
 		const stored = getMessages(db, sessionId);
-		expect(stored).toHaveLength(5); // system + user1 + assistant1 + user2 + assistant2
+		expect(stored).toHaveLength(4); // user1 + assistant1 + user2 + assistant2 (system prompt is dynamic, not stored)
 	});
 
 	test("sends error for unknown sessionId", async () => {
@@ -275,16 +274,16 @@ describe("handlePrompt", () => {
 		const toolResult = msgs.find((m: { type: string }) => m.type === "tool_result");
 		expect(toolResult.mergeable).toBe(true); // list_directory is mergeable
 
-		// DB should have: system + user + assistant(tool_calls) + tool + assistant(text)
+		// DB should have: user + assistant(tool_calls) + tool + assistant(text) (system prompt is dynamic, not stored)
 		const sessionId = msgs.find((m: { type: string }) => m.type === "done").sessionId;
 		const stored = getMessages(db, sessionId);
-		expect(stored).toHaveLength(5);
-		expect(stored[2].role).toBe("assistant");
-		expect(stored[2].metadata).toBeTruthy(); // has tool_calls
-		expect(stored[3].role).toBe("tool");
-		expect(stored[3].metadata).toBeTruthy(); // has tool_call_id
-		expect(stored[4].role).toBe("assistant");
-		expect(stored[4].content).toBe("I see the files");
+		expect(stored).toHaveLength(4);
+		expect(stored[1].role).toBe("assistant");
+		expect(stored[1].metadata).toBeTruthy(); // has tool_calls
+		expect(stored[2].role).toBe("tool");
+		expect(stored[2].metadata).toBeTruthy(); // has tool_call_id
+		expect(stored[3].role).toBe("assistant");
+		expect(stored[3].content).toBe("I see the files");
 	});
 
 	test("persists error message to DB on provider error", async () => {
@@ -298,10 +297,10 @@ describe("handlePrompt", () => {
 		expect(done.sessionId).toBeTruthy();
 
 		const stored = getMessages(db, done.sessionId);
-		// system + user + assistant(error)
-		expect(stored).toHaveLength(3);
-		expect(stored[2].role).toBe("assistant");
-		expect(stored[2].content).toContain("429");
+		// user + assistant(error) (system prompt is dynamic, not stored)
+		expect(stored).toHaveLength(2);
+		expect(stored[1].role).toBe("assistant");
+		expect(stored[1].content).toContain("429");
 	});
 
 	test("persists partial messages and error on mid-stream failure", async () => {
@@ -326,13 +325,13 @@ describe("handlePrompt", () => {
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
 
-		// system + user + assistant(tool_calls) + tool(result) + assistant(error)
-		expect(stored).toHaveLength(5);
-		expect(stored[2].role).toBe("assistant");
-		expect(stored[2].metadata?.tool_calls).toBeTruthy();
-		expect(stored[3].role).toBe("tool");
-		expect(stored[4].role).toBe("assistant");
-		expect(stored[4].content).toContain("429");
+		// user + assistant(tool_calls) + tool(result) + assistant(error) (system prompt is dynamic, not stored)
+		expect(stored).toHaveLength(4);
+		expect(stored[1].role).toBe("assistant");
+		expect(stored[1].metadata?.tool_calls).toBeTruthy();
+		expect(stored[2].role).toBe("tool");
+		expect(stored[3].role).toBe("assistant");
+		expect(stored[3].content).toContain("429");
 	});
 
 	test("task tool is available in tool registry (subagent spawning)", async () => {
@@ -470,31 +469,30 @@ describe("handlePrompt", () => {
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
 
-		// system + (assistant+tool for skill-a) + (assistant+tool for skill-b) + user + assistant
-		expect(stored).toHaveLength(7);
-		expect(stored[0].role).toBe("system");
+		// (assistant+tool for skill-a) + (assistant+tool for skill-b) + user + assistant (system prompt is dynamic, not stored)
+		expect(stored).toHaveLength(6);
 
 		// Skill A: assistant with tool_calls + tool result
-		expect(stored[1].role).toBe("assistant");
-		const skillAToolCalls = stored[1].metadata?.tool_calls as Array<{ id: string; function: { name: string } }>;
+		expect(stored[0].role).toBe("assistant");
+		const skillAToolCalls = stored[0].metadata?.tool_calls as Array<{ id: string; function: { name: string } }>;
 		expect(skillAToolCalls).toHaveLength(1);
 		expect(skillAToolCalls[0].function.name).toBe("skill");
-		expect(stored[2].role).toBe("tool");
-		expect(stored[2].content).toContain("# Skill: skill-a");
-		expect(stored[2].content).toContain("Content A");
-		expect(stored[2].metadata?.tool_call_id).toBe(skillAToolCalls[0].id);
-		expect(stored[2].metadata?.format_call).toBe("▸ Loading skill-a skill");
-		expect(stored[2].metadata?.ui_output).toBe("▸ Loaded skill-a skill");
-		expect(stored[2].metadata?.mergeable).toBe(true);
+		expect(stored[1].role).toBe("tool");
+		expect(stored[1].content).toContain("# Skill: skill-a");
+		expect(stored[1].content).toContain("Content A");
+		expect(stored[1].metadata?.tool_call_id).toBe(skillAToolCalls[0].id);
+		expect(stored[1].metadata?.format_call).toBe("▸ Loading skill-a skill");
+		expect(stored[1].metadata?.ui_output).toBe("▸ Loaded skill-a skill");
+		expect(stored[1].metadata?.mergeable).toBe(true);
 
 		// Skill B
-		expect(stored[3].role).toBe("assistant");
-		expect(stored[4].role).toBe("tool");
-		expect(stored[4].content).toContain("# Skill: skill-b");
+		expect(stored[2].role).toBe("assistant");
+		expect(stored[3].role).toBe("tool");
+		expect(stored[3].content).toContain("# Skill: skill-b");
 
 		// User message after skills
-		expect(stored[5].role).toBe("user");
-		expect(stored[5].content).toBe("use skills");
+		expect(stored[4].role).toBe("user");
+		expect(stored[4].content).toBe("use skills");
 
 		// --- LLM receives skill content as tool messages ---
 		const sentMessages = provider.captured[0].messages;
