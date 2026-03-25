@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { InstructionFile } from "../src/instructions";
 import type { Skill } from "../src/skill/skill";
 import { buildSystemPrompt, SYSTEM_PROMPT } from "../src/system-prompt";
 
@@ -59,5 +60,46 @@ describe("buildSystemPrompt", () => {
 		const skills: Skill[] = [{ name: "test", description: "A test skill", content: "...", filePath: "/a/SKILL.md" }];
 		const result = buildSystemPrompt(skills);
 		expect(result).toContain("skill");
+	});
+
+	test("appends instruction sections when instructions are provided", () => {
+		const instructions: InstructionFile[] = [
+			{ label: "Global Instructions", source: "/home/user/.config/bobai/AGENT.md", content: "Always use TDD." },
+		];
+		const result = buildSystemPrompt([], instructions);
+		expect(result).toContain("## Global Instructions");
+		expect(result).toContain("Pre-loaded from: /home/user/.config/bobai/AGENT.md");
+		expect(result).toContain("Always use TDD.");
+	});
+
+	test("appends multiple instruction sections in order", () => {
+		const instructions: InstructionFile[] = [
+			{ label: "Global Instructions", source: "/global/AGENT.md", content: "Global rules." },
+			{ label: "Project Instructions", source: "/project/.bobai/AGENT.md", content: "Project rules." },
+		];
+		const result = buildSystemPrompt([], instructions);
+		const globalIdx = result.indexOf("## Global Instructions");
+		const projectIdx = result.indexOf("## Project Instructions");
+		expect(globalIdx).toBeGreaterThan(-1);
+		expect(projectIdx).toBeGreaterThan(globalIdx);
+		expect(result).toContain("Global rules.");
+		expect(result).toContain("Project rules.");
+	});
+
+	test("instructions appear before skills", () => {
+		const instructions: InstructionFile[] = [
+			{ label: "Global Instructions", source: "/global/AGENT.md", content: "Be helpful." },
+		];
+		const skills: Skill[] = [{ name: "tdd", description: "Test-driven development", content: "...", filePath: "/a/SKILL.md" }];
+		const result = buildSystemPrompt(skills, instructions);
+		const instructionIdx = result.indexOf("## Global Instructions");
+		const skillIdx = result.indexOf("## Available Skills");
+		expect(instructionIdx).toBeGreaterThan(-1);
+		expect(skillIdx).toBeGreaterThan(instructionIdx);
+	});
+
+	test("returns base prompt when instructions array is empty", () => {
+		const result = buildSystemPrompt([], []);
+		expect(result).toBe(SYSTEM_PROMPT);
 	});
 });

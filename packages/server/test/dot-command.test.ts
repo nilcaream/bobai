@@ -359,6 +359,7 @@ describe("handlePrompt respects session model", () => {
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -393,6 +394,7 @@ describe("handlePrompt respects session model", () => {
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -426,6 +428,7 @@ describe("handlePrompt respects session model", () => {
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -461,6 +464,7 @@ describe("handlePrompt respects session model", () => {
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 

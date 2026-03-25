@@ -4,6 +4,7 @@ import { type CommandRequest, handleCommand } from "./command";
 import { compactMessagesWithStats } from "./compaction/engine";
 import { createCompactionRegistry } from "./compaction/registry";
 import { handlePrompt } from "./handler";
+import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
@@ -87,9 +88,10 @@ export function createServer(options: ServerOptions) {
 				const sessionId = decodeURIComponent(contextMatch[1]);
 				const storedMessages = getMessages(options.db, sessionId);
 
-				// Build a fresh system prompt with current skills
+				// Build a fresh system prompt with current skills and instructions
 				const skills = options.skills ?? { list: () => [], get: () => undefined };
-				const systemPrompt = buildSystemPrompt(skills.list());
+				const instructions = loadInstructions(options.configDir ?? "", options.projectRoot ?? process.cwd());
+				const systemPrompt = buildSystemPrompt(skills.list(), instructions);
 
 				// BACKWARD COMPAT: Sessions created before the dynamic system prompt change
 				// stored the system message in the DB at sort_order 0. Strip it — we always
@@ -326,6 +328,7 @@ export function createServer(options: ServerOptions) {
 							text: msg.text,
 							sessionId: msg.sessionId,
 							projectRoot: options.projectRoot ?? process.cwd(),
+							configDir: options.configDir ?? "",
 							skills: options.skills ?? { get: () => undefined, list: () => [] },
 							skillDirectories: options.skillDirectories,
 							stagedSkills: msg.stagedSkills,

@@ -86,7 +86,16 @@ describe("handlePrompt", () => {
 	test("creates new session when no sessionId provided", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		const done = msgs.find((m: { type: string }) => m.type === "done");
@@ -96,7 +105,16 @@ describe("handlePrompt", () => {
 	test("streams tokens then done with sessionId", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello", " world"]);
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		const tokens = msgs.filter((m: { type: string }) => m.type === "token");
@@ -118,6 +136,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "my question",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -141,6 +160,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "first",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 		const sessionId = ws1.messages().find((m: { type: string }) => m.type === "done").sessionId;
@@ -155,6 +175,7 @@ describe("handlePrompt", () => {
 			text: "second",
 			sessionId,
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -185,6 +206,7 @@ describe("handlePrompt", () => {
 			text: "hi",
 			sessionId: "nonexistent",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -197,7 +219,16 @@ describe("handlePrompt", () => {
 	test("sends error on ProviderError", async () => {
 		const ws = mockWs();
 		const provider = failingProvider(401, "Unauthorized");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
@@ -215,6 +246,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "tell me something",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -259,6 +291,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "what files?",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -289,7 +322,16 @@ describe("handlePrompt", () => {
 	test("persists error message to DB on provider error", async () => {
 		const ws = mockWs();
 		const provider = failingProvider(429, "Rate limited");
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "hi", projectRoot: "/tmp", skills: emptySkills });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
 
 		const msgs = ws.messages();
 		const done = msgs.find((m: { type: string }) => m.type === "done");
@@ -320,7 +362,16 @@ describe("handlePrompt", () => {
 		};
 
 		const ws = mockWs();
-		await handlePrompt({ ws, db, provider, model: "test-model", text: "list files", projectRoot: "/tmp", skills: emptySkills });
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "list files",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
 
 		const done = ws.messages().find((m: { type: string }) => m.type === "done");
 		const stored = getMessages(db, done.sessionId);
@@ -373,6 +424,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "use subagent",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -419,6 +471,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "list files",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 		const sessionId = ws1.messages().find((m: { type: string }) => m.type === "done").sessionId;
@@ -434,6 +487,7 @@ describe("handlePrompt", () => {
 			text: "resume",
 			sessionId,
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
@@ -458,6 +512,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "use skills",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 			stagedSkills: [
 				{ name: "skill-a", content: "Content A" },
@@ -542,6 +597,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "hi",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 			stagedSkills: [],
 		});
@@ -583,6 +639,7 @@ describe("handlePrompt", () => {
 			model: "test-model",
 			text: "use writing",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: skillRegistry,
 			stagedSkills: [{ name: "writing", content: "Write well." }],
 		});

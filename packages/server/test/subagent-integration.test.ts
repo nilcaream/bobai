@@ -74,6 +74,7 @@ describe("subagent integration", () => {
 			model: "test-model",
 			text: "Explore the project",
 			projectRoot: "/tmp",
+			configDir: "/tmp",
 			skills: emptySkills,
 		});
 
