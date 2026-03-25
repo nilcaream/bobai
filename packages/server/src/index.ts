@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { authorize } from "./auth/authorize";
@@ -65,7 +66,12 @@ if (!auth) {
 
 const provider = createCopilotProvider(auth, globalConfigDir);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
-const staticDir = path.resolve(import.meta.dir, "../../ui/dist");
+// Bundled layout: server.js + ui/ live side-by-side in dist/.
+// Source layout:  packages/server/src/index.ts → ../../ui/dist.
+const bundledUi = path.resolve(import.meta.dir, "ui");
+const staticDir = fs.existsSync(path.join(bundledUi, "index.html"))
+	? bundledUi
+	: path.resolve(import.meta.dir, "../../ui/dist");
 const server = createServer({
 	port,
 	staticDir,

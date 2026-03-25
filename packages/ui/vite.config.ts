@@ -6,5 +6,6 @@ export default defineConfig({
 	base: "/bobai/",
 	build: {
 		outDir: "dist",
+		chunkSizeWarningLimit: 2000,
 	},
 });
