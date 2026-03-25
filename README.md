@@ -1,15 +1,206 @@
 # Bob AI
 
-Bob AI is a browser-first coding agent focused on radical transparency for anyone who wants to inspect and understand their assistant’s full context. We are building it in the open so contributors who share the goal of a dependable everyday coding companion can shape it together.
+A browser-first coding agent powered by GitHub Copilot. Bob AI runs as a local server, connects to the Copilot API, and provides a chat interface with full access to coding tools -- file read/write, search, bash, subagents, and more.
 
-## What makes Bob AI different
-- **Radical context transparency:** Every session should show exactly what fits into the model context - system prompt footprint, tool transcripts, token usage, and anything trimmed for space.
-- **Real-time context garbage collection:** Future iterations will treat compaction as a first-class problem, streaming telemetry about what stays, what gets evicted, and why.
-- **Browser-native experience:** The agent should feel at home in the browser, offering immediate feedback without heavy local installs.
+Bob AI's defining feature is **radical context transparency**. You can inspect exactly what the LLM sees: the system prompt, every tool call and result, token usage, and what gets compacted when the context window fills.
 
-## How to contribute
-- **Share ideas or issues** around context introspection, visualization, or compaction strategies.
-- **Prototype browser UI pieces** that help users inspect session state and understand upcoming evictions.
-- **Experiment with transparency tooling** - for example, token budgets, prompt heatmaps, or GC dashboards.
+## Installation
 
-We welcome contributions - just respect the guiding principles above and avoid importing external code wholesale.
+**Requirements:** Linux x86_64, `git`, `curl`, `unzip`. The installer downloads its own Bun runtime and requires no global Node.js or Bun.
+
+**One-liner (recommended):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install.sh | bash
+```
+
+**From a cloned repo:**
+
+```bash
+git clone https://github.com/nilcaream/bobai.git
+cd bobai
+./install.sh
+```
+
+The installer downloads Bun, builds the server and UI, and places everything under `~/.local/share/bobai/`. It installs the `bobai` command at `~/.local/bin/bobai` -- add that directory to your `PATH` if it is absent.
+
+## Getting Started
+
+**1. Authenticate with GitHub Copilot:**
+
+```bash
+bobai auth
+```
+
+This runs an OAuth device flow -- it prints a URL and a code. Open the URL in a browser, enter the code, and authorize. Bob AI saves your token to `~/.config/bobai/auth.json`.
+
+**2. Start the server:**
+
+```bash
+bobai
+```
+
+Bob AI prints a local URL (e.g. `http://localhost:8080/bobai/`). Open it in your browser and type a prompt to begin.
+
+**3. Start the server in a project directory:**
+
+Run `bobai` from any project directory. Bob AI creates a `.bobai/` folder there for sessions and project-level configuration. All LLM tools operate within that directory.
+
+## CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `bobai` | Start the server (default) |
+| `bobai auth` | Authenticate with GitHub Copilot |
+| `bobai refresh` | Refresh the model list from GitHub |
+
+| Flag | Description |
+|------|-------------|
+| `-p <port>`, `--port <port>` | Set server port (default: OS picks an available port) |
+| `--debug` | Enable debug-level logging and HTTP dump files |
+
+## Dot Commands
+
+Type `.` in the prompt to access dot commands. These local commands control the session and are never sent to the LLM.
+
+| Command | Description |
+|---------|-------------|
+| `.model <n>` | Switch the LLM model (shows a numbered list) |
+| `.new [title]` | Start a new session |
+| `.session [n]` | Switch between sessions |
+| `.subagent [n]` | Switch to a subagent session |
+| `.title <text>` | Set the current session title |
+| `.view [1\|2\|3]` | Cycle between Chat, Context, and Compaction views |
+
+Commands accept abbreviations -- `.m` matches `.model`, `.v` matches `.view`. Press Tab or Enter to confirm.
+
+## Skills
+
+Skills are markdown files (`SKILL.md`) with YAML frontmatter that give the LLM specialized instructions -- coding patterns, workflows, domain knowledge, or any guidance you want the agent to follow.
+
+**Example `SKILL.md`:**
+
+```yaml
+---
+name: my-coding-style
+description: Enforce project coding conventions
+---
+Always use tabs for indentation. Prefer named exports...
+```
+
+**Where to put skills:**
+
+| Location | Scope |
+|----------|-------|
+| `~/.config/bobai/skills/` | Available in all projects |
+| `<project>/.bobai/skills/` | Available only in that project |
+
+Bob AI scans these directories for `**/SKILL.md`. Project skills override global skills when names collide.
+
+**Using skills in a session:**
+
+- Type `/` in the prompt to see available skills and stage one before sending your message.
+- The LLM can also load skills on its own via the `skill` tool during a conversation.
+
+## Plugins
+
+Plugins are `.ts` or `.js` files that Bob AI loads at startup. Place them in:
+
+```
+~/.config/bobai/plugins/
+```
+
+Bob AI loads files alphabetically via dynamic `import()`. If any plugin throws during loading, the server exits.
+
+## Configuration
+
+Bob AI uses layered configuration. Project settings override global settings, which override defaults.
+
+**Global config** (`~/.config/bobai/bobai.json`):
+
+```json
+{
+  "provider": "github-copilot",
+  "model": "gpt-5-mini"
+}
+```
+
+**Project config** (`<project>/.bobai/bobai.json`):
+
+```json
+{
+  "id": "...",
+  "port": 8080,
+  "provider": "github-copilot",
+  "model": "claude-sonnet-4.6"
+}
+```
+
+Bob AI creates the project config automatically when you first run `bobai` in a directory.
+
+### Available Models
+
+| Model | Premium Multiplier |
+|-------|-------------------|
+| gpt-4o | 0x (free) |
+| gpt-4.1 | 0x (free) |
+| gpt-5-mini | 0x (free, default) |
+| grok-code-fast-1 | 0.25x |
+| claude-haiku-4.5 | 0.33x |
+| claude-sonnet-4.6 | 1x |
+| claude-opus-4.6 | 3x |
+
+Use `.model` in the chat to switch models mid-session.
+
+## View Modes
+
+Bob AI has three view modes, accessible via `.view`:
+
+1. **Chat** -- the standard conversation view.
+2. **Context** -- raw messages as stored in the database, including every tool call and result.
+3. **Compaction** -- what the LLM sees after context compaction, showing which messages were truncated or evicted and why.
+
+The Compaction view is the key transparency feature. It exposes context pressure, per-message age and resistance scores, and exactly what was cut to fit the context window.
+
+## Directory Reference
+
+| Path | Purpose |
+|------|---------|
+| `~/.local/bin/bobai` | Runner script |
+| `~/.local/share/bobai/` | Installation home (Bun binary, bundled dist) |
+| `~/.local/share/bobai/log/` | Log files (daily rotation) |
+| `~/.config/bobai/auth.json` | OAuth token |
+| `~/.config/bobai/bobai.json` | Global config |
+| `~/.config/bobai/copilot-models.json` | Cached model metadata |
+| `~/.config/bobai/skills/` | Global skills directory |
+| `~/.config/bobai/plugins/` | Plugins directory |
+| `<project>/.bobai/` | Per-project state |
+| `<project>/.bobai/bobai.json` | Project config |
+| `<project>/.bobai/bobai.db` | Session database (SQLite) |
+| `<project>/.bobai/skills/` | Project-local skills |
+
+## Logs
+
+Bob AI writes logs to `~/.local/share/bobai/log/`, rotating daily. Each file is named `YYYY-MM-DD.log`.
+
+With `--debug`, Bob AI also writes HTTP dump files (`io-*.txt`) capturing full API request/response bodies and compaction dump files (`compaction-*.txt`) showing before/after state.
+
+## Tools
+
+The LLM has access to these tools during a conversation:
+
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read file contents |
+| `write_file` | Create or overwrite a file |
+| `edit_file` | Make targeted edits to a file |
+| `list_directory` | List directory contents |
+| `file_search` | Find files by glob pattern |
+| `grep_search` | Search file contents with regex |
+| `bash` | Run shell commands (30s timeout) |
+| `task` | Spawn a subagent for independent work |
+| `skill` | Load a skill for specialized instructions |
+
+## License
+
+Apache 2.0
