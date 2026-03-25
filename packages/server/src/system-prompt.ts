@@ -1,3 +1,4 @@
+import type { InstructionFile } from "./instructions";
 import type { Skill } from "./skill/skill";
 
 export const SYSTEM_PROMPT = `You are Bob AI, a coding assistant.
@@ -28,16 +29,17 @@ Some tool outputs in this conversation may have been compacted to manage context
 
 Do not mention compaction to the user unless they ask about it.`;
 
-export function buildSystemPrompt(skills: Skill[]): string {
-	if (skills.length === 0) return SYSTEM_PROMPT;
+export function buildSystemPrompt(skills: Skill[], instructions: InstructionFile[] = []): string {
+	let prompt = SYSTEM_PROMPT;
 
-	const listing = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+	for (const instruction of instructions) {
+		prompt += `\n\n## ${instruction.label}\n\nPre-loaded from: ${instruction.source}\n\n${instruction.content}`;
+	}
 
-	return `${SYSTEM_PROMPT}
+	if (skills.length > 0) {
+		const listing = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+		prompt += `\n\n## Available Skills\n\nUse the \`skill\` tool to load a skill when a task matches its description. Skills provide specialized instructions and workflows.\n\n${listing}`;
+	}
 
-## Available Skills
-
-Use the \`skill\` tool to load a skill when a task matches its description. Skills provide specialized instructions and workflows.
-
-${listing}`;
+	return prompt;
 }

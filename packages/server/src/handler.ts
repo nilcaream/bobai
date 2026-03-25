@@ -4,6 +4,7 @@ import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
+import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
@@ -45,6 +46,7 @@ export interface PromptRequest {
 	text: string;
 	sessionId?: string;
 	projectRoot: string;
+	configDir: string;
 	skills: SkillRegistry;
 	skillDirectories?: string[];
 	stagedSkills?: StagedSkill[];
@@ -72,9 +74,10 @@ function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent &
 }
 
 export async function handlePrompt(req: PromptRequest) {
-	const { ws, db, provider, model, text, sessionId, projectRoot, skills, skillDirectories, stagedSkills } = req;
+	const { ws, db, provider, model, text, sessionId, projectRoot, configDir, skills, skillDirectories, stagedSkills } = req;
 
-	const systemPrompt = buildSystemPrompt(skills.list());
+	const instructions = loadInstructions(configDir, projectRoot);
+	const systemPrompt = buildSystemPrompt(skills.list(), instructions);
 	let currentSessionId: string | undefined;
 	let sessionObj: { model: string | null; title: string | null } | null = null;
 	let effectiveModel = model;
