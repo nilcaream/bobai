@@ -148,6 +148,16 @@ export function useWebSocket() {
 		return () => socket.close();
 	}, []);
 
+	// Warn user before navigating away during active generation
+	useEffect(() => {
+		if (!isStreaming) return;
+		const handler = (e: BeforeUnloadEvent) => {
+			e.preventDefault();
+		};
+		window.addEventListener("beforeunload", handler);
+		return () => window.removeEventListener("beforeunload", handler);
+	}, [isStreaming]);
+
 	const sendPrompt = useCallback(
 		(text: string, stagedSkills?: StagedSkill[]) => {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
