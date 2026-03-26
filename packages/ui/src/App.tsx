@@ -156,6 +156,36 @@ type ViewMode = (typeof VIEW_MODES)[number];
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 
+function ToolPanel({ children }: { children: React.ReactNode }) {
+	const ref = useRef<HTMLDivElement>(null);
+	const [collapsed, setCollapsed] = useState<boolean | null>(null);
+
+	useEffect(() => {
+		if (ref.current && collapsed === null) {
+			const threshold = window.innerHeight * 0.3;
+			if (ref.current.scrollHeight > threshold) {
+				setCollapsed(true);
+			} else {
+				setCollapsed(false);
+			}
+		}
+	}, [collapsed]);
+
+	const handleDoubleClick = () => {
+		if (collapsed !== null) {
+			setCollapsed((prev) => !prev);
+			window.getSelection()?.removeAllRanges();
+		}
+	};
+
+	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: double-click fold is a convenience shortcut, not primary interaction
+		<div ref={ref} className={`panel panel--tool${collapsed ? " panel--collapsed" : ""}`} onDoubleClick={handleDoubleClick}>
+			{children}
+		</div>
+	);
+}
+
 export function App() {
 	const {
 		messages,
@@ -898,7 +928,7 @@ export function App() {
 					);
 				} else {
 					elements.push(
-						<div key={key++} className="panel panel--tool">
+						<ToolPanel key={key++}>
 							<Markdown>{panel.content}</Markdown>
 							{panel.summary && <div className="panel-status">{panel.summary}</div>}
 							{!panel.summary && isLast && msg.timestamp && (
@@ -907,7 +937,7 @@ export function App() {
 									{msgSummary}
 								</div>
 							)}
-						</div>,
+						</ToolPanel>,
 					);
 				}
 			}
