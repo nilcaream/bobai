@@ -6,6 +6,7 @@ import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
+import { repairMessageOrdering } from "./message-repair";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
@@ -171,6 +172,13 @@ export async function handlePrompt(req: PromptRequest) {
 				}
 				return { role: m.role as "user" | "assistant", content: m.content };
 			});
+
+		// Repair any message ordering issues from interrupted or concurrent agent loops
+		const repair = repairMessageOrdering(messages);
+		if (repair.repaired) {
+			messages = repair.messages;
+			console.warn(`[message-repair] Repaired message ordering in session ${currentSessionId}`);
+		}
 
 		// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
 		messages.unshift({ role: "system", content: systemPrompt });
