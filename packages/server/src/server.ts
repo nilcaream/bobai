@@ -38,6 +38,12 @@ export interface ServerOptions {
 export function createServer(options: ServerOptions) {
 	const staticDir = options.staticDir;
 
+	// Track active AbortControllers per WebSocket for cleanup on disconnect
+	const wsAbortControllers = new Map<object, AbortController>();
+
+	// Per-session promise chain to prevent concurrent agent loops on the same session
+	const sessionLocks = new Map<string, Promise<void>>();
+
 	return Bun.serve({
 		port: options.port,
 		async fetch(req, server) {
@@ -320,23 +326,45 @@ export function createServer(options: ServerOptions) {
 
 				if (msg.type === "prompt") {
 					if (options.provider && options.model && options.db) {
-						handlePrompt({
-							ws,
-							db: options.db,
-							provider: options.provider,
-							model: options.model,
-							text: msg.text,
-							sessionId: msg.sessionId,
-							projectRoot: options.projectRoot ?? process.cwd(),
-							configDir: options.configDir ?? "",
-							skills: options.skills ?? { get: () => undefined, list: () => [] },
-							skillDirectories: options.skillDirectories,
-							stagedSkills: msg.stagedSkills,
-							logger: options.logger,
-							logDir: options.logDir,
-						}).catch((err) => {
-							send(ws, { type: "error", message: "Unexpected error" });
-							console.error("Unhandled error in handlePrompt:", err);
+						// Create abort controller for this prompt — aborted on WebSocket close
+						const controller = new AbortController();
+						wsAbortControllers.set(ws, controller);
+
+						const runPrompt = () =>
+							handlePrompt({
+								ws,
+								db: options.db!,
+								provider: options.provider!,
+								model: options.model!,
+								text: msg.text,
+								sessionId: msg.sessionId,
+								projectRoot: options.projectRoot ?? process.cwd(),
+								configDir: options.configDir ?? "",
+								skills: options.skills ?? { get: () => undefined, list: () => [] },
+								skillDirectories: options.skillDirectories,
+								stagedSkills: msg.stagedSkills,
+								logger: options.logger,
+								logDir: options.logDir,
+								signal: controller.signal,
+							})
+								.catch((err) => {
+									send(ws, { type: "error", message: "Unexpected error" });
+									console.error("Unhandled error in handlePrompt:", err);
+								})
+								.finally(() => {
+									wsAbortControllers.delete(ws);
+								});
+
+						// Session-level concurrency guard: chain onto any existing promise for this session
+						const sessionKey = msg.sessionId ?? "__new__";
+						const existing = sessionLocks.get(sessionKey) ?? Promise.resolve();
+						const next = existing.then(runPrompt, runPrompt);
+						sessionLocks.set(sessionKey, next);
+						// Clean up finished chains to avoid memory leak
+						next.finally(() => {
+							if (sessionLocks.get(sessionKey) === next) {
+								sessionLocks.delete(sessionKey);
+							}
 						});
 					} else {
 						send(ws, { type: "error", message: "No provider configured" });
@@ -345,6 +373,13 @@ export function createServer(options: ServerOptions) {
 				}
 
 				send(ws, { type: "error", message: `Unknown message type: ${msg.type}` });
+			},
+			close(ws) {
+				const controller = wsAbortControllers.get(ws);
+				if (controller) {
+					controller.abort();
+					wsAbortControllers.delete(ws);
+				}
 			},
 		},
 	});
