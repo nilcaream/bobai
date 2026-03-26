@@ -87,6 +87,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	const newMessages: Message[] = [];
 
 	for (let iteration = 0; iteration < maxIterations; iteration++) {
+		// Abort if the signal has been triggered (e.g. WebSocket closed)
+		signal?.throwIfAborted();
+
 		let textContent = "";
 		const toolCalls = new Map<number, AccumulatedToolCall>();
 		let finishReason: "stop" | "tool_calls" = "stop";
@@ -191,6 +194,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			conversation.push(toolMsg);
 			newMessages.push(toolMsg);
 			onMessage(toolMsg);
+
+			// Check abort between tool executions
+			signal?.throwIfAborted();
 		}
 
 		// Emergency compaction: if we've crossed 85% context usage, compact from raw data before next iteration
