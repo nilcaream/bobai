@@ -434,6 +434,92 @@ describe("runAgentLoop", () => {
 		expect(captured[0].initiator).toBeUndefined();
 	});
 
+	test("aborts at start of iteration when signal is already aborted", async () => {
+		const controller = new AbortController();
+		controller.abort();
+
+		const events: AgentEvent[] = [];
+		await expect(
+			runAgentLoop({
+				provider: textProvider(["Hello"]),
+				model: "test",
+				messages: [
+					{ role: "system", content: "sys" },
+					{ role: "user", content: "hi" },
+				],
+				tools: createToolRegistry([]),
+				projectRoot: "/tmp",
+				signal: controller.signal,
+				onEvent(event) {
+					events.push(event);
+				},
+				onMessage() {},
+			}),
+		).rejects.toThrow();
+
+		// No events should have been emitted
+		expect(events).toHaveLength(0);
+	});
+
+	test("aborts between tool executions when signal fires mid-loop", async () => {
+		const controller = new AbortController();
+		let toolExecutionCount = 0;
+
+		// Tool that aborts the signal on first execution
+		const abortingTool: Tool = {
+			definition: {
+				type: "function",
+				function: {
+					name: "aborter",
+					description: "Aborts on first call",
+					parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+				},
+			},
+			mergeable: false,
+			formatCall(): string {
+				return "▸ Aborter";
+			},
+			async execute(): Promise<ToolResult> {
+				toolExecutionCount++;
+				controller.abort();
+				return { llmOutput: "done", uiOutput: "done", mergeable: false };
+			},
+		};
+
+		// Provider returns two tool calls in one response
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield { type: "tool_call_start", index: 0, id: "call_1", name: "aborter" };
+				yield { type: "tool_call_delta", index: 0, arguments: '{"text":"a"}' };
+				yield { type: "tool_call_start", index: 1, id: "call_2", name: "aborter" };
+				yield { type: "tool_call_delta", index: 1, arguments: '{"text":"b"}' };
+				yield { type: "finish", reason: "tool_calls" };
+			},
+		};
+
+		const registry = createToolRegistry([abortingTool]);
+
+		await expect(
+			runAgentLoop({
+				provider,
+				model: "test",
+				messages: [
+					{ role: "system", content: "sys" },
+					{ role: "user", content: "hi" },
+				],
+				tools: registry,
+				projectRoot: "/tmp",
+				signal: controller.signal,
+				onEvent() {},
+				onMessage() {},
+			}),
+		).rejects.toThrow();
+
+		// Only the first tool should have executed
+		expect(toolExecutionCount).toBe(1);
+	});
+
 	test("calls onMessage for each completed message", async () => {
 		const registry = createToolRegistry([echoTool()]);
 		const collected: Message[] = [];
