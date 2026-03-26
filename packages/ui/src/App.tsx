@@ -134,9 +134,10 @@ function formatMsgSummary(msg: { summary?: string; model?: string }): string {
 }
 
 function truncateContent(text: string, lineLimit: number): string {
-	if (lineLimit <= 0) return text;
-	const lines = text.split("\n");
-	if (lines.length <= lineLimit) return text;
+	const trimmed = text.trim();
+	if (lineLimit <= 0) return trimmed;
+	const lines = trimmed.split("\n");
+	if (lines.length <= lineLimit) return trimmed;
 	const headCount = 20;
 	const tailCount = 20;
 	const omitted = lines.length - headCount - tailCount;
@@ -1007,7 +1008,7 @@ export function App() {
 			} else if (msg.role === "tool") {
 				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
 				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
-				const rawContent = msg.content || "(no output)";
+				const rawContent = (msg.content || "(no output)").trim();
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">{`tool | ${toolCallId ?? ""} | ${toolName}`}</div>
@@ -1056,14 +1057,14 @@ export function App() {
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">system | excluded from compaction</div>
-						<pre className="context-body">{msg.content}</pre>
+						<pre className="context-body">{msg.content?.trim()}</pre>
 					</div>,
 				);
 			} else if (msg.role === "user") {
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">user | excluded from compaction</div>
-						<pre className="context-body">{msg.content}</pre>
+						<pre className="context-body">{msg.content?.trim()}</pre>
 					</div>,
 				);
 			} else if (msg.role === "assistant") {
@@ -1075,7 +1076,7 @@ export function App() {
 					elements.push(
 						<div key={key++} className="panel panel--context">
 							<div className="context-header">assistant | excluded from compaction</div>
-							<pre className="context-body">{msg.content}</pre>
+							<pre className="context-body">{msg.content.trim()}</pre>
 						</div>,
 					);
 				}
@@ -1095,7 +1096,7 @@ export function App() {
 				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
 				const detail = toolCallId && details ? details[toolCallId] : undefined;
 				const header = formatToolHeader(toolCallId ?? "", toolName, detail);
-				const rawContent = msg.content || "(no output)";
+				const rawContent = (msg.content || "(no output)").trim();
 				elements.push(
 					<div key={key++} className="panel panel--context">
 						<div className="context-header">{header}</div>
