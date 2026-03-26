@@ -52,6 +52,7 @@ export interface PromptRequest {
 	stagedSkills?: StagedSkill[];
 	logger?: Logger;
 	logDir?: string;
+	signal?: AbortSignal;
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -249,6 +250,7 @@ export async function handlePrompt(req: PromptRequest) {
 			rawMessages,
 			logger: req.logger,
 			logDir: req.logDir,
+			signal: req.signal,
 			onEvent(event: AgentEvent) {
 				routeEventToWs(ws, event);
 				if (event.type === "tool_call") {
@@ -299,24 +301,29 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null, summary });
 	} catch (err) {
-		// Persist error as assistant message so agent can resume with context
-		if (currentSessionId) {
-			const errorText =
-				err instanceof ProviderError
-					? `[Error: Provider error (${err.status}): ${err.body}]`
-					: `[Error: ${(err as Error).message}]`;
-			const errorMsg = appendMessage(db, currentSessionId, "assistant", errorText);
-			lastAssistantMessageId = errorMsg.id;
+		// Abort errors (e.g. WebSocket closed) are not real failures — don't persist error message
+		const isAbort = err instanceof DOMException && err.name === "AbortError";
+
+		if (!isAbort) {
+			// Persist error as assistant message so agent can resume with context
+			if (currentSessionId) {
+				const errorText =
+					err instanceof ProviderError
+						? `[Error: Provider error (${err.status}): ${err.body}]`
+						: `[Error: ${(err as Error).message}]`;
+				const errorMsg = appendMessage(db, currentSessionId, "assistant", errorText);
+				lastAssistantMessageId = errorMsg.id;
+			}
+
+			if (err instanceof ProviderError) {
+				send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
+			} else {
+				console.error("Unexpected error in handlePrompt:", err);
+				send(ws, { type: "error", message: "Unexpected error during generation" });
+			}
 		}
 
-		if (err instanceof ProviderError) {
-			send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
-		} else {
-			console.error("Unexpected error in handlePrompt:", err);
-			send(ws, { type: "error", message: "Unexpected error during generation" });
-		}
-
-		// Send done so UI gets sessionId for resume
+		// Send done so UI gets sessionId (even on abort — needed for session continuity)
 		if (currentSessionId) {
 			const errSummary = provider.getTurnSummary?.();
 			const errPromptTokens = provider.getTurnPromptTokens?.() ?? 0;

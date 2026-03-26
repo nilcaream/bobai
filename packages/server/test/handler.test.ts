@@ -609,6 +609,53 @@ describe("handlePrompt", () => {
 		expect(sentMessages[1].content).toBe("hi");
 	});
 
+	test("aborted prompt does not persist error message and sends done", async () => {
+		const controller = new AbortController();
+
+		// Provider that yields a tool call, during which the abort fires
+		const slowProvider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield { type: "tool_call_start", index: 0, id: "call_1", name: "list_directory" };
+				yield { type: "tool_call_delta", index: 0, arguments: '{"path":"."}' };
+				yield { type: "finish", reason: "tool_calls" };
+			},
+		};
+
+		// Pre-abort the controller. The agent-loop from Task 1 will
+		// throw immediately at the top of the first iteration.
+		controller.abort();
+
+		const ws = mockWs();
+		await handlePrompt({
+			ws,
+			db,
+			provider: slowProvider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+			signal: controller.signal,
+		});
+
+		const msgs = ws.messages();
+		const done = msgs.find((m: { type: string }) => m.type === "done");
+		expect(done).toBeTruthy();
+		expect(done.sessionId).toBeTruthy();
+
+		// Should NOT have an error message sent to ws
+		const errors = msgs.filter((m: { type: string }) => m.type === "error");
+		expect(errors).toHaveLength(0);
+
+		// Should NOT have persisted an error assistant message
+		const stored = getMessages(db, done.sessionId);
+		const errorMsgs = stored.filter(
+			(m: { role: string; content: string }) => m.role === "assistant" && m.content.startsWith("[Error:"),
+		);
+		expect(errorMsgs).toHaveLength(0);
+	});
+
 	test("staged skill llmContent includes base directory hint when skill is in registry", async () => {
 		const skillRegistry: SkillRegistry = {
 			get: (name) =>
