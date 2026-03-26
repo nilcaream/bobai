@@ -98,6 +98,32 @@ describe("fetch interceptor", () => {
 		expect(dumpFiles.length).toBe(0);
 	});
 
+	test("extracts method and headers from Request object when init is undefined", async () => {
+		const logger = createLogger({ level: "debug", logDir: tmpDir });
+		const mockFetch = mock(async () => {
+			return new Response('{"ok":true}', { status: 200, statusText: "OK" });
+		}) as unknown as typeof fetch;
+
+		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+
+		// Simulate what copilot-converter does: fetch(new Request(url, opts))
+		const request = new Request("https://api.githubcopilot.com/chat/completions", {
+			method: "POST",
+			headers: { Authorization: "Bearer gho_test1234", "Content-Type": "application/json" },
+			body: '{"model":"gpt-4o"}',
+		});
+		const response = await intercepted(request);
+		await response.text();
+		await Bun.sleep(50);
+
+		// Should have created a dump file with correct method (POST, not GET)
+		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("io-"));
+		expect(dumpFiles.length).toBe(1);
+		const content = fs.readFileSync(path.join(tmpDir, dumpFiles[0]), "utf8");
+		expect(content).toContain(">>> POST");
+		expect(content).toContain("Bearer gho_***1234");
+	});
+
 	test("returns response body intact after tee", async () => {
 		const logger = createLogger({ level: "debug", logDir: tmpDir });
 		const original = '{"result":"test-value"}';

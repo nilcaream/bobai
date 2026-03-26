@@ -43,7 +43,10 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 			return originalFetch(input, init);
 		}
 
-		const method = init?.method ?? "GET";
+		// When a wrapper collapses fetch(url, opts) into fetch(new Request(...)),
+		// init is undefined. Fall back to extracting from the Request object.
+		const isRequest = input instanceof Request;
+		const method = init?.method ?? (isRequest ? input.method : "GET");
 		const requestBody = typeof init?.body === "string" ? init.body : undefined;
 		const startTime = Date.now();
 
@@ -63,7 +66,7 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 
 		if (!options.debug) return response;
 
-		const reqHeaders = maskAuthHeader(headersToRecord(init?.headers));
+		const reqHeaders = maskAuthHeader(headersToRecord(init?.headers ?? (isRequest ? input.headers : undefined)));
 		const respHeaders = headersToRecord(response.headers);
 
 		if (response.body) {
