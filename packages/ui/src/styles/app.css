@@ -64,6 +64,20 @@ body,
 	background: var(--text-error);
 }
 
+@keyframes dot-pulse {
+	0%,
+	100% {
+		filter: saturate(1);
+	}
+	50% {
+		filter: saturate(0);
+	}
+}
+
+.status-dot.active {
+	animation: dot-pulse 1s ease-in-out infinite;
+}
+
 /* Messages — middle zone (scrollable) */
 .messages {
 	flex: 1;

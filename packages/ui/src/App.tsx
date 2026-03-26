@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
-import type { MessagePart, StagedSkill, SubagentInfo } from "./useWebSocket";
+import type { MessagePart, StagedSkill } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
 type Panel =
@@ -172,6 +172,7 @@ export function App() {
 		addErrorMessage,
 		parentId,
 		parentTitle,
+		projectInfo,
 		loadSession,
 		getSessionId,
 		setSessionId,
@@ -210,6 +211,11 @@ export function App() {
 		el.addEventListener("wheel", onWheel);
 		return () => el.removeEventListener("wheel", onWheel);
 	}, []);
+
+	// Update browser tab title when project info changes
+	useEffect(() => {
+		document.title = projectInfo ? `Bob AI | ${projectInfo.dir}` : "Bob AI";
+	}, [projectInfo]);
 
 	// PAGE UP/DOWN scrolls the messages panel globally (works even during streaming)
 	useEffect(() => {
@@ -1084,19 +1090,34 @@ export function App() {
 		return elements;
 	}
 
+	const agentActive = isStreaming || subagents.some((s) => s.status === "running");
+
 	return (
 		<main className="app">
 			<div className="panel panel--status-bar">
 				<span>
-					<span className="status-bar-label">Bob AI</span> <span className={`status-dot${connected ? "" : " disconnected"}`} />{" "}
-					{connected ? "connected" : "connecting..."}
-					{parentId ? (
-						<span className="status-bar-title">
-							{" "}
-							{parentTitle ?? "(untitled)"} | {title ?? "(untitled)"}
-						</span>
+					<span className="status-bar-label">Bob AI</span>{" "}
+					<span className={`status-dot${connected ? "" : " disconnected"}${connected && agentActive ? " active" : ""}`} />
+					{connected ? (
+						<>
+							{projectInfo && <span className="status-bar-title"> {projectInfo.dir}</span>}
+							{projectInfo?.git && (
+								<span className="status-bar-title">
+									{" "}
+									| {projectInfo.git.branch}:{projectInfo.git.revision}
+								</span>
+							)}
+							{parentId ? (
+								<span className="status-bar-title">
+									{" "}
+									| {parentTitle ?? "(untitled)"} | {title ?? "(untitled)"}
+								</span>
+							) : (
+								title && <span className="status-bar-title"> | {title}</span>
+							)}
+						</>
 					) : (
-						title && <span className="status-bar-title"> {title}</span>
+						" connecting..."
 					)}
 				</span>
 				<span>{status}</span>
