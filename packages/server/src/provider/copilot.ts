@@ -76,6 +76,7 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 	let turnTokens = 0;
 	let turnLastCallTokens = 0;
 	let baselineTokens = 0;
+	const warnedContextWindow = new Set<string>();
 
 	async function ensureValidSession(): Promise<void> {
 		if (Date.now() < sessionExpires) return;
@@ -89,14 +90,14 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 	return {
 		id: "github-copilot",
 
-		beginTurn() {
+		beginTurn(sessionPromptTokens?: number) {
 			turnStartTime = performance.now();
 			turnModel = "";
 			turnAgentCalls = 0;
 			turnUserCalls = 0;
 			turnPremiumCost = 0;
 			turnTokens = 0;
-			baselineTokens = turnLastCallTokens;
+			baselineTokens = turnLastCallTokens || sessionPromptTokens || 0;
 			turnLastCallTokens = 0;
 		},
 
@@ -209,6 +210,10 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 					const totalTokens = data.usage?.total_tokens ?? 0;
 					const configs = loadModelsConfig(resolvedConfigDir);
 					const contextWindow = configs.find((m) => m.id === options.model)?.contextWindow ?? 0;
+					if (contextWindow <= 0 && !warnedContextWindow.has(options.model)) {
+						warnedContextWindow.add(options.model);
+						console.warn(`[WARN] No contextWindow for model "${options.model}"; context tracking degraded`);
+					}
 					const display = formatModelDisplay(options.model, promptTokens, resolvedConfigDir);
 
 					yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };

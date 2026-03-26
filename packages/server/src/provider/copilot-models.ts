@@ -41,13 +41,21 @@ export function formatModelStatus(modelId: string): string {
 	return `${modelId} | ${formatModelCost(modelId)}`;
 }
 
+/** Check whether the copilot-models.json config file exists. */
+export function modelsConfigExists(configDir?: string): boolean {
+	const dir = configDir ?? path.join(os.homedir(), ".config", "bobai");
+	return fs.existsSync(path.join(dir, "copilot-models.json"));
+}
+
 /** Load model configs from the copilot-models.json config file. */
 export function loadModelsConfig(configDir?: string): ModelConfig[] {
 	const dir = configDir ?? path.join(os.homedir(), ".config", "bobai");
+	const filePath = path.join(dir, "copilot-models.json");
 	try {
-		const raw = fs.readFileSync(path.join(dir, "copilot-models.json"), "utf8");
+		const raw = fs.readFileSync(filePath, "utf8");
 		return JSON.parse(raw) as ModelConfig[];
-	} catch {
+	} catch (err) {
+		console.warn(`[WARN] Failed to load model config from ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
 		return [];
 	}
 }
@@ -61,6 +69,11 @@ export function formatModelDisplay(modelId: string, promptTokens: number, config
 	if (contextWindow > 0) {
 		const percent = Math.round((promptTokens / contextWindow) * 100);
 		return `${statusPrefix} | ${promptTokens} / ${contextWindow} | ${percent}%`;
+	}
+	if (!modelConfig) {
+		console.warn(`[WARN] Model "${modelId}" not found in models config; status bar will lack context window info`);
+	} else {
+		console.warn(`[WARN] Model "${modelId}" has no contextWindow configured; status bar will lack context window info`);
 	}
 	return `${statusPrefix} | ${promptTokens} tokens`;
 }
