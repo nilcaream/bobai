@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import path from "node:path";
+import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { createServer } from "../src/server";
+import { createTestDb } from "./helpers";
 
 const uiDist = path.resolve(import.meta.dir, "../../ui/dist");
 
@@ -81,5 +83,71 @@ describe("WebSocket server", () => {
 
 		const code = await closed;
 		expect(code).not.toBe(1000);
+	});
+
+	test("closing WebSocket during active prompt aborts the agent loop", async () => {
+		let streamStarted = false;
+		let streamAborted = false;
+
+		const slowProvider: Provider = {
+			id: "mock",
+			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				streamStarted = true;
+				yield { type: "text", text: "Starting..." };
+				// Wait until aborted or timeout
+				await new Promise<void>((resolve, reject) => {
+					const timer = setTimeout(resolve, 5000);
+					opts.signal?.addEventListener("abort", () => {
+						clearTimeout(timer);
+						streamAborted = true;
+						reject(new DOMException("Aborted", "AbortError"));
+					});
+				});
+				yield { type: "text", text: "Should not reach" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		const testDb = createTestDb();
+		const testServer = createServer({ port: 0, db: testDb, provider: slowProvider, model: "test" });
+		const testWsUrl = `ws://localhost:${testServer.port}/bobai/ws`;
+
+		try {
+			const clientWs = new WebSocket(testWsUrl);
+			await new Promise<void>((resolve) => {
+				clientWs.onopen = () => resolve();
+			});
+
+			// Send a prompt
+			clientWs.send(JSON.stringify({ type: "prompt", text: "hello" }));
+
+			// Wait for the provider stream to start
+			await new Promise<void>((resolve) => {
+				const interval = setInterval(() => {
+					if (streamStarted) {
+						clearInterval(interval);
+						resolve();
+					}
+				}, 10);
+			});
+
+			// Close the WebSocket (simulates page refresh)
+			clientWs.close();
+
+			// Wait for abort to propagate
+			await new Promise<void>((resolve) => {
+				const interval = setInterval(() => {
+					if (streamAborted) {
+						clearInterval(interval);
+						resolve();
+					}
+				}, 10);
+			});
+
+			expect(streamAborted).toBe(true);
+		} finally {
+			testDb.close();
+			testServer.stop(true);
+		}
 	});
 });
