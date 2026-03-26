@@ -177,7 +177,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const repair = repairMessageOrdering(messages);
 		if (repair.repaired) {
 			messages = repair.messages;
-			console.warn(`[message-repair] Repaired message ordering in session ${currentSessionId}`);
+			req.logger?.warn("REPAIR", `Repaired message ordering in session ${currentSessionId}`);
 		}
 
 		// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
