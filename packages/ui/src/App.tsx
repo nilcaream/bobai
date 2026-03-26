@@ -949,6 +949,15 @@ export function App() {
 					| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 					| undefined;
 
+				if (msg.content) {
+					elements.push(
+						<div key={key++} className="panel panel--context">
+							<div className="context-header">assistant</div>
+							<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
+						</div>,
+					);
+				}
+
 				if (toolCalls && toolCalls.length > 0) {
 					for (const tc of toolCalls) {
 						elements.push(
@@ -958,15 +967,6 @@ export function App() {
 							</div>,
 						);
 					}
-				}
-
-				if (msg.content) {
-					elements.push(
-						<div key={key++} className="panel panel--context">
-							<div className="context-header">assistant</div>
-							<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
-						</div>,
-					);
 				}
 			} else if (msg.role === "tool") {
 				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
