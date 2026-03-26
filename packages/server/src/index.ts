@@ -12,6 +12,7 @@ import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
 import { createCopilotProvider, deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
+import { modelsConfigExists } from "./provider/copilot-models";
 import { createServer } from "./server";
 import { discoverSkills } from "./skill/skill";
 
@@ -57,6 +58,11 @@ const skills = discoverSkills(skillDirectories);
 logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
 for (const skill of skills.list()) {
 	logger.info("SKILL", `  ${skill.name}: ${skill.filePath}`);
+}
+
+if (!modelsConfigExists(globalConfigDir)) {
+	console.error("Model configuration not found. Please run: bobai refresh");
+	process.exit(1);
 }
 
 let auth = loadAuth(globalConfigDir);

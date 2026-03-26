@@ -221,6 +221,9 @@ export async function handlePrompt(req: PromptRequest) {
 		const modelConfigs = loadModelsConfig();
 		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
+		if (contextWindow <= 0) {
+			req.logger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
+		}
 		const rawMessages = [...messages];
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
 			const beforeCompaction = messages;
@@ -239,7 +242,7 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 
 		// Signal the provider to start tracking turn stats
-		provider.beginTurn?.();
+		provider.beginTurn?.(sessionPromptTokens);
 
 		// Run the agent loop
 		// Capture tool metadata from onEvent (fires before onMessage for the same tool call)

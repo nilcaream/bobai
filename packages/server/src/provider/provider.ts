@@ -63,8 +63,10 @@ export interface ProviderOptions {
 export interface Provider {
 	readonly id: string;
 	stream(options: ProviderOptions): AsyncIterable<StreamEvent>;
-	/** Reset per-turn stats. Called before the agent loop starts. */
-	beginTurn?(): void;
+	/** Reset per-turn stats. Called before the agent loop starts.
+	 *  @param sessionPromptTokens — last known prompt token count from the DB,
+	 *  used as baseline when no in-memory state exists (e.g. after server restart). */
+	beginTurn?(sessionPromptTokens?: number): void;
 	/** Format accumulated turn stats into a display string (e.g. " | model | agent: 3 | ..."). */
 	getTurnSummary?(): string | undefined;
 	/** Return the prompt token count from the last LLM call in this turn. */

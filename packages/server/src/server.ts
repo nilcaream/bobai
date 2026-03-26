@@ -125,6 +125,9 @@ export function createServer(options: ServerOptions) {
 				const modelConfigs = loadModelsConfig();
 				const modelConfig = modelConfigs.find((m) => m.id === modelId);
 				const contextWindow = modelConfig?.contextWindow ?? 0;
+				if (contextWindow <= 0) {
+					options.logger?.warn("CONFIG", `No contextWindow for model "${modelId}"; compacted context view unavailable`);
+				}
 
 				const messages = [
 					{ role: "system" as const, content: systemPrompt },

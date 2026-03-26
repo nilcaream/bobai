@@ -181,6 +181,9 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			const childModelConfigs = loadModelsConfig();
 			const childModelConfig = childModelConfigs.find((m) => m.id === model);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
+			if (childContextWindow <= 0) {
+				logger?.warn("CONFIG", `No contextWindow for model "${model}"; subagent compaction disabled`);
+			}
 			const rawMessages = [...messages];
 			if (childContextWindow > 0 && childPromptTokens > 0) {
 				messages = compactMessages({
@@ -193,7 +196,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			// Run agent loop with provider turn state isolation
 			let newMessages: Message[];
 			const parentState = provider.saveTurnState?.();
-			provider.beginTurn?.();
+			provider.beginTurn?.(childPromptTokens);
 
 			// Capture tool metadata from onEvent (same pattern as handler.ts)
 			const toolMeta = new Map<
