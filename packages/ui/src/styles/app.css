@@ -210,6 +210,34 @@ body,
 	margin: 1em 0;
 }
 
+.md table {
+	border-collapse: collapse;
+	margin: 1em 0;
+	width: 100%;
+	overflow-x: auto;
+	display: block;
+}
+
+.md thead {
+	border-bottom: 2px solid var(--text-muted);
+}
+
+.md th,
+.md td {
+	padding: 0.4em 0.8em;
+	text-align: left;
+	border: 1px solid var(--text-muted);
+}
+
+.md th {
+	font-weight: 700;
+	color: var(--md-bold);
+}
+
+.md tr:nth-child(even) {
+	background: rgba(255, 255, 255, 0.03);
+}
+
 /* Prompt textarea */
 .prompt-input {
 	width: 100%;

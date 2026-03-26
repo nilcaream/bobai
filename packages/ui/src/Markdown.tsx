@@ -2,6 +2,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { vs2015 } from "react-syntax-highlighter/dist/esm/styles/hljs";
+import remarkGfm from "remark-gfm";
 
 const theme = {
 	...vs2015,
@@ -20,7 +21,7 @@ const codeStyle: React.CSSProperties = {
 
 const components: Components = {
 	code(props) {
-		const { children, className, ref: _ref, ...rest } = props;
+		const { children, className, ref: _ref, node: _node, ...rest } = props;
 		const match = /language-(\w+)/.exec(className || "");
 		if (match) {
 			return (
@@ -40,7 +41,9 @@ const components: Components = {
 export function Markdown({ children }: { children: string }) {
 	return (
 		<div className="md">
-			<ReactMarkdown components={components}>{children}</ReactMarkdown>
+			<ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+				{children}
+			</ReactMarkdown>
 		</div>
 	);
 }
