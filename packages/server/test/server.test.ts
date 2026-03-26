@@ -26,6 +26,20 @@ describe("HTTP server", () => {
 		expect(body).toEqual({ status: "ok" });
 	});
 
+	test("GET /bobai/project-info returns dir and optional git info", async () => {
+		const res = await fetch(`${baseUrl}/bobai/project-info`);
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body).toHaveProperty("dir");
+		expect(typeof body.dir).toBe("string");
+		expect(body.dir.length).toBeGreaterThan(0);
+		// git info is optional — if present, validate shape
+		if (body.git) {
+			expect(typeof body.git.branch).toBe("string");
+			expect(typeof body.git.revision).toBe("string");
+		}
+	});
+
 	test("GET /unknown returns 404", async () => {
 		const res = await fetch(`${baseUrl}/unknown`);
 		expect(res.status).toBe(404);

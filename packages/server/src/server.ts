@@ -6,6 +6,7 @@ import { createCompactionRegistry } from "./compaction/registry";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
+import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import { CURATED_MODELS, formatModelCost, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
@@ -57,6 +58,11 @@ export function createServer(options: ServerOptions) {
 
 			if (url.pathname === "/bobai/health") {
 				return Response.json({ status: "ok" });
+			}
+
+			if (url.pathname === "/bobai/project-info") {
+				const info = await getProjectInfo(options.projectRoot ?? process.cwd());
+				return Response.json(info);
 			}
 
 			// GET /bobai/skills — list available skills

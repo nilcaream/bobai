@@ -18,6 +18,11 @@ export type SubagentInfo = {
 	status: "running" | "done";
 };
 
+export type ProjectInfo = {
+	dir: string;
+	git?: { branch: string; revision: string };
+};
+
 export type StagedSkill = { name: string; content: string };
 
 export type MessagePart =
@@ -70,7 +75,17 @@ export function useWebSocket() {
 	const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
 	const [parentId, setParentId] = useState<string | null>(null);
 	const [parentTitle, setParentTitle] = useState<string | null>(null);
+	const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
 	const sessionId = useRef<string | null>(null);
+
+	const fetchProjectInfo = useCallback(() => {
+		fetch("/bobai/project-info")
+			.then((res) => (res.ok ? res.json() : null))
+			.then((data) => {
+				if (data) setProjectInfo(data);
+			})
+			.catch(() => {});
+	}, []);
 
 	useEffect(() => {
 		const socket = new WebSocket(`ws://${window.location.host}/bobai/ws`);
@@ -128,6 +143,7 @@ export function useWebSocket() {
 					return prev;
 				});
 				setIsStreaming(false);
+				fetchProjectInfo();
 			}
 
 			if (msg.type === "error") {
@@ -145,8 +161,9 @@ export function useWebSocket() {
 		};
 
 		ws.current = socket;
+		fetchProjectInfo();
 		return () => socket.close();
-	}, []);
+	}, [fetchProjectInfo]);
 
 	// Warn user before navigating away during active generation
 	useEffect(() => {
@@ -180,9 +197,10 @@ export function useWebSocket() {
 			if (hasSkills) {
 				payload.stagedSkills = stagedSkills;
 			}
+			fetchProjectInfo();
 			ws.current.send(JSON.stringify(payload));
 		},
-		[isStreaming],
+		[isStreaming, fetchProjectInfo],
 	);
 
 	const newChat = useCallback(() => {
@@ -248,6 +266,7 @@ export function useWebSocket() {
 		addErrorMessage,
 		parentId,
 		parentTitle,
+		projectInfo,
 		loadSession,
 		getSessionId: () => sessionId.current,
 		setSessionId: (id: string) => {
