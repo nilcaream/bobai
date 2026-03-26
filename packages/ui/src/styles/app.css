@@ -96,6 +96,8 @@ body,
 	background: var(--bg-panel);
 	white-space: pre-wrap;
 	word-wrap: break-word;
+	border-left: 2px groove transparent;
+	padding-left: calc(1em - 2px);
 }
 
 .panel--user {
@@ -104,14 +106,21 @@ body,
 
 .panel--assistant {
 	white-space: normal;
+	border-left-color: var(--md-bold);
 }
 
 .panel--tool {
 	color: var(--text-primary);
+	border-left-color: var(--accent-tool-success);
 }
 
 .panel--context {
 	white-space: normal;
+	border-left-color: var(--text-status);
+}
+
+.panel--dot {
+	border-left-color: var(--md-list-marker);
 }
 
 .context-header {
@@ -139,16 +148,32 @@ body,
 	margin-top: 1em;
 }
 
-/* Markdown rendering — terminal grid: margins are 0 or 1em */
+/* Markdown rendering — uniform 1em gap between block elements */
 .md {
 	white-space: normal;
 }
 
-.md p {
-	margin: 0 0 1em;
+.md p,
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6,
+.md ul,
+.md ol,
+.md pre,
+.md blockquote,
+.md table,
+.md hr {
+	margin: 1em 0;
 }
 
-.md p:last-child {
+.md :first-child {
+	margin-top: 0;
+}
+
+.md :last-child {
 	margin-bottom: 0;
 }
 
@@ -161,14 +186,9 @@ body,
 	color: var(--md-code);
 }
 
-.md pre:last-child {
-	margin-bottom: 0;
-}
-
 .md pre {
-	margin: 1em 0;
 	background: inherit;
-	overflow-x: auto;
+	overflow-x: hidden;
 }
 
 .md pre code {
@@ -177,7 +197,6 @@ body,
 
 .md ul,
 .md ol {
-	margin: 1em 0;
 	padding-left: 2em;
 }
 
@@ -189,6 +208,12 @@ body,
 	margin: 0;
 }
 
+.md li p,
+.md li ul,
+.md li ol {
+	margin: 0;
+}
+
 .md h1,
 .md h2,
 .md h3,
@@ -197,13 +222,6 @@ body,
 .md h6 {
 	color: var(--text-user);
 	font-size: inherit;
-	margin: 1em 0 0;
-}
-
-.md h1:first-child,
-.md h2:first-child,
-.md h3:first-child {
-	margin-top: 0;
 }
 
 .md a {
@@ -214,14 +232,12 @@ body,
 .md blockquote {
 	border-left: 2px solid var(--text-muted);
 	padding-left: 1em;
-	color: var(--text-muted);
-	margin: 1em 0;
+	color: var(--text-primary);
 }
 
 .md hr {
 	border: none;
 	border-top: 1px solid var(--text-muted);
-	margin: 1em 0;
 }
 
 .md table {
