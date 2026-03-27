@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { isPathAccessible } from "./tool";
+import { escapeMarkdown, isPathAccessible } from "./tool";
 
 const DEFAULT_LINE_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -63,7 +63,7 @@ export const readFileTool: Tool = {
 		const from = typeof args.from === "number" ? args.from : undefined;
 		const to = typeof args.to === "number" ? args.to : undefined;
 		const range = from || to ? ` (lines ${from ?? 1}-${to ?? "end"})` : "";
-		return `▸ Reading ${filePath}${range}`;
+		return `▸ Reading ${escapeMarkdown(filePath)}${range}`;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -95,7 +95,7 @@ export const readFileTool: Tool = {
 			if (code === "ENOENT") {
 				return {
 					llmOutput: `Error: file not found: ${filePath}`,
-					uiOutput: `▸ Reading ${filePath} — file not found`,
+					uiOutput: `▸ Reading ${escapeMarkdown(filePath)} — file not found`,
 
 					mergeable: true,
 				};
@@ -103,7 +103,7 @@ export const readFileTool: Tool = {
 			if (code === "EISDIR") {
 				return {
 					llmOutput: `Error: '${filePath}' is a directory, not a file. Use list_directory instead.`,
-					uiOutput: `▸ Reading ${filePath} — is a directory`,
+					uiOutput: `▸ Reading ${escapeMarkdown(filePath)} — is a directory`,
 
 					mergeable: true,
 				};
@@ -173,7 +173,7 @@ export const readFileTool: Tool = {
 
 		return {
 			llmOutput: `${outputLines.join("\n")}\n\n${footer}`,
-			uiOutput: `▸ Reading ${filePath} (${outputLines.length} lines)`,
+			uiOutput: `▸ Reading ${escapeMarkdown(filePath)} (${outputLines.length} lines)`,
 
 			mergeable: true,
 		};

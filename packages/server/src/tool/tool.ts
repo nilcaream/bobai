@@ -20,6 +20,11 @@ export function isPathAccessible(resolved: string, ctx: ToolContext): boolean {
 	return false;
 }
 
+/** Escape characters that have special meaning in Markdown so they render as literal text. */
+export function escapeMarkdown(text: string): string {
+	return text.replace(/([*_`~\\[\]|#>])/g, "\\$1");
+}
+
 export interface ToolResult {
 	llmOutput: string;
 	uiOutput: string | null;

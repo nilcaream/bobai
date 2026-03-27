@@ -1,7 +1,7 @@
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { isPathAccessible } from "./tool";
+import { escapeMarkdown, isPathAccessible } from "./tool";
 
 const MAX_RESULTS = 100;
 
@@ -58,7 +58,7 @@ export const grepSearchTool: Tool = {
 	formatCall(args: Record<string, unknown>): string {
 		const pattern = typeof args.pattern === "string" ? args.pattern : "?";
 		const dir = typeof args.path === "string" ? args.path : ".";
-		return `▸ Searching ${pattern} in ${dir}`;
+		return `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(dir)}`;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -103,7 +103,7 @@ export const grepSearchTool: Tool = {
 			if (exitCode === 1 && stdout.length === 0) {
 				return {
 					llmOutput: "No matches found.",
-					uiOutput: `▸ Searching ${pattern} in ${searchPath} (no results)`,
+					uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (no results)`,
 
 					mergeable: true,
 				};
@@ -121,14 +121,14 @@ export const grepSearchTool: Tool = {
 			if (lines.length > MAX_RESULTS) {
 				return {
 					llmOutput: `${lines.slice(0, MAX_RESULTS).join("\n")}\n\n... truncated (${lines.length} total matches, showing first ${MAX_RESULTS})`,
-					uiOutput: `▸ Searching ${pattern} in ${searchPath} (${lines.length} results)`,
+					uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${lines.length} results)`,
 
 					mergeable: true,
 				};
 			}
 			return {
 				llmOutput: stdout.trimEnd(),
-				uiOutput: `▸ Searching ${pattern} in ${searchPath} (${lines.length} results)`,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${lines.length} results)`,
 
 				mergeable: true,
 			};

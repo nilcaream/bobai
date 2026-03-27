@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { isPathAccessible } from "./tool";
+import { escapeMarkdown, isPathAccessible } from "./tool";
 
 export const listDirectoryTool: Tool = {
 	definition: {
@@ -29,7 +29,7 @@ export const listDirectoryTool: Tool = {
 
 	formatCall(args: Record<string, unknown>): string {
 		const dir = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
-		return `▸ Listing ${dir}`;
+		return `▸ Listing ${escapeMarkdown(dir)}`;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -50,7 +50,7 @@ export const listDirectoryTool: Tool = {
 			const lines = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
 			return {
 				llmOutput: lines.join("\n"),
-				uiOutput: `▸ Listing ${dirPath} (${entries.length} entries)`,
+				uiOutput: `▸ Listing ${escapeMarkdown(dirPath)} (${entries.length} entries)`,
 
 				mergeable: true,
 			};
@@ -59,7 +59,7 @@ export const listDirectoryTool: Tool = {
 			if (code === "ENOENT") {
 				return {
 					llmOutput: `Error: directory not found: ${dirPath}`,
-					uiOutput: `▸ Listing ${dirPath} — not found`,
+					uiOutput: `▸ Listing ${escapeMarkdown(dirPath)} — not found`,
 
 					mergeable: true,
 				};
@@ -67,7 +67,7 @@ export const listDirectoryTool: Tool = {
 			if (code === "ENOTDIR") {
 				return {
 					llmOutput: `Error: '${dirPath}' is not a directory`,
-					uiOutput: `▸ Listing ${dirPath} — not a directory`,
+					uiOutput: `▸ Listing ${escapeMarkdown(dirPath)} — not a directory`,
 
 					mergeable: true,
 				};

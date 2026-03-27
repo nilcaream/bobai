@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { isPathAccessible } from "./tool";
+import { escapeMarkdown, isPathAccessible } from "./tool";
 
 const MAX_RESULTS = 1000;
 
@@ -57,7 +57,7 @@ export const fileSearchTool: Tool = {
 
 	formatCall(args: Record<string, unknown>): string {
 		const pattern = typeof args.pattern === "string" ? args.pattern : "";
-		return `▸ Searching ${pattern}`;
+		return `▸ Searching ${escapeMarkdown(pattern)}`;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -123,7 +123,7 @@ export const fileSearchTool: Tool = {
 		if (files.length === 0) {
 			return {
 				llmOutput: `No files found matching pattern "${pattern}" in ${dirPath}.`,
-				uiOutput: `▸ Searching ${pattern} (0 files found)`,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} (0 files found)`,
 				mergeable: true,
 			};
 		}
@@ -135,7 +135,7 @@ export const fileSearchTool: Tool = {
 
 		return {
 			llmOutput,
-			uiOutput: `▸ Searching ${pattern} (${files.length} files found)`,
+			uiOutput: `▸ Searching ${escapeMarkdown(pattern)} (${files.length} files found)`,
 			mergeable: true,
 		};
 	},

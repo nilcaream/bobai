@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Tool, ToolContext, ToolResult } from "./tool";
+import { escapeMarkdown } from "./tool";
 
 export const writeFileTool: Tool = {
 	definition: {
@@ -34,7 +35,7 @@ export const writeFileTool: Tool = {
 
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";
-		return `▸ Writing ${filePath}`;
+		return `▸ Writing ${escapeMarkdown(filePath)}`;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -72,7 +73,7 @@ export const writeFileTool: Tool = {
 			fs.writeFileSync(resolved, content, "utf-8");
 			return {
 				llmOutput: `Wrote ${content.length} bytes to ${filePath}`,
-				uiOutput: `▸ Writing ${filePath} (${content.length} bytes)`,
+				uiOutput: `▸ Writing ${escapeMarkdown(filePath)} (${content.length} bytes)`,
 
 				mergeable: true,
 			};

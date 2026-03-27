@@ -16,6 +16,11 @@ function formatStoredTimestamp(iso: string): string {
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/** Escape characters that have special meaning in Markdown so they render as literal text. */
+function escapeMarkdown(text: string): string {
+	return text.replace(/([*_`~\\[\]|#>])/g, "\\$1");
+}
+
 export function reconstructMessages(stored: StoredMessage[]): Message[] {
 	const messages: Message[] = [];
 	let currentAssistant: (Message & { role: "assistant" }) | null = null;
@@ -50,7 +55,7 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 					newParts.push({
 						type: "tool_call",
 						id: tc.id,
-						content: `**${tc.function.name}** ${tc.function.arguments}`,
+						content: `**${tc.function.name}** ${escapeMarkdown(tc.function.arguments)}`,
 					});
 				}
 			}

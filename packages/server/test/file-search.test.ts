@@ -102,12 +102,12 @@ describe("fileSearchTool", () => {
 
 	test("returns correct uiOutput format", async () => {
 		const result = await fileSearchTool.execute({ pattern: "**/*.ts" }, ctx);
-		expect(result.uiOutput).toMatch(/▸ Searching \*\*\/\*\.ts \(\d+ files found\)/);
+		expect(result.uiOutput).toMatch(/▸ Searching \\\*\\\*\/\\\*\.ts \(\d+ files found\)/);
 	});
 
 	test("returns correct formatCall format", () => {
 		const formatted = fileSearchTool.formatCall({ pattern: "**/*.ts" });
-		expect(formatted).toBe("▸ Searching **/*.ts");
+		expect(formatted).toBe("▸ Searching \\*\\*/\\*.ts");
 	});
 
 	test("is always mergeable", async () => {

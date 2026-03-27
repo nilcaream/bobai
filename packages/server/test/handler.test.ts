@@ -432,7 +432,7 @@ describe("handlePrompt", () => {
 		// Should have a tool_call event for the task tool (not "Unknown tool")
 		const toolCall = msgs.find((m: { type: string; id?: string }) => m.type === "tool_call" && m.id === "call_task");
 		expect(toolCall).toBeTruthy();
-		expect(toolCall.output).toContain("Subagent");
+		expect(toolCall.output).toContain("Task:");
 
 		// Should have a tool_result (not an "Unknown tool" error)
 		const toolResult = msgs.find((m: { type: string; id?: string }) => m.type === "tool_result" && m.id === "call_task");

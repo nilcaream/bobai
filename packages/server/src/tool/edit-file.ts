@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Tool, ToolContext, ToolResult } from "./tool";
+import { escapeMarkdown } from "./tool";
 
 export const editFileTool: Tool = {
 	definition: {
@@ -47,7 +48,7 @@ export const editFileTool: Tool = {
 		for (const line of newString.split("\n")) {
 			diffLines.push(`+ ${line}`);
 		}
-		return `▸ Editing ${filePath}\n\n\`\`\`diff\n${diffLines.join("\n")}\n\`\`\``;
+		return `▸ Editing ${escapeMarkdown(filePath)}\n\n\`\`\`diff\n${diffLines.join("\n")}\n\`\`\``;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -97,7 +98,7 @@ export const editFileTool: Tool = {
 			if (code === "ENOENT") {
 				return {
 					llmOutput: `Error: file not found: ${filePath}`,
-					uiOutput: `▸ Editing ${filePath} — file not found`,
+					uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — file not found`,
 
 					mergeable: false,
 				};
@@ -121,7 +122,7 @@ export const editFileTool: Tool = {
 		if (count === 0) {
 			return {
 				llmOutput: `Error: old_string not found in ${filePath}`,
-				uiOutput: `▸ Editing ${filePath} — old_string not found`,
+				uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — old_string not found`,
 
 				mergeable: false,
 			};
@@ -129,7 +130,7 @@ export const editFileTool: Tool = {
 		if (count > 1) {
 			return {
 				llmOutput: `Error: old_string found multiple times (${count}) in ${filePath}. Include more surrounding context to make the match unique.`,
-				uiOutput: `▸ Editing ${filePath} — multiple matches`,
+				uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — multiple matches`,
 
 				mergeable: false,
 			};
