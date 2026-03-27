@@ -1148,6 +1148,93 @@ describe("Retry logic", () => {
 		]);
 	});
 
+	test("retries once on 401 from chat/completions with forced token refresh", async () => {
+		let chatAttempt = 0;
+		const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-401-retry-"));
+
+		try {
+			globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+				const urlStr = url.toString();
+
+				if (urlStr.includes("copilot_internal/v2/token")) {
+					return new Response(
+						JSON.stringify({
+							token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+							expires_at: Math.floor(Date.now() / 1000) + 3600,
+						}),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				}
+
+				chatAttempt++;
+				if (chatAttempt === 1) {
+					// First chat/completions call returns 401 (server revoked token early)
+					return new Response("Unauthorized", { status: 401 });
+				}
+				// Second call with refreshed token succeeds
+				return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
+			}) as typeof fetch;
+
+			const provider = createCopilotProvider(makeAuth("stale-token"), configDir);
+			const events: StreamEvent[] = [];
+			for await (const e of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				events.push(e);
+			}
+
+			expect(chatAttempt).toBe(2);
+			expect(events.some((e) => e.type === "text" && e.text === "recovered")).toBe(true);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
+	test("does not retry 401 from chat/completions more than once", async () => {
+		let chatAttempt = 0;
+		const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-401-noretry-"));
+
+		try {
+			globalThis.fetch = mock(async (url: string | URL | Request) => {
+				const urlStr = url.toString();
+
+				if (urlStr.includes("copilot_internal/v2/token")) {
+					return new Response(
+						JSON.stringify({
+							token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+							expires_at: Math.floor(Date.now() / 1000) + 3600,
+						}),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				}
+
+				chatAttempt++;
+				return new Response("Unauthorized", { status: 401 });
+			}) as typeof fetch;
+
+			const provider = createCopilotProvider(makeAuth("stale-token"), configDir);
+			let caught: unknown;
+			try {
+				for await (const _ of provider.stream({
+					model: "gpt-4o",
+					messages: [{ role: "user", content: "hi" }],
+				})) {
+					/* drain */
+				}
+			} catch (err) {
+				caught = err;
+			}
+
+			// Should try once, force refresh, try again, then fail
+			expect(chatAttempt).toBe(2);
+			expect(caught).toBeInstanceOf(ProviderError);
+			expect((caught as ProviderError).status).toBe(401);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
 	test("exponential backoff increases delay between retries", async () => {
 		let attempt = 0;
 		const timestamps: number[] = [];

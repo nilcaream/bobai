@@ -210,6 +210,7 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string, logg
 
 			let response: Response | undefined;
 			let lastError: unknown;
+			let retriedAuth = false;
 
 			for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
 				// Use a manual AbortController for the connection timeout so we can
@@ -263,7 +264,17 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string, logg
 				}
 
 				// Non-retryable 4xx (except 429) — fail immediately
+				// Special case: 401 might mean server-side token revocation.
+				// Force one token refresh and retry before giving up.
 				if (response.status !== 429 && response.status < 500) {
+					if (response.status === 401 && !retriedAuth) {
+						retriedAuth = true;
+						logger?.warn("AUTH", "Got 401 from chat/completions, forcing token refresh");
+						sessionExpires = 0; // Force ensureValidSession to refresh
+						await ensureValidSession();
+						response = undefined;
+						continue;
+					}
 					throw new ProviderError(response.status, await response.text());
 				}
 
