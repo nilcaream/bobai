@@ -5,7 +5,7 @@ import { type StoredAuth, saveAuth } from "../auth/store";
 import { fetchCatalog } from "../models-catalog";
 import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
-import { ProviderError } from "./provider";
+import { AuthError, ProviderError } from "./provider";
 import { parseSSE } from "./sse";
 
 const COPILOT_CONFIGURATION =
@@ -27,23 +27,32 @@ export function deriveBaseUrl(token: string): string {
 }
 
 export async function exchangeToken(refreshToken: string): Promise<{ access: string; expires: number; baseUrl: string }> {
-	const response = await fetch(COPILOT_TOKEN_URL, {
-		method: "GET",
-		headers: {
-			...copilotConfig.headers,
-			Accept: "application/json",
-			Authorization: `Bearer ${refreshToken}`,
-		},
-	});
+	let response: Response;
+	try {
+		response = await fetch(COPILOT_TOKEN_URL, {
+			method: "GET",
+			headers: {
+				...copilotConfig.headers,
+				Accept: "application/json",
+				Authorization: `Bearer ${refreshToken}`,
+			},
+		});
+	} catch (err) {
+		// Network error (ConnectionRefused, DNS failure, etc.)
+		const message = err instanceof Error ? err.message : String(err);
+		throw new AuthError(0, `Token exchange network error: ${message}`, false);
+	}
 
 	if (!response.ok) {
-		throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
+		const body = await response.text().catch(() => response.statusText);
+		const permanent = response.status === 401 || response.status === 403;
+		throw new AuthError(response.status, `Token exchange failed: ${response.status} ${body}`, permanent);
 	}
 
 	const data = (await response.json()) as { token?: string; expires_at?: number };
 
 	if (typeof data.token !== "string" || typeof data.expires_at !== "number") {
-		throw new Error("Invalid token exchange response: missing token or expires_at");
+		throw new AuthError(0, "Invalid token exchange response: missing token or expires_at", false);
 	}
 
 	return {

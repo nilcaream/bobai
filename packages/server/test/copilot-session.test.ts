@@ -50,20 +50,78 @@ describe("exchangeToken", () => {
 		expect(result.baseUrl).toBe("https://api.individual.githubcopilot.com");
 	});
 
-	test("throws on non-OK response", async () => {
+	test("throws AuthError(permanent=true) on 401", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response("Unauthorized", { status: 401 });
+		}) as typeof fetch;
+
+		try {
+			await exchangeToken("gho_bad");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AuthError);
+			const authErr = err as AuthError;
+			expect(authErr.status).toBe(401);
+			expect(authErr.permanent).toBe(true);
+		}
+	});
+
+	test("throws AuthError(permanent=true) on 403", async () => {
 		globalThis.fetch = mock(async () => {
 			return new Response("Forbidden", { status: 403 });
 		}) as typeof fetch;
 
-		expect(exchangeToken("gho_bad")).rejects.toThrow();
+		try {
+			await exchangeToken("gho_bad");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AuthError);
+			expect((err as AuthError).permanent).toBe(true);
+		}
 	});
 
-	test("throws on invalid response shape", async () => {
+	test("throws AuthError(permanent=false) on 500", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response("Server Error", { status: 500 });
+		}) as typeof fetch;
+
+		try {
+			await exchangeToken("gho_refresh");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AuthError);
+			expect((err as AuthError).permanent).toBe(false);
+		}
+	});
+
+	test("wraps network errors as AuthError(permanent=false)", async () => {
+		globalThis.fetch = mock(async () => {
+			throw new Error("Unable to connect. Is the computer able to access the internet?");
+		}) as typeof fetch;
+
+		try {
+			await exchangeToken("gho_refresh");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AuthError);
+			const authErr = err as AuthError;
+			expect(authErr.permanent).toBe(false);
+			expect(authErr.body).toContain("Unable to connect");
+		}
+	});
+
+	test("throws AuthError on invalid response shape", async () => {
 		globalThis.fetch = mock(async () => {
 			return new Response(JSON.stringify({ unexpected: true }), { status: 200 });
 		}) as typeof fetch;
 
-		expect(exchangeToken("gho_bad")).rejects.toThrow();
+		try {
+			await exchangeToken("gho_bad");
+			throw new Error("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AuthError);
+			expect((err as AuthError).permanent).toBe(false);
+		}
 	});
 });
 
