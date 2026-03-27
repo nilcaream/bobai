@@ -78,6 +78,20 @@ body,
 	animation: dot-pulse 1s ease-in-out infinite;
 }
 
+@keyframes label-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+
+.status-bar-label.active {
+	animation: label-pulse 1s ease-in-out infinite;
+}
+
 /* Messages — middle zone (scrollable) */
 .messages {
 	flex: 1;

@@ -1128,7 +1128,7 @@ export function App() {
 		<main className="app">
 			<div className="panel panel--status-bar">
 				<span>
-					<span className="status-bar-label">Bob AI</span>{" "}
+					<span className={`status-bar-label${connected && agentActive ? " active" : ""}`}>Bob AI</span>{" "}
 					<span className={`status-dot${connected ? "" : " disconnected"}${connected && agentActive ? " active" : ""}`} />
 					{connected ? (
 						<>
