@@ -11,7 +11,7 @@ import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
-import { ProviderError } from "./provider/provider";
+import { AuthError, ProviderError } from "./provider/provider";
 import {
 	appendMessage,
 	createSession,
@@ -318,15 +318,27 @@ export async function handlePrompt(req: PromptRequest) {
 		if (!isAbort) {
 			// Persist error as assistant message so agent can resume with context
 			if (currentSessionId) {
-				const errorText =
-					err instanceof ProviderError
-						? `[Error: Provider error (${err.status}): ${err.body}]`
-						: `[Error: ${(err as Error).message}]`;
+				let errorText: string;
+				if (err instanceof AuthError) {
+					errorText = err.permanent
+						? `[Error: Authentication failed (${err.status}). Run \`bobai auth\` to re-authenticate.]`
+						: `[Error: Token refresh failed: ${err.body}. Check your network connection and try again.]`;
+				} else if (err instanceof ProviderError) {
+					errorText = `[Error: Provider error (${err.status}): ${err.body}]`;
+				} else {
+					errorText = `[Error: ${(err as Error).message}]`;
+				}
 				const errorMsg = appendMessage(db, currentSessionId, "assistant", errorText);
 				lastAssistantMessageId = errorMsg.id;
 			}
 
-			if (err instanceof ProviderError) {
+			if (err instanceof AuthError) {
+				if (err.permanent) {
+					send(ws, { type: "error", message: `Authentication expired. Run \`bobai auth\` to re-authenticate.` });
+				} else {
+					send(ws, { type: "error", message: `Token refresh failed: ${err.body}` });
+				}
+			} else if (err instanceof ProviderError) {
 				send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
 			} else {
 				console.error("Unexpected error in handlePrompt:", err);

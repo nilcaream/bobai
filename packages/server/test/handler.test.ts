@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { handlePrompt } from "../src/handler";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
-import { ProviderError } from "../src/provider/provider";
+import { AuthError, ProviderError } from "../src/provider/provider";
 import { getMessages } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
@@ -52,6 +52,19 @@ function failingProvider(status: number, body: string): Provider {
 			async function* gen(): AsyncGenerator<StreamEvent> {
 				yield* [];
 				throw new ProviderError(status, body);
+			}
+			return gen();
+		},
+	};
+}
+
+function authFailingProvider(status: number, body: string, permanent: boolean): Provider {
+	return {
+		id: "mock",
+		stream() {
+			async function* gen(): AsyncGenerator<StreamEvent> {
+				yield* [];
+				throw new AuthError(status, body, permanent);
 			}
 			return gen();
 		},
@@ -654,6 +667,71 @@ describe("handlePrompt", () => {
 			(m: { role: string; content: string }) => m.role === "assistant" && m.content.startsWith("[Error:"),
 		);
 		expect(errorMsgs).toHaveLength(0);
+	});
+
+	test("sends actionable auth error for permanent AuthError (401)", async () => {
+		const ws = mockWs();
+		const provider = authFailingProvider(401, "Unauthorized", true);
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const msgs = ws.messages();
+		const errors = msgs.filter((m: { type: string }) => m.type === "error");
+		expect(errors).toHaveLength(1);
+		expect(errors[0].message).toContain("bobai auth");
+	});
+
+	test("sends network error message for transient AuthError", async () => {
+		const ws = mockWs();
+		const provider = authFailingProvider(0, "Token exchange network error: Unable to connect", false);
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const msgs = ws.messages();
+		const errors = msgs.filter((m: { type: string }) => m.type === "error");
+		expect(errors).toHaveLength(1);
+		// Should NOT say "Unexpected error" — should reference the actual error
+		expect(errors[0].message).not.toContain("Unexpected error");
+		expect(errors[0].message).toMatch(/connect|network|token/i);
+	});
+
+	test("persists actionable auth error message to DB", async () => {
+		const ws = mockWs();
+		const provider = authFailingProvider(401, "Unauthorized", true);
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const done = ws.messages().find((m: { type: string }) => m.type === "done");
+		const stored = getMessages(db, done.sessionId);
+		const errorMsg = stored.find(
+			(m: { role: string; content: string }) => m.role === "assistant" && m.content.startsWith("[Error:"),
+		);
+		expect(errorMsg).toBeTruthy();
+		expect(errorMsg!.content).toContain("bobai auth");
 	});
 
 	test("staged skill llmContent includes base directory hint when skill is in registry", async () => {
