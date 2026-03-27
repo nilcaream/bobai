@@ -88,3 +88,14 @@ export class ProviderError extends Error {
 		this.name = "ProviderError";
 	}
 }
+
+export class AuthError extends ProviderError {
+	constructor(
+		status: number,
+		body: string,
+		public readonly permanent: boolean,
+	) {
+		super(status, body);
+		this.name = "AuthError";
+	}
+}

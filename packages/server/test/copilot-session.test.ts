@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { deriveBaseUrl, enableModels, exchangeToken } from "../src/provider/copilot";
+import { AuthError, ProviderError } from "../src/provider/provider";
 
 describe("deriveBaseUrl", () => {
 	test("extracts base URL from proxy-ep in token", () => {
@@ -128,5 +129,34 @@ describe("enableModels", () => {
 		// All should start within ~30ms of each other (parallel, not sequential)
 		const spread = Math.max(...timestamps) - Math.min(...timestamps);
 		expect(spread).toBeLessThan(30);
+	});
+});
+
+describe("AuthError", () => {
+	test("is an instance of ProviderError", () => {
+		const err = new AuthError(401, "Unauthorized", true);
+		expect(err).toBeInstanceOf(ProviderError);
+		expect(err).toBeInstanceOf(AuthError);
+		expect(err).toBeInstanceOf(Error);
+	});
+
+	test("has name AuthError", () => {
+		const err = new AuthError(401, "Unauthorized", true);
+		expect(err.name).toBe("AuthError");
+	});
+
+	test("permanent flag distinguishes re-auth from transient", () => {
+		const permanent = new AuthError(401, "Unauthorized", true);
+		expect(permanent.permanent).toBe(true);
+
+		const transient = new AuthError(500, "Server Error", false);
+		expect(transient.permanent).toBe(false);
+	});
+
+	test("inherits status and body from ProviderError", () => {
+		const err = new AuthError(403, "Forbidden", true);
+		expect(err.status).toBe(403);
+		expect(err.body).toBe("Forbidden");
+		expect(err.message).toContain("403");
 	});
 });
