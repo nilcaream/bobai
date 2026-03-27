@@ -1012,6 +1012,49 @@ describe("Retry logic", () => {
 		expect(capturedTokens.every((t) => t.startsWith("Bearer "))).toBe(true);
 	});
 
+	test("slow SSE body stream is not killed by connection timeout", async () => {
+		// The connection timeout (60s) should only cover waiting for headers.
+		// Once headers arrive the timeout is cleared, so even a slow body
+		// stream should complete without being aborted.
+		globalThis.fetch = mock(async () => {
+			// Headers arrive immediately, but the body drips slowly.
+			const stream = new ReadableStream<Uint8Array>({
+				async start(controller) {
+					const encoder = new TextEncoder();
+					controller.enqueue(encoder.encode(`data: ${chatChunk("slow")}\n\n`));
+					// Simulate a slow generation — 200ms pause between chunks.
+					// This is well within 60s but proves the body is not governed
+					// by the connection timeout timer.
+					await new Promise((r) => setTimeout(r, 200));
+					controller.enqueue(encoder.encode(`data: ${chatChunk(" but steady")}\n\n`));
+					await new Promise((r) => setTimeout(r, 200));
+					controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+					controller.close();
+				},
+			});
+			return new Response(stream, {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		// Both chunks should arrive — the body was not aborted
+		expect(events).toEqual([
+			{ type: "text", text: "slow" },
+			{ type: "text", text: " but steady" },
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
 	test("exponential backoff increases delay between retries", async () => {
 		let attempt = 0;
 		const timestamps: number[] = [];

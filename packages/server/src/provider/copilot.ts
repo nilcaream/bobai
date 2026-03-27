@@ -194,9 +194,14 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 			let lastError: unknown;
 
 			for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-				// Combine caller's abort signal with a per-attempt timeout
-				const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-				const combinedSignal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+				// Use a manual AbortController for the connection timeout so we can
+				// clear it once headers arrive. AbortSignal.timeout() cannot be
+				// cancelled and would abort the SSE body stream mid-read.
+				const timeoutController = new AbortController();
+				const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+				const signals: AbortSignal[] = [timeoutController.signal];
+				if (options.signal) signals.push(options.signal);
+				const combinedSignal = AbortSignal.any(signals);
 
 				try {
 					response = await fetch(`${baseUrl}/chat/completions`, {
@@ -216,7 +221,11 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 						}),
 						signal: combinedSignal,
 					});
+					// Headers received — clear the connection timeout so it does
+					// not abort the SSE body stream during long generations.
+					clearTimeout(timeoutId);
 				} catch (err) {
+					clearTimeout(timeoutId);
 					// If the CALLER aborted (not our timeout), do not retry
 					if (options.signal?.aborted) {
 						throw err;
