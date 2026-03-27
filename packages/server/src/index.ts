@@ -39,9 +39,16 @@ if (cli.command === "refresh") {
 		process.exit(1);
 	}
 	if (Date.now() >= auth.expires) {
-		const session = await exchangeToken(auth.refresh);
-		auth = { refresh: auth.refresh, access: session.access, expires: session.expires };
-		saveAuth(globalConfigDir, auth);
+		try {
+			const session = await exchangeToken(auth.refresh);
+			auth = { refresh: auth.refresh, access: session.access, expires: session.expires };
+			saveAuth(globalConfigDir, auth);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			console.error(`Token refresh failed: ${message}`);
+			console.error("Your session may have expired. Run `bobai auth` to re-authenticate.");
+			process.exit(1);
+		}
 	}
 	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
 	process.exit(0);
