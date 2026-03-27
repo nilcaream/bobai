@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { type StoredAuth, saveAuth } from "../auth/store";
+import type { Logger } from "../log/logger";
 import { fetchCatalog } from "../models-catalog";
 import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
@@ -67,7 +68,7 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 	return last?.role === "user" ? "user" : "agent";
 }
 
-export function createCopilotProvider(auth: StoredAuth, configDir?: string): Provider {
+export function createCopilotProvider(auth: StoredAuth, configDir?: string, logger?: Logger): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
 
 	// Mutable session state
@@ -95,9 +96,12 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 		if (Date.now() < sessionExpires) return;
 
 		if (refreshInFlight) {
+			logger?.debug("AUTH", "Token refresh already in-flight, waiting");
 			await refreshInFlight;
 			return;
 		}
+
+		logger?.info("AUTH", "Session token expired, refreshing");
 
 		refreshInFlight = (async () => {
 			const result = await exchangeToken(refreshToken);
@@ -105,10 +109,15 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 			sessionExpires = result.expires;
 			baseUrl = result.baseUrl;
 			saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
+			logger?.info("AUTH", "Token refreshed successfully");
 		})();
 
 		try {
 			await refreshInFlight;
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			logger?.error("AUTH", `Token refresh failed: ${msg}`);
+			throw err;
 		} finally {
 			refreshInFlight = null;
 		}

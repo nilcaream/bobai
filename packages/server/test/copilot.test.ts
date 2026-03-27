@@ -794,6 +794,99 @@ describe("Token refresh coalescing", () => {
 	});
 });
 
+// ── ensureValidSession logging ────────────────────────────────────────────
+
+describe("ensureValidSession logging", () => {
+	const originalFetch = globalThis.fetch;
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-session-log-"));
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	test("logs token refresh trigger and success", async () => {
+		const logs: string[] = [];
+		const logger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: (_s: string, m: string) => logs.push(`debug: ${m}`),
+			info: (_s: string, m: string) => logs.push(`info: ${m}`),
+			warn: (_s: string, m: string) => logs.push(`warn: ${m}`),
+			error: (_s: string, m: string) => logs.push(`error: ${m}`),
+		};
+
+		globalThis.fetch = mock(async (url: string | URL | Request) => {
+			const urlStr = url.toString();
+			if (urlStr.includes("copilot_internal/v2/token")) {
+				return new Response(
+					JSON.stringify({
+						token: "tid=new;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(
+			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			configDir,
+			logger,
+		);
+
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		expect(logs.some((l) => l.includes("refresh"))).toBe(true);
+		expect(logs.some((l) => l.includes("success") || l.includes("refreshed"))).toBe(true);
+	});
+
+	test("logs token refresh failure", async () => {
+		const logs: string[] = [];
+		const logger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: (_s: string, m: string) => logs.push(`debug: ${m}`),
+			info: (_s: string, m: string) => logs.push(`info: ${m}`),
+			warn: (_s: string, m: string) => logs.push(`warn: ${m}`),
+			error: (_s: string, m: string) => logs.push(`error: ${m}`),
+		};
+
+		globalThis.fetch = mock(async () => {
+			return new Response("Unauthorized", { status: 401 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(
+			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			configDir,
+			logger,
+		);
+
+		try {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				/* drain */
+			}
+		} catch {
+			// expected
+		}
+
+		expect(logs.some((l) => l.includes("fail") || l.includes("error"))).toBe(true);
+	});
+});
+
 // ── Retry logic ───────────────────────────────────────────────────────────
 
 describe("Retry logic", () => {
