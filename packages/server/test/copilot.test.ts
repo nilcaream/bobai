@@ -501,3 +501,549 @@ describe("CopilotProvider", () => {
 		expect(capturedUrl).toBe("https://api.custom.example.com/chat/completions");
 	});
 });
+
+// ── Turn tracking: beginTurn / getTurnSummary ─────────────────────────────
+
+describe("Turn tracking", () => {
+	const originalFetch = globalThis.fetch;
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-turn-"));
+		const modelsConfig = [
+			{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 1, enabled: true },
+		];
+		fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(modelsConfig));
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	/** Helper: mock fetch returning a single completion with the given usage. */
+	function mockFetchWithUsage(promptTokens: number, completionTokens: number) {
+		globalThis.fetch = mock(async () => {
+			const chunks = [
+				chatChunk("ok"),
+				JSON.stringify({
+					choices: [{ finish_reason: "stop", delta: {} }],
+					usage: {
+						prompt_tokens: promptTokens,
+						completion_tokens: completionTokens,
+						total_tokens: promptTokens + completionTokens,
+					},
+				}),
+				"[DONE]",
+			];
+			return new Response(sseStream(chunks), { status: 200 });
+		}) as typeof fetch;
+	}
+
+	/** Drain a provider stream, collecting all events. */
+	async function drain(provider: ReturnType<typeof createCopilotProvider>, model = "gpt-4o") {
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model,
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+		return events;
+	}
+
+	test("subagent session (beginTurn(0)) shows absolute context", async () => {
+		mockFetchWithUsage(3500, 200);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		provider.beginTurn!(0);
+		await drain(provider);
+
+		const summary = provider.getTurnSummary!();
+		expect(summary).toBeDefined();
+		// Should show "context: 3500" (absolute, no sign)
+		expect(summary).toContain("context: 3500");
+		expect(summary).not.toMatch(/context: [+-]3500/);
+	});
+
+	test("subagent session (beginTurn()) with no argument shows absolute context", async () => {
+		mockFetchWithUsage(2000, 100);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		provider.beginTurn!();
+		await drain(provider);
+
+		const summary = provider.getTurnSummary!();
+		expect(summary).toBeDefined();
+		// No sessionPromptTokens → baselineTokens is 0 → absolute display
+		expect(summary).toContain("context: 2000");
+	});
+
+	test("parent session (beginTurn(5000)) shows context delta with sign", async () => {
+		mockFetchWithUsage(5800, 300);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		provider.beginTurn!(5000);
+		await drain(provider);
+
+		const summary = provider.getTurnSummary!();
+		expect(summary).toBeDefined();
+		// Delta: 5800 - 5000 = +800
+		expect(summary).toContain("context: +800");
+	});
+
+	test("parent session shows negative delta when context shrinks", async () => {
+		mockFetchWithUsage(4200, 100);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		provider.beginTurn!(5000);
+		await drain(provider);
+
+		const summary = provider.getTurnSummary!();
+		expect(summary).toBeDefined();
+		// Delta: 4200 - 5000 = -800
+		expect(summary).toContain("context: -800");
+	});
+
+	test("parent session shows zero delta without sign", async () => {
+		mockFetchWithUsage(5000, 100);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		provider.beginTurn!(5000);
+		await drain(provider);
+
+		const summary = provider.getTurnSummary!();
+		expect(summary).toBeDefined();
+		// Delta: 5000 - 5000 = 0
+		expect(summary).toContain("context: 0");
+		expect(summary).not.toMatch(/context: [+-]0/);
+	});
+
+	test("beginTurn resets turnLastCallTokens so prior parent state does not leak", async () => {
+		// Simulate the original bug: parent accumulates tokens, then subagent starts
+		mockFetchWithUsage(41965, 500);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		// Parent turn
+		provider.beginTurn!(30000);
+		await drain(provider);
+		expect(provider.getTurnPromptTokens!()).toBe(41965);
+
+		// Now a subagent starts — save parent, begin subagent turn
+		const saved = provider.saveTurnState!();
+		provider.beginTurn!(0);
+
+		// Subagent makes a call
+		mockFetchWithUsage(3500, 200);
+		await drain(provider);
+
+		const subSummary = provider.getTurnSummary!();
+		// Subagent should show absolute "context: 3500", NOT "context: -38465"
+		expect(subSummary).toContain("context: 3500");
+		expect(subSummary).not.toMatch(/context: [+-]/);
+
+		// Restore parent state
+		provider.restoreTurnState!(saved);
+		const parentSummary = provider.getTurnSummary!();
+		// Parent should still show its own delta: 41965 - 30000 = +11965
+		expect(parentSummary).toContain("context: +11965");
+	});
+
+	test("getTurnSummary returns undefined when no turn has started", () => {
+		const provider = createCopilotProvider(makeAuth(), configDir);
+		expect(provider.getTurnSummary!()).toBeUndefined();
+	});
+
+	test("getTurnSummary includes all expected fields", async () => {
+		mockFetchWithUsage(1000, 50);
+		const provider = createCopilotProvider(makeAuth(), configDir);
+
+		provider.beginTurn!(0);
+		await drain(provider);
+
+		const summary = provider.getTurnSummary!();
+		expect(summary).toBeDefined();
+		expect(summary).toContain("gpt-4o");
+		expect(summary).toContain("agent: 0");
+		expect(summary).toContain("user: 1");
+		expect(summary).toContain("premium:");
+		expect(summary).toContain("tokens: 1050");
+		expect(summary).toContain("context: 1000");
+		expect(summary).toMatch(/\d+\.\d+s/);
+	});
+});
+
+// ── Token refresh coalescing ──────────────────────────────────────────────
+
+describe("Token refresh coalescing", () => {
+	const originalFetch = globalThis.fetch;
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-coalesce-"));
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	test("concurrent streams with expired token trigger only one token exchange", async () => {
+		let tokenExchangeCount = 0;
+
+		globalThis.fetch = mock(async (url: string | URL | Request) => {
+			const urlStr = url.toString();
+
+			if (urlStr.includes("copilot_internal/v2/token")) {
+				tokenExchangeCount++;
+				// Simulate network delay so concurrent callers overlap
+				await new Promise((r) => setTimeout(r, 50));
+				return new Response(
+					JSON.stringify({
+						token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(
+			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			configDir,
+		);
+
+		// Fire two streams concurrently — both will find the token expired
+		const stream1 = (async () => {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "a" }],
+			})) {
+				/* drain */
+			}
+		})();
+
+		const stream2 = (async () => {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "b" }],
+			})) {
+				/* drain */
+			}
+		})();
+
+		await Promise.all([stream1, stream2]);
+
+		// Only ONE token exchange should have happened
+		expect(tokenExchangeCount).toBe(1);
+	});
+
+	test("failed token refresh resets coalescing so next caller retries", async () => {
+		let tokenExchangeCount = 0;
+
+		globalThis.fetch = mock(async (url: string | URL | Request) => {
+			const urlStr = url.toString();
+
+			if (urlStr.includes("copilot_internal/v2/token")) {
+				tokenExchangeCount++;
+				if (tokenExchangeCount === 1) {
+					return new Response("Server Error", { status: 500 });
+				}
+				return new Response(
+					JSON.stringify({
+						token: "tid=recovered;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(
+			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			configDir,
+		);
+
+		// First attempt should fail (500)
+		try {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "a" }],
+			})) {
+				/* drain */
+			}
+		} catch {
+			// Expected: token exchange failed
+		}
+
+		// Second attempt should succeed — coalescing promise was cleared
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "b" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(tokenExchangeCount).toBe(2);
+		expect(events.some((e) => e.type === "text")).toBe(true);
+	});
+});
+
+// ── Retry logic ───────────────────────────────────────────────────────────
+
+describe("Retry logic", () => {
+	const originalFetch = globalThis.fetch;
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	test("retries on 5xx and succeeds", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			if (attempt <= 2) {
+				return new Response("Internal Server Error", { status: 500 });
+			}
+			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(attempt).toBe(3);
+		expect(events.some((e) => e.type === "text" && e.text === "recovered")).toBe(true);
+	});
+
+	test("retries on 429 and succeeds", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			if (attempt === 1) {
+				return new Response("Rate limited", { status: 429 });
+			}
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(attempt).toBe(2);
+		expect(events.some((e) => e.type === "text" && e.text === "ok")).toBe(true);
+	});
+
+	test("does not retry on 4xx other than 429", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			return new Response("Bad Request", { status: 400 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+
+		let caught: unknown;
+		try {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				/* drain */
+			}
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(attempt).toBe(1);
+		expect(caught).toBeInstanceOf(ProviderError);
+		expect((caught as ProviderError).status).toBe(400);
+	});
+
+	test("retries on timeout (fetch throws) and succeeds", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			attempt++;
+			if (attempt <= 1) {
+				// Simulate a timeout by aborting via the signal
+				const error = new DOMException("The operation timed out", "TimeoutError");
+				throw error;
+			}
+			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(attempt).toBe(2);
+		expect(events.some((e) => e.type === "text" && e.text === "recovered")).toBe(true);
+	});
+
+	test("throws after exhausting all retries on 5xx", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			return new Response("Server Error", { status: 502 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+
+		let caught: unknown;
+		try {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				/* drain */
+			}
+		} catch (err) {
+			caught = err;
+		}
+
+		// 1 initial + 3 retries = 4 total attempts
+		expect(attempt).toBe(4);
+		expect(caught).toBeInstanceOf(ProviderError);
+		expect((caught as ProviderError).status).toBe(502);
+	});
+
+	test("does not retry when caller's abort signal fires", async () => {
+		let attempt = 0;
+		const controller = new AbortController();
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			// Abort the caller signal to simulate user cancellation
+			controller.abort();
+			throw new DOMException("The operation was aborted", "AbortError");
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+
+		let caught: unknown;
+		try {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+				signal: controller.signal,
+			})) {
+				/* drain */
+			}
+		} catch (err) {
+			caught = err;
+		}
+
+		// Should NOT retry — caller aborted
+		expect(attempt).toBe(1);
+		expect(caught).toBeDefined();
+	});
+
+	test("calls ensureValidSession before each retry", async () => {
+		let attempt = 0;
+		const capturedTokens: string[] = [];
+
+		globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+			const urlStr = url.toString();
+
+			if (urlStr.includes("copilot_internal/v2/token")) {
+				return new Response(
+					JSON.stringify({
+						token: "tid=refreshed;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			attempt++;
+			const headers = init?.headers as Record<string, string>;
+			capturedTokens.push(headers?.Authorization ?? "");
+
+			if (attempt === 1) {
+				return new Response("Server Error", { status: 500 });
+			}
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		// Start with a token that will expire during backoff
+		const provider = createCopilotProvider({ refresh: "gho_refresh", access: "tid=original", expires: Date.now() + 100 });
+
+		// Small delay to let the token expire before retry
+		await new Promise((r) => setTimeout(r, 150));
+
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(attempt).toBe(2);
+		// First request used original token (via initial ensureValidSession which refreshed because expired)
+		// After 500, backoff + ensureValidSession before retry
+		// Both should have a Bearer token
+		expect(capturedTokens.length).toBe(2);
+		expect(capturedTokens.every((t) => t.startsWith("Bearer "))).toBe(true);
+	});
+
+	test("exponential backoff increases delay between retries", async () => {
+		let attempt = 0;
+		const timestamps: number[] = [];
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			timestamps.push(performance.now());
+			if (attempt <= 3) {
+				return new Response("Server Error", { status: 503 });
+			}
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth());
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		expect(attempt).toBe(4);
+		// Verify backoff is increasing: gap2 > gap1, gap3 > gap2
+		// Backoff is 2s, 4s, 8s — but we allow some tolerance
+		const gap1 = timestamps[1] - timestamps[0]; // ~2000ms
+		const gap2 = timestamps[2] - timestamps[1]; // ~4000ms
+		const gap3 = timestamps[3] - timestamps[2]; // ~8000ms
+
+		expect(gap1).toBeGreaterThan(1500); // 2s with tolerance
+		expect(gap2).toBeGreaterThan(3500); // 4s with tolerance
+		expect(gap3).toBeGreaterThan(7000); // 8s with tolerance
+		expect(gap2).toBeGreaterThan(gap1);
+		expect(gap3).toBeGreaterThan(gap2);
+	});
+});

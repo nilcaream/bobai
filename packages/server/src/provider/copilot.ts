@@ -78,13 +78,31 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 	let baselineTokens = 0;
 	const warnedContextWindow = new Set<string>();
 
+	// Coalescing promise: when a refresh is in-flight, concurrent callers
+	// await the same promise instead of issuing duplicate token exchanges.
+	let refreshInFlight: Promise<void> | null = null;
+
 	async function ensureValidSession(): Promise<void> {
 		if (Date.now() < sessionExpires) return;
-		const result = await exchangeToken(refreshToken);
-		sessionToken = result.access;
-		sessionExpires = result.expires;
-		baseUrl = result.baseUrl;
-		saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
+
+		if (refreshInFlight) {
+			await refreshInFlight;
+			return;
+		}
+
+		refreshInFlight = (async () => {
+			const result = await exchangeToken(refreshToken);
+			sessionToken = result.access;
+			sessionExpires = result.expires;
+			baseUrl = result.baseUrl;
+			saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
+		})();
+
+		try {
+			await refreshInFlight;
+		} finally {
+			refreshInFlight = null;
+		}
 	}
 
 	return {
@@ -97,22 +115,29 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 			turnUserCalls = 0;
 			turnPremiumCost = 0;
 			turnTokens = 0;
-			baselineTokens = turnLastCallTokens || sessionPromptTokens || 0;
 			turnLastCallTokens = 0;
+			baselineTokens = sessionPromptTokens || 0;
 		},
 
 		getTurnSummary(): string | undefined {
 			if (turnStartTime === 0) return undefined;
 			const elapsed = (performance.now() - turnStartTime) / 1000;
-			const contextDelta = turnLastCallTokens - baselineTokens;
-			const sign = contextDelta > 0 ? "+" : "";
+			let contextDisplay: string;
+			if (baselineTokens === 0) {
+				// New session or new subagent — show absolute context size
+				contextDisplay = `context: ${turnLastCallTokens}`;
+			} else {
+				const contextDelta = turnLastCallTokens - baselineTokens;
+				const sign = contextDelta > 0 ? "+" : "";
+				contextDisplay = `context: ${sign}${contextDelta}`;
+			}
 			const parts = [
 				turnModel,
 				`agent: ${turnAgentCalls}`,
 				`user: ${turnUserCalls}`,
 				`premium: ${turnPremiumCost.toFixed(2)}`,
 				`tokens: ${turnTokens}`,
-				`context: ${sign}${contextDelta}`,
+				contextDisplay,
 				`${elapsed.toFixed(2)}s`,
 			];
 			return ` | ${parts.join(" | ")}`;
@@ -160,26 +185,73 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string): Pro
 			await ensureValidSession();
 			const initiator = options.initiator ?? resolveInitiator(options.messages);
 
-			const response = await fetch(`${baseUrl}/chat/completions`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					...copilotConfig.headers,
-					"Openai-Intent": "conversation-edits",
-					Authorization: `Bearer ${sessionToken}`,
-					"x-initiator": initiator,
-				},
-				body: JSON.stringify({
-					model: options.model,
-					messages: options.messages,
-					stream: true,
-					...(options.tools?.length ? { tools: options.tools } : {}),
-				}),
-				signal: options.signal,
-			});
+			// Retry constants
+			const MAX_RETRIES = 3;
+			const REQUEST_TIMEOUT_MS = 60_000;
+			const BACKOFF_BASE_MS = 2_000;
 
-			if (!response.ok) {
-				throw new ProviderError(response.status, await response.text());
+			let response: Response | undefined;
+			let lastError: unknown;
+
+			for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+				// Combine caller's abort signal with a per-attempt timeout
+				const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+				const combinedSignal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+
+				try {
+					response = await fetch(`${baseUrl}/chat/completions`, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							...copilotConfig.headers,
+							"Openai-Intent": "conversation-edits",
+							Authorization: `Bearer ${sessionToken}`,
+							"x-initiator": initiator,
+						},
+						body: JSON.stringify({
+							model: options.model,
+							messages: options.messages,
+							stream: true,
+							...(options.tools?.length ? { tools: options.tools } : {}),
+						}),
+						signal: combinedSignal,
+					});
+				} catch (err) {
+					// If the CALLER aborted (not our timeout), do not retry
+					if (options.signal?.aborted) {
+						throw err;
+					}
+					lastError = err;
+					// Timeout errors and network errors are retryable; fall through to backoff
+					if (attempt === MAX_RETRIES) throw lastError;
+					const backoffMs = BACKOFF_BASE_MS * 2 ** attempt;
+					await new Promise((r) => setTimeout(r, backoffMs));
+					await ensureValidSession();
+					response = undefined;
+					continue;
+				}
+
+				if (response.ok) {
+					break;
+				}
+
+				// Non-retryable 4xx (except 429) — fail immediately
+				if (response.status !== 429 && response.status < 500) {
+					throw new ProviderError(response.status, await response.text());
+				}
+
+				// Retryable: 429 or 5xx
+				lastError = new ProviderError(response.status, await response.text());
+				if (attempt === MAX_RETRIES) throw lastError;
+
+				const backoffMs = BACKOFF_BASE_MS * 2 ** attempt;
+				await new Promise((r) => setTimeout(r, backoffMs));
+				await ensureValidSession();
+				response = undefined;
+			}
+
+			if (!response || !response.ok) {
+				throw lastError ?? new Error("Unexpected: no response after retry loop");
 			}
 
 			if (!response.body) {
