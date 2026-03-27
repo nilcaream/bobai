@@ -5,4 +5,4 @@ node_modules
 dist
 .bobai
 *.tmp
-docs/plans/
+**/docs/plans/

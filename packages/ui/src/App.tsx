@@ -157,23 +157,24 @@ type ViewMode = (typeof VIEW_MODES)[number];
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 
-function ToolPanel({ children }: { children: React.ReactNode }) {
+function ToolPanel({ children, content }: { children: React.ReactNode; content: string }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
+	const collapsible = useRef(false);
+	const userToggled = useRef(false);
 
 	useEffect(() => {
-		if (ref.current && collapsed === null) {
+		if (ref.current && !userToggled.current) {
 			const threshold = window.innerHeight * 0.3;
-			if (ref.current.scrollHeight > threshold) {
-				setCollapsed(true);
-			} else {
-				setCollapsed(false);
-			}
+			const shouldCollapse = ref.current.scrollHeight > threshold;
+			collapsible.current = shouldCollapse;
+			setCollapsed(shouldCollapse);
 		}
-	}, [collapsed]);
+	}, [content]);
 
 	const handleDoubleClick = () => {
-		if (collapsed !== null) {
+		if (collapsible.current) {
+			userToggled.current = true;
 			setCollapsed((prev) => !prev);
 			window.getSelection()?.removeAllRanges();
 		}
@@ -929,7 +930,7 @@ export function App() {
 					);
 				} else {
 					elements.push(
-						<ToolPanel key={key++}>
+						<ToolPanel key={key++} content={panel.content}>
 							<Markdown>{panel.content}</Markdown>
 							{panel.summary && <div className="panel-status">{panel.summary}</div>}
 							{!panel.summary && isLast && msg.timestamp && (
