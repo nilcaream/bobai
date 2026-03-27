@@ -90,7 +90,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		mergeable: false,
 		compactionResistance: 0.7,
 		formatCall(args: Record<string, unknown>): string {
-			return `▸ Task: ${args.description ?? "task"}`;
+			return `▸ ${args.description ?? "task"}`;
 		},
 		async execute(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
 			const description = args.description as string;
