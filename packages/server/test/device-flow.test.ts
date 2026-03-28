@@ -31,9 +31,12 @@ describe("requestDeviceCode", () => {
 
 		expect(capturedUrl).toBe("https://github.com/login/device/code");
 		expect(capturedInit?.method).toBe("POST");
-		const body = JSON.parse(capturedInit?.body as string);
-		expect(body.client_id).toBe("Iv1.b507a08c87ecfe98");
-		expect(body.scope).toBe("read:user");
+		expect(capturedInit?.headers).toMatchObject({
+			"Content-Type": "application/x-www-form-urlencoded",
+		});
+		const body = new URLSearchParams(capturedInit?.body as string);
+		expect(body.get("client_id")).toBe("Iv1.b507a08c87ecfe98");
+		expect(body.get("scope")).toBe("read:user");
 		expect(result.device_code).toBe("dc_123");
 		expect(result.user_code).toBe("ABCD-1234");
 		expect(result.verification_uri).toBe("https://github.com/login/device");

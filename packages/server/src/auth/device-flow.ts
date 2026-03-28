@@ -14,10 +14,11 @@ export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
 	const response = await fetch(GITHUB_DEVICE_CODE_URL, {
 		method: "POST",
 		headers: {
-			"Content-Type": "application/json",
+			"Content-Type": "application/x-www-form-urlencoded",
 			Accept: "application/json",
+			"User-Agent": copilotConfig.headers["User-Agent"],
 		},
-		body: JSON.stringify({
+		body: new URLSearchParams({
 			client_id: copilotConfig.clientId,
 			scope: "read:user",
 		}),
@@ -54,10 +55,11 @@ export async function pollForToken(
 		const response = await fetch(GITHUB_TOKEN_URL, {
 			method: "POST",
 			headers: {
-				"Content-Type": "application/json",
+				"Content-Type": "application/x-www-form-urlencoded",
 				Accept: "application/json",
+				"User-Agent": copilotConfig.headers["User-Agent"],
 			},
-			body: JSON.stringify({
+			body: new URLSearchParams({
 				client_id: copilotConfig.clientId,
 				device_code: deviceCode,
 				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
