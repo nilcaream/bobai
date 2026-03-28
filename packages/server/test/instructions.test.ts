@@ -30,7 +30,7 @@ describe("loadInstructions", () => {
 		fs.writeFileSync(path.join(globalConfigDir, "AGENT.md"), "Global instructions here");
 		const result = loadInstructions(globalConfigDir, projectRoot);
 		expect(result).toHaveLength(1);
-		expect(result[0].label).toBe("Global Instructions");
+		expect(result[0].type).toBe("global");
 		expect(result[0].content).toBe("Global instructions here");
 		expect(result[0].source).toBe(path.join(globalConfigDir, "AGENT.md"));
 	});
@@ -39,7 +39,7 @@ describe("loadInstructions", () => {
 		fs.writeFileSync(path.join(projectRoot, ".bobai", "AGENT.md"), "Project instructions here");
 		const result = loadInstructions(globalConfigDir, projectRoot);
 		expect(result).toHaveLength(1);
-		expect(result[0].label).toBe("Project Instructions");
+		expect(result[0].type).toBe("project");
 		expect(result[0].content).toBe("Project instructions here");
 		expect(result[0].source).toBe(path.join(projectRoot, ".bobai", "AGENT.md"));
 	});
@@ -49,9 +49,9 @@ describe("loadInstructions", () => {
 		fs.writeFileSync(path.join(projectRoot, ".bobai", "AGENT.md"), "Project rules");
 		const result = loadInstructions(globalConfigDir, projectRoot);
 		expect(result).toHaveLength(2);
-		expect(result[0].label).toBe("Global Instructions");
+		expect(result[0].type).toBe("global");
 		expect(result[0].content).toBe("Global rules");
-		expect(result[1].label).toBe("Project Instructions");
+		expect(result[1].type).toBe("project");
 		expect(result[1].content).toBe("Project rules");
 	});
 
@@ -60,7 +60,7 @@ describe("loadInstructions", () => {
 		fs.writeFileSync(path.join(projectRoot, ".bobai", "AGENT.md"), "Real content");
 		const result = loadInstructions(globalConfigDir, projectRoot);
 		expect(result).toHaveLength(1);
-		expect(result[0].label).toBe("Project Instructions");
+		expect(result[0].type).toBe("project");
 	});
 
 	test("trims whitespace from file contents", () => {

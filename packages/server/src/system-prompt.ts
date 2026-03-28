@@ -22,24 +22,25 @@ When working with code:
 - Use edit_file for modifying existing files and write_file for creating new ones.
 - After making changes, run relevant tests or builds to verify correctness.
 - Use the task tool for complex multi-step work that can be delegated to a subagent.
+- Projects often contain context files (AGENT.md, CLAUDE.md, README.md, etc.) that describe conventions, architecture, and workflows. In monorepos these may exist in multiple subdirectories. Read them when you need to understand a project or subdirectory you are working in.
 
-## Context Compaction
-
-Some tool outputs in this conversation may have been compacted to manage context size. Compacted outputs are marked with "# COMPACTED" followed by a short description of what was removed. If you need the full output, you can re-invoke the tool. The original data is not lost — it has been summarized for efficiency.
-
-Do not mention compaction to the user unless they ask about it.`;
+Context Compaction:
+- Some tool outputs in this conversation may have been compacted to manage context size. Compacted outputs are marked with "# COMPACTED" followed by a short description of what was removed. If you need the full output, you can re-invoke the tool. The original data is not lost — it has been summarized for efficiency.
+- Do not mention compaction to the user unless they ask about it.`;
 
 export function buildSystemPrompt(skills: Skill[], instructions: InstructionFile[] = []): string {
-	let prompt = SYSTEM_PROMPT;
-
-	for (const instruction of instructions) {
-		prompt += `\n\n## ${instruction.label}\n\nPre-loaded from: ${instruction.source}\n\n${instruction.content}`;
-	}
+	const parts: string[] = [`<base>\n${SYSTEM_PROMPT}\n</base>`];
 
 	if (skills.length > 0) {
 		const listing = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
-		prompt += `\n\n## Available Skills\n\nUse the \`skill\` tool to load a skill when a task matches its description. Skills provide specialized instructions and workflows.\n\n${listing}`;
+		parts.push(
+			`<skills>\n## Available Skills\n\nUse the \`skill\` tool to load a skill when a task matches its description. Skills provide specialized instructions and workflows.\n\n${listing}\n</skills>`,
+		);
 	}
 
-	return prompt;
+	for (const instruction of instructions) {
+		parts.push(`<instructions type="${instruction.type}">\n${instruction.content}\n</instructions>`);
+	}
+
+	return parts.join("\n\n");
 }

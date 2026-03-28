@@ -11,9 +11,15 @@ describe("SYSTEM_PROMPT constant", () => {
 });
 
 describe("buildSystemPrompt", () => {
-	test("returns base prompt when no skills provided", () => {
+	test("wraps base prompt in <base> tags", () => {
 		const result = buildSystemPrompt([]);
-		expect(result).toBe(SYSTEM_PROMPT);
+		expect(result).toStartWith("<base>\n");
+		expect(result).toContain("\n</base>");
+	});
+
+	test("returns only base section when no skills or instructions provided", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).toBe(`<base>\n${SYSTEM_PROMPT}\n</base>`);
 	});
 
 	test("identifies as Bob AI", () => {
@@ -44,6 +50,15 @@ describe("buildSystemPrompt", () => {
 		expect(result).not.toContain("no access to the project");
 	});
 
+	test("wraps skills in <skills> tags", () => {
+		const skills: Skill[] = [
+			{ name: "tdd", description: "Test-driven development workflow", content: "...", filePath: "/a/SKILL.md" },
+		];
+		const result = buildSystemPrompt(skills);
+		expect(result).toContain("<skills>\n## Available Skills");
+		expect(result).toContain("\n</skills>");
+	});
+
 	test("appends skill listing when skills are provided", () => {
 		const skills: Skill[] = [
 			{ name: "tdd", description: "Test-driven development workflow", content: "...", filePath: "/a/SKILL.md" },
@@ -62,44 +77,51 @@ describe("buildSystemPrompt", () => {
 		expect(result).toContain("skill");
 	});
 
-	test("appends instruction sections when instructions are provided", () => {
+	test("wraps instructions in <instructions> tags with type attribute", () => {
 		const instructions: InstructionFile[] = [
-			{ label: "Global Instructions", source: "/home/user/.config/bobai/AGENT.md", content: "Always use TDD." },
+			{ type: "global", source: "/home/user/.config/bobai/AGENT.md", content: "Always use TDD." },
 		];
 		const result = buildSystemPrompt([], instructions);
-		expect(result).toContain("## Global Instructions");
-		expect(result).toContain("Pre-loaded from: /home/user/.config/bobai/AGENT.md");
+		expect(result).toContain('<instructions type="global">');
+		expect(result).not.toContain("source=");
 		expect(result).toContain("Always use TDD.");
+		expect(result).toContain("</instructions>");
 	});
 
 	test("appends multiple instruction sections in order", () => {
 		const instructions: InstructionFile[] = [
-			{ label: "Global Instructions", source: "/global/AGENT.md", content: "Global rules." },
-			{ label: "Project Instructions", source: "/project/.bobai/AGENT.md", content: "Project rules." },
+			{ type: "global", source: "/global/AGENT.md", content: "Global rules." },
+			{ type: "project", source: "/project/.bobai/AGENT.md", content: "Project rules." },
 		];
 		const result = buildSystemPrompt([], instructions);
-		const globalIdx = result.indexOf("## Global Instructions");
-		const projectIdx = result.indexOf("## Project Instructions");
+		const globalIdx = result.indexOf('<instructions type="global"');
+		const projectIdx = result.indexOf('<instructions type="project"');
 		expect(globalIdx).toBeGreaterThan(-1);
 		expect(projectIdx).toBeGreaterThan(globalIdx);
 		expect(result).toContain("Global rules.");
 		expect(result).toContain("Project rules.");
 	});
 
-	test("instructions appear before skills", () => {
+	test("skills appear before instructions", () => {
 		const instructions: InstructionFile[] = [
-			{ label: "Global Instructions", source: "/global/AGENT.md", content: "Be helpful." },
+			{ type: "global", source: "/global/AGENT.md", content: "Be helpful." },
 		];
 		const skills: Skill[] = [{ name: "tdd", description: "Test-driven development", content: "...", filePath: "/a/SKILL.md" }];
 		const result = buildSystemPrompt(skills, instructions);
-		const instructionIdx = result.indexOf("## Global Instructions");
-		const skillIdx = result.indexOf("## Available Skills");
-		expect(instructionIdx).toBeGreaterThan(-1);
-		expect(skillIdx).toBeGreaterThan(instructionIdx);
+		const skillIdx = result.indexOf("<skills>");
+		const instructionIdx = result.indexOf("<instructions");
+		expect(skillIdx).toBeGreaterThan(-1);
+		expect(instructionIdx).toBeGreaterThan(skillIdx);
 	});
 
-	test("returns base prompt when instructions array is empty", () => {
+	test("returns only base section when instructions array is empty", () => {
 		const result = buildSystemPrompt([], []);
-		expect(result).toBe(SYSTEM_PROMPT);
+		expect(result).toBe(`<base>\n${SYSTEM_PROMPT}\n</base>`);
+	});
+
+	test("context compaction section uses plain label instead of markdown heading", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).toContain("Context Compaction:");
+		expect(result).not.toContain("## Context Compaction");
 	});
 });
