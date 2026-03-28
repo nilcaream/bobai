@@ -162,14 +162,25 @@ function ToolPanel({ children }: { children: React.ReactNode }) {
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
 	const collapsible = useRef(false);
 	const userToggled = useRef(false);
+	const observerRef = useRef<ResizeObserver | null>(null);
 
 	useEffect(() => {
-		if (ref.current && !userToggled.current) {
+		if (!ref.current) return;
+
+		const evaluate = () => {
+			if (userToggled.current) return;
 			const threshold = window.innerHeight * 0.3;
-			const shouldCollapse = ref.current.scrollHeight > threshold;
-			collapsible.current = shouldCollapse;
-			setCollapsed(shouldCollapse);
-		}
+			const shouldCollapse = ref.current!.scrollHeight > threshold;
+			if (shouldCollapse) {
+				collapsible.current = true;
+				setCollapsed(true);
+				observerRef.current?.disconnect();
+			}
+		};
+
+		observerRef.current = new ResizeObserver(evaluate);
+		observerRef.current.observe(ref.current);
+		return () => observerRef.current?.disconnect();
 	}, []);
 
 	const handleDoubleClick = () => {
