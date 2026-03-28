@@ -334,7 +334,8 @@ export function createServer(options: ServerOptions) {
 				}
 
 				if (msg.type === "prompt") {
-					if (options.provider && options.model && options.db) {
+					const { db, provider, model } = options;
+					if (provider && model && db) {
 						// Create abort controller for this prompt — aborted on WebSocket close
 						const controller = new AbortController();
 						wsAbortControllers.set(ws, controller);
@@ -342,9 +343,9 @@ export function createServer(options: ServerOptions) {
 						const runPrompt = () =>
 							handlePrompt({
 								ws,
-								db: options.db!,
-								provider: options.provider!,
-								model: options.model!,
+								db,
+								provider,
+								model,
 								text: msg.text,
 								sessionId: msg.sessionId,
 								projectRoot: options.projectRoot ?? process.cwd(),

@@ -1,28 +1,28 @@
 {
-  "name": "@bobai/ui",
-  "version": "0.0.1",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "biome check ."
-  },
-  "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-markdown": "^10.1.0",
-    "react-syntax-highlighter": "^16.1.1",
-    "remark-gfm": "^4.0.1"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "@vitejs/plugin-react": "^4.5.0",
-    "typescript": "^5.8.0",
-    "vite": "^6.3.0"
-  }
+	"name": "@bobai/ui",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "biome check ."
+	},
+	"dependencies": {
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"react-markdown": "^10.1.0",
+		"react-syntax-highlighter": "^16.1.1",
+		"remark-gfm": "^4.0.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.0.0",
+		"@types/react": "^19.1.0",
+		"@types/react-dom": "^19.1.0",
+		"@types/react-syntax-highlighter": "^15.5.13",
+		"@vitejs/plugin-react": "^4.5.0",
+		"typescript": "^5.8.0",
+		"vite": "^6.3.0"
+	}
 }

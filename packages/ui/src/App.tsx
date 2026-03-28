@@ -148,7 +148,7 @@ function truncateContent(text: string, lineLimit: number): string {
 
 function truncateChars(text: string, charLimit: number): string {
 	if (charLimit <= 0 || text.length <= charLimit) return text;
-	return text.slice(0, charLimit) + `... (${text.length - charLimit} more chars)`;
+	return `${text.slice(0, charLimit)}... (${text.length - charLimit} more chars)`;
 }
 
 const VIEW_MODES = ["chat", "context", "compaction"] as const;
@@ -157,7 +157,7 @@ type ViewMode = (typeof VIEW_MODES)[number];
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 
-function ToolPanel({ children, content }: { children: React.ReactNode; content: string }) {
+function ToolPanel({ children }: { children: React.ReactNode }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
 	const collapsible = useRef(false);
@@ -170,7 +170,7 @@ function ToolPanel({ children, content }: { children: React.ReactNode; content: 
 			collapsible.current = shouldCollapse;
 			setCollapsed(shouldCollapse);
 		}
-	}, [content]);
+	}, []);
 
 	const handleDoubleClick = () => {
 		if (collapsible.current) {
@@ -930,7 +930,7 @@ export function App() {
 					);
 				} else {
 					elements.push(
-						<ToolPanel key={key++} content={panel.content}>
+						<ToolPanel key={key++}>
 							<Markdown>{panel.content}</Markdown>
 							{panel.summary && <div className="panel-status">{panel.summary}</div>}
 							{!panel.summary && isLast && msg.timestamp && (

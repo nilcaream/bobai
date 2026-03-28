@@ -556,10 +556,10 @@ describe("Turn tracking", () => {
 		mockFetchWithUsage(3500, 200);
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
-		provider.beginTurn!(0);
+		provider.beginTurn?.(0);
 		await drain(provider);
 
-		const summary = provider.getTurnSummary!();
+		const summary = provider.getTurnSummary?.();
 		expect(summary).toBeDefined();
 		// Should show "context: 3500" (absolute, no sign)
 		expect(summary).toContain("context: 3500");
@@ -570,10 +570,10 @@ describe("Turn tracking", () => {
 		mockFetchWithUsage(2000, 100);
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
-		provider.beginTurn!();
+		provider.beginTurn?.();
 		await drain(provider);
 
-		const summary = provider.getTurnSummary!();
+		const summary = provider.getTurnSummary?.();
 		expect(summary).toBeDefined();
 		// No sessionPromptTokens → baselineTokens is 0 → absolute display
 		expect(summary).toContain("context: 2000");
@@ -583,10 +583,10 @@ describe("Turn tracking", () => {
 		mockFetchWithUsage(5800, 300);
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
-		provider.beginTurn!(5000);
+		provider.beginTurn?.(5000);
 		await drain(provider);
 
-		const summary = provider.getTurnSummary!();
+		const summary = provider.getTurnSummary?.();
 		expect(summary).toBeDefined();
 		// Delta: 5800 - 5000 = +800
 		expect(summary).toContain("context: +800");
@@ -596,10 +596,10 @@ describe("Turn tracking", () => {
 		mockFetchWithUsage(4200, 100);
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
-		provider.beginTurn!(5000);
+		provider.beginTurn?.(5000);
 		await drain(provider);
 
-		const summary = provider.getTurnSummary!();
+		const summary = provider.getTurnSummary?.();
 		expect(summary).toBeDefined();
 		// Delta: 4200 - 5000 = -800
 		expect(summary).toContain("context: -800");
@@ -609,10 +609,10 @@ describe("Turn tracking", () => {
 		mockFetchWithUsage(5000, 100);
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
-		provider.beginTurn!(5000);
+		provider.beginTurn?.(5000);
 		await drain(provider);
 
-		const summary = provider.getTurnSummary!();
+		const summary = provider.getTurnSummary?.();
 		expect(summary).toBeDefined();
 		// Delta: 5000 - 5000 = 0
 		expect(summary).toContain("context: 0");
@@ -625,43 +625,43 @@ describe("Turn tracking", () => {
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
 		// Parent turn
-		provider.beginTurn!(30000);
+		provider.beginTurn?.(30000);
 		await drain(provider);
-		expect(provider.getTurnPromptTokens!()).toBe(41965);
+		expect(provider.getTurnPromptTokens?.()).toBe(41965);
 
 		// Now a subagent starts — save parent, begin subagent turn
-		const saved = provider.saveTurnState!();
-		provider.beginTurn!(0);
+		const saved = provider.saveTurnState?.();
+		provider.beginTurn?.(0);
 
 		// Subagent makes a call
 		mockFetchWithUsage(3500, 200);
 		await drain(provider);
 
-		const subSummary = provider.getTurnSummary!();
+		const subSummary = provider.getTurnSummary?.();
 		// Subagent should show absolute "context: 3500", NOT "context: -38465"
 		expect(subSummary).toContain("context: 3500");
 		expect(subSummary).not.toMatch(/context: [+-]/);
 
 		// Restore parent state
-		provider.restoreTurnState!(saved);
-		const parentSummary = provider.getTurnSummary!();
+		provider.restoreTurnState?.(saved);
+		const parentSummary = provider.getTurnSummary?.();
 		// Parent should still show its own delta: 41965 - 30000 = +11965
 		expect(parentSummary).toContain("context: +11965");
 	});
 
 	test("getTurnSummary returns undefined when no turn has started", () => {
 		const provider = createCopilotProvider(makeAuth(), configDir);
-		expect(provider.getTurnSummary!()).toBeUndefined();
+		expect(provider.getTurnSummary?.()).toBeUndefined();
 	});
 
 	test("getTurnSummary includes all expected fields", async () => {
 		mockFetchWithUsage(1000, 50);
 		const provider = createCopilotProvider(makeAuth(), configDir);
 
-		provider.beginTurn!(0);
+		provider.beginTurn?.(0);
 		await drain(provider);
 
-		const summary = provider.getTurnSummary!();
+		const summary = provider.getTurnSummary?.();
 		expect(summary).toBeDefined();
 		expect(summary).toContain("gpt-4o");
 		expect(summary).toContain("agent: 0");
@@ -891,6 +891,7 @@ describe("ensureValidSession logging", () => {
 
 describe("Retry logic", () => {
 	const originalFetch = globalThis.fetch;
+	const fast = { backoffBaseMs: 10 };
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
@@ -907,7 +908,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -931,7 +932,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -974,7 +975,7 @@ describe("Retry logic", () => {
 	test("retries on timeout (fetch throws) and succeeds", async () => {
 		let attempt = 0;
 
-		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+		globalThis.fetch = mock(async (_url: string | URL | Request, _init?: RequestInit) => {
 			attempt++;
 			if (attempt <= 1) {
 				// Simulate a timeout by aborting via the signal
@@ -984,7 +985,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -1005,7 +1006,7 @@ describe("Retry logic", () => {
 			return new Response("Server Error", { status: 502 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
 
 		let caught: unknown;
 		try {
@@ -1036,7 +1037,7 @@ describe("Retry logic", () => {
 			throw new DOMException("The operation was aborted", "AbortError");
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
 
 		let caught: unknown;
 		try {
@@ -1084,7 +1085,12 @@ describe("Retry logic", () => {
 		}) as typeof fetch;
 
 		// Start with a token that will expire during backoff
-		const provider = createCopilotProvider({ refresh: "gho_refresh", access: "tid=original", expires: Date.now() + 100 });
+		const provider = createCopilotProvider(
+			{ refresh: "gho_refresh", access: "tid=original", expires: Date.now() + 100 },
+			undefined,
+			undefined,
+			fast,
+		);
 
 		// Small delay to let the token expire before retry
 		await new Promise((r) => setTimeout(r, 150));
@@ -1153,7 +1159,7 @@ describe("Retry logic", () => {
 		const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-401-retry-"));
 
 		try {
-			globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+			globalThis.fetch = mock(async (url: string | URL | Request, _init?: RequestInit) => {
 				const urlStr = url.toString();
 
 				if (urlStr.includes("copilot_internal/v2/token")) {
@@ -1248,7 +1254,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
 			messages: [{ role: "user", content: "hi" }],
@@ -1258,14 +1264,12 @@ describe("Retry logic", () => {
 
 		expect(attempt).toBe(4);
 		// Verify backoff is increasing: gap2 > gap1, gap3 > gap2
-		// Backoff is 2s, 4s, 8s — but we allow some tolerance
-		const gap1 = timestamps[1] - timestamps[0]; // ~2000ms
-		const gap2 = timestamps[2] - timestamps[1]; // ~4000ms
-		const gap3 = timestamps[3] - timestamps[2]; // ~8000ms
+		// With backoffBaseMs=10: delays are 10ms, 20ms, 40ms
+		const gap1 = timestamps[1] - timestamps[0]; // ~10ms
+		const gap2 = timestamps[2] - timestamps[1]; // ~20ms
+		const gap3 = timestamps[3] - timestamps[2]; // ~40ms
 
-		expect(gap1).toBeGreaterThan(1500); // 2s with tolerance
-		expect(gap2).toBeGreaterThan(3500); // 4s with tolerance
-		expect(gap3).toBeGreaterThan(7000); // 8s with tolerance
+		expect(gap1).toBeGreaterThan(5);
 		expect(gap2).toBeGreaterThan(gap1);
 		expect(gap3).toBeGreaterThan(gap2);
 	});

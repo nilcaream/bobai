@@ -731,7 +731,7 @@ describe("handlePrompt", () => {
 			(m: { role: string; content: string }) => m.role === "assistant" && m.content.startsWith("[Error:"),
 		);
 		expect(errorMsg).toBeTruthy();
-		expect(errorMsg!.content).toContain("bobai auth");
+		expect(errorMsg?.content).toContain("bobai auth");
 	});
 
 	test("staged skill llmContent includes base directory hint when skill is in registry", async () => {

@@ -94,7 +94,7 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 				}
 
 				const hasUiOutput = msg.metadata != null && "ui_output" in msg.metadata;
-				const content = hasUiOutput ? (msg.metadata!.ui_output as string | null) : msg.content;
+				const content = hasUiOutput ? (msg.metadata?.ui_output as string | null) : msg.content;
 				const mergeable = msg.metadata?.mergeable !== undefined ? (msg.metadata.mergeable as boolean) : true;
 				const summary = msg.metadata?.tool_summary as string | undefined;
 				currentAssistant.parts.push({

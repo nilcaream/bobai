@@ -68,7 +68,13 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 	return last?.role === "user" ? "user" : "agent";
 }
 
-export function createCopilotProvider(auth: StoredAuth, configDir?: string, logger?: Logger): Provider {
+export function createCopilotProvider(
+	auth: StoredAuth,
+	configDir?: string,
+	logger?: Logger,
+	/** @internal — exposed for unit tests to avoid multi-second backoff waits */
+	testOverrides?: { backoffBaseMs?: number },
+): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
 
 	// Mutable session state
@@ -206,7 +212,7 @@ export function createCopilotProvider(auth: StoredAuth, configDir?: string, logg
 			// Retry constants
 			const MAX_RETRIES = 3;
 			const REQUEST_TIMEOUT_MS = 60_000;
-			const BACKOFF_BASE_MS = 2_000;
+			const BACKOFF_BASE_MS = testOverrides?.backoffBaseMs ?? 2_000;
 
 			let response: Response | undefined;
 			let lastError: unknown;

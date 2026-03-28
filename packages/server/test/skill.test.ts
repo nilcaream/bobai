@@ -169,14 +169,8 @@ describe("discoverSkills", () => {
 		const skillB = path.join(externalBase, "group", "skill-b");
 		fs.mkdirSync(skillA, { recursive: true });
 		fs.mkdirSync(skillB, { recursive: true });
-		fs.writeFileSync(
-			path.join(skillA, "SKILL.md"),
-			["---", "name: skill-a", "description: First", "---", "A"].join("\n"),
-		);
-		fs.writeFileSync(
-			path.join(skillB, "SKILL.md"),
-			["---", "name: skill-b", "description: Second", "---", "B"].join("\n"),
-		);
+		fs.writeFileSync(path.join(skillA, "SKILL.md"), ["---", "name: skill-a", "description: First", "---", "A"].join("\n"));
+		fs.writeFileSync(path.join(skillB, "SKILL.md"), ["---", "name: skill-b", "description: Second", "---", "B"].join("\n"));
 
 		// Symlink the entire collection into the skills directory
 		const skillsDir = path.join(tmpDir, "skills");

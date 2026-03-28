@@ -70,7 +70,8 @@ export function repairMessageOrdering(messages: Message[]): RepairResult {
 			// Everything is already correct — skip forward past the tool results
 			for (const tcId of toolCallIds) {
 				i++;
-				result.push(pendingResults.get(tcId)!);
+				const msg = pendingResults.get(tcId);
+				if (msg) result.push(msg);
 			}
 			continue;
 		}

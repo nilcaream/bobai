@@ -166,7 +166,7 @@ describe("reconstructMessages", () => {
 		if (result[0].role === "assistant") {
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
 			expect(toolResult).toBeDefined();
-			expect(toolResult!.content).toBe("$ `ls`\n```\nraw stdout\n```");
+			expect(toolResult?.content).toBe("$ `ls`\n```\nraw stdout\n```");
 		}
 	});
 
@@ -205,7 +205,7 @@ describe("reconstructMessages", () => {
 		const result = reconstructMessages(stored);
 		if (result[0].role === "assistant") {
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
-			expect(toolResult!.content).toBe("file contents here");
+			expect(toolResult?.content).toBe("file contents here");
 		}
 	});
 
@@ -257,13 +257,13 @@ describe("reconstructMessages", () => {
 		if (result[0].role === "assistant") {
 			// tool_call content should be overridden by format_call
 			const toolCall = result[0].parts.find((p) => p.type === "tool_call");
-			expect(toolCall!.content).toBe("**Subagent** Find CPU hog");
+			expect(toolCall?.content).toBe("**Subagent** Find CPU hog");
 			// tool_result content should be null (not the raw subagent response)
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
-			expect(toolResult!.content).toBeNull();
-			expect(toolResult!.mergeable).toBe(false);
+			expect(toolResult?.content).toBeNull();
+			expect(toolResult?.mergeable).toBe(false);
 			// tool_summary should be passed through as summary on the part
-			expect(toolResult!.summary).toBe("2026-03-06 20:28:32 | gpt-5-mini | agent: 3 | tokens: 6614 | 41.26s");
+			expect(toolResult?.summary).toBe("2026-03-06 20:28:32 | gpt-5-mini | agent: 3 | tokens: 6614 | 41.26s");
 		}
 	});
 
@@ -308,9 +308,9 @@ describe("reconstructMessages", () => {
 		if (result[0].role === "assistant") {
 			const toolCall = result[0].parts.find((p) => p.type === "tool_call");
 			// Should use format_call, not the generic "**bash** {\"command\":\"ls -la\"}"
-			expect(toolCall!.content).toBe("`$ ls -la`");
+			expect(toolCall?.content).toBe("`$ ls -la`");
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
-			expect(toolResult!.content).toBe("$ `ls -la`\n```\nfile1.txt\nfile2.txt\n```");
+			expect(toolResult?.content).toBe("$ `ls -la`\n```\nfile1.txt\nfile2.txt\n```");
 		}
 	});
 
@@ -350,7 +350,7 @@ describe("reconstructMessages", () => {
 		if (result[0].role === "assistant") {
 			const toolCall = result[0].parts.find((p) => p.type === "tool_call");
 			// No format_call → uses generic format
-			expect(toolCall!.content).toBe('**bash** {"command":"ls"}');
+			expect(toolCall?.content).toBe('**bash** {"command":"ls"}');
 		}
 	});
 
@@ -389,7 +389,7 @@ describe("reconstructMessages", () => {
 		const result = reconstructMessages(stored);
 		if (result[0].role === "assistant") {
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
-			expect(toolResult!.mergeable).toBe(true);
+			expect(toolResult?.mergeable).toBe(true);
 		}
 	});
 
@@ -428,7 +428,7 @@ describe("reconstructMessages", () => {
 		const result = reconstructMessages(stored);
 		if (result[0].role === "assistant") {
 			const toolResult = result[0].parts.find((p) => p.type === "tool_result");
-			expect(toolResult!.mergeable).toBe(true);
+			expect(toolResult?.mergeable).toBe(true);
 		}
 	});
 

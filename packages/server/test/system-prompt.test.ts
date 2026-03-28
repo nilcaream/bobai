@@ -103,9 +103,7 @@ describe("buildSystemPrompt", () => {
 	});
 
 	test("skills appear before instructions", () => {
-		const instructions: InstructionFile[] = [
-			{ type: "global", source: "/global/AGENT.md", content: "Be helpful." },
-		];
+		const instructions: InstructionFile[] = [{ type: "global", source: "/global/AGENT.md", content: "Be helpful." }];
 		const skills: Skill[] = [{ name: "tdd", description: "Test-driven development", content: "...", filePath: "/a/SKILL.md" }];
 		const result = buildSystemPrompt(skills, instructions);
 		const skillIdx = result.indexOf("<skills>");
