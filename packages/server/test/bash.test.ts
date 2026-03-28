@@ -11,7 +11,7 @@ describe("bashTool", () => {
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-bash-"));
-		ctx = { projectRoot: tmpDir };
+		ctx = { projectRoot: tmpDir, sessionId: "test-session" };
 		fs.writeFileSync(path.join(tmpDir, "test.txt"), "hello from test");
 	});
 

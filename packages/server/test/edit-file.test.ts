@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { FileTime } from "../src/file/time";
 import { editFileTool } from "../src/tool/edit-file";
 import type { ToolContext } from "../src/tool/tool";
 
@@ -11,12 +12,22 @@ describe("editFileTool", () => {
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-edit-file-"));
-		ctx = { projectRoot: tmpDir };
+		ctx = { projectRoot: tmpDir, sessionId: "test-session" };
 	});
 
 	afterAll(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
+
+	afterEach(() => {
+		FileTime.clearSession("test-session");
+	});
+
+	function writeAndTrack(relativePath: string, content: string) {
+		const resolved = path.join(tmpDir, relativePath);
+		fs.writeFileSync(resolved, content);
+		FileTime.read("test-session", resolved);
+	}
 
 	test("definition has correct name and parameters", () => {
 		expect(editFileTool.definition.function.name).toBe("edit_file");
@@ -27,7 +38,7 @@ describe("editFileTool", () => {
 	});
 
 	test("replaces a unique string in a file", async () => {
-		fs.writeFileSync(path.join(tmpDir, "target.ts"), "const x = 1;\nconst y = 2;\nconst z = 3;\n");
+		writeAndTrack("target.ts", "const x = 1;\nconst y = 2;\nconst z = 3;\n");
 		const result = await editFileTool.execute(
 			{ path: "target.ts", old_string: "const y = 2;", new_string: "const y = 42;" },
 			ctx,
@@ -39,7 +50,7 @@ describe("editFileTool", () => {
 	});
 
 	test("returns error when old_string is not found", async () => {
-		fs.writeFileSync(path.join(tmpDir, "no-match.ts"), "hello world\n");
+		writeAndTrack("no-match.ts", "hello world\n");
 		const result = await editFileTool.execute(
 			{ path: "no-match.ts", old_string: "does not exist", new_string: "replacement" },
 			ctx,
@@ -48,12 +59,14 @@ describe("editFileTool", () => {
 	});
 
 	test("returns error when old_string has multiple matches", async () => {
-		fs.writeFileSync(path.join(tmpDir, "multi.ts"), "foo\nbar\nfoo\n");
+		writeAndTrack("multi.ts", "foo\nbar\nfoo\n");
 		const result = await editFileTool.execute({ path: "multi.ts", old_string: "foo", new_string: "baz" }, ctx);
 		expect(result.llmOutput).toContain("multiple");
 	});
 
 	test("returns error for nonexistent file", async () => {
+		const resolved = path.join(tmpDir, "nope.ts");
+		FileTime.read("test-session", resolved);
 		const result = await editFileTool.execute({ path: "nope.ts", old_string: "x", new_string: "y" }, ctx);
 		expect(result.llmOutput).toContain("not found");
 	});
@@ -73,7 +86,7 @@ describe("editFileTool", () => {
 	});
 
 	test("preserves dollar-sign replacement patterns literally in new_string", async () => {
-		fs.writeFileSync(path.join(tmpDir, "dollar.ts"), 'const msg = "hello";\n');
+		writeAndTrack("dollar.ts", 'const msg = "hello";\n');
 		const result = await editFileTool.execute(
 			{ path: "dollar.ts", old_string: 'const msg = "hello";', new_string: "const msg = `cost: $1 or $& or $$`;" },
 			ctx,
@@ -84,13 +97,13 @@ describe("editFileTool", () => {
 	});
 
 	test("returns error when old_string is empty", async () => {
-		fs.writeFileSync(path.join(tmpDir, "empty-match.ts"), "some content\n");
+		writeAndTrack("empty-match.ts", "some content\n");
 		const result = await editFileTool.execute({ path: "empty-match.ts", old_string: "", new_string: "injected" }, ctx);
 		expect(result.llmOutput).toContain("non-empty");
 	});
 
 	test("shows context around the edit in output", async () => {
-		fs.writeFileSync(path.join(tmpDir, "context.ts"), "line1\nline2\nline3\nline4\nline5\n");
+		writeAndTrack("context.ts", "line1\nline2\nline3\nline4\nline5\n");
 		const result = await editFileTool.execute({ path: "context.ts", old_string: "line3", new_string: "LINE_THREE" }, ctx);
 		expect(result.llmOutput).not.toContain("Error");
 		// Output should show surrounding lines for context

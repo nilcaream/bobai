@@ -5,6 +5,8 @@ export interface ToolContext {
 	projectRoot: string;
 	/** Additional directories the read-only tools (read_file, grep_search, list_directory, file_search) may access. */
 	accessibleDirectories?: string[];
+	/** Session identifier for FileTime tracking. */
+	sessionId: string;
 }
 
 /** Check whether a resolved absolute path falls within the project root or any accessible directory. */

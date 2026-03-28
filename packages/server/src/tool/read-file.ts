@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
+import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown, isPathAccessible } from "./tool";
 
@@ -170,6 +171,8 @@ export const readFileTool: Tool = {
 		} else {
 			footer = `(End of file - total ${totalLines} lines)`;
 		}
+
+		FileTime.read(ctx.sessionId, resolved);
 
 		return {
 			llmOutput: `${outputLines.join("\n")}\n\n${footer}`,

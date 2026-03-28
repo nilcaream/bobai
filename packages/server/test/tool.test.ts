@@ -40,17 +40,17 @@ describe("createToolRegistry", () => {
 
 describe("isPathAccessible", () => {
 	test("allows paths within projectRoot", () => {
-		const ctx: ToolContext = { projectRoot: "/home/user/project" };
+		const ctx: ToolContext = { projectRoot: "/home/user/project", sessionId: "test-session" };
 		expect(isPathAccessible("/home/user/project/src/file.ts", ctx)).toBe(true);
 	});
 
 	test("allows projectRoot itself", () => {
-		const ctx: ToolContext = { projectRoot: "/home/user/project" };
+		const ctx: ToolContext = { projectRoot: "/home/user/project", sessionId: "test-session" };
 		expect(isPathAccessible("/home/user/project", ctx)).toBe(true);
 	});
 
 	test("rejects paths outside projectRoot when no accessibleDirectories", () => {
-		const ctx: ToolContext = { projectRoot: "/home/user/project" };
+		const ctx: ToolContext = { projectRoot: "/home/user/project", sessionId: "test-session" };
 		expect(isPathAccessible("/home/user/other/file.ts", ctx)).toBe(false);
 	});
 
@@ -58,6 +58,7 @@ describe("isPathAccessible", () => {
 		const ctx: ToolContext = {
 			projectRoot: "/home/user/project",
 			accessibleDirectories: ["/home/user/.config/bobai/skills"],
+			sessionId: "test-session",
 		};
 		expect(isPathAccessible("/home/user/.config/bobai/skills/tdd/SKILL.md", ctx)).toBe(true);
 	});
@@ -66,6 +67,7 @@ describe("isPathAccessible", () => {
 		const ctx: ToolContext = {
 			projectRoot: "/home/user/project",
 			accessibleDirectories: ["/home/user/.config/bobai/skills"],
+			sessionId: "test-session",
 		};
 		expect(isPathAccessible("/home/user/.config/bobai/skills", ctx)).toBe(true);
 	});
@@ -74,12 +76,13 @@ describe("isPathAccessible", () => {
 		const ctx: ToolContext = {
 			projectRoot: "/home/user/project",
 			accessibleDirectories: ["/home/user/.config/bobai/skills"],
+			sessionId: "test-session",
 		};
 		expect(isPathAccessible("/etc/passwd", ctx)).toBe(false);
 	});
 
 	test("prevents prefix confusion (projectRoot=/foo should not allow /foobar)", () => {
-		const ctx: ToolContext = { projectRoot: "/foo" };
+		const ctx: ToolContext = { projectRoot: "/foo", sessionId: "test-session" };
 		expect(isPathAccessible("/foobar/file.ts", ctx)).toBe(false);
 	});
 
@@ -87,12 +90,13 @@ describe("isPathAccessible", () => {
 		const ctx: ToolContext = {
 			projectRoot: "/project",
 			accessibleDirectories: ["/home/skills"],
+			sessionId: "test-session",
 		};
 		expect(isPathAccessible("/home/skillsxyz/file.ts", ctx)).toBe(false);
 	});
 
 	test("handles empty accessibleDirectories", () => {
-		const ctx: ToolContext = { projectRoot: "/project", accessibleDirectories: [] };
+		const ctx: ToolContext = { projectRoot: "/project", accessibleDirectories: [], sessionId: "test-session" };
 		expect(isPathAccessible("/outside/file.ts", ctx)).toBe(false);
 		expect(isPathAccessible("/project/file.ts", ctx)).toBe(true);
 	});

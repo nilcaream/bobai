@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown } from "./tool";
 
@@ -68,9 +69,23 @@ export const writeFileTool: Tool = {
 			};
 		}
 
+		// Only assert if the file already exists (overwrite)
+		if (fs.existsSync(resolved)) {
+			try {
+				FileTime.assert(ctx.sessionId, resolved);
+			} catch (err) {
+				return {
+					llmOutput: `Error: ${(err as Error).message}`,
+					uiOutput: `▸ Writing ${escapeMarkdown(filePath)} — stale read`,
+					mergeable: true,
+				};
+			}
+		}
+
 		try {
 			fs.mkdirSync(path.dirname(resolved), { recursive: true });
 			fs.writeFileSync(resolved, content, "utf-8");
+			FileTime.read(ctx.sessionId, resolved);
 			return {
 				llmOutput: `Wrote ${content.length} bytes to ${filePath}`,
 				uiOutput: `▸ Writing ${escapeMarkdown(filePath)} (${content.length} bytes)`,

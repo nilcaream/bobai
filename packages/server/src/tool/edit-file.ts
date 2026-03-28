@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown } from "./tool";
 
@@ -90,6 +91,16 @@ export const editFileTool: Tool = {
 			};
 		}
 
+		try {
+			FileTime.assert(ctx.sessionId, resolved);
+		} catch (err) {
+			return {
+				llmOutput: `Error: ${(err as Error).message}`,
+				uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — stale read`,
+				mergeable: false,
+			};
+		}
+
 		let content: string;
 		try {
 			content = fs.readFileSync(resolved, "utf-8");
@@ -139,6 +150,7 @@ export const editFileTool: Tool = {
 		// Perform the replacement
 		const newContent = content.replace(oldString, () => newString);
 		fs.writeFileSync(resolved, newContent, "utf-8");
+		FileTime.read(ctx.sessionId, resolved);
 
 		// Show context around the edit
 		const editIdx = newContent.indexOf(newString);

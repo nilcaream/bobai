@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
+import path from "node:path";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
 import { compactMessages } from "../compaction/engine";
+import { FileTime } from "../file/time";
 import type { Logger } from "../log/logger";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
@@ -184,12 +186,21 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			if (childContextWindow <= 0) {
 				logger?.warn("CONFIG", `No contextWindow for model "${model}"; subagent compaction disabled`);
 			}
+			function invalidateCompactedRead(_toolCallId: string, callArgs: Record<string, unknown>) {
+				const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
+				if (filePath) {
+					const resolved = path.resolve(projectRoot, filePath);
+					FileTime.invalidate(childSessionId, resolved);
+				}
+			}
+
 			const rawMessages = [...messages];
 			if (childContextWindow > 0 && childPromptTokens > 0) {
 				messages = compactMessages({
 					messages,
 					context: { promptTokens: childPromptTokens, contextWindow: childContextWindow },
 					tools: childTools,
+					onReadFileCompacted: invalidateCompactedRead,
 				});
 			}
 
@@ -213,12 +224,14 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					tools: childTools,
 					projectRoot,
 					accessibleDirectories,
+					sessionId: childSessionId,
 					signal,
 					initiator: "agent",
 					contextWindow: childContextWindow,
 					rawMessages,
 					logger,
 					logDir,
+					onReadFileCompacted: invalidateCompactedRead,
 					onEvent(event: AgentEvent) {
 						onEvent({ ...event, sessionId: childSessionId });
 						if (event.type === "tool_call") {

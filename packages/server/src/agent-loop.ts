@@ -20,6 +20,7 @@ export function emergencyCompactConversation(
 	tools: ToolRegistry,
 	logDir?: string,
 	logger?: Logger,
+	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void,
 ): Message[] {
 	if (!shouldEmergencyCompact(promptTokens, contextWindow)) return conversation;
 
@@ -31,6 +32,7 @@ export function emergencyCompactConversation(
 			contextWindow,
 		},
 		tools,
+		onReadFileCompacted,
 	});
 
 	if (compacted !== conversation) {
@@ -59,6 +61,7 @@ export interface AgentLoopOptions {
 	tools: ToolRegistry;
 	projectRoot: string;
 	accessibleDirectories?: string[];
+	sessionId: string;
 	maxIterations?: number;
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
@@ -67,6 +70,8 @@ export interface AgentLoopOptions {
 	rawMessages?: Message[];
 	logger?: Logger;
 	logDir?: string;
+	/** Called when a read_file tool output is compacted during emergency compaction. */
+	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void;
 	onEvent: (event: AgentEvent) => void;
 	onMessage: (msg: Message) => void;
 }
@@ -78,7 +83,8 @@ interface AccumulatedToolCall {
 }
 
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
-	const { provider, model, tools, projectRoot, accessibleDirectories, onEvent, onMessage, signal, initiator } = options;
+	const { provider, model, tools, projectRoot, accessibleDirectories, sessionId, onEvent, onMessage, signal, initiator } =
+		options;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
 	// Working copy of messages — starts with what was passed in
@@ -177,7 +183,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				uiOutput = `Unknown tool: ${tc.function.name}`;
 			} else {
 				try {
-					const result = await tool.execute(args, { projectRoot, accessibleDirectories });
+					const result = await tool.execute(args, { projectRoot, accessibleDirectories, sessionId });
 					llmOutput = result.llmOutput;
 					uiOutput = result.uiOutput;
 					mergeable = result.mergeable;
@@ -210,6 +216,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				tools,
 				options.logDir,
 				options.logger,
+				options.onReadFileCompacted,
 			);
 			if (compacted !== rawPlusNew) {
 				conversation.length = 0;

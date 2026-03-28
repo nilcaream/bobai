@@ -4,6 +4,7 @@ import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
+import { FileTime } from "./file/time";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
 import { repairMessageOrdering } from "./message-repair";
@@ -224,6 +225,14 @@ export async function handlePrompt(req: PromptRequest) {
 		if (contextWindow <= 0) {
 			req.logger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
 		}
+		function invalidateCompactedRead(_toolCallId: string, callArgs: Record<string, unknown>) {
+			const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
+			if (filePath) {
+				const resolved = path.resolve(projectRoot, filePath);
+				FileTime.invalidate(currentSessionId as string, resolved);
+			}
+		}
+
 		const rawMessages = [...messages];
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
 			const beforeCompaction = messages;
@@ -231,6 +240,7 @@ export async function handlePrompt(req: PromptRequest) {
 				messages,
 				context: { promptTokens: sessionPromptTokens, contextWindow },
 				tools,
+				onReadFileCompacted: invalidateCompactedRead,
 			});
 			// Write debug dump if compaction actually changed something
 			if (messages !== beforeCompaction && req.logDir) {
@@ -257,11 +267,13 @@ export async function handlePrompt(req: PromptRequest) {
 			tools,
 			projectRoot,
 			accessibleDirectories: skillDirectories,
+			sessionId: currentSessionId as string,
 			contextWindow,
 			rawMessages,
 			logger: req.logger,
 			logDir: req.logDir,
 			signal: req.signal,
+			onReadFileCompacted: invalidateCompactedRead,
 			onEvent(event: AgentEvent) {
 				routeEventToWs(ws, event);
 				if (event.type === "tool_call") {

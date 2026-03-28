@@ -46,7 +46,7 @@ describe("createSkillTool", () => {
 
 	test("execute returns skill content for valid name", async () => {
 		const tool = createSkillTool(registry);
-		const result = await tool.execute({ name: "tdd" }, { projectRoot: "/project" });
+		const result = await tool.execute({ name: "tdd" }, { projectRoot: "/project", sessionId: "test-session" });
 		expect(result.llmOutput).toContain("# TDD");
 		expect(result.llmOutput).toContain("Write tests first.");
 		expect(result.llmOutput).toContain("/skills/tdd/SKILL.md");
@@ -55,7 +55,7 @@ describe("createSkillTool", () => {
 
 	test("execute returns error for unknown skill", async () => {
 		const tool = createSkillTool(registry);
-		const result = await tool.execute({ name: "nonexistent" }, { projectRoot: "/project" });
+		const result = await tool.execute({ name: "nonexistent" }, { projectRoot: "/project", sessionId: "test-session" });
 		expect(result.llmOutput).toContain("not found");
 		expect(result.llmOutput).toContain("tdd");
 		expect(result.llmOutput).toContain("debugging");
@@ -80,14 +80,14 @@ describe("createSkillTool", () => {
 	test("execute on empty registry returns no skills message", async () => {
 		const emptyRegistry = makeRegistry([]);
 		const tool = createSkillTool(emptyRegistry);
-		const result = await tool.execute({ name: "anything" }, { projectRoot: "/project" });
+		const result = await tool.execute({ name: "anything" }, { projectRoot: "/project", sessionId: "test-session" });
 		expect(result.llmOutput).toContain("not found");
 		expect(result.llmOutput).toContain("No skills are available");
 	});
 
 	test("execute with invalid name returns error", async () => {
 		const tool = createSkillTool(registry);
-		const result = await tool.execute({ name: 42 }, { projectRoot: "/project" });
+		const result = await tool.execute({ name: 42 }, { projectRoot: "/project", sessionId: "test-session" });
 		expect(result.llmOutput).toContain("Error");
 		expect(result.llmOutput).toContain("name");
 	});

@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { FileTime } from "../src/file/time";
 import type { ToolContext } from "../src/tool/tool";
 import { writeFileTool } from "../src/tool/write-file";
 
@@ -11,12 +12,16 @@ describe("writeFileTool", () => {
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-write-file-"));
-		ctx = { projectRoot: tmpDir };
+		ctx = { projectRoot: tmpDir, sessionId: "test-session" };
 		fs.writeFileSync(path.join(tmpDir, "existing.txt"), "original content");
 	});
 
 	afterAll(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	afterEach(() => {
+		FileTime.clearSession("test-session");
 	});
 
 	test("definition has correct name and parameters", () => {
@@ -33,6 +38,7 @@ describe("writeFileTool", () => {
 	});
 
 	test("overwrites an existing file", async () => {
+		FileTime.read("test-session", path.join(tmpDir, "existing.txt"));
 		const _result = await writeFileTool.execute({ path: "existing.txt", content: "new content" }, ctx);
 		const written = fs.readFileSync(path.join(tmpDir, "existing.txt"), "utf-8");
 		expect(written).toBe("new content");

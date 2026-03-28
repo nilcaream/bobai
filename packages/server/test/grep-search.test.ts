@@ -11,7 +11,7 @@ describe("grepSearchTool", () => {
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-grep-search-"));
-		ctx = { projectRoot: tmpDir };
+		ctx = { projectRoot: tmpDir, sessionId: "test-session" };
 		fs.writeFileSync(path.join(tmpDir, "hello.ts"), 'const greeting = "hello";\nexport default greeting;\n');
 		fs.writeFileSync(path.join(tmpDir, "world.ts"), 'const planet = "world";\nexport default planet;\n');
 		fs.mkdirSync(path.join(tmpDir, "src"));
@@ -57,7 +57,7 @@ describe("grepSearchTool", () => {
 	test("allows searching in accessibleDirectories", async () => {
 		const extraDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-grep-extra-"));
 		fs.writeFileSync(path.join(extraDir, "data.ts"), 'const target = "found me";\n');
-		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir] };
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir], sessionId: "test-session" };
 		const result = await grepSearchTool.execute({ pattern: "found me", path: extraDir }, ctxWithExtra);
 		expect(result.llmOutput).toContain("data.ts");
 		fs.rmSync(extraDir, { recursive: true, force: true });
@@ -66,7 +66,7 @@ describe("grepSearchTool", () => {
 	test("rejects search path outside both projectRoot and accessibleDirectories", async () => {
 		const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-grep-outside-"));
 		fs.writeFileSync(path.join(outsideDir, "secret.ts"), "secret");
-		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [] };
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [], sessionId: "test-session" };
 		const result = await grepSearchTool.execute({ pattern: "secret", path: outsideDir }, ctxWithExtra);
 		expect(result.llmOutput).toContain("outside");
 		fs.rmSync(outsideDir, { recursive: true, force: true });

@@ -11,7 +11,7 @@ describe("fileSearchTool", () => {
 
 	beforeAll(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-"));
-		ctx = { projectRoot: tmpDir };
+		ctx = { projectRoot: tmpDir, sessionId: "test-session" };
 
 		// Create test file tree:
 		// file-a.ts
@@ -151,7 +151,7 @@ describe("fileSearchTool", () => {
 	test("caps results at 1000 files", async () => {
 		// Create a temporary directory with >1000 files
 		const bigDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-big-"));
-		const bigCtx: ToolContext = { projectRoot: bigDir };
+		const bigCtx: ToolContext = { projectRoot: bigDir, sessionId: "test-session" };
 		for (let i = 0; i < 1010; i++) {
 			fs.writeFileSync(path.join(bigDir, `file-${String(i).padStart(4, "0")}.txt`), "x");
 		}
@@ -170,7 +170,7 @@ describe("fileSearchTool", () => {
 	test("allows searching in accessibleDirectories", async () => {
 		const extraDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-extra-"));
 		fs.writeFileSync(path.join(extraDir, "extra.ts"), "e");
-		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir] };
+		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir], sessionId: "test-session" };
 
 		const result = await fileSearchTool.execute({ pattern: "*.ts", path: extraDir }, ctxWithExtra);
 		const lines = result.llmOutput.split("\n").filter(Boolean);
@@ -182,7 +182,7 @@ describe("fileSearchTool", () => {
 	test("rejects searching directories outside both projectRoot and accessibleDirectories", async () => {
 		const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-outside-"));
 		fs.writeFileSync(path.join(outsideDir, "secret.ts"), "s");
-		const ctxWithEmpty: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [] };
+		const ctxWithEmpty: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [], sessionId: "test-session" };
 
 		const result = await fileSearchTool.execute({ pattern: "*.ts", path: outsideDir }, ctxWithEmpty);
 		expect(result.llmOutput).toContain("outside");
