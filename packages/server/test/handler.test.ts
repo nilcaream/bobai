@@ -780,4 +780,72 @@ describe("handlePrompt", () => {
 		expect(skillToolMsg?.content).toContain("Base directory: /home/user/.config/bobai/skills/writing");
 		expect(skillToolMsg?.content).toContain("Source: /home/user/.config/bobai/skills/writing/SKILL.md");
 	});
+
+	test("new session emits session_created before any token message", async () => {
+		const ws = mockWs();
+		const provider = mockProvider(["Hello", " world"]);
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "test-model",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const msgs = ws.messages();
+
+		// Should have a session_created message
+		const sessionCreated = msgs.find((m: { type: string }) => m.type === "session_created");
+		expect(sessionCreated).toBeTruthy();
+		expect(sessionCreated.sessionId).toBeTruthy();
+
+		// session_created should come before any token message
+		const sessionCreatedIdx = msgs.indexOf(sessionCreated);
+		const firstTokenIdx = msgs.findIndex((m: { type: string }) => m.type === "token");
+		expect(firstTokenIdx).toBeGreaterThan(-1); // tokens exist
+		expect(sessionCreatedIdx).toBeLessThan(firstTokenIdx);
+
+		// session_created sessionId should match done sessionId
+		const done = msgs.find((m: { type: string }) => m.type === "done");
+		expect(sessionCreated.sessionId).toBe(done.sessionId);
+	});
+
+	test("existing session does NOT emit session_created", async () => {
+		// First prompt — creates a session
+		const ws1 = mockWs();
+		const provider1 = mockProvider(["first"]);
+		await handlePrompt({
+			ws: ws1,
+			db,
+			provider: provider1,
+			model: "test-model",
+			text: "first",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+		const sessionId = ws1.messages().find((m: { type: string }) => m.type === "done").sessionId;
+
+		// Second prompt — reuses existing session
+		const ws2 = mockWs();
+		const provider2 = mockProvider(["second"]);
+		await handlePrompt({
+			ws: ws2,
+			db,
+			provider: provider2,
+			model: "test-model",
+			text: "second",
+			sessionId,
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const msgs = ws2.messages();
+		const sessionCreated = msgs.find((m: { type: string }) => m.type === "session_created");
+		expect(sessionCreated).toBeUndefined();
+	});
 });

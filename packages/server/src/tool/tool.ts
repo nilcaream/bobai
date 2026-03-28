@@ -7,6 +7,8 @@ export interface ToolContext {
 	accessibleDirectories?: string[];
 	/** Session identifier for FileTime tracking. */
 	sessionId: string;
+	/** The provider-assigned tool_call ID for this invocation (used by the task tool to link subagent sessions). */
+	toolCallId?: string;
 }
 
 /** Check whether a resolved absolute path falls within the project root or any accessible directory. */

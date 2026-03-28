@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import type { MessagePart, StagedSkill } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
+import { buildSessionUrl, parseSessionUrl } from "./urlUtils";
 
 type Panel =
 	| { type: "text"; content: string }
@@ -157,7 +158,7 @@ type ViewMode = (typeof VIEW_MODES)[number];
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 
-function ToolPanel({ children }: { children: React.ReactNode }) {
+function ToolPanel({ children, onNavigate }: { children: React.ReactNode; onNavigate?: () => void }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
 	const collapsible = useRef(false);
@@ -184,6 +185,11 @@ function ToolPanel({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const handleDoubleClick = () => {
+		if (onNavigate) {
+			onNavigate();
+			window.getSelection()?.removeAllRanges();
+			return;
+		}
 		if (collapsible.current) {
 			userToggled.current = true;
 			setCollapsed((prev) => !prev);
@@ -219,6 +225,12 @@ export function App() {
 		loadSession,
 		getSessionId,
 		setSessionId,
+		volatileError,
+		setVolatileError,
+		sessionLocked,
+		viewingSubagentId,
+		peekSubagent,
+		exitSubagentPeek,
 	} = useWebSocket();
 	const [input, setInput] = useState("");
 	const [historyIndex, setHistoryIndex] = useState(-1);
@@ -384,7 +396,7 @@ export function App() {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const isReadOnly = !!parentId || view.mode === "context" || view.mode === "compaction";
+	const isReadOnly = !!parentId || sessionLocked || viewingSubagentId !== null || view.mode === "context" || view.mode === "compaction";
 	const activeDotCommands = isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
 
 	function clearInput() {
@@ -453,21 +465,58 @@ export function App() {
 			.catch(() => setSkillList(null));
 	}, []);
 
-	// Load most recent parent session on page reload
+	// Load session from URL or most recent on page load
 	// biome-ignore lint/correctness/useExhaustiveDependencies: loadSession is stable via useCallback
 	useEffect(() => {
-		fetch("/bobai/sessions/recent")
-			.then((res) => res.json())
-			.then((data: { id: string; title: string | null; model: string | null } | null) => {
-				if (data) {
-					loadSession(data.id);
+		const { sessionId: urlSessionId } = parseSessionUrl(window.location.pathname);
+		if (urlSessionId) {
+			loadSession(urlSessionId, { skipUrlUpdate: true }).then((success) => {
+				if (!success) {
+					setVolatileError("Session not found");
 				}
-			})
-			.catch(() => {});
+			});
+		} else {
+			fetch("/bobai/sessions/recent")
+				.then((res) => res.json())
+				.then((data: { id: string; title: string | null; model: string | null } | null) => {
+					if (data) {
+						loadSession(data.id, { skipUrlUpdate: true }).then(() => {
+							history.replaceState(null, "", buildSessionUrl(data.id));
+						});
+					}
+				})
+				.catch(() => {});
+		}
 	}, []);
 
+	// Handle browser back/forward navigation
+	useEffect(() => {
+		const onPopState = () => {
+			const { sessionId: urlSessionId } = parseSessionUrl(window.location.pathname);
+			if (urlSessionId) {
+				loadSession(urlSessionId, { skipUrlUpdate: true });
+			} else {
+				newChat();
+			}
+		};
+		window.addEventListener("popstate", onPopState);
+		return () => window.removeEventListener("popstate", onPopState);
+	}, [loadSession, newChat]);
+
+	// Escape key exits subagent peek
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && viewingSubagentId) {
+				e.preventDefault();
+				exitSubagentPeek();
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [viewingSubagentId, exitSubagentPeek]);
+
 	const [sessionList, setSessionList] = useState<
-		{ index: number; id: string; title: string | null; updatedAt: string }[] | null
+		{ index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[] | null
 	>(null);
 	const [subagentList, setSubagentList] = useState<{ index: number; title: string; sessionId: string }[] | null>(null);
 
@@ -573,7 +622,13 @@ export function App() {
 					clearInput();
 					return;
 				}
-				loadSession(sessionList[index - 1].id);
+				const targetSession = sessionList[index - 1];
+				if (targetSession.owned && targetSession.id !== getSessionId()) {
+					addErrorMessage("Session is active in another tab");
+					clearInput();
+					return;
+				}
+				loadSession(targetSession.id);
 				setStagedSkills([]);
 				clearInput();
 				return;
@@ -593,7 +648,14 @@ export function App() {
 					clearInput();
 					return;
 				}
-				loadSession(subagentList[index - 1].sessionId);
+				const targetSubagent = subagentList[index - 1];
+				// Check if this subagent is currently live (running) — use peek instead of DB load
+				const liveSubagent = subagents.find((s) => s.sessionId === targetSubagent.sessionId && s.status === "running");
+				if (liveSubagent) {
+					peekSubagent(liveSubagent.sessionId);
+				} else {
+					loadSession(targetSubagent.sessionId);
+				}
 				setStagedSkills([]);
 				clearInput();
 				return;
@@ -646,9 +708,12 @@ export function App() {
 			return;
 		}
 
-		// .session (no space): return to parent if in subagent, no-op if in parent
+		// .session (no space): exit peek, return to parent if in subagent, no-op if in parent
 		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session") {
-			if (parentId) {
+			if (viewingSubagentId) {
+				exitSubagentPeek();
+				setStagedSkills([]);
+			} else if (parentId) {
 				loadSession(parentId);
 				setStagedSkills([]);
 			}
@@ -844,6 +909,7 @@ export function App() {
 									.replace(/\.\d+Z$/, "")
 									.replace("Z", "")}{" "}
 								{s.title ?? ""}
+								{s.owned && s.id !== getSessionId() ? " (active in another tab)" : ""}
 							</div>
 						))
 					) : (
@@ -940,8 +1006,11 @@ export function App() {
 						</div>,
 					);
 				} else {
+					const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
+					const onNavigate = linkedSubagent ? () => peekSubagent(linkedSubagent.sessionId) : undefined;
+
 					elements.push(
-						<ToolPanel key={key++}>
+						<ToolPanel key={key++} onNavigate={onNavigate}>
 							<Markdown>{panel.content}</Markdown>
 							{panel.summary && <div className="panel-status">{panel.summary}</div>}
 							{!panel.summary && isLast && msg.timestamp && (
@@ -1134,6 +1203,7 @@ export function App() {
 	}
 
 	const agentActive = isStreaming || subagents.some((s) => s.status === "running");
+	const peekingSubagent = viewingSubagentId ? subagents.find((s) => s.sessionId === viewingSubagentId) : null;
 
 	return (
 		<main className="app">
@@ -1150,7 +1220,12 @@ export function App() {
 									| {projectInfo.git.branch}:{projectInfo.git.revision}
 								</span>
 							)}
-							{parentId ? (
+							{peekingSubagent ? (
+								<span className="status-bar-title">
+									{" "}
+									| {title ?? "(untitled)"} | {peekingSubagent.title}
+								</span>
+							) : parentId ? (
 								<span className="status-bar-title">
 									{" "}
 									| {parentTitle ?? "(untitled)"} | {title ?? "(untitled)"}
@@ -1167,6 +1242,11 @@ export function App() {
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
+				{volatileError && (
+					<div className="panel panel--error-volatile">
+						{volatileError}
+					</div>
+				)}
 				{view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels()}
 			</div>
 
@@ -1196,8 +1276,8 @@ export function App() {
 						adjustHeight();
 					}}
 					onKeyDown={handleKeyDown}
-					placeholder={isReadOnly ? "Dot commands only (read-only)" : "Type a message..."}
-					disabled={!connected || isStreaming}
+					placeholder={viewingSubagentId ? "Viewing subagent — press Escape to return" : isReadOnly ? "Dot commands only (read-only)" : "Type a message..."}
+					disabled={!connected || isStreaming || sessionLocked}
 				/>
 			</div>
 		</main>

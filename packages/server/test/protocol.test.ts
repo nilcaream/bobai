@@ -66,8 +66,8 @@ describe("protocol", () => {
 
 	test("send subagent_start message", () => {
 		const ws = mockWs();
-		send(ws, { type: "subagent_start", sessionId: "child-1", title: "Exploring code" });
-		expect(ws.messages()[0]).toEqual({ type: "subagent_start", sessionId: "child-1", title: "Exploring code" });
+		send(ws, { type: "subagent_start", sessionId: "child-1", title: "Exploring code", toolCallId: "call_1" });
+		expect(ws.messages()[0]).toEqual({ type: "subagent_start", sessionId: "child-1", title: "Exploring code", toolCallId: "call_1" });
 	});
 
 	test("send subagent_done message", () => {

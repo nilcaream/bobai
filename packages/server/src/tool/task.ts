@@ -138,7 +138,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			// Emit WebSocket lifecycle event
 			if (sendWs) {
 				const session = getSession(db, childSessionId);
-				sendWs({ type: "subagent_start", sessionId: childSessionId, title: session?.title ?? description });
+				const toolCallId = _ctx.toolCallId ?? "";
+				sendWs({ type: "subagent_start", sessionId: childSessionId, title: session?.title ?? description, toolCallId });
 			}
 
 			// Load child session messages

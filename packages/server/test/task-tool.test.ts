@@ -367,6 +367,56 @@ describe("createTaskTool", () => {
 		expect(doneMsg.sessionId).toBe(startMsg.sessionId);
 	});
 
+	test("subagent_start includes toolCallId from context", async () => {
+		const wsMsgs: ServerMessage[] = [];
+		const tool = createTaskTool({
+			db,
+			provider: textOnlyProvider("result"),
+			model: "test-model",
+			parentSessionId,
+			projectRoot: "/tmp",
+			systemPrompt: "sys",
+			onEvent: () => {},
+			sendWs: (msg) => wsMsgs.push(msg),
+			subagentStatus: new SubagentStatus(),
+		});
+
+		await tool.execute(
+			{ description: "Test with toolCallId", prompt: "do it" },
+			{ projectRoot: "/tmp", toolCallId: "call_task_42" },
+		);
+
+		const startMsg = wsMsgs.find((m) => m.type === "subagent_start");
+		expect(startMsg).toBeTruthy();
+		expect(startMsg.type).toBe("subagent_start");
+		if (startMsg?.type === "subagent_start") {
+			expect(startMsg.toolCallId).toBe("call_task_42");
+		}
+	});
+
+	test("subagent_start toolCallId defaults to empty string when not provided", async () => {
+		const wsMsgs: ServerMessage[] = [];
+		const tool = createTaskTool({
+			db,
+			provider: textOnlyProvider("result"),
+			model: "test-model",
+			parentSessionId,
+			projectRoot: "/tmp",
+			systemPrompt: "sys",
+			onEvent: () => {},
+			sendWs: (msg) => wsMsgs.push(msg),
+			subagentStatus: new SubagentStatus(),
+		});
+
+		await tool.execute({ description: "Test no toolCallId", prompt: "do it" }, { projectRoot: "/tmp" });
+
+		const startMsg = wsMsgs.find((m) => m.type === "subagent_start");
+		expect(startMsg).toBeTruthy();
+		if (startMsg?.type === "subagent_start") {
+			expect(startMsg.toolCallId).toBe("");
+		}
+	});
+
 	test("persists tool metadata and turn summary in child session messages", async () => {
 		// Provider that triggers a bash tool call on first request, then responds with text
 		let callCount = 0;

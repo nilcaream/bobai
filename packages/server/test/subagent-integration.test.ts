@@ -109,6 +109,9 @@ describe("subagent integration", () => {
 		const startEvent = msgs.find((m) => m.type === "subagent_start");
 		expect(startEvent).toBeTruthy();
 		expect(startEvent?.sessionId).toBe(latestSubagent.id);
+		if (startEvent?.type === "subagent_start") {
+			expect(startEvent.toolCallId).toBe("call_task_1");
+		}
 
 		const doneEvent = msgs.find((m) => m.type === "subagent_done");
 		expect(doneEvent).toBeTruthy();

@@ -100,6 +100,7 @@ export async function handlePrompt(req: PromptRequest) {
 			const session = createSession(db);
 			currentSessionId = session.id;
 			sessionObj = session;
+			send(ws, { type: "session_created", sessionId: currentSessionId });
 		}
 
 		effectiveModel = sessionObj?.model ?? model;

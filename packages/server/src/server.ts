@@ -45,6 +45,20 @@ export function createServer(options: ServerOptions) {
 	// Per-session promise chain to prevent concurrent agent loops on the same session
 	const sessionLocks = new Map<string, Promise<void>>();
 
+	// Session ownership: which WebSocket owns which session
+	const sessionOwners = new Map<string, object>(); // sessionId → ws
+	const wsOwnedSessions = new Map<object, string>(); // ws → sessionId (reverse lookup)
+
+	function releaseOwnership(ws: object) {
+		const ownedSessionId = wsOwnedSessions.get(ws);
+		if (ownedSessionId) {
+			wsOwnedSessions.delete(ws);
+			if (sessionOwners.get(ownedSessionId) === ws) {
+				sessionOwners.delete(ownedSessionId);
+			}
+		}
+	}
+
 	return Bun.serve({
 		port: options.port,
 		async fetch(req, server) {
@@ -283,6 +297,7 @@ export function createServer(options: ServerOptions) {
 					id: s.id,
 					title: s.title,
 					updatedAt: s.updatedAt,
+					owned: sessionOwners.has(s.id),
 				}));
 				return Response.json(body);
 			}
@@ -311,13 +326,21 @@ export function createServer(options: ServerOptions) {
 				});
 			}
 
+			// GET /bobai/session/:id/ownership — check if session is owned
+			const ownershipMatch = url.pathname.match(/^\/bobai\/session\/([^/]+)\/ownership$/);
+			if (ownershipMatch) {
+				const sid = decodeURIComponent(ownershipMatch[1]);
+				return Response.json({ owned: sessionOwners.has(sid) });
+			}
+
 			if (staticDir && url.pathname.startsWith("/bobai")) {
 				const relative = url.pathname.replace(/^\/bobai\/?/, "");
 				const filePath = path.join(staticDir, relative || "index.html");
 				const file = Bun.file(filePath);
 				return file.exists().then((exists) => {
 					if (exists) return new Response(file);
-					return new Response("Not Found", { status: 404 });
+					// SPA fallback: serve index.html for any unmatched /bobai/* path
+					return new Response(Bun.file(path.join(staticDir, "index.html")));
 				});
 			}
 
@@ -330,6 +353,24 @@ export function createServer(options: ServerOptions) {
 					msg = JSON.parse(raw as string) as ClientMessage;
 				} catch {
 					send(ws, { type: "error", message: "Invalid JSON" });
+					return;
+				}
+
+				if (msg.type === "subscribe") {
+					releaseOwnership(ws); // release any previous ownership
+					const currentOwner = sessionOwners.get(msg.sessionId);
+					if (currentOwner && currentOwner !== ws) {
+						send(ws, { type: "session_locked", sessionId: msg.sessionId });
+					} else {
+						sessionOwners.set(msg.sessionId, ws);
+						wsOwnedSessions.set(ws, msg.sessionId);
+						send(ws, { type: "session_subscribed", sessionId: msg.sessionId });
+					}
+					return;
+				}
+
+				if (msg.type === "unsubscribe") {
+					releaseOwnership(ws);
 					return;
 				}
 
@@ -385,6 +426,7 @@ export function createServer(options: ServerOptions) {
 				send(ws, { type: "error", message: `Unknown message type: ${msg.type}` });
 			},
 			close(ws) {
+				releaseOwnership(ws);
 				const controller = wsAbortControllers.get(ws);
 				if (controller) {
 					controller.abort();

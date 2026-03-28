@@ -147,6 +147,11 @@ body,
 	border-left-color: var(--md-list-marker);
 }
 
+.panel--error-volatile {
+	color: var(--text-status);
+	border-left-color: var(--text-error);
+}
+
 .context-header {
 	font-weight: 700;
 	color: var(--text-status);
