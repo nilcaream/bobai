@@ -13,8 +13,12 @@ cd packages/ui && bun run check -- --error-on-warnings
 cd packages/server && bun run check -- --write
 cd packages/ui && bun run check -- --write
 
-# Tests (server only)
+# Tests
 cd packages/server && bun test
+cd packages/ui && bun test
+
+# Type check (UI)
+cd packages/ui && bunx tsc --noEmit
 
 # Bundle server
 bun build --target=bun --minify --outfile=dist/server.js packages/server/src/index.ts
