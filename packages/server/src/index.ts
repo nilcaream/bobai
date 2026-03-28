@@ -77,7 +77,7 @@ if (!auth) {
 	auth = await authorize(globalConfigDir);
 }
 
-const provider = createCopilotProvider(auth, globalConfigDir);
+const provider = createCopilotProvider(auth, globalConfigDir, logger);
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 // Bundled layout: server.js + ui/ live side-by-side in dist/.
 // Source layout:  packages/server/src/index.ts → ../../ui/dist.
