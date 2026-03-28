@@ -416,8 +416,8 @@ export function App() {
 			if (matches.length === 0) {
 				const m = prefix.match(/^([a-z]+)(\d+)$/);
 				if (m) {
-					const cmdPart = m[1];
-					const numPart = m[2];
+					const cmdPart = m[1]!;
+					const numPart = m[2]!;
 					const cmdMatches = activeDotCommands.filter((c) => c.startsWith(cmdPart));
 					if (cmdMatches.length === 1) {
 						return { mode: "args" as const, prefix: cmdPart, matches: cmdMatches, args: numPart, command: cmdMatches[0] };
@@ -584,7 +584,7 @@ export function App() {
 				setStagedSkills([]);
 				setStatus(defaultStatus.current);
 				setView((prev) => ({ ...prev, mode: "chat" }));
-				const newTitle = parsed.args.trim();
+				const newTitle = (parsed.args ?? "").trim();
 				if (newTitle) {
 					setTitle(newTitle);
 					pendingNewTitle.current = newTitle;
@@ -595,11 +595,11 @@ export function App() {
 
 			// View command: select by index or cycle when no args
 			if (parsed.command === "view") {
-				const arg = parsed.args.trim();
+				const arg = (parsed.args ?? "").trim();
 				const viewMap: Record<string, ViewMode> = { "1": "chat", "2": "context", "3": "compaction" };
 				setView((prev) => {
 					const currentIdx = VIEW_MODES.indexOf(prev.mode);
-					const next = arg ? (viewMap[arg] ?? prev.mode) : VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length];
+					const next = arg ? (viewMap[arg] ?? prev.mode) : (VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat");
 					if (next === "context") fetchContext();
 					if (next === "compaction") fetchCompactedContext();
 					return { ...prev, mode: next };
@@ -610,7 +610,7 @@ export function App() {
 
 			// Session switching: .session <N> or .session (no args = list shown in panel)
 			if (parsed.command === "session") {
-				const arg = parsed.args.trim();
+				const arg = (parsed.args ?? "").trim();
 				if (!arg) {
 					// .session with space but no number — no-op (list is in dot panel)
 					clearInput();
@@ -623,6 +623,11 @@ export function App() {
 					return;
 				}
 				const targetSession = sessionList[index - 1];
+				if (!targetSession) {
+					addErrorMessage(`Invalid session index: ${arg}`);
+					clearInput();
+					return;
+				}
 				if (targetSession.owned && targetSession.id !== getSessionId()) {
 					addErrorMessage("Session is active in another tab");
 					clearInput();
@@ -636,7 +641,7 @@ export function App() {
 
 			// Subagent switching: .subagent <N>
 			if (parsed.command === "subagent") {
-				const arg = parsed.args.trim();
+				const arg = (parsed.args ?? "").trim();
 				if (!arg) {
 					// .subagent with space but no number — no-op
 					clearInput();
@@ -649,6 +654,11 @@ export function App() {
 					return;
 				}
 				const targetSubagent = subagentList[index - 1];
+				if (!targetSubagent) {
+					addErrorMessage(`Invalid subagent index: ${arg}`);
+					clearInput();
+					return;
+				}
 				// Check if this subagent is currently live (running) — use peek instead of DB load
 				const liveSubagent = subagents.find((s) => s.sessionId === targetSubagent.sessionId && s.status === "running");
 				if (liveSubagent) {
@@ -665,7 +675,7 @@ export function App() {
 			fetch("/bobai/command", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ command: parsed.command, args: parsed.args.trim(), sessionId: sid }),
+				body: JSON.stringify({ command: parsed.command, args: (parsed.args ?? "").trim(), sessionId: sid }),
 			})
 				.then((res) => res.json())
 				.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string }) => {
@@ -674,12 +684,12 @@ export function App() {
 							setSessionId(result.sessionId);
 						}
 						if (parsed.command === "model" && modelList) {
-							const idx = Number.parseInt(parsed.args.trim(), 10);
+							const idx = Number.parseInt((parsed.args ?? "").trim(), 10);
 							const selected = modelList.find((m) => m.index === idx);
 							if (selected) setModel(selected.id);
 						}
 						if (parsed.command === "title") {
-							setTitle(parsed.args.trim());
+							setTitle((parsed.args ?? "").trim());
 						}
 						if (result.status) {
 							setStatus(result.status);
@@ -699,7 +709,7 @@ export function App() {
 		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "view") {
 			setView((prev) => {
 				const currentIdx = VIEW_MODES.indexOf(prev.mode);
-				const next = VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length];
+				const next = VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat";
 				if (next === "context") fetchContext();
 				if (next === "compaction") fetchCompactedContext();
 				return { ...prev, mode: next };
@@ -738,7 +748,7 @@ export function App() {
 		const slashParsed = parseSlashInput(text);
 		if (slashParsed) {
 			if (slashParsed.matches.length === 1) {
-				stageSkill(slashParsed.matches[0].name);
+				stageSkill(slashParsed.matches[0]!.name);
 			}
 			clearInput();
 			return;
@@ -780,7 +790,7 @@ export function App() {
 				const nextIndex = Math.min(historyIndex + 1, historyEntries.current.length - 1);
 				if (nextIndex !== historyIndex) {
 					setHistoryIndex(nextIndex);
-					setInput(historyEntries.current[nextIndex]);
+					setInput(historyEntries.current[nextIndex] ?? "");
 				}
 				return;
 			}
@@ -791,7 +801,7 @@ export function App() {
 					exitHistory(savedDraft.current);
 				} else {
 					setHistoryIndex(nextIndex);
-					setInput(historyEntries.current[nextIndex]);
+					setInput(historyEntries.current[nextIndex] ?? "");
 				}
 				return;
 			}
@@ -803,7 +813,7 @@ export function App() {
 			if (e.key === "Enter") {
 				e.preventDefault();
 				// Copy history entry into input as editable text
-				exitHistory(historyEntries.current[historyIndex]);
+				exitHistory(historyEntries.current[historyIndex] ?? "");
 				return;
 			}
 			return;
@@ -824,7 +834,7 @@ export function App() {
 					if (gen !== fetchGen.current) return;
 					historyEntries.current = entries;
 					setHistoryIndex(0);
-					setInput(entries[0]);
+					setInput(entries[0] ?? "");
 				})
 				.catch(() => {
 					// Silently ignore fetch errors — user stays in normal mode
@@ -991,6 +1001,7 @@ export function App() {
 			const msgSummary = formatMsgSummary(msg);
 			for (let i = 0; i < panels.length; i++) {
 				const panel = panels[i];
+				if (!panel) continue;
 				const isLast = i === panels.length - 1;
 
 				if (panel.type === "text") {

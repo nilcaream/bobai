@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createEventRouter } from "./eventRouter";
 import { reconstructMessages, type StoredMessage } from "./messageReconstruction";
 import { replayBufferToMessages } from "./replayBuffer";
-import { buildSessionUrl, parseSessionUrl } from "./urlUtils";
+import { buildSessionUrl } from "./urlUtils";
 
 type ServerMessage =
 	| { type: "token"; text: string; sessionId?: string }

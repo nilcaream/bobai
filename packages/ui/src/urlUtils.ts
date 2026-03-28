@@ -1,7 +1,7 @@
 export function parseSessionUrl(pathname: string): { sessionId: string | null } {
 	const clean = pathname.replace(/\?.*$/, "").replace(/\/+$/, "");
 	const match = clean.match(/^\/bobai\/([^/]+)$/);
-	if (match) {
+	if (match && match[1]) {
 		return { sessionId: decodeURIComponent(match[1]) };
 	}
 	return { sessionId: null };

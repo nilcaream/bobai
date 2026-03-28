@@ -1,10 +1,6 @@
 import type { Message, MessagePart } from "./useWebSocket";
 
-type BufferedEvent =
-	| { type: "token"; text: string; [key: string]: unknown }
-	| { type: "tool_call"; id: string; output: string; [key: string]: unknown }
-	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; [key: string]: unknown }
-	| { type: string; [key: string]: unknown };
+type BufferedEvent = { type: string; [key: string]: any };
 
 /** Append to the last assistant message's parts, or create a new assistant message. */
 function appendPart(msgs: Message[], part: MessagePart): Message[] {

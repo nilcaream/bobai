@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import SyntaxHighlighter from "react-syntax-highlighter";
@@ -6,8 +7,8 @@ import remarkGfm from "remark-gfm";
 
 const theme = {
 	...vs2015,
-	"hljs-addition": { ...vs2015["hljs-addition"], backgroundColor: "rgba(20, 66, 18, 0.3)" },
-	"hljs-deletion": { ...vs2015["hljs-deletion"], backgroundColor: "rgba(102, 0, 0, 0.3)" },
+	"hljs-addition": { ...(vs2015["hljs-addition"] as CSSProperties), backgroundColor: "rgba(20, 66, 18, 0.3)" },
+	"hljs-deletion": { ...(vs2015["hljs-deletion"] as CSSProperties), backgroundColor: "rgba(102, 0, 0, 0.3)" },
 };
 
 const codeStyle: React.CSSProperties = {
@@ -21,11 +22,11 @@ const codeStyle: React.CSSProperties = {
 
 const components: Components = {
 	code(props) {
-		const { children, className, ref: _ref, node: _node, ...rest } = props;
+		const { children, className, ref: _ref, node: _node, style: _style, ...rest } = props;
 		const match = /language-(\w+)/.exec(className || "");
 		if (match) {
 			return (
-				<SyntaxHighlighter language={match[1]} style={theme} customStyle={codeStyle} PreTag="div" {...rest}>
+				<SyntaxHighlighter language={match[1]} style={theme as Record<string, CSSProperties>} customStyle={codeStyle} PreTag="div" {...rest}>
 					{String(children).replace(/\n$/, "")}
 				</SyntaxHighlighter>
 			);
