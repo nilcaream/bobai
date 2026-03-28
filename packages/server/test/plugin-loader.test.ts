@@ -168,4 +168,39 @@ describe("loadPlugins", () => {
 
 		expect(readLog()).not.toContain("b-good.js");
 	});
+
+	test("loads a symlinked .js plugin", async () => {
+		const pluginsDir = path.join(tmpDir, "plugins");
+		fs.mkdirSync(pluginsDir);
+
+		// Create the real plugin file outside the plugins directory
+		const externalPlugin = path.join(tmpDir, "external", "my-plugin.js");
+		fs.mkdirSync(path.dirname(externalPlugin), { recursive: true });
+		fs.writeFileSync(externalPlugin, "// symlinked no-op plugin");
+
+		// Symlink it into the plugins directory
+		fs.symlinkSync(externalPlugin, path.join(pluginsDir, "my-plugin.js"));
+
+		const logger = createLogger({ level: "info", logDir });
+		await loadPlugins(tmpDir, logger);
+
+		expect(readLog()).toContain("PLUGIN");
+		expect(readLog()).toContain("my-plugin.js");
+	});
+
+	test("ignores a symlink that does not end in .ts or .js", async () => {
+		const pluginsDir = path.join(tmpDir, "plugins");
+		fs.mkdirSync(pluginsDir);
+
+		const externalFile = path.join(tmpDir, "external", "notes.md");
+		fs.mkdirSync(path.dirname(externalFile), { recursive: true });
+		fs.writeFileSync(externalFile, "# not a plugin");
+
+		fs.symlinkSync(externalFile, path.join(pluginsDir, "notes.md"));
+
+		const logger = createLogger({ level: "info", logDir });
+		await loadPlugins(tmpDir, logger);
+
+		expect(readLog()).not.toContain("PLUGIN");
+	});
 });

@@ -112,7 +112,7 @@ export const fileSearchTool: Tool = {
 		const files: string[] = [];
 		let capped = false;
 
-		for await (const file of glob.scan({ cwd: resolved, onlyFiles: true })) {
+		for await (const file of glob.scan({ cwd: resolved, onlyFiles: true, followSymlinks: true })) {
 			if (files.length >= MAX_RESULTS) {
 				capped = true;
 				break;

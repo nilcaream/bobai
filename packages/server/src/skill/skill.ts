@@ -36,7 +36,7 @@ export function discoverSkills(directories: string[]): SkillRegistry {
 	for (const dir of directories) {
 		if (!fs.existsSync(dir)) continue;
 
-		const files = Array.from(new Bun.Glob("**/SKILL.md").scanSync({ cwd: dir, absolute: true })).sort();
+		const files = Array.from(new Bun.Glob("**/SKILL.md").scanSync({ cwd: dir, absolute: true, followSymlinks: true })).sort();
 
 		for (const filePath of files) {
 			try {

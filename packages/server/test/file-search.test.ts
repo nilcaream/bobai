@@ -189,4 +189,42 @@ describe("fileSearchTool", () => {
 
 		fs.rmSync(outsideDir, { recursive: true, force: true });
 	});
+
+	test("finds files inside a symlinked directory", async () => {
+		// Create a directory with files outside the project root
+		const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-symlink-"));
+		fs.writeFileSync(path.join(externalDir, "linked-file.ts"), "linked");
+		fs.mkdirSync(path.join(externalDir, "nested"));
+		fs.writeFileSync(path.join(externalDir, "nested", "deep-linked.ts"), "deep");
+
+		// Symlink into the project
+		fs.symlinkSync(externalDir, path.join(tmpDir, "linked-dir"));
+
+		const result = await fileSearchTool.execute({ pattern: "**/*.ts", path: "linked-dir" }, ctx);
+		const lines = result.llmOutput.split("\n").filter(Boolean);
+		expect(lines).toContain("linked-file.ts");
+		expect(lines).toContain("nested/deep-linked.ts");
+
+		// Cleanup
+		fs.unlinkSync(path.join(tmpDir, "linked-dir"));
+		fs.rmSync(externalDir, { recursive: true, force: true });
+	});
+
+	test("finds files inside a symlinked subdirectory with recursive search from project root", async () => {
+		// Create a directory with a file outside the project root
+		const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-symlink2-"));
+		fs.writeFileSync(path.join(externalDir, "external.json"), "{}");
+
+		// Symlink into the project
+		fs.symlinkSync(externalDir, path.join(tmpDir, "ext-link"));
+
+		const result = await fileSearchTool.execute({ pattern: "**/*.json" }, ctx);
+		const lines = result.llmOutput.split("\n").filter(Boolean);
+		expect(lines).toContain("ext-link/external.json");
+		expect(lines).toContain("src/deep/data.json");
+
+		// Cleanup
+		fs.unlinkSync(path.join(tmpDir, "ext-link"));
+		fs.rmSync(externalDir, { recursive: true, force: true });
+	});
 });

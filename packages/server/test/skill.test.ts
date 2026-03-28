@@ -140,4 +140,52 @@ describe("discoverSkills", () => {
 		const registry = discoverSkills([]);
 		expect(registry.list()).toHaveLength(0);
 	});
+
+	test("discovers skills through symlinked directories", () => {
+		// Create the actual skill outside the scan root
+		const externalDir = path.join(tmpDir, "external", "my-skill");
+		fs.mkdirSync(externalDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(externalDir, "SKILL.md"),
+			["---", "name: linked-skill", "description: A symlinked skill", "---", "Linked content"].join("\n"),
+		);
+
+		// Symlink into the skills directory
+		const skillsDir = path.join(tmpDir, "skills");
+		fs.mkdirSync(skillsDir, { recursive: true });
+		fs.symlinkSync(externalDir, path.join(skillsDir, "my-skill"));
+
+		const registry = discoverSkills([skillsDir]);
+		expect(registry.list()).toHaveLength(1);
+		expect(registry.get("linked-skill")).not.toBeUndefined();
+		expect(registry.get("linked-skill")?.description).toBe("A symlinked skill");
+		expect(registry.get("linked-skill")?.content).toContain("Linked content");
+	});
+
+	test("discovers skills through nested symlinked directories", () => {
+		// Create a whole skill collection outside the scan root
+		const externalBase = path.join(tmpDir, "external-collection");
+		const skillA = path.join(externalBase, "skill-a");
+		const skillB = path.join(externalBase, "group", "skill-b");
+		fs.mkdirSync(skillA, { recursive: true });
+		fs.mkdirSync(skillB, { recursive: true });
+		fs.writeFileSync(
+			path.join(skillA, "SKILL.md"),
+			["---", "name: skill-a", "description: First", "---", "A"].join("\n"),
+		);
+		fs.writeFileSync(
+			path.join(skillB, "SKILL.md"),
+			["---", "name: skill-b", "description: Second", "---", "B"].join("\n"),
+		);
+
+		// Symlink the entire collection into the skills directory
+		const skillsDir = path.join(tmpDir, "skills");
+		fs.mkdirSync(skillsDir, { recursive: true });
+		fs.symlinkSync(externalBase, path.join(skillsDir, "collection"));
+
+		const registry = discoverSkills([skillsDir]);
+		const names = registry.list().map((s) => s.name);
+		expect(names).toContain("skill-a");
+		expect(names).toContain("skill-b");
+	});
 });

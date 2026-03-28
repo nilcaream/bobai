@@ -11,7 +11,7 @@ export async function loadPlugins(configDir: string, logger: Logger): Promise<vo
 
 	const entries = fs.readdirSync(pluginsDir, { withFileTypes: true });
 	const pluginPaths = entries
-		.filter((e) => e.isFile() && (e.name.endsWith(".ts") || e.name.endsWith(".js")))
+		.filter((e) => (e.isFile() || e.isSymbolicLink()) && (e.name.endsWith(".ts") || e.name.endsWith(".js")))
 		.map((e) => path.join(pluginsDir, e.name))
 		.sort();
 
