@@ -113,6 +113,7 @@ install_runner() {
 set -euo pipefail
 DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
 BOBAI_HOME="${DATA_HOME}/bobai"
+export BUN_CONFIG_INSTALL_AUTO=disable
 exec "${BOBAI_HOME}/bun" "${BOBAI_HOME}/dist/server.js" "$@"
 RUNNER
 
