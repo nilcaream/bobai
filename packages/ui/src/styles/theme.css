@@ -20,8 +20,6 @@
 	--md-code: #a8e6a3;
 	--md-list-marker: #d4a846;
 
-	/* Typography — one size everywhere */
-	--font-family: "Ubuntu Mono", monospace;
+	/* Font size — part of the theme surface (e.g. high-contrast accessibility themes) */
 	--font-size: 15px;
-	--line-height: 1.1;
 }

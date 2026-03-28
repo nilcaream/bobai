@@ -14,9 +14,9 @@ body,
 	height: 100%;
 	background: var(--bg-primary);
 	color: var(--text-primary);
-	font-family: var(--font-family);
+	font-family: "Ubuntu Mono", monospace;
 	font-size: var(--font-size);
-	line-height: var(--line-height);
+	line-height: 1;
 }
 
 /* Three-zone flex layout */
@@ -134,7 +134,7 @@ body,
 }
 
 .panel--tool.panel--collapsed > .md {
-	height: calc(6 * 1.1em);
+	height: 6em;
 	overflow: clip;
 }
 
@@ -297,9 +297,9 @@ body,
 	width: 100%;
 	background: var(--bg-panel);
 	color: var(--text-user);
-	font-family: var(--font-family);
+	font-family: inherit;
 	font-size: var(--font-size);
-	line-height: var(--line-height);
+	line-height: 1;
 	border: none;
 	outline: none;
 	resize: none;
