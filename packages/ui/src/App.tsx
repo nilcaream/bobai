@@ -644,14 +644,14 @@ export function App() {
 					clearInput();
 					return;
 				}
-				const isTargetSelf = targetSession.id === getSessionId() && !sessionLocked;
+				const isTargetSelf = targetSession.id === getSessionId();
 				if (isTargetSelf) {
 					// Already viewing this session — no-op
 					clearInput();
 					return;
 				}
 				if (targetSession.owned) {
-					addErrorMessage("Session is active in another tab");
+					setVolatileError("Session is active in another tab");
 					clearInput();
 					return;
 				}
