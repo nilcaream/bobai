@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, memo } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import SyntaxHighlighter from "react-syntax-highlighter";
@@ -45,7 +45,7 @@ const components: Components = {
 	},
 };
 
-export function Markdown({ children }: { children: string }) {
+export const Markdown = memo(function Markdown({ children }: { children: string }) {
 	return (
 		<div className="md">
 			<ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
@@ -53,4 +53,4 @@ export function Markdown({ children }: { children: string }) {
 			</ReactMarkdown>
 		</div>
 	);
-}
+});
