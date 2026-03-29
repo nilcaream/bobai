@@ -274,15 +274,18 @@ export function App() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const autoScroll = useRef(true);
 
-	// Mouse wheel disables autoscroll
+	// Unified scroll listener: determine autoscroll based on position.
+	// Fires on every scroll event (mouse wheel, PageUp/Down, programmatic).
 	useEffect(() => {
 		const el = messagesRef.current;
 		if (!el) return;
-		const onWheel = () => {
-			autoScroll.current = false;
+		const THRESHOLD = 2;
+		const onScroll = () => {
+			const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - THRESHOLD;
+			autoScroll.current = atBottom;
 		};
-		el.addEventListener("wheel", onWheel);
-		return () => el.removeEventListener("wheel", onWheel);
+		el.addEventListener("scroll", onScroll);
+		return () => el.removeEventListener("scroll", onScroll);
 	}, []);
 
 	// Update browser tab title when project info changes
@@ -302,13 +305,10 @@ export function App() {
 			const distance = el.clientHeight - lineHeight * 2;
 			if (e.key === "PageUp") {
 				el.scrollTop -= distance;
-				autoScroll.current = false;
 			} else {
 				el.scrollTop += distance;
-				if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
-					autoScroll.current = true;
-				}
 			}
+			// autoScroll state is handled by the scroll listener above
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
