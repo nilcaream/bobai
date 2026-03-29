@@ -8,7 +8,7 @@ import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 
 function makeAuth(access = "tok"): StoredAuth {
-	return { refresh: "gho_refresh", access, expires: Date.now() + 3_600_000 };
+	return { refresh: "gho_testauthrefreshtoken1234567890abcdef", access, expires: Date.now() + 3_600_000 };
 }
 
 function sseStream(events: string[]): ReadableStream<Uint8Array> {
@@ -39,7 +39,7 @@ describe("CopilotProvider", () => {
 	});
 
 	test("has correct id", () => {
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		expect(provider.id).toBe("github-copilot");
 	});
 
@@ -56,7 +56,7 @@ describe("CopilotProvider", () => {
 			});
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth("test-token"));
+		const provider = createCopilotProvider(makeAuth("test-token"), emptyConfigDir);
 		const tokens: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-5-mini",
@@ -82,7 +82,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("Hello"), chatChunk(" world"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-5-mini",
@@ -103,7 +103,7 @@ describe("CopilotProvider", () => {
 			return new Response("Unauthorized", { status: 401 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth("bad-token"));
+		const provider = createCopilotProvider(makeAuth("bad-token"), emptyConfigDir);
 		const iter = provider.stream({
 			model: "gpt-5-mini",
 			messages: [{ role: "user", content: "hi" }],
@@ -123,7 +123,7 @@ describe("CopilotProvider", () => {
 			});
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		const events: StreamEvent[] = [];
 		for await (const t of provider.stream({
 			model: "gpt-5-mini",
@@ -146,7 +146,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
 			messages: [{ role: "user", content: "hi" }],
@@ -166,7 +166,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		const tools = [
 			{
 				type: "function" as const,
@@ -197,7 +197,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
 			messages: [{ role: "user", content: "hi" }],
@@ -288,7 +288,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
 			messages: [
@@ -390,7 +390,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
 			messages: [{ role: "user", content: "hi" }],
@@ -428,7 +428,7 @@ describe("CopilotProvider", () => {
 			}) as typeof fetch;
 
 			const provider = createCopilotProvider(
-				{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+				{ refresh: "gho_testauthrefreshtoken1234567890abcdef", access: "expired-tok", expires: Date.now() - 1000 },
 				configDir,
 			);
 
@@ -441,13 +441,13 @@ describe("CopilotProvider", () => {
 
 			// First call should be token exchange, second should be chat completions
 			expect(fetchCalls[0].url).toContain("copilot_internal/v2/token");
-			expect(fetchCalls[0].headers.Authorization).toBe("Bearer gho_refresh");
+			expect(fetchCalls[0].headers.Authorization).toBe("Bearer gho_testauthrefreshtoken1234567890abcdef");
 			expect(fetchCalls[1].url).toContain("chat/completions");
 			expect(fetchCalls[1].headers.Authorization).toContain("tid=new");
 
 			// Should persist the refreshed auth
 			const saved = JSON.parse(fs.readFileSync(path.join(configDir, "auth.json"), "utf8"));
-			expect(saved.refresh).toBe("gho_refresh");
+			expect(saved.refresh).toBe("gho_testauthrefreshtoken1234567890abcdef");
 			expect(saved.access).toContain("tid=new");
 		} finally {
 			fs.rmSync(configDir, { recursive: true, force: true });
@@ -462,7 +462,7 @@ describe("CopilotProvider", () => {
 			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth("valid-tok"));
+		const provider = createCopilotProvider(makeAuth("valid-tok"), emptyConfigDir);
 
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
@@ -485,11 +485,11 @@ describe("CopilotProvider", () => {
 		}) as typeof fetch;
 
 		const auth: StoredAuth = {
-			refresh: "gho_r",
+			refresh: "gho_testauthrefreshtoken1234567890abcdef",
 			access: "tid=x;proxy-ep=proxy.custom.example.com",
 			expires: Date.now() + 3_600_000,
 		};
-		const provider = createCopilotProvider(auth);
+		const provider = createCopilotProvider(auth, emptyConfigDir);
 
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
@@ -711,7 +711,7 @@ describe("Token refresh coalescing", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider(
-			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			{ refresh: "gho_testauthrefreshtoken1234567890abcdef", access: "expired-tok", expires: Date.now() - 1000 },
 			configDir,
 		);
 
@@ -764,7 +764,7 @@ describe("Token refresh coalescing", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider(
-			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			{ refresh: "gho_testauthrefreshtoken1234567890abcdef", access: "expired-tok", expires: Date.now() - 1000 },
 			configDir,
 		);
 
@@ -809,7 +809,7 @@ describe("ensureValidSession logging", () => {
 		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
-	test("logs token refresh trigger and success", async () => {
+	test("logs token refresh trigger and success with token details", async () => {
 		const logs: string[] = [];
 		const logger = {
 			level: "debug" as const,
@@ -835,7 +835,7 @@ describe("ensureValidSession logging", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider(
-			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			{ refresh: "gho_testauthrefreshtoken1234567890abcdef", access: "expired-tok", expires: Date.now() - 1000 },
 			configDir,
 			logger,
 		);
@@ -849,6 +849,9 @@ describe("ensureValidSession logging", () => {
 
 		expect(logs.some((l) => l.includes("refresh"))).toBe(true);
 		expect(logs.some((l) => l.includes("success") || l.includes("refreshed"))).toBe(true);
+		// New: verify token summary details are logged
+		expect(logs.some((l) => l.includes("type=oauth") && l.includes("gho_"))).toBe(true);
+		expect(logs.some((l) => l.includes("baseUrl="))).toBe(true);
 	});
 
 	test("logs token refresh failure", async () => {
@@ -867,7 +870,7 @@ describe("ensureValidSession logging", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider(
-			{ refresh: "gho_refresh", access: "expired-tok", expires: Date.now() - 1000 },
+			{ refresh: "gho_testauthrefreshtoken1234567890abcdef", access: "expired-tok", expires: Date.now() - 1000 },
 			configDir,
 			logger,
 		);
@@ -885,6 +888,52 @@ describe("ensureValidSession logging", () => {
 
 		expect(logs.some((l) => l.includes("fail") || l.includes("error"))).toBe(true);
 	});
+
+	test("logs diagnostic details on 400 auth retry", async () => {
+		const logs: string[] = [];
+		const logger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: (_s: string, m: string) => logs.push(`debug: ${m}`),
+			info: (_s: string, m: string) => logs.push(`info: ${m}`),
+			warn: (_s: string, m: string) => logs.push(`warn: ${m}`),
+			error: (_s: string, m: string) => logs.push(`error: ${m}`),
+		};
+
+		let chatAttempt = 0;
+
+		globalThis.fetch = mock(async (url: string | URL | Request) => {
+			const urlStr = url.toString();
+
+			if (urlStr.includes("copilot_internal/v2/token")) {
+				return new Response(
+					JSON.stringify({
+						token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+
+			chatAttempt++;
+			if (chatAttempt === 1) {
+				return new Response("Authorization header is badly formatted", { status: 400 });
+			}
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("stale-session"), configDir, logger);
+		for await (const _ of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		// Should log the 400 with body excerpt and token details
+		expect(logs.some((l) => l.includes("Got 400") && l.includes("badly formatted"))).toBe(true);
+		expect(logs.some((l) => l.includes("session=") && l.includes("baseUrl="))).toBe(true);
+	});
 });
 
 // ── Retry logic ───────────────────────────────────────────────────────────
@@ -892,9 +941,15 @@ describe("ensureValidSession logging", () => {
 describe("Retry logic", () => {
 	const originalFetch = globalThis.fetch;
 	const fast = { backoffBaseMs: 10 };
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-retry-"));
+	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
 	test("retries on 5xx and succeeds", async () => {
@@ -908,7 +963,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -932,7 +987,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -945,15 +1000,15 @@ describe("Retry logic", () => {
 		expect(events.some((e) => e.type === "text" && e.text === "ok")).toBe(true);
 	});
 
-	test("does not retry on 4xx other than 429", async () => {
+	test("does not retry on 4xx other than 400, 401, 429", async () => {
 		let attempt = 0;
 
 		globalThis.fetch = mock(async () => {
 			attempt++;
-			return new Response("Bad Request", { status: 400 });
+			return new Response("Forbidden", { status: 403 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), configDir);
 
 		let caught: unknown;
 		try {
@@ -969,7 +1024,7 @@ describe("Retry logic", () => {
 
 		expect(attempt).toBe(1);
 		expect(caught).toBeInstanceOf(ProviderError);
-		expect((caught as ProviderError).status).toBe(400);
+		expect((caught as ProviderError).status).toBe(403);
 	});
 
 	test("retries on timeout (fetch throws) and succeeds", async () => {
@@ -985,7 +1040,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -1006,7 +1061,7 @@ describe("Retry logic", () => {
 			return new Response("Server Error", { status: 502 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
 
 		let caught: unknown;
 		try {
@@ -1037,7 +1092,7 @@ describe("Retry logic", () => {
 			throw new DOMException("The operation was aborted", "AbortError");
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
 
 		let caught: unknown;
 		try {
@@ -1086,8 +1141,8 @@ describe("Retry logic", () => {
 
 		// Start with a token that will expire during backoff
 		const provider = createCopilotProvider(
-			{ refresh: "gho_refresh", access: "tid=original", expires: Date.now() + 100 },
-			undefined,
+			{ refresh: "gho_testauthrefreshtoken1234567890abcdef", access: "tid=original", expires: Date.now() + 100 },
+			configDir,
 			undefined,
 			fast,
 		);
@@ -1137,7 +1192,7 @@ describe("Retry logic", () => {
 			});
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth());
+		const provider = createCopilotProvider(makeAuth(), configDir);
 		const events: StreamEvent[] = [];
 		for await (const e of provider.stream({
 			model: "gpt-4o",
@@ -1241,6 +1296,91 @@ describe("Retry logic", () => {
 		}
 	});
 
+	test("retries once on 400 from chat/completions with forced token refresh", async () => {
+		let chatAttempt = 0;
+		const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-400-retry-"));
+
+		try {
+			globalThis.fetch = mock(async (url: string | URL | Request, _init?: RequestInit) => {
+				const urlStr = url.toString();
+
+				if (urlStr.includes("copilot_internal/v2/token")) {
+					return new Response(
+						JSON.stringify({
+							token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+							expires_at: Math.floor(Date.now() / 1000) + 3600,
+						}),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				}
+
+				chatAttempt++;
+				if (chatAttempt === 1) {
+					return new Response("Authorization header is badly formatted", { status: 400 });
+				}
+				return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
+			}) as typeof fetch;
+
+			const provider = createCopilotProvider(makeAuth("stale-token"), configDir);
+			const events: StreamEvent[] = [];
+			for await (const e of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				events.push(e);
+			}
+
+			expect(chatAttempt).toBe(2);
+			expect(events.some((e) => e.type === "text" && e.text === "recovered")).toBe(true);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
+	test("does not retry 400 from chat/completions more than once", async () => {
+		let chatAttempt = 0;
+		const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-400-noretry-"));
+
+		try {
+			globalThis.fetch = mock(async (url: string | URL | Request) => {
+				const urlStr = url.toString();
+
+				if (urlStr.includes("copilot_internal/v2/token")) {
+					return new Response(
+						JSON.stringify({
+							token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+							expires_at: Math.floor(Date.now() / 1000) + 3600,
+						}),
+						{ status: 200, headers: { "Content-Type": "application/json" } },
+					);
+				}
+
+				chatAttempt++;
+				return new Response("Authorization header is badly formatted", { status: 400 });
+			}) as typeof fetch;
+
+			const provider = createCopilotProvider(makeAuth("stale-token"), configDir);
+			let caught: unknown;
+			try {
+				for await (const _ of provider.stream({
+					model: "gpt-4o",
+					messages: [{ role: "user", content: "hi" }],
+				})) {
+					/* drain */
+				}
+			} catch (err) {
+				caught = err;
+			}
+
+			// Should try once, force refresh, try again, then fail
+			expect(chatAttempt).toBe(2);
+			expect(caught).toBeInstanceOf(ProviderError);
+			expect((caught as ProviderError).status).toBe(400);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
+	});
+
 	test("exponential backoff increases delay between retries", async () => {
 		let attempt = 0;
 		const timestamps: number[] = [];
@@ -1254,7 +1394,7 @@ describe("Retry logic", () => {
 			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
 		}) as typeof fetch;
 
-		const provider = createCopilotProvider(makeAuth(), undefined, undefined, fast);
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
 		for await (const _ of provider.stream({
 			model: "gpt-4o",
 			messages: [{ role: "user", content: "hi" }],
@@ -1272,5 +1412,63 @@ describe("Retry logic", () => {
 		expect(gap1).toBeGreaterThan(5);
 		expect(gap2).toBeGreaterThan(gap1);
 		expect(gap3).toBeGreaterThan(gap2);
+	});
+});
+
+// ── Corrupt token detection ───────────────────────────────────────────────
+
+describe("Corrupt token detection", () => {
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-corrupt-"));
+	});
+
+	afterEach(() => {
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	test("warns when gho_ refresh token is suspiciously short", () => {
+		const logs: string[] = [];
+		const logger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: (_s: string, m: string) => logs.push(m),
+			info: (_s: string, m: string) => logs.push(m),
+			warn: (_s: string, m: string) => logs.push(m),
+			error: (_s: string, m: string) => logs.push(m),
+		};
+
+		createCopilotProvider(
+			{ refresh: "gho_short", access: "tid=x;proxy-ep=proxy.individual.githubcopilot.com", expires: Date.now() + 3_600_000 },
+			configDir,
+			logger,
+		);
+
+		expect(logs.some((l) => l.includes("corrupt") && l.includes("gho_"))).toBe(true);
+	});
+
+	test("does not warn when gho_ refresh token has normal length", () => {
+		const logs: string[] = [];
+		const logger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: (_s: string, m: string) => logs.push(m),
+			info: (_s: string, m: string) => logs.push(m),
+			warn: (_s: string, m: string) => logs.push(m),
+			error: (_s: string, m: string) => logs.push(m),
+		};
+
+		createCopilotProvider(
+			{
+				refresh: "gho_abcdefghijklmnopqrstuvwxyz1234567890ab",
+				access: "tid=x;proxy-ep=proxy.individual.githubcopilot.com",
+				expires: Date.now() + 3_600_000,
+			},
+			configDir,
+			logger,
+		);
+
+		expect(logs.some((l) => l.includes("corrupt"))).toBe(false);
 	});
 });

@@ -32,6 +32,25 @@ export function maskAuthHeader(headers: Record<string, string>): Record<string, 
 	const value = masked[key];
 	if (!value.startsWith("Bearer ")) return masked;
 	const token = value.slice("Bearer ".length);
+
+	// Session tokens (tid=...;exp=...;proxy-ep=...) contain mostly metadata.
+	// Mask the tid value (the actual secret) but keep exp and proxy-ep visible
+	// for diagnostics.
+	if (token.includes(";") && token.includes("tid=")) {
+		const maskedToken = token.replace(/tid=([^;]+)/, (_, tid: string) => {
+			return `tid=${tid.length > 8 ? `${tid.slice(0, 3)}***${tid.slice(-3)}` : "***"}`;
+		});
+		masked[key] = `Bearer ${maskedToken}`;
+		return masked;
+	}
+
+	// OAuth tokens (gho_xxx) — show prefix + last 4
+	if (token.startsWith("gho_")) {
+		masked[key] = `Bearer gho_***${token.slice(-4)}`;
+		return masked;
+	}
+
+	// Fallback: generic masking
 	masked[key] = `Bearer ${token.length > 8 ? `${token.slice(0, 4)}***${token.slice(-4)}` : "***"}`;
 	return masked;
 }

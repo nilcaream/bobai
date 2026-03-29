@@ -56,7 +56,7 @@ describe("writeDump", () => {
 });
 
 describe("maskAuthHeader", () => {
-	test("preserves prefix and last 4 chars of long tokens", () => {
+	test("masks gho_ token showing prefix and last 4 chars", () => {
 		const masked = maskAuthHeader({ Authorization: "Bearer gho_abcdefghijklmnop" });
 		expect(masked.Authorization).toBe("Bearer gho_***mnop");
 	});
@@ -72,5 +72,19 @@ describe("maskAuthHeader", () => {
 			Authorization: "Bearer gho_abcdefghijkl",
 		});
 		expect(masked["Content-Type"]).toBe("application/json");
+	});
+
+	test("masks session token tid but keeps exp and proxy-ep visible", () => {
+		const masked = maskAuthHeader({
+			Authorization: "Bearer tid=abc123def456;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com",
+		});
+		expect(masked.Authorization).toBe("Bearer tid=abc***456;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com");
+	});
+
+	test("fully masks short session token tid", () => {
+		const masked = maskAuthHeader({
+			Authorization: "Bearer tid=short;exp=123;proxy-ep=proxy.example.com",
+		});
+		expect(masked.Authorization).toBe("Bearer tid=***;exp=123;proxy-ep=proxy.example.com");
 	});
 });

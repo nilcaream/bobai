@@ -83,6 +83,13 @@ export function createCopilotProvider(
 	let baseUrl = deriveBaseUrl(auth.access);
 	const refreshToken = auth.refresh;
 
+	// Warn about potentially corrupt refresh token
+	if (refreshToken.startsWith("gho_") && refreshToken.length < 20) {
+		const msg = `Refresh token looks corrupt: prefix=gho_ len=${refreshToken.length} (expected 40+). Run 'bobai auth' to re-authenticate.`;
+		logger?.warn("AUTH", msg);
+		console.warn(`[WARN] ${msg}`);
+	}
+
 	// Per-turn tracking
 	let turnStartTime = 0;
 	let turnModel = "";
@@ -98,8 +105,18 @@ export function createCopilotProvider(
 	// await the same promise instead of issuing duplicate token exchanges.
 	let refreshInFlight: Promise<void> | null = null;
 
+	function tokenSummary(token: string): string {
+		const prefix = token.slice(0, 4);
+		const type = token.startsWith("tid=") ? "session" : token.startsWith("gho_") ? "oauth" : "unknown";
+		return `type=${type} prefix=${prefix}... len=${token.length}`;
+	}
+
 	async function ensureValidSession(): Promise<void> {
-		if (Date.now() < sessionExpires) return;
+		const now = Date.now();
+		if (now < sessionExpires) {
+			logger?.debug("AUTH", `Session valid (expires in ${Math.round((sessionExpires - now) / 1000)}s, baseUrl=${baseUrl})`);
+			return;
+		}
 
 		if (refreshInFlight) {
 			logger?.debug("AUTH", "Token refresh already in-flight, waiting");
@@ -107,7 +124,11 @@ export function createCopilotProvider(
 			return;
 		}
 
-		logger?.info("AUTH", "Session token expired, refreshing");
+		logger?.info(
+			"AUTH",
+			`Session token expired (expired ${Math.round((now - sessionExpires) / 1000)}s ago), refreshing. ` +
+				`refresh=${tokenSummary(refreshToken)} session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
+		);
 
 		refreshInFlight = (async () => {
 			const result = await exchangeToken(refreshToken);
@@ -115,14 +136,14 @@ export function createCopilotProvider(
 			sessionExpires = result.expires;
 			baseUrl = result.baseUrl;
 			saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
-			logger?.info("AUTH", "Token refreshed successfully");
+			logger?.info("AUTH", `Token refreshed successfully. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`);
 		})();
 
 		try {
 			await refreshInFlight;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			logger?.error("AUTH", `Token refresh failed: ${msg}`);
+			logger?.error("AUTH", `Token refresh failed: ${msg}. refresh=${tokenSummary(refreshToken)}`);
 			throw err;
 		} finally {
 			refreshInFlight = null;
@@ -270,12 +291,19 @@ export function createCopilotProvider(
 				}
 
 				// Non-retryable 4xx (except 429) — fail immediately
-				// Special case: 401 might mean server-side token revocation.
+				// Special cases:
+				// - 401 might mean server-side token revocation.
+				// - 400 "badly formatted" can mean a corrupt/stale session token.
 				// Force one token refresh and retry before giving up.
 				if (response.status !== 429 && response.status < 500) {
-					if (response.status === 401 && !retriedAuth) {
+					if ((response.status === 401 || response.status === 400) && !retriedAuth) {
+						const body = await response.text();
 						retriedAuth = true;
-						logger?.warn("AUTH", "Got 401 from chat/completions, forcing token refresh");
+						logger?.warn(
+							"AUTH",
+							`Got ${response.status} from chat/completions (body: ${body.slice(0, 200)}), ` +
+								`forcing token refresh. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
+						);
 						sessionExpires = 0; // Force ensureValidSession to refresh
 						await ensureValidSession();
 						response = undefined;
