@@ -463,6 +463,8 @@ export function useWebSocket() {
 		getSessionId: () => sessionId.current,
 		setSessionId: (id: string) => {
 			sessionId.current = id;
+			history.replaceState(null, "", buildSessionUrl(id));
+			sendSubscribe(id);
 		},
 		volatileError,
 		setVolatileError,
