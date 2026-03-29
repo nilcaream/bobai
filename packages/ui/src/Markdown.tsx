@@ -26,7 +26,13 @@ const components: Components = {
 		const match = /language-(\w+)/.exec(className || "");
 		if (match) {
 			return (
-				<SyntaxHighlighter language={match[1]} style={theme as Record<string, CSSProperties>} customStyle={codeStyle} PreTag="div" {...rest}>
+				<SyntaxHighlighter
+					language={match[1]}
+					style={theme as Record<string, CSSProperties>}
+					customStyle={codeStyle}
+					PreTag="div"
+					{...rest}
+				>
 					{String(children).replace(/\n$/, "")}
 				</SyntaxHighlighter>
 			);

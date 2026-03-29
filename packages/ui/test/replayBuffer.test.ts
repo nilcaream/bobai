@@ -21,9 +21,7 @@ describe("replayBufferToMessages", () => {
 	});
 
 	test("tool_call event creates a tool_call part", () => {
-		const events = [
-			{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", sessionId: "c1" },
-		];
+		const events = [{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", sessionId: "c1" }];
 		const msgs = replayBufferToMessages(events);
 		expect(msgs).toHaveLength(1);
 		if (msgs[0].role === "assistant") {
@@ -41,7 +39,11 @@ describe("replayBufferToMessages", () => {
 		if (msgs[0].role === "assistant") {
 			expect(msgs[0].parts).toHaveLength(2);
 			expect(msgs[0].parts[1]).toEqual({
-				type: "tool_result", id: "tc1", content: "file contents", mergeable: true, summary: undefined,
+				type: "tool_result",
+				id: "tc1",
+				content: "file contents",
+				mergeable: true,
+				summary: undefined,
 			});
 		}
 	});
@@ -85,7 +87,11 @@ describe("replayBufferToMessages", () => {
 		const msgs = replayBufferToMessages(events);
 		if (msgs[0].role === "assistant") {
 			expect(msgs[0].parts[1]).toEqual({
-				type: "tool_result", id: "tc1", content: null, mergeable: false, summary: undefined,
+				type: "tool_result",
+				id: "tc1",
+				content: null,
+				mergeable: false,
+				summary: undefined,
 			});
 		}
 	});
@@ -93,12 +99,23 @@ describe("replayBufferToMessages", () => {
 	test("tool_result with summary", () => {
 		const events = [
 			{ type: "tool_call" as const, id: "tc1", output: "▸ task analysis", sessionId: "c1" },
-			{ type: "tool_result" as const, id: "tc1", output: "result", mergeable: false, summary: "Analyzed codebase", sessionId: "c1" },
+			{
+				type: "tool_result" as const,
+				id: "tc1",
+				output: "result",
+				mergeable: false,
+				summary: "Analyzed codebase",
+				sessionId: "c1",
+			},
 		];
 		const msgs = replayBufferToMessages(events);
 		if (msgs[0].role === "assistant") {
 			expect(msgs[0].parts[1]).toEqual({
-				type: "tool_result", id: "tc1", content: "result", mergeable: false, summary: "Analyzed codebase",
+				type: "tool_result",
+				id: "tc1",
+				content: "result",
+				mergeable: false,
+				summary: "Analyzed codebase",
 			});
 		}
 	});

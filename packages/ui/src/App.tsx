@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
+import { buildSessionUrl, parseSessionUrl } from "./urlUtils";
 import type { MessagePart, StagedSkill } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
-import { buildSessionUrl, parseSessionUrl } from "./urlUtils";
 
 type Panel =
 	| { type: "text"; content: string }
@@ -414,7 +414,8 @@ export function App() {
 		requestAnimationFrame(adjustHeight);
 	}, [historyIndex]);
 
-	const isReadOnly = !!parentId || sessionLocked || viewingSubagentId !== null || view.mode === "context" || view.mode === "compaction";
+	const isReadOnly =
+		!!parentId || sessionLocked || viewingSubagentId !== null || view.mode === "context" || view.mode === "compaction";
 	const activeDotCommands = sessionLocked ? LOCKED_DOT_COMMANDS : isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
 
 	function clearInput() {
@@ -433,9 +434,9 @@ export function App() {
 			// No dot command name contains a digit, so trailing digits are always an arg.
 			if (matches.length === 0) {
 				const m = prefix.match(/^([a-z]+)(\d+)$/);
-				if (m) {
-					const cmdPart = m[1]!;
-					const numPart = m[2]!;
+				const cmdPart = m?.[1];
+				const numPart = m?.[2];
+				if (cmdPart && numPart) {
 					const cmdMatches = activeDotCommands.filter((c) => c.startsWith(cmdPart));
 					if (cmdMatches.length === 1) {
 						return { mode: "args" as const, prefix: cmdPart, matches: cmdMatches, args: numPart, command: cmdMatches[0] };
@@ -787,7 +788,8 @@ export function App() {
 		const slashParsed = parseSlashInput(text);
 		if (slashParsed) {
 			if (slashParsed.matches.length === 1) {
-				stageSkill(slashParsed.matches[0]!.name);
+				const name = slashParsed.matches[0]?.name;
+				if (name) stageSkill(name);
 			}
 			clearInput();
 			return;
@@ -1302,12 +1304,9 @@ export function App() {
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
-				{volatileError && (
-					<div className="panel panel--error-volatile">
-						{volatileError}
-					</div>
-				)}
-				{!sessionLocked && (view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels())}
+				{volatileError && <div className="panel panel--error-volatile">{volatileError}</div>}
+				{!sessionLocked &&
+					(view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels())}
 			</div>
 
 			{stagedSkills.length > 0 && (
@@ -1336,7 +1335,15 @@ export function App() {
 						adjustHeight();
 					}}
 					onKeyDown={handleKeyDown}
-					placeholder={viewingSubagentId ? "Viewing subagent — press Escape to return" : sessionLocked ? "Use .new or .session to navigate" : isReadOnly ? "Dot commands only (read-only)" : "Type a message..."}
+					placeholder={
+						viewingSubagentId
+							? "Viewing subagent — press Escape to return"
+							: sessionLocked
+								? "Use .new or .session to navigate"
+								: isReadOnly
+									? "Dot commands only (read-only)"
+									: "Type a message..."
+					}
 					disabled={!connected || isStreaming}
 				/>
 			</div>

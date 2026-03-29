@@ -1,6 +1,6 @@
 import type { Message, MessagePart } from "./useWebSocket";
 
-type BufferedEvent = { type: string; [key: string]: any };
+type BufferedEvent = { type: string; [key: string]: unknown };
 
 /** Append to the last assistant message's parts, or create a new assistant message. */
 function appendPart(msgs: Message[], part: MessagePart): Message[] {
@@ -34,16 +34,16 @@ export function replayBufferToMessages(events: BufferedEvent[]): Message[] {
 	let messages: Message[] = [];
 	for (const event of events) {
 		if (event.type === "token") {
-			messages = appendText(messages, event.text);
+			messages = appendText(messages, event.text as string);
 		} else if (event.type === "tool_call") {
-			messages = appendPart(messages, { type: "tool_call", id: event.id, content: event.output });
+			messages = appendPart(messages, { type: "tool_call", id: event.id as string, content: event.output as string });
 		} else if (event.type === "tool_result") {
 			messages = appendPart(messages, {
 				type: "tool_result",
-				id: event.id,
-				content: event.output,
-				mergeable: event.mergeable,
-				summary: event.summary,
+				id: event.id as string,
+				content: event.output as string,
+				mergeable: event.mergeable as boolean,
+				summary: event.summary as string | undefined,
 			});
 		}
 		// All other event types (status, error, done, etc.) are not message-producing — skip

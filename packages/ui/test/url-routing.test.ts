@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseSessionUrl, buildSessionUrl } from "../src/urlUtils";
+import { buildSessionUrl, parseSessionUrl } from "../src/urlUtils";
 
 describe("URL parsing", () => {
 	test("parseSessionUrl returns null for /bobai/", () => {

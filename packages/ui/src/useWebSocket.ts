@@ -156,7 +156,10 @@ export function useWebSocket() {
 
 			if (result.target === "lifecycle") {
 				if (msg.type === "subagent_start") {
-					setSubagents((prev) => [...prev, { sessionId: msg.sessionId, title: msg.title, status: "running", toolCallId: msg.toolCallId }]);
+					setSubagents((prev) => [
+						...prev,
+						{ sessionId: msg.sessionId, title: msg.title, status: "running", toolCallId: msg.toolCallId },
+					]);
 				}
 				if (msg.type === "subagent_done") {
 					setSubagents((prev) => prev.map((s) => (s.sessionId === msg.sessionId ? { ...s, status: "done" } : s)));

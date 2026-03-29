@@ -46,7 +46,7 @@ export function createEventRouter() {
 			if ("sessionId" in msg && msg.sessionId) {
 				const sid = msg.sessionId as string;
 				if (!buffers.has(sid)) buffers.set(sid, []);
-				buffers.get(sid)!.push(msg);
+				buffers.get(sid)?.push(msg);
 				return { target: "child", sessionId: sid };
 			}
 
