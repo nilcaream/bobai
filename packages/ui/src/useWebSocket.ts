@@ -376,6 +376,28 @@ export function useWebSocket() {
 			eventRouter.current.clearAllBuffers();
 			setSessionLocked(false);
 
+			// Check ownership before loading to avoid flicker
+			try {
+				const ownershipRes = await fetch(`/bobai/session/${targetId}/ownership`);
+				if (ownershipRes.ok) {
+					const ownershipData = await ownershipRes.json();
+					if (ownershipData.owned) {
+						// Session is owned by another tab — go straight to locked state
+						sessionId.current = targetId;
+						setSessionLocked(true);
+						setVolatileError("Session is active in another tab");
+						setMessages([]);
+						if (!options?.skipUrlUpdate) {
+							history.pushState(null, "", buildSessionUrl(targetId));
+						}
+						sendSubscribe(targetId);
+						return true;
+					}
+				}
+			} catch {
+				// Ownership check failed — proceed with normal load
+			}
+
 			try {
 				const res = await fetch(`/bobai/session/${targetId}/load`);
 				if (!res.ok) return false;

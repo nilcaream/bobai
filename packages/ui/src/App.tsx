@@ -644,7 +644,13 @@ export function App() {
 					clearInput();
 					return;
 				}
-				if (targetSession.owned && targetSession.id !== getSessionId()) {
+				const isTargetSelf = targetSession.id === getSessionId() && !sessionLocked;
+				if (isTargetSelf) {
+					// Already viewing this session — no-op
+					clearInput();
+					return;
+				}
+				if (targetSession.owned) {
 					addErrorMessage("Session is active in another tab");
 					clearInput();
 					return;
@@ -927,17 +933,23 @@ export function App() {
 				const filtered = parsed.args ? sessionList.filter((s) => String(s.index).startsWith(parsed.args.trim())) : sessionList;
 				content =
 					filtered.length > 0 ? (
-						filtered.map((s) => (
-							<div key={s.id}>
-								{s.index}:{" "}
-								{s.updatedAt
-									.replace("T", " ")
-									.replace(/\.\d+Z$/, "")
-									.replace("Z", "")}{" "}
-								{s.title ?? ""}
-								{s.owned && s.id !== getSessionId() ? " (active in another tab)" : ""}
-							</div>
-						))
+						filtered.map((s) => {
+							const isCurrentSession = s.id === getSessionId();
+							const isOwnedBySelf = isCurrentSession && !sessionLocked;
+							const isOwnedByOther = s.owned && !isOwnedBySelf;
+							return (
+								<div key={s.id}>
+									{s.index}:{" "}
+									{s.updatedAt
+										.replace("T", " ")
+										.replace(/\.\d+Z$/, "")
+										.replace("Z", "")}{" "}
+									{s.title ?? ""}
+									{isOwnedByOther ? " (active in another tab)" : ""}
+									{isOwnedBySelf ? " (this session)" : ""}
+								</div>
+							);
+						})
 					) : (
 						<div>No matching sessions</div>
 					);
