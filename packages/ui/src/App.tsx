@@ -159,31 +159,48 @@ const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 const LOCKED_DOT_COMMANDS = ["new", "session"] as const;
 
-function ToolPanel({ children, onNavigate }: { children: React.ReactNode; onNavigate?: () => void }) {
+function ToolPanel({
+	children,
+	onNavigate,
+	observe,
+}: {
+	children: React.ReactNode;
+	onNavigate?: () => void;
+	observe?: boolean;
+}) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
 	const collapsible = useRef(false);
 	const userToggled = useRef(false);
-	const observerRef = useRef<ResizeObserver | null>(null);
 
+	// One-shot measurement on mount for static (non-streaming) panels.
 	useEffect(() => {
-		if (!ref.current) return;
+		if (observe || !ref.current) return;
+		if (userToggled.current) return;
+		const threshold = window.innerHeight * 0.3;
+		const shouldCollapse = ref.current.scrollHeight > threshold;
+		collapsible.current = shouldCollapse;
+		setCollapsed(shouldCollapse);
+	}, [observe]);
 
-		const evaluate = () => {
+	// ResizeObserver only for the actively-streaming panel.
+	useEffect(() => {
+		if (!observe || !ref.current) return;
+
+		const el = ref.current;
+		const observer = new ResizeObserver(() => {
 			if (userToggled.current) return;
 			const threshold = window.innerHeight * 0.3;
-			const shouldCollapse = ref.current!.scrollHeight > threshold;
+			const shouldCollapse = el.scrollHeight > threshold;
 			if (shouldCollapse) {
 				collapsible.current = true;
 				setCollapsed(true);
-				observerRef.current?.disconnect();
+				observer.disconnect();
 			}
-		};
-
-		observerRef.current = new ResizeObserver(evaluate);
-		observerRef.current.observe(ref.current);
-		return () => observerRef.current?.disconnect();
-	}, []);
+		});
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [observe]);
 
 	const handleDoubleClick = () => {
 		if (onNavigate) {
@@ -1014,7 +1031,10 @@ export function App() {
 		const elements: React.ReactNode[] = [];
 		let key = 0;
 
-		for (const msg of messages) {
+		for (let m = 0; m < messages.length; m++) {
+			const msg = messages[m];
+			if (!msg) continue;
+			const isLastMsg = m === messages.length - 1;
 			if (msg.role === "user") {
 				elements.push(
 					<div key={key++} className="panel panel--user">
@@ -1047,9 +1067,10 @@ export function App() {
 				} else {
 					const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
 					const onNavigate = linkedSubagent ? () => peekSubagent(linkedSubagent.sessionId) : undefined;
+					const shouldObserve = isStreaming && isLastMsg && !panel.completed;
 
 					elements.push(
-						<ToolPanel key={key++} onNavigate={onNavigate}>
+						<ToolPanel key={key++} onNavigate={onNavigate} observe={shouldObserve}>
 							<Markdown>{panel.content}</Markdown>
 							{panel.summary && <div className="panel-status">{panel.summary}</div>}
 							{!panel.summary && isLast && msg.timestamp && (
