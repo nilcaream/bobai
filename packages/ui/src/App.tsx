@@ -157,6 +157,7 @@ type ViewMode = (typeof VIEW_MODES)[number];
 
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
+const LOCKED_DOT_COMMANDS = ["new", "session"] as const;
 
 function ToolPanel({ children, onNavigate }: { children: React.ReactNode; onNavigate?: () => void }) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -397,7 +398,7 @@ export function App() {
 	}, [historyIndex]);
 
 	const isReadOnly = !!parentId || sessionLocked || viewingSubagentId !== null || view.mode === "context" || view.mode === "compaction";
-	const activeDotCommands = isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
+	const activeDotCommands = sessionLocked ? LOCKED_DOT_COMMANDS : isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
 
 	function clearInput() {
 		setInput("");
@@ -577,6 +578,21 @@ export function App() {
 		if (!text || !connected) return;
 
 		const parsed = parseDotInput(text);
+
+		// When session is locked, only .new and .session commands are allowed
+		if (sessionLocked) {
+			const isNewCmd =
+				(parsed?.mode === "args" && parsed.command === "new") ||
+				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "new");
+			const isSessionCmd =
+				(parsed?.mode === "args" && parsed.command === "session") ||
+				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session");
+			if (!isNewCmd && !isSessionCmd) {
+				clearInput();
+				return;
+			}
+		}
+
 		if (parsed?.mode === "args" && parsed.command) {
 			// New chat: .new [optional title]
 			if (parsed.command === "new") {
@@ -1258,7 +1274,7 @@ export function App() {
 						{volatileError}
 					</div>
 				)}
-				{view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels()}
+				{!sessionLocked && (view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels())}
 			</div>
 
 			{stagedSkills.length > 0 && (
@@ -1287,8 +1303,8 @@ export function App() {
 						adjustHeight();
 					}}
 					onKeyDown={handleKeyDown}
-					placeholder={viewingSubagentId ? "Viewing subagent — press Escape to return" : isReadOnly ? "Dot commands only (read-only)" : "Type a message..."}
-					disabled={!connected || isStreaming || sessionLocked}
+					placeholder={viewingSubagentId ? "Viewing subagent — press Escape to return" : sessionLocked ? "Use .new or .session to navigate" : isReadOnly ? "Dot commands only (read-only)" : "Type a message..."}
+					disabled={!connected || isStreaming}
 				/>
 			</div>
 		</main>
