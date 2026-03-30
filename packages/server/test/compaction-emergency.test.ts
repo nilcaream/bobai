@@ -78,7 +78,7 @@ describe("emergencyCompactConversation", () => {
 			emptyRegistry,
 		);
 		// compactMessages returns a new array when it compacts
-		// At 90% usage with threshold 0.4, there IS context pressure so compaction should fire
+		// At 90% usage with threshold 0.5, there IS context pressure so compaction should fire
 		expect(result).not.toBe(conversation);
 		// The result should still have the same number of messages (compaction changes content, not count)
 		expect(result.length).toBe(conversation.length);

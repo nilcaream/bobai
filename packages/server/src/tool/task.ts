@@ -91,7 +91,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			},
 		},
 		mergeable: false,
-		compactionResistance: 0.7,
+		compactionResistance: 1.0,
 		formatCall(args: Record<string, unknown>): string {
 			return `▸ ${args.description ?? "task"}`;
 		},

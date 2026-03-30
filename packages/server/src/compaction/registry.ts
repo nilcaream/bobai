@@ -46,7 +46,7 @@ const skillCompactionStub: Tool = {
 const taskCompactionStub: Tool = {
 	definition: { type: "function", function: { name: "task", description: "", parameters: { type: "object", properties: {} } } },
 	mergeable: false,
-	compactionResistance: 0.7,
+	compactionResistance: 1.0,
 	// No custom compact — uses default strategy
 	formatCall() {
 		return "";

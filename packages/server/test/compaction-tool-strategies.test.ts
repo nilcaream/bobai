@@ -78,8 +78,8 @@ describe("compactionResistance values", () => {
 		expect(editFileTool.compactionResistance).toBe(0.8);
 	});
 
-	test("task has resistance 0.7", () => {
-		expect(makeTaskTool().compactionResistance).toBe(0.7);
+	test("task has resistance 1.0", () => {
+		expect(makeTaskTool().compactionResistance).toBe(1.0);
 	});
 });
 

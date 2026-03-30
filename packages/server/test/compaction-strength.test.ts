@@ -20,12 +20,12 @@ describe("computeContextPressure", () => {
 		expect(computeContextPressure({ promptTokens: 100, contextWindow: -1000 })).toBe(0);
 	});
 
-	test("returns 0 when usage is below default threshold (60%)", () => {
-		expect(computeContextPressure({ promptTokens: 500, contextWindow: 1000 })).toBe(0);
+	test("returns 0 when usage is below default threshold (50%)", () => {
+		expect(computeContextPressure({ promptTokens: 400, contextWindow: 1000 })).toBe(0);
 	});
 
 	test("returns 0 when usage is exactly at threshold", () => {
-		expect(computeContextPressure({ promptTokens: 600, contextWindow: 1000 })).toBe(0);
+		expect(computeContextPressure({ promptTokens: 500, contextWindow: 1000 })).toBe(0);
 	});
 
 	test("returns positive when usage is above threshold", () => {
@@ -34,9 +34,9 @@ describe("computeContextPressure", () => {
 	});
 
 	test("scales linearly from 0 to 1 between threshold and full", () => {
-		// At 80% usage with default 60% threshold: (0.8 - 0.6) / (1 - 0.6) = 0.5
+		// At 80% usage with default 50% threshold: (0.8 - 0.5) / (1 - 0.5) = 0.6
 		const pressure = computeContextPressure({ promptTokens: 800, contextWindow: 1000 });
-		expect(pressure).toBeCloseTo(0.5, 10);
+		expect(pressure).toBeCloseTo(0.6, 10);
 	});
 
 	test("returns 1.0 when context is fully used", () => {
@@ -60,14 +60,14 @@ describe("computeContextPressure", () => {
 		expect(pressure).toBeCloseTo(0.5, 10);
 	});
 
-	test("usage at 70% with default threshold gives 0.25", () => {
-		// (0.7 - 0.6) / (1 - 0.6) = 0.1 / 0.4 = 0.25
+	test("usage at 70% with default threshold gives 0.4", () => {
+		// (0.7 - 0.5) / (1 - 0.5) = 0.2 / 0.5 = 0.4
 		const pressure = computeContextPressure({ promptTokens: 700, contextWindow: 1000 });
-		expect(pressure).toBeCloseTo(0.25, 10);
+		expect(pressure).toBeCloseTo(0.4, 10);
 	});
 
-	test("DEFAULT_THRESHOLD is 0.6", () => {
-		expect(DEFAULT_THRESHOLD).toBe(0.6);
+	test("DEFAULT_THRESHOLD is 0.5", () => {
+		expect(DEFAULT_THRESHOLD).toBe(0.5);
 	});
 });
 
@@ -88,32 +88,33 @@ describe("computeAge", () => {
 		expect(computeAge(9, 10)).toBe(0);
 	});
 
-	test("AGE_INFLECTION is 0.7", () => {
-		expect(AGE_INFLECTION).toBe(0.7);
+	test("AGE_INFLECTION is 0.8", () => {
+		expect(AGE_INFLECTION).toBe(0.8);
 	});
 
-	test("AGE_STEEPNESS is 8", () => {
-		expect(AGE_STEEPNESS).toBe(8);
+	test("AGE_STEEPNESS is 10", () => {
+		expect(AGE_STEEPNESS).toBe(10);
 	});
 
 	test("age follows arctan S-curve", () => {
 		const total = 5;
 		const ages = Array.from({ length: total }, (_, i) => computeAge(i, total));
-		// With inflection=0.7 and steepness=8, the S-curve protects the newest 30%
+		// With inflection=0.8 and steepness=10, the S-curve protects the newest 20%
 		// and aggressively compacts older messages.
 		// positions: [0.0, 0.25, 0.5, 0.75, 1.0]
 		expect(ages[0]).toBe(1); // oldest
-		expect(ages[1]).toBeCloseTo(0.9633, 3); // position 0.25: still very old
-		expect(ages[2]).toBeCloseTo(0.8514, 3); // position 0.5: above inflection, high age
-		expect(ages[3]).toBeCloseTo(0.3095, 3); // position 0.75: just past inflection, drops sharply
+		expect(ages[1]).toBeCloseTo(0.9783, 3); // position 0.25: still very old
+		expect(ages[2]).toBeCloseTo(0.9227, 3); // position 0.5: above inflection, high age
+		expect(ages[3]).toBeCloseTo(0.6151, 3); // position 0.75: near inflection, dropping
 		expect(ages[4]).toBe(0); // newest
 	});
 
-	test("messages near inflection point have age close to 0.5", () => {
-		// Position 0.7 is the inflection. In a 101-message conversation,
-		// index 70 has position 0.7.
-		const age = computeAge(70, 101);
-		expect(age).toBeCloseTo(0.5, 1);
+	test("messages near inflection point have age around 0.43", () => {
+		// Position 0.8 is the inflection. In a 101-message conversation,
+		// index 80 has position ~0.8. The normalized atan curve is slightly
+		// asymmetric, so the inflection maps to ~0.43 rather than exactly 0.5.
+		const age = computeAge(80, 101);
+		expect(age).toBeCloseTo(0.43, 1);
 	});
 
 	test("arctan curve gives sharper transition than quadratic", () => {
@@ -228,17 +229,17 @@ describe("computeMessageStrengths", () => {
 		expect(result.has(1)).toBe(true);
 		expect(result.has(3)).toBe(true);
 
-		// index 1, total 5: arctan age ≈ 0.9633, resistance=0, compactability=1.0
-		// strength = 1.0 * 0.9633 * 1.0 ≈ 0.9633
+		// index 1, total 5: arctan age ≈ 0.9783, resistance=0, compactability=1.0
+		// strength = 1.0 * 0.9783 * 1.0 ≈ 0.9783
 		const strength1 = result.get(1);
 		expect(strength1).toBeDefined();
-		expect(strength1).toBeCloseTo(0.9633, 3);
+		expect(strength1).toBeCloseTo(0.9783, 3);
 
-		// index 3, total 5: arctan age ≈ 0.3095, resistance=0, compactability=1.0
-		// strength = 1.0 * 0.3095 * 1.0 ≈ 0.3095
+		// index 3, total 5: arctan age ≈ 0.6151, resistance=0, compactability=1.0
+		// strength = 1.0 * 0.6151 * 1.0 ≈ 0.6151
 		const strength3 = result.get(3);
 		expect(strength3).toBeDefined();
-		expect(strength3).toBeCloseTo(0.3095, 3);
+		expect(strength3).toBeCloseTo(0.6151, 3);
 	});
 
 	test("uses getResistance callback with correct tool_call_id", () => {
@@ -302,17 +303,17 @@ describe("computeMessageStrengths", () => {
 
 		const result = computeMessageStrengths(messages, 0.8, (id) => resistanceMap[id] ?? DEFAULT_RESISTANCE);
 
-		// index 1, total 6: arctan age ≈ 0.9734, resistance=0.0, compactability=1.0
-		// strength = 0.8 * 0.9734 * 1.0 ≈ 0.7787
+		// index 1, total 6: arctan age ≈ 0.9840, resistance=0.0, compactability=1.0
+		// strength = 0.8 * 0.9840 * 1.0 ≈ 0.7872
 		const strength1 = result.get(1);
 		expect(strength1).toBeDefined();
-		expect(strength1).toBeCloseTo(0.7787, 3);
+		expect(strength1).toBeCloseTo(0.7872, 3);
 
-		// index 3, total 6: arctan age ≈ 0.7201, resistance=0.5, compactability=0.5
-		// strength = 0.8 * 0.7201 * 0.5 ≈ 0.2880
+		// index 3, total 6: arctan age ≈ 0.8671, resistance=0.5, compactability=0.5
+		// strength = 0.8 * 0.8671 * 0.5 ≈ 0.3469
 		const strength3 = result.get(3);
 		expect(strength3).toBeDefined();
-		expect(strength3).toBeCloseTo(0.288, 3);
+		expect(strength3).toBeCloseTo(0.3469, 3);
 
 		// index 5, total 6: arctan age = 0.0, resistance=1.0, compactability=0.0
 		// strength = 0.8 * 0.0 * 0.0 = 0.0 -> excluded

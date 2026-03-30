@@ -573,7 +573,7 @@ describe("compactMessages", () => {
 		});
 
 		test("context pressure at exact threshold produces no compaction", () => {
-			// DEFAULT_THRESHOLD is 0.6, so at exactly 60% usage → pressure = 0
+			// DEFAULT_THRESHOLD is 0.5, so at exactly 50% usage → pressure = 0
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
@@ -581,7 +581,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: { promptTokens: 6_000, contextWindow: 10_000 }, // exactly 0.6
+				context: { promptTokens: 5_000, contextWindow: 10_000 }, // exactly 0.5
 				tools: createMockRegistry({ bash: {} }),
 			});
 			expect(result).toBe(messages); // no compaction
@@ -596,7 +596,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: { promptTokens: 6_100, contextWindow: 10_000 }, // 0.61 > 0.6 threshold
+				context: { promptTokens: 5_100, contextWindow: 10_000 }, // 0.51 > 0.5 threshold
 				tools: createMockRegistry({ bash: {} }),
 			});
 			expect(result).not.toBe(messages); // compaction occurred
