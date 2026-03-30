@@ -12,6 +12,7 @@ import { send } from "./protocol";
 import { CURATED_MODELS, formatModelCost, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
 import type { AssistantMessage, Provider } from "./provider/provider";
 import {
+	deleteSession,
 	getMessages,
 	getMostRecentParentSession,
 	getRecentPrompts,
@@ -292,7 +293,7 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
 				}
-				const sessions = listSessions(options.db, 9);
+				const sessions = listSessions(options.db, 20);
 				const body = sessions.map((s, i) => ({
 					index: i + 1,
 					id: s.id,
@@ -332,6 +333,26 @@ export function createServer(options: ServerOptions) {
 			if (ownershipMatch) {
 				const sid = decodeURIComponent(ownershipMatch[1]);
 				return Response.json({ owned: sessionOwners.has(sid) });
+			}
+
+			// DELETE /bobai/session/:id — delete a session and its children
+			const deleteMatch = url.pathname.match(/^\/bobai\/session\/([^/]+)$/);
+			if (deleteMatch && req.method === "DELETE") {
+				if (!options.db) {
+					return Response.json({ ok: false, error: "Database not available" });
+				}
+				const sid = decodeURIComponent(deleteMatch[1]);
+				const session = getSession(options.db, sid);
+				if (!session) {
+					return Response.json({ ok: false, error: "Session not found" });
+				}
+				// Block deletion if another tab owns this session
+				const owner = sessionOwners.get(sid);
+				if (owner) {
+					return Response.json({ ok: false, error: "Session is active in another tab" });
+				}
+				deleteSession(options.db, sid);
+				return Response.json({ ok: true, id: sid, title: session.title });
 			}
 
 			if (staticDir && url.pathname.startsWith("/bobai")) {

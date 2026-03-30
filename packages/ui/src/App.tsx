@@ -249,15 +249,14 @@ export function App() {
 		status,
 		setStatus,
 		subagents,
-		addErrorMessage,
 		parentId,
 		parentTitle,
 		projectInfo,
 		loadSession,
 		getSessionId,
 		setSessionId,
-		volatileError,
-		setVolatileError,
+		volatileMessage,
+		setVolatileMessage,
 		sessionLocked,
 		viewingSubagentId,
 		peekSubagent,
@@ -571,7 +570,7 @@ export function App() {
 		if (urlSessionId) {
 			loadSession(urlSessionId, { skipUrlUpdate: true }).then((success) => {
 				if (!success) {
-					setVolatileError("Session not found");
+					setVolatileMessage({ text: "Session not found", kind: "error" });
 				}
 			});
 		} else {
@@ -675,6 +674,8 @@ export function App() {
 		const text = input.trim();
 		if (!text || !connected) return;
 
+		setVolatileMessage(null);
+
 		const parsed = parseDotInput(text);
 
 		// When session is locked, only .new and .session commands are allowed
@@ -730,18 +731,56 @@ export function App() {
 					clearInput();
 					return;
 				}
-				const index = Number.parseInt(arg, 10);
+				const parts = arg.split(/\s+/);
+				const indexStr = parts[0] ?? "";
+				const index = Number.parseInt(indexStr, 10);
+				const subcommand = parts[1];
 				if (Number.isNaN(index) || index < 1 || !sessionList || index > sessionList.length) {
-					addErrorMessage(`Invalid session index: ${arg}`);
+					setVolatileMessage({ text: `Invalid session index: ${indexStr}`, kind: "error" });
 					clearInput();
 					return;
 				}
 				const targetSession = sessionList[index - 1];
 				if (!targetSession) {
-					addErrorMessage(`Invalid session index: ${arg}`);
+					setVolatileMessage({ text: `Invalid session index: ${indexStr}`, kind: "error" });
 					clearInput();
 					return;
 				}
+
+				// Delete subcommand: .session N delete
+				if (subcommand === "delete") {
+					const isTargetSelf = targetSession.id === getSessionId();
+					const isOwnedByOther = targetSession.owned && !isTargetSelf;
+					if (isOwnedByOther) {
+						setVolatileMessage({ text: "Cannot delete: session is active in another tab", kind: "error" });
+						clearInput();
+						return;
+					}
+					// If deleting current session, clear it first (releases ownership)
+					if (isTargetSelf) {
+						newChat();
+						setStagedSkills([]);
+						setStatus(defaultStatus.current);
+						setView((prev) => ({ ...prev, mode: "chat" }));
+					}
+					fetch(`/bobai/session/${targetSession.id}`, { method: "DELETE" })
+						.then((res) => res.json())
+						.then((data: { ok: boolean; id?: string; title?: string | null; error?: string }) => {
+							if (data.ok) {
+								const label = data.title ? `${data.id} "${data.title}"` : (data.id ?? targetSession.id);
+								setVolatileMessage({ text: `Session ${label} has been removed`, kind: "success" });
+							} else {
+								setVolatileMessage({ text: data.error ?? "Failed to delete session", kind: "error" });
+							}
+						})
+						.catch(() => {
+							setVolatileMessage({ text: "Failed to delete session", kind: "error" });
+						});
+					clearInput();
+					return;
+				}
+
+				// Session switching (no subcommand)
 				const isTargetSelf = targetSession.id === getSessionId();
 				if (isTargetSelf) {
 					// Already viewing this session — no-op
@@ -749,7 +788,7 @@ export function App() {
 					return;
 				}
 				if (targetSession.owned) {
-					setVolatileError("Session is active in another tab");
+					setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
 					clearInput();
 					return;
 				}
@@ -769,13 +808,13 @@ export function App() {
 				}
 				const index = Number.parseInt(arg, 10);
 				if (Number.isNaN(index) || index < 1 || !subagentList || index > subagentList.length) {
-					addErrorMessage(`Invalid subagent index: ${arg}`);
+					setVolatileMessage({ text: `Invalid subagent index: ${arg}`, kind: "error" });
 					clearInput();
 					return;
 				}
 				const targetSubagent = subagentList[index - 1];
 				if (!targetSubagent) {
-					addErrorMessage(`Invalid subagent index: ${arg}`);
+					setVolatileMessage({ text: `Invalid subagent index: ${arg}`, kind: "error" });
 					clearInput();
 					return;
 				}
@@ -815,11 +854,11 @@ export function App() {
 							setStatus(result.status);
 						}
 					} else {
-						addErrorMessage(result.error ?? "Command failed");
+						setVolatileMessage({ text: result.error ?? "Command failed", kind: "error" });
 					}
 				})
 				.catch(() => {
-					addErrorMessage("Failed to execute command");
+					setVolatileMessage({ text: "Failed to execute command", kind: "error" });
 				});
 			clearInput();
 			return;
@@ -876,13 +915,13 @@ export function App() {
 		}
 
 		if (parentId) {
-			addErrorMessage("Subagent sessions are read-only");
+			setVolatileMessage({ text: "Subagent sessions are read-only", kind: "error" });
 			clearInput();
 			return;
 		}
 
 		if (view.mode === "context" || view.mode === "compaction") {
-			addErrorMessage("Read-only view");
+			setVolatileMessage({ text: "Read-only view", kind: "error" });
 			clearInput();
 			return;
 		}
@@ -1029,35 +1068,52 @@ export function App() {
 			} else if (sessionList.length === 0) {
 				content = "No sessions";
 			} else {
-				const filtered = parsed.args ? sessionList.filter((s) => String(s.index).startsWith(parsed.args.trim())) : sessionList;
-				content =
-					filtered.length > 0 ? (
-						filtered.map((s) => {
-							const isCurrentSession = s.id === getSessionId();
-							const isOwnedBySelf = isCurrentSession && !sessionLocked;
-							const isOwnedByOther = s.owned && !isOwnedBySelf;
-							const localTime = new Date(s.updatedAt)
-								.toLocaleString("sv-SE", {
-									year: "numeric",
-									month: "2-digit",
-									day: "2-digit",
-									hour: "2-digit",
-									minute: "2-digit",
-									second: "2-digit",
-									hour12: false,
-								})
-								.replace(",", "");
-							return (
-								<div key={s.id}>
-									{s.index}: {localTime} {s.title ?? ""}
-									{isOwnedByOther ? " (active in another tab)" : ""}
-									{isOwnedBySelf ? " (this session)" : ""}
-								</div>
-							);
-						})
-					) : (
-						<div>No matching sessions</div>
-					);
+				const argText = (parsed.args ?? "").trim();
+				const argParts = argText.split(/\s+/);
+				const indexPart = argParts[0] ?? "";
+				const subcommand = argParts[1];
+
+				// If user typed "N delete", show a delete preview instead of the session list
+				if (subcommand === "delete") {
+					const idx = Number.parseInt(indexPart, 10);
+					if (!Number.isNaN(idx) && idx >= 1 && idx <= sessionList.length) {
+						const target = sessionList[idx - 1];
+						const label = target?.title ? `"${target.title}"` : `#${idx}`;
+						content = `Delete session ${label}`;
+					} else {
+						content = `Invalid session index: ${indexPart}`;
+					}
+				} else {
+					const filtered = argText ? sessionList.filter((s) => String(s.index).startsWith(indexPart)) : sessionList;
+					content =
+						filtered.length > 0 ? (
+							filtered.map((s) => {
+								const isCurrentSession = s.id === getSessionId();
+								const isOwnedBySelf = isCurrentSession && !sessionLocked;
+								const isOwnedByOther = s.owned && !isOwnedBySelf;
+								const localTime = new Date(s.updatedAt)
+									.toLocaleString("sv-SE", {
+										year: "numeric",
+										month: "2-digit",
+										day: "2-digit",
+										hour: "2-digit",
+										minute: "2-digit",
+										second: "2-digit",
+										hour12: false,
+									})
+									.replace(",", "");
+								return (
+									<div key={s.id}>
+										{s.index}: {localTime} {s.title ?? ""}
+										{isOwnedByOther ? " (active in another tab)" : ""}
+										{isOwnedBySelf ? " (this session)" : ""}
+									</div>
+								);
+							})
+						) : (
+							<div>No matching sessions</div>
+						);
+				}
 			}
 		} else if (parsed.command === "subagent") {
 			if (!subagentList) {
@@ -1399,10 +1455,13 @@ export function App() {
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
-				{volatileError && <div className="panel panel--error-volatile">{volatileError}</div>}
 				{!sessionLocked &&
 					(view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels())}
 			</div>
+
+			{volatileMessage && (
+				<div className={`panel panel--volatile panel--volatile-${volatileMessage.kind}`}>{volatileMessage.text}</div>
+			)}
 
 			{stagedSkills.length > 0 && (
 				<div className="panel panel--tool">

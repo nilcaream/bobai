@@ -90,7 +90,7 @@ export function useWebSocket() {
 	const [parentId, setParentId] = useState<string | null>(null);
 	const [parentTitle, setParentTitle] = useState<string | null>(null);
 	const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-	const [volatileError, setVolatileError] = useState<string | null>(null);
+	const [volatileMessage, setVolatileMessage] = useState<{ text: string; kind: "error" | "success" } | null>(null);
 	const [sessionLocked, setSessionLocked] = useState(false);
 	const [viewingSubagentId, setViewingSubagentId] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
@@ -140,7 +140,7 @@ export function useWebSocket() {
 			// Session-level concerns — handle before the event router
 			if (msg.type === "session_created") {
 				sessionId.current = msg.sessionId;
-				setVolatileError(null);
+				setVolatileMessage(null);
 				history.pushState(null, "", buildSessionUrl(msg.sessionId));
 				sendSubscribe(msg.sessionId);
 				return;
@@ -148,13 +148,13 @@ export function useWebSocket() {
 
 			if (msg.type === "session_locked") {
 				setSessionLocked(true);
-				setVolatileError("Session is active in another tab");
+				setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
 				return;
 			}
 
 			if (msg.type === "session_subscribed") {
 				setSessionLocked(false);
-				setVolatileError(null);
+				setVolatileMessage(null);
 				return;
 			}
 
@@ -327,7 +327,7 @@ export function useWebSocket() {
 			}
 			eventRouter.current.clearAllBuffers();
 			setSubagents([]);
-			setVolatileError(null);
+			setVolatileMessage(null);
 
 			setIsStreaming(true);
 			// When staged skills are present, the server sends prompt_echo after skill
@@ -370,7 +370,7 @@ export function useWebSocket() {
 		setSubagents([]);
 		setParentId(null);
 		setParentTitle(null);
-		setVolatileError(null);
+		setVolatileMessage(null);
 		setSessionLocked(false);
 		history.pushState(null, "", "/bobai");
 	}, [sendUnsubscribe]);
@@ -398,7 +398,7 @@ export function useWebSocket() {
 						// Session is owned by another tab — go straight to locked state
 						sessionId.current = targetId;
 						setSessionLocked(true);
-						setVolatileError("Session is active in another tab");
+						setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
 						setMessages([]);
 						if (!options?.skipUrlUpdate) {
 							history.pushState(null, "", buildSessionUrl(targetId));
@@ -426,7 +426,7 @@ export function useWebSocket() {
 				setSubagents([]);
 				setStatus(data.status ?? "");
 				setMessages(reconstructMessages(data.messages));
-				setVolatileError(null);
+				setVolatileMessage(null);
 
 				if (!options?.skipUrlUpdate) {
 					history.pushState(null, "", buildSessionUrl(data.session.id));
@@ -476,8 +476,8 @@ export function useWebSocket() {
 			history.replaceState(null, "", buildSessionUrl(id));
 			sendSubscribe(id);
 		},
-		volatileError,
-		setVolatileError,
+		volatileMessage,
+		setVolatileMessage,
 		sessionLocked,
 		viewingSubagentId,
 		peekSubagent,

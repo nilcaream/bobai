@@ -224,3 +224,16 @@ export function getMostRecentParentSession(db: Database): Session | null {
 		updatedAt: row.updated_at,
 	};
 }
+
+export function deleteSession(db: Database, sessionId: string): void {
+	db.transaction(() => {
+		// Delete messages of child (subagent) sessions
+		db.prepare("DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE parent_id = ?)").run(sessionId);
+		// Delete child sessions
+		db.prepare("DELETE FROM sessions WHERE parent_id = ?").run(sessionId);
+		// Delete messages of the target session
+		db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
+		// Delete the target session
+		db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+	})();
+}

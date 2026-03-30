@@ -316,6 +316,33 @@ describe("HTTP endpoints", () => {
 		const res = await fetch(`${baseUrl}/bobai/session/nonexistent/load`);
 		expect(res.status).toBe(404);
 	});
+
+	test("DELETE /bobai/session/:id deletes session and returns ok", async () => {
+		const freshDb = createTestDb();
+		const s = createServer({ port: 0, db: freshDb });
+		const base = `http://localhost:${s.port}`;
+		const session = createSession(freshDb);
+		updateSessionTitle(freshDb, session.id, "Doomed Session");
+		appendMessage(freshDb, session.id, "user", "hello");
+
+		const res = await fetch(`${base}/bobai/session/${session.id}`, { method: "DELETE" });
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { ok: boolean; id: string; title: string | null };
+		expect(body.ok).toBe(true);
+		expect(body.id).toBe(session.id);
+		expect(body.title).toBe("Doomed Session");
+		expect(getSession(freshDb, session.id)).toBeNull();
+		s.stop(true);
+		freshDb.close();
+	});
+
+	test("DELETE /bobai/session/:id returns error for unknown session", async () => {
+		const res = await fetch(`${baseUrl}/bobai/session/nonexistent`, { method: "DELETE" });
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { ok: boolean; error: string };
+		expect(body.ok).toBe(false);
+		expect(body.error).toContain("Session not found");
+	});
 });
 
 describe("handlePrompt respects session model", () => {

@@ -3,6 +3,7 @@ import {
 	appendMessage,
 	createSession,
 	createSubagentSession,
+	deleteSession,
 	getMessages,
 	getMostRecentParentSession,
 	getSession,
@@ -246,6 +247,50 @@ describe("session repository", () => {
 
 		const unlimited = listSessions(freshDb);
 		expect(unlimited).toHaveLength(3);
+		freshDb.close();
+	});
+
+	test("deleteSession removes session and its messages", () => {
+		const freshDb = createTestDb();
+		const session = createSession(freshDb);
+		appendMessage(freshDb, session.id, "user", "hello");
+		appendMessage(freshDb, session.id, "assistant", "hi");
+
+		deleteSession(freshDb, session.id);
+
+		expect(getSession(freshDb, session.id)).toBeNull();
+		expect(getMessages(freshDb, session.id)).toHaveLength(0);
+		freshDb.close();
+	});
+
+	test("deleteSession cascade-deletes child sessions and their messages", () => {
+		const freshDb = createTestDb();
+		const parent = createSession(freshDb);
+		appendMessage(freshDb, parent.id, "user", "parent msg");
+		const child = createSubagentSession(freshDb, parent.id, "Child Task", "gpt-5-mini");
+		appendMessage(freshDb, child.id, "user", "child msg");
+
+		deleteSession(freshDb, parent.id);
+
+		expect(getSession(freshDb, parent.id)).toBeNull();
+		expect(getSession(freshDb, child.id)).toBeNull();
+		expect(getMessages(freshDb, parent.id)).toHaveLength(0);
+		expect(getMessages(freshDb, child.id)).toHaveLength(0);
+		freshDb.close();
+	});
+
+	test("deleteSession does not affect other sessions", () => {
+		const freshDb = createTestDb();
+		const s1 = createSession(freshDb);
+		const s2 = createSession(freshDb);
+		appendMessage(freshDb, s1.id, "user", "s1 msg");
+		appendMessage(freshDb, s2.id, "user", "s2 msg");
+
+		deleteSession(freshDb, s1.id);
+
+		expect(getSession(freshDb, s1.id)).toBeNull();
+		expect(getSession(freshDb, s2.id)).not.toBeNull();
+		expect(getMessages(freshDb, s2.id)).toHaveLength(1);
 		freshDb.close();
 	});
 });
