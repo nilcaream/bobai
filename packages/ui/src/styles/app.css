@@ -51,6 +51,17 @@ body,
 	margin: 1em 1em 0;
 }
 
+/* Slash skill rows — always one line, truncated */
+.slash-skill-row {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.slash-skill-desc {
+	color: var(--text-muted);
+}
+
 .status-dot {
 	display: inline-block;
 	width: 6px;
