@@ -1036,14 +1036,20 @@ export function App() {
 							const isCurrentSession = s.id === getSessionId();
 							const isOwnedBySelf = isCurrentSession && !sessionLocked;
 							const isOwnedByOther = s.owned && !isOwnedBySelf;
+							const localTime = new Date(s.updatedAt)
+								.toLocaleString("sv-SE", {
+									year: "numeric",
+									month: "2-digit",
+									day: "2-digit",
+									hour: "2-digit",
+									minute: "2-digit",
+									second: "2-digit",
+									hour12: false,
+								})
+								.replace(",", "");
 							return (
 								<div key={s.id}>
-									{s.index}:{" "}
-									{s.updatedAt
-										.replace("T", " ")
-										.replace(/\.\d+Z$/, "")
-										.replace("Z", "")}{" "}
-									{s.title ?? ""}
+									{s.index}: {localTime} {s.title ?? ""}
 									{isOwnedByOther ? " (active in another tab)" : ""}
 									{isOwnedBySelf ? " (this session)" : ""}
 								</div>
