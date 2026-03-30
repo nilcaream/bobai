@@ -486,4 +486,34 @@ describe("createTaskTool", () => {
 		expect(lastAssistant?.metadata?.summary).toContain("agent: 2");
 		expect(lastAssistant?.metadata?.turn_model).toBe("test-model");
 	});
+
+	test("emits prompt_echo with child sessionId via sendWs", async () => {
+		const wsMsgs: ServerMessage[] = [];
+		const tool = createTaskTool({
+			db,
+			provider: textOnlyProvider("result"),
+			model: "test-model",
+			parentSessionId,
+			projectRoot: "/tmp",
+			systemPrompt: "sys",
+			onEvent: () => {},
+			sendWs: (msg) => wsMsgs.push(msg),
+			subagentStatus: new SubagentStatus(),
+		});
+
+		await tool.execute({ description: "Test prompt echo", prompt: "Find all tests" }, { projectRoot: "/tmp" });
+
+		const promptEcho = wsMsgs.find((m) => m.type === "prompt_echo");
+		expect(promptEcho).toBeTruthy();
+		expect(promptEcho.type).toBe("prompt_echo");
+		if (promptEcho?.type === "prompt_echo") {
+			expect(promptEcho.text).toBe("Find all tests");
+			expect(promptEcho.sessionId).toBeTruthy();
+		}
+
+		// prompt_echo should come before subagent_start
+		const echoIdx = wsMsgs.indexOf(promptEcho!);
+		const startIdx = wsMsgs.findIndex((m) => m.type === "subagent_start");
+		expect(echoIdx).toBeLessThan(startIdx);
+	});
 });

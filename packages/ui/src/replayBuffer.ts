@@ -33,7 +33,9 @@ function appendText(msgs: Message[], text: string): Message[] {
 export function replayBufferToMessages(events: BufferedEvent[]): Message[] {
 	let messages: Message[] = [];
 	for (const event of events) {
-		if (event.type === "token") {
+		if (event.type === "prompt_echo") {
+			messages = [...messages, { role: "user", text: event.text as string, timestamp: "" }];
+		} else if (event.type === "token") {
 			messages = appendText(messages, event.text as string);
 		} else if (event.type === "tool_call") {
 			messages = appendPart(messages, { type: "tool_call", id: event.id as string, content: event.output as string });

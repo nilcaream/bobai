@@ -77,6 +77,18 @@ describe("event routing", () => {
 		expect(result.target).toBe("parent");
 	});
 
+	test("prompt_echo with sessionId is buffered as child event", () => {
+		const router = createEventRouter();
+		const result = router.route({ type: "prompt_echo", text: "subagent instructions", sessionId: "child-1" });
+		expect(result).toEqual({ target: "child", sessionId: "child-1" });
+		expect(router.getBuffer("child-1")).toHaveLength(1);
+		expect(router.getBuffer("child-1")[0]).toEqual({
+			type: "prompt_echo",
+			text: "subagent instructions",
+			sessionId: "child-1",
+		});
+	});
+
 	test("error with sessionId is buffered as child event", () => {
 		const router = createEventRouter();
 		const result = router.route({ type: "error", message: "oops", sessionId: "child-1" });

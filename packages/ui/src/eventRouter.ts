@@ -5,7 +5,7 @@ export type ServerMessage =
 	| { type: "status"; text: string; sessionId?: string }
 	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string; sessionId?: string }
-	| { type: "prompt_echo"; text: string }
+	| { type: "prompt_echo"; text: string; sessionId?: string }
 	| { type: "subagent_start"; sessionId: string; title: string; toolCallId: string }
 	| { type: "subagent_done"; sessionId: string }
 	| { type: "session_created"; sessionId: string }
@@ -32,8 +32,8 @@ export function createEventRouter() {
 				return { target: "parent", msg };
 			}
 
-			// prompt_echo has no sessionId concept — always parent
-			if (msg.type === "prompt_echo") {
+			// prompt_echo without sessionId — always parent (user's own prompts)
+			if (msg.type === "prompt_echo" && !("sessionId" in msg && msg.sessionId)) {
 				return { target: "parent", msg };
 			}
 

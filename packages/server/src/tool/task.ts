@@ -131,6 +131,10 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				});
 			}
 
+			// Emit initial prompt as prompt_echo for the child session
+			// so the UI can display it when peeking at the subagent
+			sendWs?.({ type: "prompt_echo", text: prompt, sessionId: childSessionId });
+
 			// Notify status tracker
 			subagentStatus.set(childSessionId, "running");
 			onEvent({ type: "status", text: "Subagent started", sessionId: childSessionId });

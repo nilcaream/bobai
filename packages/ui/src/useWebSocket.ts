@@ -8,7 +8,7 @@ type ServerMessage =
 	| { type: "token"; text: string; sessionId?: string }
 	| { type: "tool_call"; id: string; output: string; sessionId?: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
-	| { type: "prompt_echo"; text: string }
+	| { type: "prompt_echo"; text: string; sessionId?: string }
 	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string; sessionId?: string }
 	| { type: "status"; text: string; sessionId?: string }
@@ -171,7 +171,10 @@ export function useWebSocket() {
 				// Already buffered by router.
 				// If peeking at this child, also update displayed messages.
 				if (result.sessionId === viewingSubagentIdRef.current) {
-					if (msg.type === "token") {
+					if (msg.type === "prompt_echo") {
+						const userMsg: Message = { role: "user", text: msg.text, timestamp: formatTimestamp() };
+						setMessages((prev) => [...prev, userMsg]);
+					} else if (msg.type === "token") {
 						setMessages((prev) => appendText(prev, msg.text));
 					} else if (msg.type === "tool_call") {
 						setMessages((prev) => appendPart(prev, { type: "tool_call", id: msg.id, content: msg.output }));

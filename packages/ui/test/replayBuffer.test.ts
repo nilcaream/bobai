@@ -132,4 +132,18 @@ describe("replayBufferToMessages", () => {
 			expect(msgs[0].parts[0]).toEqual({ type: "text", content: "abc" });
 		}
 	});
+
+	test("prompt_echo event creates a user message", () => {
+		const events = [
+			{ type: "prompt_echo" as const, text: "Explore the codebase and find all usages of X", sessionId: "c1" },
+			{ type: "token" as const, text: "I'll look into that", sessionId: "c1" },
+		];
+		const msgs = replayBufferToMessages(events);
+		expect(msgs).toHaveLength(2);
+		expect(msgs[0].role).toBe("user");
+		if (msgs[0].role === "user") {
+			expect(msgs[0].text).toBe("Explore the codebase and find all usages of X");
+		}
+		expect(msgs[1].role).toBe("assistant");
+	});
 });
