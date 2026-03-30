@@ -67,4 +67,18 @@ describe("initProject", () => {
 			.all();
 		expect(indexes).toHaveLength(1);
 	});
+
+	test("reads debug from bobai.json", async () => {
+		fs.mkdirSync(path.join(tmpDir, ".bobai"), { recursive: true });
+		fs.writeFileSync(path.join(tmpDir, ".bobai", "bobai.json"), JSON.stringify({ debug: true }));
+		const project = await initProject(tmpDir);
+		expect(project.debug).toBe(true);
+	});
+
+	test("reads maxIterations from bobai.json", async () => {
+		fs.mkdirSync(path.join(tmpDir, ".bobai"), { recursive: true });
+		fs.writeFileSync(path.join(tmpDir, ".bobai", "bobai.json"), JSON.stringify({ maxIterations: 60 }));
+		const project = await initProject(tmpDir);
+		expect(project.maxIterations).toBe(60);
+	});
 });

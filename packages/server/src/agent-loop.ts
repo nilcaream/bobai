@@ -4,7 +4,7 @@ import type { Logger } from "./log/logger";
 import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
 
-const DEFAULT_MAX_ITERATIONS = 20;
+const DEFAULT_MAX_ITERATIONS = 40;
 
 export const EMERGENCY_THRESHOLD = 0.85;
 
@@ -86,6 +86,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	const { provider, model, tools, projectRoot, accessibleDirectories, sessionId, onEvent, onMessage, signal, initiator } =
 		options;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
+	if (!Number.isInteger(maxIterations) || maxIterations < 1) {
+		throw new Error(`Invalid maxIterations: ${maxIterations}. Must be a positive integer.`);
+	}
 
 	// Working copy of messages — starts with what was passed in
 	const conversation = [...options.messages];

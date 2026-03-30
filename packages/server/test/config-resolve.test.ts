@@ -25,4 +25,19 @@ describe("resolveConfig", () => {
 		expect(config.provider).toBe("github-copilot");
 		expect(config.model).toBe("gpt-4o");
 	});
+
+	test("maxIterations from global preferences", () => {
+		const config = resolveConfig({}, { maxIterations: 50 });
+		expect(config.maxIterations).toBe(50);
+	});
+
+	test("project maxIterations overrides global", () => {
+		const config = resolveConfig({ maxIterations: 30 }, { maxIterations: 50 });
+		expect(config.maxIterations).toBe(30);
+	});
+
+	test("maxIterations is undefined when not set", () => {
+		const config = resolveConfig({}, {});
+		expect(config.maxIterations).toBeUndefined();
+	});
 });

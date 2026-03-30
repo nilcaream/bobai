@@ -20,12 +20,11 @@ const cli = parseCLI(process.argv.slice(2));
 
 const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
 const logDir = path.join(dataHome, "bobai", "log");
-const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
-installFetchInterceptor({ logger, logDir, debug: cli.debug });
-
 const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
 
 if (cli.command === "auth") {
+	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
+	installFetchInterceptor({ logger, logDir, debug: cli.debug });
 	logger.info("AUTH", "Starting authentication flow");
 	const auth = await authorize(globalConfigDir);
 	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
@@ -33,6 +32,8 @@ if (cli.command === "auth") {
 }
 
 if (cli.command === "refresh") {
+	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
+	installFetchInterceptor({ logger, logDir, debug: cli.debug });
 	let auth = loadAuth(globalConfigDir);
 	if (!auth) {
 		console.error("No auth found. Run `bobai auth` first.");
@@ -54,11 +55,21 @@ if (cli.command === "refresh") {
 	process.exit(0);
 }
 
-logger.info("SERVER", `Starting bobai (debug=${cli.debug})`);
-
+// Serve command: load config before creating logger so debug preference is respected
 const globalConfig = loadGlobalConfig(globalConfigDir);
 const project = await initProject(process.cwd());
-const config = resolveConfig({ provider: project.provider, model: project.model }, globalConfig.preferences);
+
+// Merge debug: CLI flag OR global config OR project config
+const debug = cli.debug || globalConfig.preferences.debug === true || project.debug === true;
+const logger = createLogger({ level: debug ? "debug" : "info", logDir });
+installFetchInterceptor({ logger, logDir, debug });
+
+logger.info("SERVER", `Starting bobai (debug=${debug})`);
+
+const config = resolveConfig(
+	{ provider: project.provider, model: project.model, maxIterations: project.maxIterations },
+	globalConfig.preferences,
+);
 
 const skillDirectories = [path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")];
 const skills = discoverSkills(skillDirectories);
@@ -91,6 +102,7 @@ const server = createServer({
 	db: project.db,
 	provider,
 	model: config.model,
+	maxIterations: config.maxIterations,
 	projectRoot: process.cwd(),
 	configDir: globalConfigDir,
 	skills,

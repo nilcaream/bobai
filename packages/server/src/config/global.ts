@@ -4,6 +4,8 @@ import path from "node:path";
 export interface GlobalPreferences {
 	provider?: string;
 	model?: string;
+	maxIterations?: number;
+	debug?: boolean;
 }
 
 export interface GlobalConfig {

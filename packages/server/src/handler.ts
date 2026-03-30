@@ -52,6 +52,7 @@ export interface PromptRequest {
 	skills: SkillRegistry;
 	skillDirectories?: string[];
 	stagedSkills?: StagedSkill[];
+	maxIterations?: number;
 	logger?: Logger;
 	logDir?: string;
 	signal?: AbortSignal;
@@ -193,6 +194,7 @@ export async function handlePrompt(req: PromptRequest) {
 			projectRoot,
 			accessibleDirectories: skillDirectories,
 			systemPrompt,
+			maxIterations: req.maxIterations,
 			logger: req.logger,
 			logDir: req.logDir,
 			onEvent(event) {
@@ -269,6 +271,7 @@ export async function handlePrompt(req: PromptRequest) {
 			projectRoot,
 			accessibleDirectories: skillDirectories,
 			sessionId: currentSessionId as string,
+			maxIterations: req.maxIterations,
 			contextWindow,
 			rawMessages,
 			logger: req.logger,

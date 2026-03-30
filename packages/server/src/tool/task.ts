@@ -33,6 +33,7 @@ export interface TaskToolDeps {
 	projectRoot: string;
 	accessibleDirectories?: string[];
 	systemPrompt: string;
+	maxIterations?: number;
 	signal?: AbortSignal;
 	onEvent: (event: AgentEvent & { sessionId?: string }) => void;
 	sendWs?: (msg: import("../protocol").ServerMessage) => void;
@@ -230,6 +231,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					projectRoot,
 					accessibleDirectories,
 					sessionId: childSessionId,
+					maxIterations: deps.maxIterations,
 					signal,
 					initiator: "agent",
 					contextWindow: childContextWindow,

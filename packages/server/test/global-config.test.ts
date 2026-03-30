@@ -40,4 +40,18 @@ describe("loadGlobalConfig", () => {
 		const config = loadGlobalConfig(tmpDir);
 		expect(config.preferences.headers).toEqual({ "User-Agent": "Custom/1.0" });
 	});
+
+	test("reads debug from bobai.json", () => {
+		fs.mkdirSync(tmpDir, { recursive: true });
+		fs.writeFileSync(path.join(tmpDir, "bobai.json"), JSON.stringify({ debug: true }));
+		const config = loadGlobalConfig(tmpDir);
+		expect(config.preferences.debug).toBe(true);
+	});
+
+	test("reads maxIterations from bobai.json", () => {
+		fs.mkdirSync(tmpDir, { recursive: true });
+		fs.writeFileSync(path.join(tmpDir, "bobai.json"), JSON.stringify({ maxIterations: 50 }));
+		const config = loadGlobalConfig(tmpDir);
+		expect(config.preferences.maxIterations).toBe(50);
+	});
 });

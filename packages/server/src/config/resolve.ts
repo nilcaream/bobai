@@ -1,11 +1,13 @@
 export interface ResolvedConfig {
 	provider: string;
 	model: string;
+	maxIterations?: number;
 }
 
 interface ConfigLayer {
 	provider?: string;
 	model?: string;
+	maxIterations?: number;
 }
 
 const DEFAULTS: ResolvedConfig = {
@@ -17,5 +19,6 @@ export function resolveConfig(project: ConfigLayer, global: ConfigLayer): Resolv
 	return {
 		provider: project.provider ?? global.provider ?? DEFAULTS.provider,
 		model: project.model ?? global.model ?? DEFAULTS.model,
+		maxIterations: project.maxIterations ?? global.maxIterations,
 	};
 }

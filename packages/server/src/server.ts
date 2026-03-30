@@ -28,6 +28,7 @@ export interface ServerOptions {
 	db?: Database;
 	provider?: Provider;
 	model?: string;
+	maxIterations?: number;
 	projectRoot?: string;
 	configDir?: string;
 	skills?: SkillRegistry;
@@ -394,6 +395,7 @@ export function createServer(options: ServerOptions) {
 								skills: options.skills ?? { get: () => undefined, list: () => [] },
 								skillDirectories: options.skillDirectories,
 								stagedSkills: msg.stagedSkills,
+								maxIterations: options.maxIterations,
 								logger: options.logger,
 								logDir: options.logDir,
 								signal: controller.signal,
