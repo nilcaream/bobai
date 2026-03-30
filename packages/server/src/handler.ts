@@ -261,7 +261,13 @@ export async function handlePrompt(req: PromptRequest) {
 		// Capture tool metadata from onEvent (fires before onMessage for the same tool call)
 		const toolMeta = new Map<
 			string,
-			{ formatCall?: string; uiOutput?: string | null; mergeable?: boolean; summary?: string }
+			{
+				formatCall?: string;
+				uiOutput?: string | null;
+				mergeable?: boolean;
+				summary?: string;
+				resultMetadata?: Record<string, unknown>;
+			}
 		>();
 		await runAgentLoop({
 			provider,
@@ -291,6 +297,7 @@ export async function handlePrompt(req: PromptRequest) {
 						uiOutput: event.output,
 						mergeable: event.mergeable ?? true,
 						summary: event.summary,
+						resultMetadata: event.metadata,
 					});
 				}
 			},
@@ -308,6 +315,7 @@ export async function handlePrompt(req: PromptRequest) {
 						if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
 						if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
 						if (captured.summary) metadata.tool_summary = captured.summary;
+						if (captured.resultMetadata) Object.assign(metadata, captured.resultMetadata);
 						toolMeta.delete(msg.tool_call_id);
 					}
 					appendMessage(db, currentSessionId, "tool", msg.content, metadata);

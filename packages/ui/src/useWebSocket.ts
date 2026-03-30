@@ -35,7 +35,14 @@ export type StagedSkill = { name: string; content: string };
 export type MessagePart =
 	| { type: "text"; content: string }
 	| { type: "tool_call"; id: string; content: string }
-	| { type: "tool_result"; id: string; content: string | null; mergeable: boolean; summary?: string };
+	| {
+			type: "tool_result";
+			id: string;
+			content: string | null;
+			mergeable: boolean;
+			summary?: string;
+			subagentSessionId?: string;
+	  };
 
 export type Message =
 	| { role: "user"; text: string; timestamp: string }

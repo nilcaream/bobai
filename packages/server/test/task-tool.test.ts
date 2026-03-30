@@ -512,7 +512,7 @@ describe("createTaskTool", () => {
 		}
 
 		// prompt_echo should come before subagent_start
-		const echoIdx = wsMsgs.indexOf(promptEcho!);
+		const echoIdx = wsMsgs.findIndex((m) => m.type === "prompt_echo");
 		const startIdx = wsMsgs.findIndex((m) => m.type === "subagent_start");
 		expect(echoIdx).toBeLessThan(startIdx);
 	});

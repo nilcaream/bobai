@@ -218,7 +218,13 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			// Capture tool metadata from onEvent (same pattern as handler.ts)
 			const toolMeta = new Map<
 				string,
-				{ formatCall?: string; uiOutput?: string | null; mergeable?: boolean; summary?: string }
+				{
+					formatCall?: string;
+					uiOutput?: string | null;
+					mergeable?: boolean;
+					summary?: string;
+					resultMetadata?: Record<string, unknown>;
+				}
 			>();
 			let lastAssistantMessageId: string | undefined;
 
@@ -252,6 +258,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 								uiOutput: event.output,
 								mergeable: event.mergeable ?? true,
 								summary: event.summary,
+								resultMetadata: event.metadata,
 							});
 						}
 					},
@@ -270,6 +277,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 								if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
 								if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
 								if (captured.summary) metadata.tool_summary = captured.summary;
+								if (captured.resultMetadata) Object.assign(metadata, captured.resultMetadata);
 								toolMeta.delete(toolMsg.tool_call_id);
 							}
 							appendMessage(db, childSessionId, "tool", toolMsg.content, metadata);
@@ -291,6 +299,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					uiOutput: null,
 					mergeable: false,
 					summary: turnSummary ? `${ts}${turnSummary} (error)` : undefined,
+					metadata: { subagent_session_id: childSessionId },
 				};
 			}
 
@@ -322,6 +331,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				uiOutput: null,
 				mergeable: false,
 				summary: turnSummary ? `${ts}${turnSummary}` : undefined,
+				metadata: { subagent_session_id: childSessionId },
 			};
 		},
 	};

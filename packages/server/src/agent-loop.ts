@@ -51,7 +51,14 @@ export function emergencyCompactConversation(
 export type AgentEvent =
 	| { type: "text"; text: string }
 	| { type: "tool_call"; id: string; output: string }
-	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string }
+	| {
+			type: "tool_result";
+			id: string;
+			output: string | null;
+			mergeable: boolean;
+			summary?: string;
+			metadata?: Record<string, unknown>;
+	  }
 	| { type: "status"; text: string };
 
 export interface AgentLoopOptions {
@@ -181,6 +188,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			let mergeable = false;
 			let summary: string | undefined;
 
+			let resultMetadata: Record<string, unknown> | undefined;
+
 			if (!tool) {
 				llmOutput = `Unknown tool: ${tc.function.name}`;
 				uiOutput = `Unknown tool: ${tc.function.name}`;
@@ -191,13 +200,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 					uiOutput = result.uiOutput;
 					mergeable = result.mergeable;
 					summary = result.summary;
+					resultMetadata = result.metadata;
 				} catch (err) {
 					llmOutput = `Tool execution error: ${(err as Error).message}`;
 					uiOutput = `Tool execution error: ${(err as Error).message}`;
 				}
 			}
 
-			onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable, summary });
+			onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable, summary, metadata: resultMetadata });
 
 			const toolMsg: ToolMessage = { role: "tool", content: llmOutput, tool_call_id: tc.id };
 			conversation.push(toolMsg);

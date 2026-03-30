@@ -35,6 +35,8 @@ export interface ToolResult {
 	mergeable: boolean;
 	/** Optional summary line (e.g. subagent turn stats) rendered as a status bar on the tool panel. */
 	summary?: string;
+	/** Optional metadata to persist alongside the tool message in the DB. */
+	metadata?: Record<string, unknown>;
 }
 
 export interface Tool {

@@ -6,7 +6,15 @@ import { useWebSocket } from "./useWebSocket";
 
 type Panel =
 	| { type: "text"; content: string }
-	| { type: "tool"; id: string; content: string; completed: boolean; mergeable: boolean; summary?: string };
+	| {
+			type: "tool";
+			id: string;
+			content: string;
+			completed: boolean;
+			mergeable: boolean;
+			summary?: string;
+			subagentSessionId?: string;
+	  };
 
 interface ContextMessage {
 	role: "system" | "user" | "assistant" | "tool";
@@ -104,6 +112,9 @@ function groupParts(parts: MessagePart[]): Panel[] {
 				panel.mergeable = part.mergeable;
 				if (part.summary) {
 					panel.summary = part.summary;
+				}
+				if (part.subagentSessionId) {
+					panel.subagentSessionId = part.subagentSessionId;
 				}
 			}
 		}
@@ -1094,7 +1105,16 @@ export function App() {
 					);
 				} else {
 					const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
-					const onNavigate = linkedSubagent ? () => peekSubagentWithScroll(linkedSubagent.sessionId) : undefined;
+					const subagentSessionId = linkedSubagent?.sessionId ?? panel.subagentSessionId;
+					const onNavigate = subagentSessionId
+						? () => {
+								if (linkedSubagent?.status === "running") {
+									peekSubagentWithScroll(subagentSessionId);
+								} else {
+									loadSession(subagentSessionId);
+								}
+							}
+						: undefined;
 					const shouldObserve = isStreaming && isLastMsg && !panel.completed;
 
 					elements.push(
