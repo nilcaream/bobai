@@ -106,15 +106,22 @@ deploy_dist() {
 }
 
 install_runner() {
+	local source_dir="${1}"
+	local build_rev
+	local build_time
+	build_rev=$(git -C "${source_dir}" rev-parse --short HEAD)
+	build_time=$(date +"%Y-%m-%d %H:%M:%S")
+
 	mkdir -p "${BIN_DIR}"
 
-	cat > "${BIN_DIR}/bobai" << 'RUNNER'
+	cat > "${BIN_DIR}/bobai" << RUNNER
 #!/bin/bash
 set -euo pipefail
-DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
-BOBAI_HOME="${DATA_HOME}/bobai"
+DATA_HOME="\${XDG_DATA_HOME:-\${HOME}/.local/share}"
+BOBAI_HOME="\${DATA_HOME}/bobai"
+echo "Bob AI (${build_rev} ${build_time})"
 export BUN_CONFIG_INSTALL_AUTO=disable
-exec "${BOBAI_HOME}/bun" "${BOBAI_HOME}/dist/server.js" "$@"
+exec "\${BOBAI_HOME}/bun" "\${BOBAI_HOME}/dist/server.js" "\$@"
 RUNNER
 
 	chmod +x "${BIN_DIR}/bobai"
@@ -131,7 +138,7 @@ main() {
 
 	build_dist "${source_dir}"
 	deploy_dist "${source_dir}"
-	install_runner
+	install_runner "${source_dir}"
 
 	echo ""
 	echo "Bob AI installed successfully!"
