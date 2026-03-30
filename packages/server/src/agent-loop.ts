@@ -4,7 +4,7 @@ import type { Logger } from "./log/logger";
 import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
 
-const DEFAULT_MAX_ITERATIONS = 40;
+const DEFAULT_MAX_ITERATIONS = 64;
 
 export const EMERGENCY_THRESHOLD = 0.85;
 
