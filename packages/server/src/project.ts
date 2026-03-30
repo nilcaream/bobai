@@ -87,5 +87,14 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE sessions ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0");
 	}
 
-	return { id, port: config.port, provider: config.provider, model: config.model, maxIterations: config.maxIterations, debug: config.debug, dir: bobaiDir, db };
+	return {
+		id,
+		port: config.port,
+		provider: config.provider,
+		model: config.model,
+		maxIterations: config.maxIterations,
+		debug: config.debug,
+		dir: bobaiDir,
+		db,
+	};
 }

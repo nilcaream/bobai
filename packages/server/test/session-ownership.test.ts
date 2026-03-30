@@ -43,11 +43,7 @@ function sendAndWait(
 /**
  * Helper: wait for a message matching predicate (without sending anything).
  */
-function waitForMessage(
-	ws: WebSocket,
-	predicate: (m: ServerMessage) => boolean,
-	timeoutMs = 2000,
-): Promise<ServerMessage> {
+function _waitForMessage(ws: WebSocket, predicate: (m: ServerMessage) => boolean, timeoutMs = 2000): Promise<ServerMessage> {
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => reject(new Error("Timed out waiting for message")), timeoutMs);
 		const handler = (event: MessageEvent) => {
@@ -101,11 +97,7 @@ describe("Session Ownership", () => {
 		const ws2 = await openWs(wsUrl);
 		try {
 			// First subscriber takes ownership
-			await sendAndWait(
-				ws1,
-				{ type: "subscribe", sessionId: session.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws1, { type: "subscribe", sessionId: session.id }, (m) => m.type === "session_subscribed");
 
 			// Second subscriber is rejected
 			const reply = await sendAndWait(
@@ -125,11 +117,7 @@ describe("Session Ownership", () => {
 		const ws1 = await openWs(wsUrl);
 
 		// First subscriber takes ownership
-		await sendAndWait(
-			ws1,
-			{ type: "subscribe", sessionId: session.id },
-			(m) => m.type === "session_subscribed",
-		);
+		await sendAndWait(ws1, { type: "subscribe", sessionId: session.id }, (m) => m.type === "session_subscribed");
 
 		// Close ws1 to release ownership
 		ws1.close();
@@ -158,18 +146,10 @@ describe("Session Ownership", () => {
 
 		try {
 			// ws1 subscribes to session1
-			await sendAndWait(
-				ws1,
-				{ type: "subscribe", sessionId: session1.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws1, { type: "subscribe", sessionId: session1.id }, (m) => m.type === "session_subscribed");
 
 			// ws1 subscribes to session2 — should release session1
-			await sendAndWait(
-				ws1,
-				{ type: "subscribe", sessionId: session2.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws1, { type: "subscribe", sessionId: session2.id }, (m) => m.type === "session_subscribed");
 
 			// ws2 should now be able to subscribe to session1
 			const reply = await sendAndWait(
@@ -191,11 +171,7 @@ describe("Session Ownership", () => {
 
 		try {
 			// ws1 subscribes
-			await sendAndWait(
-				ws1,
-				{ type: "subscribe", sessionId: session.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws1, { type: "subscribe", sessionId: session.id }, (m) => m.type === "session_subscribed");
 
 			// ws1 unsubscribes — no response expected, so just send and wait a tick
 			ws1.send(JSON.stringify({ type: "unsubscribe" }));
@@ -226,11 +202,7 @@ describe("Session Ownership", () => {
 		const session = createSession(db);
 		const ws = await openWs(wsUrl);
 		try {
-			await sendAndWait(
-				ws,
-				{ type: "subscribe", sessionId: session.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws, { type: "subscribe", sessionId: session.id }, (m) => m.type === "session_subscribed");
 
 			const res = await fetch(`${baseUrl}/bobai/session/${session.id}/ownership`);
 			expect(res.status).toBe(200);
@@ -254,11 +226,7 @@ describe("Session Ownership", () => {
 
 			// Subscribe to s1 only
 			const ws = await openWs(freshWsUrl);
-			await sendAndWait(
-				ws,
-				{ type: "subscribe", sessionId: s1.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws, { type: "subscribe", sessionId: s1.id }, (m) => m.type === "session_subscribed");
 
 			const res = await fetch(`${freshBaseUrl}/bobai/sessions`);
 			expect(res.status).toBe(200);
@@ -282,11 +250,7 @@ describe("Session Ownership", () => {
 		const ws = await openWs(wsUrl);
 		try {
 			// Subscribe once
-			await sendAndWait(
-				ws,
-				{ type: "subscribe", sessionId: session.id },
-				(m) => m.type === "session_subscribed",
-			);
+			await sendAndWait(ws, { type: "subscribe", sessionId: session.id }, (m) => m.type === "session_subscribed");
 
 			// Subscribe again — same ws, same session — should succeed, not lock
 			const reply = await sendAndWait(
