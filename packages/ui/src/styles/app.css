@@ -133,6 +133,10 @@ body,
 	cursor: pointer;
 }
 
+.panel--tool.panel--navigable {
+	cursor: pointer;
+}
+
 .panel--tool.panel--collapsed > .md {
 	height: 6em;
 	overflow: clip;

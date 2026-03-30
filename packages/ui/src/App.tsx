@@ -215,9 +215,11 @@ function ToolPanel({
 		}
 	};
 
+	const cls = `panel panel--tool${collapsed ? " panel--collapsed" : ""}${onNavigate ? " panel--navigable" : ""}`;
+
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: double-click fold is a convenience shortcut, not primary interaction
-		<div ref={ref} className={`panel panel--tool${collapsed ? " panel--collapsed" : ""}`} onDoubleClick={handleDoubleClick}>
+		<div ref={ref} className={cls} onDoubleClick={handleDoubleClick}>
 			{children}
 		</div>
 	);
@@ -273,6 +275,30 @@ export function App() {
 	const messagesRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const autoScroll = useRef(true);
+	const savedScrollTop = useRef<number | null>(null);
+
+	// Wrap peekSubagent to save scroll position before switching to child view
+	const peekSubagentWithScroll = useCallback(
+		(childSessionId: string) => {
+			savedScrollTop.current = messagesRef.current?.scrollTop ?? null;
+			peekSubagent(childSessionId);
+		},
+		[peekSubagent],
+	);
+
+	// Wrap exitSubagentPeek to restore scroll position after returning to parent view
+	const exitSubagentPeekWithScroll = useCallback(() => {
+		const scrollPos = savedScrollTop.current;
+		exitSubagentPeek();
+		if (scrollPos !== null) {
+			autoScroll.current = false;
+			requestAnimationFrame(() => {
+				const el = messagesRef.current;
+				if (el) el.scrollTop = scrollPos;
+			});
+			savedScrollTop.current = null;
+		}
+	}, [exitSubagentPeek]);
 
 	// Unified scroll listener: determine autoscroll based on position.
 	// Fires on every scroll event (mouse wheel, PageUp/Down, programmatic).
@@ -527,12 +553,12 @@ export function App() {
 		const onKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "Escape" && viewingSubagentId) {
 				e.preventDefault();
-				exitSubagentPeek();
+				exitSubagentPeekWithScroll();
 			}
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [viewingSubagentId, exitSubagentPeek]);
+	}, [viewingSubagentId, exitSubagentPeekWithScroll]);
 
 	const [sessionList, setSessionList] = useState<
 		{ index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[] | null
@@ -702,7 +728,7 @@ export function App() {
 				// Check if this subagent is currently live (running) — use peek instead of DB load
 				const liveSubagent = subagents.find((s) => s.sessionId === targetSubagent.sessionId && s.status === "running");
 				if (liveSubagent) {
-					peekSubagent(liveSubagent.sessionId);
+					peekSubagentWithScroll(liveSubagent.sessionId);
 				} else {
 					loadSession(targetSubagent.sessionId);
 				}
@@ -761,7 +787,7 @@ export function App() {
 		// .session (no space): exit peek, return to parent if in subagent, no-op if in parent
 		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session") {
 			if (viewingSubagentId) {
-				exitSubagentPeek();
+				exitSubagentPeekWithScroll();
 				setStagedSkills([]);
 			} else if (parentId) {
 				loadSession(parentId);
@@ -1068,7 +1094,7 @@ export function App() {
 					);
 				} else {
 					const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
-					const onNavigate = linkedSubagent ? () => peekSubagent(linkedSubagent.sessionId) : undefined;
+					const onNavigate = linkedSubagent ? () => peekSubagentWithScroll(linkedSubagent.sessionId) : undefined;
 					const shouldObserve = isStreaming && isLastMsg && !panel.completed;
 
 					elements.push(
