@@ -4,7 +4,8 @@ export type StagedSkill = { name: string; content: string };
 export type ClientMessage =
 	| { type: "prompt"; text: string; sessionId?: string; stagedSkills?: StagedSkill[] }
 	| { type: "subscribe"; sessionId: string }
-	| { type: "unsubscribe" };
+	| { type: "unsubscribe" }
+	| { type: "cancel" };
 
 // Server → Client
 export type ServerMessage =

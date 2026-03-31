@@ -169,6 +169,7 @@ type ViewMode = (typeof VIEW_MODES)[number];
 const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
 const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
 const LOCKED_DOT_COMMANDS = ["new", "session"] as const;
+const STREAMING_DOT_COMMANDS = ["stop", "subagent"] as const;
 
 function ToolPanel({
 	children,
@@ -263,6 +264,7 @@ export function App() {
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,
+		sendCancel,
 	} = useWebSocket();
 	const [input, setInput] = useState("");
 	const [historyIndex, setHistoryIndex] = useState(-1);
@@ -463,7 +465,13 @@ export function App() {
 
 	const isReadOnly =
 		!!parentId || sessionLocked || viewingSubagentId !== null || view.mode === "context" || view.mode === "compaction";
-	const activeDotCommands = sessionLocked ? LOCKED_DOT_COMMANDS : isReadOnly ? READ_ONLY_DOT_COMMANDS : FULL_DOT_COMMANDS;
+	const activeDotCommands = isStreaming
+		? STREAMING_DOT_COMMANDS
+		: sessionLocked
+			? LOCKED_DOT_COMMANDS
+			: isReadOnly
+				? READ_ONLY_DOT_COMMANDS
+				: FULL_DOT_COMMANDS;
 
 	function clearInput() {
 		setInput("");
@@ -704,6 +712,13 @@ export function App() {
 		}
 
 		if (parsed?.mode === "args" && parsed.command) {
+			// Stop: cancel the running agent loop
+			if (parsed.command === "stop") {
+				sendCancel();
+				clearInput();
+				return;
+			}
+
 			// New chat: .new [optional title]
 			if (parsed.command === "new") {
 				newChat();
@@ -911,6 +926,13 @@ export function App() {
 			return;
 		}
 
+		// .stop (no space): cancel the running agent loop
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "stop") {
+			sendCancel();
+			clearInput();
+			return;
+		}
+
 		// Incomplete or invalid dot command — don't send as prompt
 		if (parsed) return;
 
@@ -1020,14 +1042,14 @@ export function App() {
 				submit();
 				return;
 			}
-			// Slash commands: submit on any Enter (like dot commands)
-			if (parseSlashInput(input)) {
+			// Slash commands: submit on any Enter (like dot commands) — blocked during streaming
+			if (!isStreaming && parseSlashInput(input)) {
 				e.preventDefault();
 				submit();
 				return;
 			}
 			// Regular prompts: Shift+Enter to submit, bare Enter for newline
-			if (e.shiftKey) {
+			if (!isStreaming && e.shiftKey) {
 				e.preventDefault();
 				submit();
 			}
@@ -1036,7 +1058,7 @@ export function App() {
 		// Tab submits dot or slash commands; otherwise suppressed (no tab navigation)
 		if (e.key === "Tab") {
 			e.preventDefault();
-			if (parseDotInput(input) || parseSlashInput(input)) {
+			if (parseDotInput(input) || (!isStreaming && parseSlashInput(input))) {
 				submit();
 			}
 		}
@@ -1501,15 +1523,19 @@ export function App() {
 					}}
 					onKeyDown={handleKeyDown}
 					placeholder={
-						viewingSubagentId
-							? "Viewing subagent — press Escape to return"
-							: sessionLocked
-								? "Use .new or .session to navigate"
-								: isReadOnly
-									? "Dot commands only (read-only)"
-									: "Type a message..."
+						isStreaming && viewingSubagentId
+							? "Escape to return — .stop to cancel"
+							: isStreaming
+								? "Agent working — .stop to cancel"
+								: viewingSubagentId
+									? "Viewing subagent — press Escape to return"
+									: sessionLocked
+										? "Use .new or .session to navigate"
+										: isReadOnly
+											? "Dot commands only (read-only)"
+											: "Type a message..."
 					}
-					disabled={!connected || isStreaming}
+					disabled={!connected}
 				/>
 			</div>
 		</main>

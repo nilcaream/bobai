@@ -383,6 +383,12 @@ export function useWebSocket() {
 		[isStreaming, fetchProjectInfo, exitSubagentPeek],
 	);
 
+	const sendCancel = useCallback(() => {
+		if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+		if (!isStreaming) return;
+		ws.current.send(JSON.stringify({ type: "cancel" }));
+	}, [isStreaming]);
+
 	const newChat = useCallback(() => {
 		// Clear peek state
 		if (viewingSubagentIdRef.current) {
@@ -483,6 +489,7 @@ export function useWebSocket() {
 		connected,
 		isStreaming,
 		sendPrompt,
+		sendCancel,
 		newChat,
 		model,
 		setModel,

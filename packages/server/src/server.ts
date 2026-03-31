@@ -397,6 +397,14 @@ export function createServer(options: ServerOptions) {
 					return;
 				}
 
+				if (msg.type === "cancel") {
+					const controller = wsAbortControllers.get(ws);
+					if (controller) {
+						controller.abort();
+					}
+					return;
+				}
+
 				if (msg.type === "prompt") {
 					const { db, provider, model } = options;
 					if (provider && model && db) {
