@@ -58,8 +58,10 @@ export const bashTool: Tool = {
 
 		// Tail-only strategy: keep the last N lines. For bash output the tail
 		// (final status, errors, summary) is almost always more important than
-		// the head (early verbose output).
-		const keepCount = Math.max(3, Math.floor(contentTotal * (1 - strength)));
+		// the head (early verbose output). Cap at 10 lines — old bash output is
+		// historical context; the LLM has already acted on it.
+		const MAX_KEEP_LINES = 10;
+		const keepCount = Math.min(MAX_KEEP_LINES, Math.max(3, Math.floor(contentTotal * (1 - strength))));
 		if (keepCount >= contentTotal) return output;
 
 		const tail = contentLines.slice(-keepCount).join("\n");
