@@ -52,12 +52,22 @@ export type StreamEvent =
 
 // --- Provider interface ---
 
+export interface StreamMetrics {
+	model: string;
+	promptTokens: number;
+	totalTokens: number;
+	initiator: "user" | "agent";
+}
+
 export interface ProviderOptions {
 	model: string;
 	messages: Message[];
 	tools?: ToolDefinition[];
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
+	/** When set, per-call metrics are routed to this callback instead of the provider's
+	 *  internal turn accumulator. Used by isolated turn providers for parallel execution. */
+	onMetrics?(metrics: StreamMetrics): void;
 }
 
 export interface Provider {

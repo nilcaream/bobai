@@ -116,6 +116,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			return `▸ ${args.description ?? "task"}`;
 		},
 		async execute(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
+			const activeProvider = _ctx.provider ?? provider;
 			const description = args.description as string;
 			const prompt = args.prompt as string;
 			const taskId = args.task_id as string | undefined;
@@ -233,8 +234,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 
 			// Run agent loop with provider turn state isolation
 			let newMessages: Message[];
-			const parentState = provider.saveTurnState?.();
-			provider.beginTurn?.(childPromptTokens);
+			const parentState = activeProvider.saveTurnState?.();
+			activeProvider.beginTurn?.(childPromptTokens);
 
 			// Capture tool metadata from onEvent (same pattern as handler.ts)
 			const toolMeta = new Map<
@@ -251,7 +252,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 
 			try {
 				newMessages = await runAgentLoop({
-					provider,
+					provider: activeProvider,
 					model,
 					messages,
 					tools: childTools,
@@ -308,8 +309,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			} catch (err) {
 				subagentStatus.set(childSessionId, "error");
 				sendWs?.({ type: "subagent_done", sessionId: childSessionId });
-				const turnSummary = provider.getTurnSummary?.() ?? "";
-				if (parentState !== undefined) provider.restoreTurnState?.(parentState);
+				const turnSummary = activeProvider.getTurnSummary?.() ?? "";
+				if (parentState !== undefined) activeProvider.restoreTurnState?.(parentState);
 				// Persist turn summary on last assistant message for reconstruction
 				if (lastAssistantMessageId && turnSummary) {
 					updateMessageMetadata(db, lastAssistantMessageId, { summary: turnSummary, turn_model: model });
@@ -324,8 +325,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				};
 			}
 
-			const turnSummary = provider.getTurnSummary?.();
-			if (parentState !== undefined) provider.restoreTurnState?.(parentState);
+			const turnSummary = activeProvider.getTurnSummary?.();
+			if (parentState !== undefined) activeProvider.restoreTurnState?.(parentState);
 
 			// Persist turn summary on last assistant message for reconstruction
 			if (lastAssistantMessageId && (turnSummary || model)) {

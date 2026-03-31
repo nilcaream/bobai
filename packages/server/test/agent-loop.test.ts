@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentEvent } from "../src/agent-loop";
 import { runAgentLoop } from "../src/agent-loop";
-import type { Message, Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
+import type { Message, Provider, ProviderOptions, StreamEvent, ToolMessage } from "../src/provider/provider";
 import { editFileTool } from "../src/tool/edit-file";
 import { readFileTool } from "../src/tool/read-file";
 import type { Tool, ToolResult } from "../src/tool/tool";
@@ -546,5 +546,310 @@ describe("runAgentLoop", () => {
 		expect(collected[2].role).toBe("assistant"); // final text
 		// Should match return value
 		expect(collected).toEqual(messages);
+	});
+});
+
+describe("parallel task execution", () => {
+	/** Create a mock task tool that records execution order and takes a configurable delay. */
+	function createMockTaskTool(options: {
+		executionLog: string[];
+		delays: Record<string, number>;
+	}): Tool {
+		return {
+			definition: {
+				type: "function",
+				function: {
+					name: "task",
+					description: "Run a subagent task",
+					parameters: {
+						type: "object",
+						properties: {
+							description: { type: "string" },
+							prompt: { type: "string" },
+						},
+						required: ["description", "prompt"],
+					},
+				},
+			},
+			mergeable: false,
+			formatCall(args: Record<string, unknown>): string {
+				return `▸ ${args.description}`;
+			},
+			async execute(args: Record<string, unknown>): Promise<ToolResult> {
+				const desc = args.description as string;
+				options.executionLog.push(`start:${desc}`);
+				const delay = options.delays[desc] ?? 0;
+				if (delay > 0) {
+					await new Promise((resolve) => setTimeout(resolve, delay));
+				}
+				options.executionLog.push(`end:${desc}`);
+				return {
+					llmOutput: `result of ${desc}`,
+					uiOutput: null,
+					mergeable: false,
+					summary: `summary:${desc}`,
+				};
+			},
+		};
+	}
+
+	/** Provider that yields N task tool_calls on call 1, then text on call 2. */
+	function multiTaskProvider(tasks: { id: string; description: string; prompt: string }[]): Provider {
+		let callCount = 0;
+		return {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					for (let i = 0; i < tasks.length; i++) {
+						yield { type: "tool_call_start", index: i, id: tasks[i].id, name: "task" };
+						yield {
+							type: "tool_call_delta",
+							index: i,
+							arguments: JSON.stringify({ description: tasks[i].description, prompt: tasks[i].prompt }),
+						};
+					}
+					yield { type: "finish", reason: "tool_calls" };
+				} else {
+					yield { type: "text", text: "Done." };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+	}
+
+	test("multiple task tool calls run concurrently", async () => {
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			delays: { "task-A": 50, "task-B": 50 },
+		});
+
+		const start = performance.now();
+		await runAgentLoop({
+			provider: multiTaskProvider([
+				{ id: "tc1", description: "task-A", prompt: "do A" },
+				{ id: "tc2", description: "task-B", prompt: "do B" },
+			]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent() {},
+			onMessage() {},
+		});
+		const elapsed = performance.now() - start;
+
+		// Both tasks started before either ended (concurrent execution)
+		const startA = executionLog.indexOf("start:task-A");
+		const startB = executionLog.indexOf("start:task-B");
+		const endA = executionLog.indexOf("end:task-A");
+		const endB = executionLog.indexOf("end:task-B");
+		expect(startA).toBeLessThan(endA);
+		expect(startB).toBeLessThan(endB);
+		// Both started before either finished
+		expect(startA).toBeLessThan(endB);
+		expect(startB).toBeLessThan(endA);
+
+		// Wall time should be ~50ms (parallel), not ~100ms (sequential)
+		// Use generous threshold for CI flakiness
+		expect(elapsed).toBeLessThan(90);
+	});
+
+	test("parallel task results are injected in dispatch order", async () => {
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			// task-B completes faster than task-A
+			delays: { "task-A": 50, "task-B": 10 },
+		});
+
+		const events: AgentEvent[] = [];
+		const collectedMessages: Message[] = [];
+		await runAgentLoop({
+			provider: multiTaskProvider([
+				{ id: "tc1", description: "task-A", prompt: "do A" },
+				{ id: "tc2", description: "task-B", prompt: "do B" },
+			]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(e) {
+				events.push(e);
+			},
+			onMessage(m) {
+				collectedMessages.push(m);
+			},
+		});
+
+		// tool_result events should be in dispatch order (tc1 before tc2)
+		const resultEvents = events.filter((e) => e.type === "tool_result");
+		expect(resultEvents).toHaveLength(2);
+		expect((resultEvents[0] as { id: string }).id).toBe("tc1");
+		expect((resultEvents[1] as { id: string }).id).toBe("tc2");
+
+		// Tool messages in conversation should also be in dispatch order
+		const toolMsgs = collectedMessages.filter((m) => m.role === "tool");
+		expect(toolMsgs).toHaveLength(2);
+		expect((toolMsgs[0] as ToolMessage).tool_call_id).toBe("tc1");
+		expect((toolMsgs[1] as ToolMessage).tool_call_id).toBe("tc2");
+	});
+
+	test("formatCall events are emitted upfront for all tool calls", async () => {
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			delays: { "task-A": 20, "task-B": 20 },
+		});
+
+		const events: AgentEvent[] = [];
+		await runAgentLoop({
+			provider: multiTaskProvider([
+				{ id: "tc1", description: "task-A", prompt: "do A" },
+				{ id: "tc2", description: "task-B", prompt: "do B" },
+			]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(e) {
+				events.push(e);
+			},
+			onMessage() {},
+		});
+
+		// All tool_call events should come before any tool_result events
+		const toolCallIndices = events
+			.map((e, i) => (e.type === "tool_call" ? i : -1))
+			.filter((i) => i >= 0);
+		const toolResultIndices = events
+			.map((e, i) => (e.type === "tool_result" ? i : -1))
+			.filter((i) => i >= 0);
+
+		expect(toolCallIndices).toHaveLength(2);
+		expect(toolResultIndices).toHaveLength(2);
+
+		// Every tool_call should precede every tool_result
+		for (const ci of toolCallIndices) {
+			for (const ri of toolResultIndices) {
+				expect(ci).toBeLessThan(ri);
+			}
+		}
+	});
+
+	test("single task call still executes sequentially (no parallel overhead)", async () => {
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			delays: { "task-A": 10 },
+		});
+
+		await runAgentLoop({
+			provider: multiTaskProvider([{ id: "tc1", description: "task-A", prompt: "do A" }]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent() {},
+			onMessage() {},
+		});
+
+		expect(executionLog).toEqual(["start:task-A", "end:task-A"]);
+	});
+
+	test("mixed tool calls: non-task tools remain sequential, task tools are parallel", async () => {
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			delays: { "task-A": 30, "task-B": 30 },
+		});
+
+		const echoExecOrder: string[] = [];
+		const echo: Tool = {
+			definition: {
+				type: "function",
+				function: {
+					name: "echo",
+					description: "Echo",
+					parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+				},
+			},
+			mergeable: true,
+			formatCall(args: Record<string, unknown>): string {
+				return `▸ ${args.text}`;
+			},
+			async execute(args: Record<string, unknown>): Promise<ToolResult> {
+				echoExecOrder.push(`echo:${args.text}`);
+				return { llmOutput: `echoed: ${args.text}`, uiOutput: null, mergeable: true };
+			},
+		};
+
+		// Provider that yields: echo("first"), task-A, task-B, echo("last")
+		let callCount = 0;
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					yield { type: "tool_call_start", index: 0, id: "e1", name: "echo" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"text":"first"}' };
+					yield { type: "tool_call_start", index: 1, id: "t1", name: "task" };
+					yield {
+						type: "tool_call_delta",
+						index: 1,
+						arguments: '{"description":"task-A","prompt":"A"}',
+					};
+					yield { type: "tool_call_start", index: 2, id: "t2", name: "task" };
+					yield {
+						type: "tool_call_delta",
+						index: 2,
+						arguments: '{"description":"task-B","prompt":"B"}',
+					};
+					yield { type: "tool_call_start", index: 3, id: "e2", name: "echo" };
+					yield { type: "tool_call_delta", index: 3, arguments: '{"text":"last"}' };
+					yield { type: "finish", reason: "tool_calls" };
+				} else {
+					yield { type: "text", text: "All done." };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+
+		const events: AgentEvent[] = [];
+		await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([echo, taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(e) {
+				events.push(e);
+			},
+			onMessage() {},
+		});
+
+		// echo("first") runs sequentially before the tasks
+		expect(echoExecOrder[0]).toBe("echo:first");
+
+		// Both tasks should have run (concurrently)
+		expect(executionLog).toContain("start:task-A");
+		expect(executionLog).toContain("start:task-B");
+		expect(executionLog).toContain("end:task-A");
+		expect(executionLog).toContain("end:task-B");
+
+		// echo("last") runs sequentially after the tasks
+		expect(echoExecOrder[1]).toBe("echo:last");
+
+		// Results in event order should match dispatch order:
+		// tool_call(e1), tool_call(t1), tool_call(t2), tool_call(e2),
+		// tool_result(e1), tool_result(t1), tool_result(t2), tool_result(e2)
+		const resultIds = events.filter((e) => e.type === "tool_result").map((e) => (e as { id: string }).id);
+		expect(resultIds).toEqual(["e1", "t1", "t2", "e2"]);
 	});
 });

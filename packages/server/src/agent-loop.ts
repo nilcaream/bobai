@@ -2,6 +2,7 @@ import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
 import type { Logger } from "./log/logger";
 import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
+import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import type { ToolRegistry } from "./tool/tool";
 
 const DEFAULT_MAX_ITERATIONS = 64;
@@ -170,7 +171,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 		newMessages.push(assistantMsg);
 		onMessage(assistantMsg);
 
-		// Execute each tool call sequentially
+		// --- Tool execution ---
+		// Partition tool calls: consecutive `task` calls form a parallel group,
+		// everything else executes sequentially.
+
+		interface ToolCallGroup {
+			parallel: boolean;
+			items: ToolCallContent[];
+		}
+		const groups: ToolCallGroup[] = [];
+		for (const tc of toolCallContents) {
+			const isTask = tc.function.name === "task";
+			const lastGroup = groups[groups.length - 1];
+			if (isTask && lastGroup?.parallel) {
+				lastGroup.items.push(tc);
+			} else {
+				groups.push({ parallel: isTask, items: [tc] });
+			}
+		}
+
+		// Emit formatCall for ALL tool calls upfront so the UI shows all panels immediately
 		for (const tc of toolCallContents) {
 			let args: Record<string, unknown>;
 			try {
@@ -178,45 +198,124 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			} catch {
 				args = {};
 			}
-
 			const tool = tools.get(tc.function.name);
-
-			// Emit formatCall output
 			const callOutput = tool ? tool.formatCall(args) : `[${tc.function.name}]`;
 			onEvent({ type: "tool_call", id: tc.id, output: callOutput });
+		}
 
-			let llmOutput: string;
-			let uiOutput: string | null = null;
-			let mergeable = false;
-			let summary: string | undefined;
+		for (const group of groups) {
+			if (group.parallel && group.items.length > 1) {
+				// Parallel task execution — each task gets an isolated provider
+				interface ParallelResult {
+					tc: ToolCallContent;
+					llmOutput: string;
+					uiOutput: string | null;
+					mergeable: boolean;
+					summary?: string;
+					resultMetadata?: Record<string, unknown>;
+				}
 
-			let resultMetadata: Record<string, unknown> | undefined;
+				const promises = group.items.map(async (tc): Promise<ParallelResult> => {
+					let args: Record<string, unknown>;
+					try {
+						args = JSON.parse(tc.function.arguments);
+					} catch {
+						args = {};
+					}
+					const tool = tools.get(tc.function.name);
+					if (!tool) {
+						return {
+							tc,
+							llmOutput: `Unknown tool: ${tc.function.name}`,
+							uiOutput: `Unknown tool: ${tc.function.name}`,
+							mergeable: false,
+						};
+					}
+					try {
+						const isolated = createIsolatedTurnProvider(provider);
+						const result = await tool.execute(args, {
+							projectRoot,
+							accessibleDirectories,
+							sessionId,
+							toolCallId: tc.id,
+							provider: isolated,
+						});
+						return {
+							tc,
+							llmOutput: result.llmOutput,
+							uiOutput: result.uiOutput,
+							mergeable: result.mergeable,
+							summary: result.summary,
+							resultMetadata: result.metadata,
+						};
+					} catch (err) {
+						return {
+							tc,
+							llmOutput: `Tool execution error: ${(err as Error).message}`,
+							uiOutput: `Tool execution error: ${(err as Error).message}`,
+							mergeable: false,
+						};
+					}
+				});
 
-			if (!tool) {
-				llmOutput = `Unknown tool: ${tc.function.name}`;
-				uiOutput = `Unknown tool: ${tc.function.name}`;
+				const results = await Promise.all(promises);
+
+				// Inject results in dispatch order
+				for (const r of results) {
+					onEvent({ type: "tool_result", id: r.tc.id, output: r.uiOutput, mergeable: r.mergeable, summary: r.summary, metadata: r.resultMetadata });
+					const toolMsg: ToolMessage = { role: "tool", content: r.llmOutput, tool_call_id: r.tc.id };
+					conversation.push(toolMsg);
+					newMessages.push(toolMsg);
+					onMessage(toolMsg);
+				}
 			} else {
-				try {
-					const result = await tool.execute(args, { projectRoot, accessibleDirectories, sessionId, toolCallId: tc.id });
-					llmOutput = result.llmOutput;
-					uiOutput = result.uiOutput;
-					mergeable = result.mergeable;
-					summary = result.summary;
-					resultMetadata = result.metadata;
-				} catch (err) {
-					llmOutput = `Tool execution error: ${(err as Error).message}`;
-					uiOutput = `Tool execution error: ${(err as Error).message}`;
+				// Sequential execution (non-task tools, or a single task call)
+				for (const tc of group.items) {
+					let args: Record<string, unknown>;
+					try {
+						args = JSON.parse(tc.function.arguments);
+					} catch {
+						args = {};
+					}
+
+					const tool = tools.get(tc.function.name);
+
+					let llmOutput: string;
+					let uiOutput: string | null = null;
+					let mergeable = false;
+					let summary: string | undefined;
+					let resultMetadata: Record<string, unknown> | undefined;
+
+					if (!tool) {
+						llmOutput = `Unknown tool: ${tc.function.name}`;
+						uiOutput = `Unknown tool: ${tc.function.name}`;
+					} else {
+						try {
+							const result = await tool.execute(args, { projectRoot, accessibleDirectories, sessionId, toolCallId: tc.id });
+							llmOutput = result.llmOutput;
+							uiOutput = result.uiOutput;
+							mergeable = result.mergeable;
+							summary = result.summary;
+							resultMetadata = result.metadata;
+						} catch (err) {
+							llmOutput = `Tool execution error: ${(err as Error).message}`;
+							uiOutput = `Tool execution error: ${(err as Error).message}`;
+						}
+					}
+
+					onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable, summary, metadata: resultMetadata });
+
+					const toolMsg: ToolMessage = { role: "tool", content: llmOutput, tool_call_id: tc.id };
+					conversation.push(toolMsg);
+					newMessages.push(toolMsg);
+					onMessage(toolMsg);
+
+					// Check abort between tool executions
+					signal?.throwIfAborted();
 				}
 			}
 
-			onEvent({ type: "tool_result", id: tc.id, output: uiOutput, mergeable, summary, metadata: resultMetadata });
-
-			const toolMsg: ToolMessage = { role: "tool", content: llmOutput, tool_call_id: tc.id };
-			conversation.push(toolMsg);
-			newMessages.push(toolMsg);
-			onMessage(toolMsg);
-
-			// Check abort between tool executions
+			// Check abort between groups
 			signal?.throwIfAborted();
 		}
 

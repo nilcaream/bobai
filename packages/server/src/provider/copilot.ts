@@ -362,14 +362,19 @@ export function createCopilotProvider(
 
 					yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };
 
-					// Accumulate per-turn stats
-					turnModel = options.model;
-					turnTokens += totalTokens;
-					turnLastCallTokens = promptTokens;
-					if (initiator === "agent") turnAgentCalls++;
-					else turnUserCalls++;
-					const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
-					if (initiator === "user") turnPremiumCost += multiplier;
+					// Accumulate per-turn stats — route to external callback if provided,
+					// otherwise update the provider's own closure-scoped variables.
+					if (options.onMetrics) {
+						options.onMetrics({ model: options.model, promptTokens, totalTokens, initiator });
+					} else {
+						turnModel = options.model;
+						turnTokens += totalTokens;
+						turnLastCallTokens = promptTokens;
+						if (initiator === "agent") turnAgentCalls++;
+						else turnUserCalls++;
+						const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+						if (initiator === "user") turnPremiumCost += multiplier;
+					}
 
 					const reason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
 					yield { type: "finish" as const, reason } as StreamEvent;

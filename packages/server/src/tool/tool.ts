@@ -9,6 +9,8 @@ export interface ToolContext {
 	sessionId: string;
 	/** The provider-assigned tool_call ID for this invocation (used by the task tool to link subagent sessions). */
 	toolCallId?: string;
+	/** Provider override for parallel task execution (isolated turn state). */
+	provider?: import("../provider/provider").Provider;
 }
 
 /** Check whether a resolved absolute path falls within the project root or any accessible directory. */
