@@ -56,13 +56,15 @@ export const bashTool: Tool = {
 		const contentTotal = contentLines.length;
 		if (contentTotal <= 6) return output;
 
-		const keepPerSide = Math.max(3, Math.floor((contentTotal * (1 - strength)) / 2));
-		if (keepPerSide * 2 >= contentTotal) return output;
+		// Tail-only strategy: keep the last N lines. For bash output the tail
+		// (final status, errors, summary) is almost always more important than
+		// the head (early verbose output).
+		const keepCount = Math.max(3, Math.floor(contentTotal * (1 - strength)));
+		if (keepCount >= contentTotal) return output;
 
-		const head = contentLines.slice(0, keepPerSide).join("\n");
-		const tail = contentLines.slice(-keepPerSide).join("\n");
-		const removed = contentTotal - keepPerSide * 2;
-		return `${head}\n${COMPACTION_MARKER} ${removed} lines from bash('${command}') omitted\n${tail}${trailer}`;
+		const tail = contentLines.slice(-keepCount).join("\n");
+		const removed = contentTotal - keepCount;
+		return `${COMPACTION_MARKER} ${removed} lines from bash('${command}') omitted\n${tail}${trailer}`;
 	},
 
 	formatCall(args: Record<string, unknown>): string {

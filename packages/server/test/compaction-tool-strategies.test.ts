@@ -346,7 +346,7 @@ describe("bash compact()", () => {
 		expect(compact(output, 0.8, { command: "ls" })).toBe(output);
 	});
 
-	test("produces head + COMPACTED + tail for long output", () => {
+	test("produces COMPACTED marker + tail for long output", () => {
 		const lines = Array.from({ length: 30 }, (_, i) => `output line ${i + 1}`);
 		const output = lines.join("\n");
 		const result = compact(output, 0.8, { command: "npm test" });
@@ -354,8 +354,8 @@ describe("bash compact()", () => {
 		expect(result).toContain(COMPACTION_MARKER);
 		expect(result).toContain("bash('npm test')");
 		expect(result).toContain("omitted");
-		// First lines present
-		expect(result).toContain("output line 1");
+		// Head is NOT present (tail-only strategy)
+		expect(result).not.toContain("output line 1");
 		// Last lines present
 		expect(result).toContain("output line 30");
 		// Middle absent
