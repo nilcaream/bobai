@@ -37,7 +37,7 @@ export function formatModelCost(modelId: string): string {
 }
 
 /** Format the status prefix for a model (e.g. "gpt-5-mini | 0x"). */
-export function formatModelStatus(modelId: string): string {
+function formatModelStatus(modelId: string): string {
 	return `${modelId} | ${formatModelCost(modelId)}`;
 }
 

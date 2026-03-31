@@ -1,4 +1,4 @@
-export type ServerMessage =
+type ServerMessage =
 	| { type: "token"; text: string; sessionId?: string }
 	| { type: "tool_call"; id: string; output: string; sessionId?: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
@@ -12,7 +12,7 @@ export type ServerMessage =
 	| { type: "session_subscribed"; sessionId: string }
 	| { type: "session_locked"; sessionId: string };
 
-export type RouteResult =
+type RouteResult =
 	| { target: "parent"; msg: ServerMessage }
 	| { target: "child"; sessionId: string }
 	| { target: "lifecycle"; msg: ServerMessage };

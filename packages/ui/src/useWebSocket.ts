@@ -18,14 +18,14 @@ type ServerMessage =
 	| { type: "subagent_start"; sessionId: string; title: string; toolCallId: string }
 	| { type: "subagent_done"; sessionId: string };
 
-export type SubagentInfo = {
+type SubagentInfo = {
 	sessionId: string;
 	title: string;
 	status: "running" | "done";
 	toolCallId: string;
 };
 
-export type ProjectInfo = {
+type ProjectInfo = {
 	dir: string;
 	git?: { branch: string; revision: string };
 };
@@ -375,10 +375,6 @@ export function useWebSocket() {
 		history.pushState(null, "", "/bobai");
 	}, [sendUnsubscribe]);
 
-	const addErrorMessage = useCallback((text: string) => {
-		setMessages((prev) => appendPart(prev, { type: "text", content: `Error: ${text}` }));
-	}, []);
-
 	const loadSession = useCallback(
 		async (targetId: string, options?: { skipUrlUpdate?: boolean }): Promise<boolean> => {
 			// Clear peek state
@@ -465,7 +461,6 @@ export function useWebSocket() {
 		status,
 		setStatus,
 		subagents,
-		addErrorMessage,
 		parentId,
 		parentTitle,
 		projectInfo,

@@ -40,24 +40,6 @@ function sendAndWait(
 	});
 }
 
-/**
- * Helper: wait for a message matching predicate (without sending anything).
- */
-function _waitForMessage(ws: WebSocket, predicate: (m: ServerMessage) => boolean, timeoutMs = 2000): Promise<ServerMessage> {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error("Timed out waiting for message")), timeoutMs);
-		const handler = (event: MessageEvent) => {
-			const parsed = JSON.parse(event.data as string) as ServerMessage;
-			if (predicate(parsed)) {
-				clearTimeout(timer);
-				ws.removeEventListener("message", handler);
-				resolve(parsed);
-			}
-		};
-		ws.addEventListener("message", handler);
-	});
-}
-
 describe("Session Ownership", () => {
 	let server: ReturnType<typeof Bun.serve>;
 	let wsUrl: string;

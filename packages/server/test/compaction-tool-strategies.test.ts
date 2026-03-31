@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
@@ -10,35 +10,8 @@ import { grepSearchTool } from "../src/tool/grep-search";
 import { listDirectoryTool } from "../src/tool/list-directory";
 import { readFileTool } from "../src/tool/read-file";
 import { createSkillTool } from "../src/tool/skill";
+import { createTaskTool } from "../src/tool/task";
 import { writeFileTool } from "../src/tool/write-file";
-
-// ---------------------------------------------------------------------------
-// Stub out modules that task.ts transitively imports but which have broken
-// exports during the multi-task migration (engine.ts references removed
-// exports from strength.ts). These stubs are only needed so that importing
-// task.ts doesn't throw; the compact/compactArgs methods we test are pure
-// and never call into these modules.
-// ---------------------------------------------------------------------------
-
-mock.module("../src/compaction/engine", () => ({
-	compactMessages: () => [],
-}));
-mock.module("../src/session/repository", () => ({
-	appendMessage: () => ({ id: "mock" }),
-	createSubagentSession: () => ({ id: "mock-child" }),
-	getMessages: () => [],
-	getSession: () => null,
-	updateMessageMetadata: () => {},
-}));
-mock.module("../src/provider/copilot-models", () => ({
-	loadModelsConfig: () => [],
-}));
-mock.module("../src/agent-loop", () => ({
-	runAgentLoop: async () => [],
-}));
-mock.module("../src/file/time", () => ({
-	FileTime: { read: () => {}, assert: () => {}, invalidate: () => {} },
-}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,8 +46,6 @@ function makeSkillTool() {
  * so we only need to satisfy the constructor shape.
  */
 function makeTaskTool() {
-	// Dynamic require so mocks are applied before the module loads
-	const { createTaskTool } = require("../src/tool/task");
 	// biome-ignore lint/suspicious/noExplicitAny: minimal mock deps for testing pure compact methods
 	const deps: any = {
 		db: {},
