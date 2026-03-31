@@ -201,6 +201,10 @@ The LLM has access to these tools during a conversation:
 | `task` | Spawn a subagent for independent work |
 | `skill` | Load a skill for specialized instructions |
 
+## Attribution
+
+Favicon based on [Circuit icons created by Prosymbols - Flaticon](https://www.flaticon.com/free-icons/circuit).
+
 ## License
 
 Apache 2.0
