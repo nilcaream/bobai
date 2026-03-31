@@ -362,42 +362,26 @@ describe("bash compact()", () => {
 		expect(result).not.toContain("output line 15");
 	});
 
-	test("preserves 'exit code:' trailer", () => {
+	test("exit code is kept in tail naturally", () => {
 		const contentLines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
-		const output = [...contentLines, "exit code: 1"].join("\n");
+		const output = [...contentLines, "", "exit code: 1"].join("\n");
 		const result = compact(output, 0.8, { command: "make" });
 
 		expect(result).toContain(COMPACTION_MARKER);
 		expect(result).toContain("exit code: 1");
-		// Exit code should be the very last line
+		// Exit code is the last line — naturally in the tail
 		const resultLines = result.split("\n");
 		expect(resultLines[resultLines.length - 1]).toBe("exit code: 1");
 	});
 
-	test("preserves 'Command timed out' trailer", () => {
+	test("timeout notice is kept in tail naturally", () => {
 		const contentLines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
-		const output = [...contentLines, "Command timed out after 30s"].join("\n");
+		const output = [...contentLines, "", "Command timed out after 30s"].join("\n");
 		const result = compact(output, 0.8, { command: "sleep 100" });
 
 		expect(result).toContain("Command timed out after 30s");
 		const resultLines = result.split("\n");
 		expect(resultLines[resultLines.length - 1]).toBe("Command timed out after 30s");
-	});
-
-	test("handles empty line before exit code trailer", () => {
-		const contentLines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
-		const output = [...contentLines, "", "exit code: 0"].join("\n");
-		const result = compact(output, 0.8, { command: "echo hi" });
-
-		expect(result).toContain("exit code: 0");
-		// The empty line before exit code should be stripped from content
-		expect(result).toContain(COMPACTION_MARKER);
-	});
-
-	test("does not compact when content lines <= 6 after trailer extraction", () => {
-		const contentLines = Array.from({ length: 5 }, (_, i) => `line ${i + 1}`);
-		const output = [...contentLines, "exit code: 0"].join("\n");
-		expect(compact(output, 0.8, { command: "ls" })).toBe(output);
 	});
 
 	test("uses '?' for missing command arg", () => {

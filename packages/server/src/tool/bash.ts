@@ -2,7 +2,7 @@ import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const MAX_OUTPUT_BYTES = 50_000;
+const MAX_OUTPUT_BYTES = 32_000;
 
 export const bashTool: Tool = {
 	definition: {
@@ -41,32 +41,16 @@ export const bashTool: Tool = {
 		const total = lines.length;
 		if (total <= 6) return output;
 
-		// Detect and preserve trailing status (exit code, timeout notice)
-		let trailer = "";
-		let contentLines = lines;
-		const lastLine = lines[total - 1] ?? "";
-
-		if (lastLine.startsWith("exit code:") || lastLine.startsWith("Command timed out")) {
-			trailer = `\n${lastLine}`;
-			// Check for empty line before the status line
-			const secondLast = total >= 2 ? (lines[total - 2] ?? "") : "";
-			contentLines = secondLast === "" ? lines.slice(0, -2) : lines.slice(0, -1);
-		}
-
-		const contentTotal = contentLines.length;
-		if (contentTotal <= 6) return output;
-
-		// Tail-only strategy: keep the last N lines. For bash output the tail
-		// (final status, errors, summary) is almost always more important than
-		// the head (early verbose output). Cap at 10 lines — old bash output is
-		// historical context; the LLM has already acted on it.
+		// Tail-only strategy with a hard cap. Old bash output is historical
+		// context — the LLM has already acted on it. The tail (final status,
+		// errors, summary, exit code) is what matters.
 		const MAX_KEEP_LINES = 10;
-		const keepCount = Math.min(MAX_KEEP_LINES, Math.max(3, Math.floor(contentTotal * (1 - strength))));
-		if (keepCount >= contentTotal) return output;
+		const keepCount = Math.min(MAX_KEEP_LINES, Math.max(3, Math.floor(total * (1 - strength))));
+		if (keepCount >= total) return output;
 
-		const tail = contentLines.slice(-keepCount).join("\n");
-		const removed = contentTotal - keepCount;
-		return `${COMPACTION_MARKER} ${removed} lines from bash('${command}') omitted\n${tail}${trailer}`;
+		const tail = lines.slice(-keepCount).join("\n");
+		const removed = total - keepCount;
+		return `${COMPACTION_MARKER} ${removed} lines from bash('${command}') omitted\n${tail}`;
 	},
 
 	formatCall(args: Record<string, unknown>): string {
@@ -108,10 +92,10 @@ export const bashTool: Tool = {
 					Promise.race([new Response(stream).text(), new Promise<string>((r) => setTimeout(() => r(""), 2000))]);
 				const stdout = await partialRead(proc.stdout);
 				const stderr = await partialRead(proc.stderr);
-				let output = truncate(`${stdout}${stderr}`.trim());
-				if (output.length > 0) output += "\n\n";
-				output += `Command timed out after ${timeoutMs}ms`;
-				return { llmOutput: output, uiOutput: formatBashOutput(command, output), mergeable: false };
+				const output = truncate(`${stdout}${stderr}`.trim());
+				const status = `Command timed out after ${timeoutMs}ms`;
+				const llm = output.length > 0 ? `${output}\n\n${status}` : status;
+				return { llmOutput: llm, uiOutput: formatBashOutput(command, llm), mergeable: false };
 			}
 
 			if (timerId !== undefined) clearTimeout(timerId);
@@ -119,20 +103,11 @@ export const bashTool: Tool = {
 			const stderr = await new Response(proc.stderr).text();
 			const combined = `${stdout}${stderr}`.trim();
 			const truncated = truncate(combined);
-
-			if (result.code !== 0) {
-				return {
-					llmOutput: `${truncated}\n\nexit code: ${result.code}`,
-					uiOutput: formatBashOutput(command, `${truncated}\n\nexit code: ${result.code}`),
-
-					mergeable: false,
-				};
-			}
+			const output = truncated ? `${truncated}\n\nexit code: ${result.code}` : `(no output)\n\nexit code: ${result.code}`;
 
 			return {
-				llmOutput: truncated || "(no output)",
-				uiOutput: formatBashOutput(command, truncated || "(no output)"),
-
+				llmOutput: output,
+				uiOutput: formatBashOutput(command, output),
 				mergeable: false,
 			};
 		} catch (err) {
@@ -146,9 +121,12 @@ export const bashTool: Tool = {
 	},
 };
 
+/** Truncate output keeping the tail (most recent/relevant output). */
 function truncate(text: string): string {
 	if (text.length <= MAX_OUTPUT_BYTES) return text;
-	return `${text.slice(0, MAX_OUTPUT_BYTES)}\n\n... truncated (${text.length} bytes total, showing first ${MAX_OUTPUT_BYTES})`;
+	const kept = text.slice(-MAX_OUTPUT_BYTES);
+	const totalBytes = text.length;
+	return `... truncated (${totalBytes} bytes total, showing last ${MAX_OUTPUT_BYTES})\n${kept}`;
 }
 
 function formatBashOutput(command: string, output: string): string {

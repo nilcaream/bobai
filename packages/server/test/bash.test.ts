@@ -26,6 +26,7 @@ describe("bashTool", () => {
 	test("executes a simple command and returns stdout", async () => {
 		const result = await bashTool.execute({ command: "echo 'hello world'" }, ctx);
 		expect(result.llmOutput).toContain("hello world");
+		expect(result.llmOutput).toContain("exit code: 0");
 	});
 
 	test("runs in projectRoot as working directory", async () => {
