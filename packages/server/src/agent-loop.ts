@@ -1,8 +1,8 @@
 import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
 import type { Logger } from "./log/logger";
-import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
+import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
 
 const DEFAULT_MAX_ITERATIONS = 64;
@@ -262,7 +262,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 
 				// Inject results in dispatch order
 				for (const r of results) {
-					onEvent({ type: "tool_result", id: r.tc.id, output: r.uiOutput, mergeable: r.mergeable, summary: r.summary, metadata: r.resultMetadata });
+					onEvent({
+						type: "tool_result",
+						id: r.tc.id,
+						output: r.uiOutput,
+						mergeable: r.mergeable,
+						summary: r.summary,
+						metadata: r.resultMetadata,
+					});
 					const toolMsg: ToolMessage = { role: "tool", content: r.llmOutput, tool_call_id: r.tc.id };
 					conversation.push(toolMsg);
 					newMessages.push(toolMsg);

@@ -551,10 +551,7 @@ describe("runAgentLoop", () => {
 
 describe("parallel task execution", () => {
 	/** Create a mock task tool that records execution order and takes a configurable delay. */
-	function createMockTaskTool(options: {
-		executionLog: string[];
-		delays: Record<string, number>;
-	}): Tool {
+	function createMockTaskTool(options: { executionLog: string[]; delays: Record<string, number> }): Tool {
 		return {
 			definition: {
 				type: "function",
@@ -723,12 +720,8 @@ describe("parallel task execution", () => {
 		});
 
 		// All tool_call events should come before any tool_result events
-		const toolCallIndices = events
-			.map((e, i) => (e.type === "tool_call" ? i : -1))
-			.filter((i) => i >= 0);
-		const toolResultIndices = events
-			.map((e, i) => (e.type === "tool_result" ? i : -1))
-			.filter((i) => i >= 0);
+		const toolCallIndices = events.map((e, i) => (e.type === "tool_call" ? i : -1)).filter((i) => i >= 0);
+		const toolResultIndices = events.map((e, i) => (e.type === "tool_result" ? i : -1)).filter((i) => i >= 0);
 
 		expect(toolCallIndices).toHaveLength(2);
 		expect(toolResultIndices).toHaveLength(2);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { Provider, ProviderOptions, StreamEvent, StreamMetrics } from "../src/provider/provider";
 import { createIsolatedTurnProvider } from "../src/provider/isolated-turn";
+import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 
 /** Create a mock provider that supports onMetrics routing. */
 function mockProvider(): Provider {
@@ -65,14 +65,14 @@ describe("createIsolatedTurnProvider", () => {
 
 	test("beginTurn on isolated provider does not affect the original", () => {
 		const original = mockProvider();
-		original.beginTurn!();
-		expect(original.getTurnSummary!()).toBe(" | started | calls: 1");
+		original.beginTurn?.();
+		expect(original.getTurnSummary?.()).toBe(" | started | calls: 1");
 
 		const isolated = createIsolatedTurnProvider(original);
-		isolated.beginTurn!(42);
+		isolated.beginTurn?.(42);
 
-		expect(original.getTurnSummary!()).toBe(" | started | calls: 1");
-		const isoSummary = isolated.getTurnSummary!();
+		expect(original.getTurnSummary?.()).toBe(" | started | calls: 1");
+		const isoSummary = isolated.getTurnSummary?.();
 		expect(isoSummary).toBeDefined();
 		expect(isoSummary).toContain("agent: 0");
 	});
@@ -82,11 +82,11 @@ describe("createIsolatedTurnProvider", () => {
 		const a = createIsolatedTurnProvider(original);
 		const b = createIsolatedTurnProvider(original);
 
-		a.beginTurn!(10);
-		b.beginTurn!(20);
+		a.beginTurn?.(10);
+		b.beginTurn?.(20);
 
-		const aSummary = a.getTurnSummary!();
-		const bSummary = b.getTurnSummary!();
+		const aSummary = a.getTurnSummary?.();
+		const bSummary = b.getTurnSummary?.();
 		expect(aSummary).toContain("context: -10");
 		expect(bSummary).toContain("context: -20");
 	});
@@ -95,32 +95,32 @@ describe("createIsolatedTurnProvider", () => {
 		const original = mockProvider();
 		const isolated = createIsolatedTurnProvider(original);
 
-		isolated.beginTurn!(50);
-		const saved = isolated.saveTurnState!();
-		isolated.beginTurn!(999);
-		isolated.restoreTurnState!(saved);
-		const summary = isolated.getTurnSummary!();
+		isolated.beginTurn?.(50);
+		const saved = isolated.saveTurnState?.();
+		isolated.beginTurn?.(999);
+		isolated.restoreTurnState?.(saved);
+		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("context: -50");
 	});
 
 	test("save/restore on isolated does not affect original", () => {
 		const original = mockProvider();
-		original.beginTurn!();
-		const originalSummaryBefore = original.getTurnSummary!();
+		original.beginTurn?.();
+		const originalSummaryBefore = original.getTurnSummary?.();
 
 		const isolated = createIsolatedTurnProvider(original);
-		isolated.beginTurn!(100);
-		const saved = isolated.saveTurnState!();
-		isolated.beginTurn!(200);
-		isolated.restoreTurnState!(saved);
+		isolated.beginTurn?.(100);
+		const saved = isolated.saveTurnState?.();
+		isolated.beginTurn?.(200);
+		isolated.restoreTurnState?.(saved);
 
-		expect(original.getTurnSummary!()).toBe(originalSummaryBefore);
+		expect(original.getTurnSummary?.()).toBe(originalSummaryBefore);
 	});
 
 	test("getTurnSummary returns undefined before any beginTurn call", () => {
 		const original = mockProvider();
 		const isolated = createIsolatedTurnProvider(original);
-		expect(isolated.getTurnSummary!()).toBeUndefined();
+		expect(isolated.getTurnSummary?.()).toBeUndefined();
 	});
 
 	test("restoreTurnState preserves all turn tracking fields", () => {
@@ -137,10 +137,10 @@ describe("createIsolatedTurnProvider", () => {
 			turnLastCallTokens: 8000,
 			baselineTokens: 6000,
 		};
-		isolated.restoreTurnState!(customState);
+		isolated.restoreTurnState?.(customState);
 
-		expect(isolated.getTurnPromptTokens!()).toBe(8000);
-		const summary = isolated.getTurnSummary!();
+		expect(isolated.getTurnPromptTokens?.()).toBe(8000);
+		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("gpt-4o");
 		expect(summary).toContain("agent: 5");
 		expect(summary).toContain("user: 2");
@@ -152,7 +152,7 @@ describe("createIsolatedTurnProvider", () => {
 	test("stream routes metrics to isolated provider via onMetrics", async () => {
 		const original = mockProvider();
 		const isolated = createIsolatedTurnProvider(original);
-		isolated.beginTurn!(0);
+		isolated.beginTurn?.(0);
 
 		// Stream through the isolated provider — onMetrics should route to its locals
 		for await (const _event of isolated.stream({ model: "test-model", messages: [], initiator: "agent" })) {
@@ -160,34 +160,36 @@ describe("createIsolatedTurnProvider", () => {
 		}
 
 		// The isolated provider should have accumulated metrics from onMetrics
-		const summary = isolated.getTurnSummary!();
+		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("test-model");
 		expect(summary).toContain("agent: 1");
 		expect(summary).toContain("tokens: 750");
 		expect(summary).toContain("context: 500"); // promptTokens=500, baselineTokens=0
 
 		// The original should NOT have been affected
-		expect(original.getTurnSummary!()).not.toContain("test-model");
+		expect(original.getTurnSummary?.()).not.toContain("test-model");
 	});
 
 	test("two isolated providers streaming concurrently track independently", async () => {
 		const original = mockProvider();
 		const a = createIsolatedTurnProvider(original);
 		const b = createIsolatedTurnProvider(original);
-		a.beginTurn!(0);
-		b.beginTurn!(0);
+		a.beginTurn?.(0);
+		b.beginTurn?.(0);
 
 		// Run both streams concurrently
 		const streamA = async () => {
-			for await (const _e of a.stream({ model: "model-a", messages: [], initiator: "agent" })) {}
+			for await (const _e of a.stream({ model: "model-a", messages: [], initiator: "agent" })) {
+			}
 		};
 		const streamB = async () => {
-			for await (const _e of b.stream({ model: "model-b", messages: [], initiator: "agent" })) {}
+			for await (const _e of b.stream({ model: "model-b", messages: [], initiator: "agent" })) {
+			}
 		};
 		await Promise.all([streamA(), streamB()]);
 
-		const aSummary = a.getTurnSummary!();
-		const bSummary = b.getTurnSummary!();
+		const aSummary = a.getTurnSummary?.();
+		const bSummary = b.getTurnSummary?.();
 		expect(aSummary).toContain("model-a");
 		expect(aSummary).toContain("agent: 1");
 		expect(bSummary).toContain("model-b");
