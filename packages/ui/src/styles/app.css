@@ -144,6 +144,11 @@ body,
 	cursor: pointer;
 }
 
+.panel--tool.panel--expanded {
+	border-left-style: dashed;
+	cursor: pointer;
+}
+
 .panel--tool.panel--navigable {
 	cursor: pointer;
 }

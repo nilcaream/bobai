@@ -10,8 +10,8 @@ export interface StrengthContext {
 	threshold?: number;
 }
 
-/** Default threshold: compaction activates when context usage exceeds 50%. */
-export const DEFAULT_THRESHOLD = 0.5;
+/** Default threshold: compaction activates when context usage exceeds 20%. */
+export const DEFAULT_THRESHOLD = 0.2;
 
 /**
  * Compute the effective context pressure (0.0-1.0).
@@ -28,16 +28,16 @@ export function computeContextPressure(ctx: StrengthContext): number {
 /**
  * Position in the conversation (0.0-1.0, from oldest to newest) where the
  * age curve transitions from "mostly compactable" to "mostly protected".
- * At 0.8 the newest 20% of messages are strongly protected.
+ * At 0.7 the newest 30% of messages are strongly protected.
  */
-export const AGE_INFLECTION = 0.8;
+export const AGE_INFLECTION = 0.7;
 
 /**
  * Controls steepness of the S-curve around the inflection point.
- * Higher values produce a sharper transition; 10 gives a sharp gradient
- * spanning roughly 10% of the conversation on each side of the inflection.
+ * Higher values produce a sharper transition; 5 gives a moderate gradient
+ * spanning roughly 20% of the conversation on each side of the inflection.
  */
-export const AGE_STEEPNESS = 10;
+export const AGE_STEEPNESS = 5;
 
 /**
  * Compute the age factor for a tool message (0.0-1.0).

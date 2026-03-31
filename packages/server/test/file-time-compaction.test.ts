@@ -120,7 +120,7 @@ describe("FileTime compaction invalidation", () => {
 
 		compactMessages({
 			messages,
-			context: { promptTokens: 50_000, contextWindow: 100_000 }, // 50% - below threshold
+			context: { promptTokens: 10_000, contextWindow: 100_000 }, // 10% - below 20% threshold
 			tools,
 			onReadFileCompacted() {
 				callbackCalled = true;

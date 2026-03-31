@@ -50,6 +50,11 @@ function buildConversation(): Message[] {
 		},
 		{ role: "tool", content: "file contents here ".repeat(100), tool_call_id: "tc1" },
 		{ role: "assistant", content: "Here is the file." },
+		// Trailing context to push the tool result into the compactable age zone
+		{ role: "user", content: "Thanks, now do something else" },
+		{ role: "assistant", content: "Sure." },
+		{ role: "user", content: "One more thing" },
+		{ role: "assistant", content: "Done." },
 	];
 }
 

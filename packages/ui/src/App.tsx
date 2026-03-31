@@ -226,7 +226,8 @@ function ToolPanel({
 		}
 	};
 
-	const cls = `panel panel--tool${collapsed ? " panel--collapsed" : ""}${onNavigate ? " panel--navigable" : ""}`;
+	const isExpanded = collapsible.current && !collapsed;
+	const cls = `panel panel--tool${collapsed ? " panel--collapsed" : ""}${isExpanded ? " panel--expanded" : ""}${onNavigate ? " panel--navigable" : ""}`;
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: double-click fold is a convenience shortcut, not primary interaction

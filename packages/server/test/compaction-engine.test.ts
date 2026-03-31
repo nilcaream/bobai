@@ -1036,7 +1036,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: { promptTokens: 5_000, contextWindow: 10_000 }, // exactly 0.5 = threshold
+				context: { promptTokens: 2_000, contextWindow: 10_000 }, // exactly 0.2 = threshold
 				tools: createMockRegistry({ bash: { outputThreshold: 0.2, compact: () => `${COMPACTION_MARKER} compacted` } }),
 			});
 			expect(result).toBe(messages); // no compaction
