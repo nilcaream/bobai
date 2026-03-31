@@ -13,8 +13,10 @@ function createMockRegistry(
 	tools: Record<
 		string,
 		{
-			resistance?: number;
-			compact?: (output: string, strength: number, args: Record<string, unknown>) => string;
+			outputThreshold?: number;
+			argsThreshold?: number;
+			compact?: (output: string, args: Record<string, unknown>) => string;
+			compactArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
 		}
 	>,
 ): ToolRegistry {
@@ -23,14 +25,22 @@ function createMockRegistry(
 		get(name: string) {
 			const t = tools[name];
 			if (!t) return undefined;
+			// If outputThreshold is set but no compact() provided, create a default one
+			const compact =
+				t.compact ??
+				(t.outputThreshold !== undefined
+					? (output: string) => `${COMPACTION_MARKER} ${name} output compacted (was ${output.length} chars)`
+					: undefined);
 			return {
 				definition: {
 					type: "function" as const,
 					function: { name, description: "", parameters: { type: "object", properties: {}, required: [] } },
 				},
 				mergeable: true,
-				compactionResistance: t.resistance,
-				compact: t.compact,
+				outputThreshold: t.outputThreshold,
+				argsThreshold: t.argsThreshold,
+				compact,
+				compactArgs: t.compactArgs,
 				formatCall: () => "",
 				execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: true }),
 			} as ReturnType<ToolRegistry["get"]>;
@@ -78,7 +88,6 @@ describe("compactMessagesWithStats", () => {
 			tools: emptyRegistry,
 		});
 		expect(stats.compacted).toBe(0);
-		expect(stats.superseded).toBe(0);
 		expect(stats.totalToolMessages).toBe(1);
 		expect(stats.contextPressure).toBeLessThanOrEqual(0);
 		// Messages unchanged
@@ -98,9 +107,9 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc3", longOutput),
 		];
 		const registry = createMockRegistry({
-			file_search: { resistance: 0.1 },
-			bash: { resistance: 0.5 },
-			edit_file: { resistance: 0.8 },
+			file_search: { outputThreshold: 0.2 },
+			bash: { outputThreshold: 0.4 },
+			edit_file: { outputThreshold: 0.7 },
 		});
 		const { stats } = compactMessagesWithStats({
 			messages,
@@ -109,46 +118,9 @@ describe("compactMessagesWithStats", () => {
 		});
 		expect(stats.totalToolMessages).toBe(3);
 		expect(stats.contextPressure).toBeGreaterThan(0);
-		// At 90% usage, all tool messages should be compacted
+		// At 90% usage, older tool messages should be compacted
 		expect(stats.compacted).toBeGreaterThan(0);
 		expect(stats.compacted).toBeLessThanOrEqual(3);
-	});
-
-	test("counts superseded messages in stats", () => {
-		// Supersession: re-read after edit (read → edit → read same file)
-		// Note: the supersession rules use "path" as the primary arg key
-		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
-		const messages: Message[] = [
-			{ role: "system", content: "sys" },
-			assistantWithToolCall("tc1", "read_file", JSON.stringify({ path: "foo.ts" })),
-			toolMessage("tc1", longOutput),
-			assistantWithToolCall("tc2", "edit_file", JSON.stringify({ path: "foo.ts" })),
-			toolMessage("tc2", longOutput),
-			assistantWithToolCall("tc3", "read_file", JSON.stringify({ path: "foo.ts" })),
-			toolMessage("tc3", longOutput),
-		];
-		const registry = createMockRegistry({
-			read_file: { resistance: 0.4 },
-			edit_file: { resistance: 0.8 },
-		});
-
-		// Low pressure → no compaction at all (supersession gated behind pressure)
-		const { stats: lowStats } = compactMessagesWithStats({
-			messages,
-			context: lowPressureContext(),
-			tools: registry,
-		});
-		expect(lowStats.superseded).toBe(0);
-		expect(lowStats.compacted).toBe(0);
-
-		// With high pressure, superseded + pressure-based compaction
-		const { stats: highStats } = compactMessagesWithStats({
-			messages,
-			context: highPressureContext(),
-			tools: registry,
-		});
-		expect(highStats.superseded).toBeGreaterThanOrEqual(1);
-		expect(highStats.compacted).toBeGreaterThanOrEqual(1);
 	});
 
 	test("stats.contextPressure matches expected value", () => {
@@ -178,9 +150,9 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc3", longOutput),
 		];
 		const registry = createMockRegistry({
-			file_search: { resistance: 0.1 },
-			bash: { resistance: 0.5 },
-			edit_file: { resistance: 0.8 },
+			file_search: { outputThreshold: 0.2 },
+			bash: { outputThreshold: 0.4 },
+			edit_file: { outputThreshold: 0.7 },
 		});
 		const { details } = compactMessagesWithStats({
 			messages,
@@ -196,18 +168,16 @@ describe("compactMessagesWithStats", () => {
 			expect(detail).toBeDefined();
 			if (!detail) throw new Error(`Missing detail for ${id}`);
 			expect(typeof detail.age).toBe("number");
-			expect(typeof detail.resistance).toBe("number");
-			expect(typeof detail.strength).toBe("number");
+			expect(typeof detail.compactionFactor).toBe("number");
 			expect(typeof detail.wasCompacted).toBe("boolean");
 		}
 
-		// file_search (low resistance) should have higher strength than edit_file (high resistance)
+		// file_search (low threshold) should be compacted more readily than edit_file (high threshold)
 		const fsDetail = details.get("tc1");
 		const editDetail = details.get("tc3");
 		if (!fsDetail || !editDetail) throw new Error("Missing details");
-		expect(fsDetail.resistance).toBe(0.1);
-		expect(editDetail.resistance).toBe(0.8);
-		expect(fsDetail.strength).toBeGreaterThan(editDetail.strength);
+		expect(fsDetail.outputThreshold).toBe(0.2);
+		expect(editDetail.outputThreshold).toBe(0.7);
 	});
 
 	test("returns empty details map when no compaction needed", () => {
@@ -236,8 +206,8 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc2", longOutput),
 		];
 		const registry = createMockRegistry({
-			file_search: { resistance: 0.1 },
-			bash: { resistance: 0.5 },
+			file_search: { outputThreshold: 0.2 },
+			bash: { outputThreshold: 0.4 },
 		});
 		const { details } = compactMessagesWithStats({
 			messages,
@@ -264,7 +234,7 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc1", "output line 1\nline 2\nline 3"),
 		];
 		const ctx = highPressureContext();
-		const registry = createMockRegistry({ bash: { resistance: 0.5 } });
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4 } });
 
 		const plain = compactMessages({ messages, context: ctx, tools: registry });
 		const { messages: withStats } = compactMessagesWithStats({ messages, context: ctx, tools: registry });
@@ -308,21 +278,45 @@ describe("createCompactionRegistry", () => {
 		expect(registry.get("nonexistent")).toBeUndefined();
 	});
 
-	test("has correct compactionResistance values", () => {
+	test("has correct outputThreshold values", () => {
 		const expected: Record<string, number> = {
-			file_search: 0.1,
-			list_directory: 0.1,
+			list_directory: 0.2,
+			file_search: 0.2,
 			grep_search: 0.2,
-			skill: 0.2,
-			read_file: 0.4,
-			bash: 0.5,
-			task: 1.0,
-			write_file: 0.7,
-			edit_file: 0.8,
+			read_file: 0.3,
+			skill: 0.4,
+			bash: 0.4,
+			edit_file: 0.7,
+			task: 0.8,
 		};
-		for (const [name, resistance] of Object.entries(expected)) {
+		for (const [name, threshold] of Object.entries(expected)) {
 			const tool = registry.get(name);
-			expect(tool?.compactionResistance).toBe(resistance);
+			expect(tool?.outputThreshold).toBe(threshold);
+		}
+	});
+
+	test("write_file has no outputThreshold", () => {
+		const tool = registry.get("write_file");
+		expect(tool?.outputThreshold).toBeUndefined();
+	});
+
+	test("has correct argsThreshold values", () => {
+		const expected: Record<string, number> = {
+			write_file: 0.6,
+			edit_file: 0.3,
+			task: 0.8,
+		};
+		for (const [name, threshold] of Object.entries(expected)) {
+			const tool = registry.get(name);
+			expect(tool?.argsThreshold).toBe(threshold);
+		}
+	});
+
+	test("tools without argsThreshold have it undefined", () => {
+		const noArgs = ["list_directory", "file_search", "grep_search", "read_file", "skill", "bash"];
+		for (const name of noArgs) {
+			const tool = registry.get(name);
+			expect(tool?.argsThreshold).toBeUndefined();
 		}
 	});
 
@@ -330,15 +324,28 @@ describe("createCompactionRegistry", () => {
 		const skill = registry.get("skill");
 		expect(skill?.compact).toBeDefined();
 		if (!skill?.compact) throw new Error("skill compact() should be defined");
-		const result = skill.compact("full skill content here", 0.8, { name: "tdd" });
+		const result = skill.compact("full skill content here", { name: "tdd" });
 		expect(result).toContain(COMPACTION_MARKER);
 		expect(result).toContain("tdd");
 		expect(result).toContain("Re-invoke");
 	});
 
-	test("task stub has no custom compact() method", () => {
+	test("task stub has custom compact() method", () => {
 		const task = registry.get("task");
-		expect(task?.compact).toBeUndefined();
+		expect(task?.compact).toBeDefined();
+		if (!task?.compact) throw new Error("task compact() should be defined");
+		const result = task.compact("task output here", { description: "do something" });
+		expect(result).toContain(COMPACTION_MARKER);
+		expect(result).toContain("do something");
+	});
+
+	test("task stub has compactArgs() method", () => {
+		const task = registry.get("task");
+		expect(task?.compactArgs).toBeDefined();
+		if (!task?.compactArgs) throw new Error("task compactArgs() should be defined");
+		const result = task.compactArgs({ description: "do something", prompt: "long prompt text" });
+		expect(result.description).toBe("do something");
+		expect(result.prompt).toBe(COMPACTION_MARKER);
 	});
 
 	test("tools with custom compact() methods work correctly", () => {
@@ -358,25 +365,28 @@ describe("createCompactionRegistry", () => {
 		const bash = registry.get("bash");
 		expect(bash?.compact).toBeDefined();
 
-		// list_directory, write_file, edit_file — no custom compact
-		expect(registry.get("list_directory")?.compact).toBeUndefined();
-		expect(registry.get("write_file")?.compact).toBeUndefined();
-		expect(registry.get("edit_file")?.compact).toBeUndefined();
+		// list_directory — has compact
+		const listDir = registry.get("list_directory");
+		expect(listDir?.compact).toBeDefined();
+
+		// edit_file — has compact
+		const editFile = registry.get("edit_file");
+		expect(editFile?.compact).toBeDefined();
 	});
 
 	test("file_search compact() retains summary info", () => {
 		const tool = registry.get("file_search");
 		if (!tool?.compact) throw new Error("file_search compact() should be defined");
 		const output = "Found 5 files:\n/src/a.ts\n/src/b.ts\n/src/c.ts\n/src/d.ts\n/src/e.ts";
-		const compacted = tool.compact(output, 0.8, { pattern: "*.ts" });
+		const compacted = tool.compact(output, { pattern: "*.ts" });
 		expect(compacted).toContain(COMPACTION_MARKER);
 	});
 
 	test("bash compact() retains command and exit info", () => {
 		const tool = registry.get("bash");
 		if (!tool?.compact) throw new Error("bash compact() should be defined");
-		const output = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10";
-		const compacted = tool.compact(output, 0.8, { command: "ls -la" });
+		const output = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join("\n");
+		const compacted = tool.compact(output, { command: "ls -la" });
 		expect(compacted).toContain(COMPACTION_MARKER);
 	});
 
@@ -384,7 +394,7 @@ describe("createCompactionRegistry", () => {
 		const tool = registry.get("read_file");
 		if (!tool?.compact) throw new Error("read_file compact() should be defined");
 		const lines = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join("\n");
-		const compacted = tool.compact(lines, 0.8, { file_path: "src/main.ts" });
+		const compacted = tool.compact(lines, { file_path: "src/main.ts" });
 		expect(compacted).toContain(COMPACTION_MARKER);
 	});
 

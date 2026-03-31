@@ -30,27 +30,17 @@ export const bashTool: Tool = {
 
 	mergeable: false,
 
-	compactionResistance: 0.5,
+	outputThreshold: 0.4,
 
-	compact(output: string, strength: number, callArgs: Record<string, unknown>): string {
+	compact(output: string, callArgs: Record<string, unknown>): string {
 		const command = typeof callArgs.command === "string" ? callArgs.command : "?";
-		// Don't compact error messages or very short output
 		if (output.startsWith("Error")) return output;
-
 		const lines = output.split("\n");
 		const total = lines.length;
-		if (total <= 6) return output;
-
-		// Tail-only strategy with a hard cap. Old bash output is historical
-		// context — the LLM has already acted on it. The tail (final status,
-		// errors, summary, exit code) is what matters.
-		const MAX_KEEP_LINES = 10;
-		const keepCount = Math.min(MAX_KEEP_LINES, Math.max(3, Math.floor(total * (1 - strength))));
-		if (keepCount >= total) return output;
-
-		const tail = lines.slice(-keepCount).join("\n");
-		const removed = total - keepCount;
-		return `${COMPACTION_MARKER} ${removed} lines from bash('${command}') omitted\n${tail}`;
+		if (total <= 10) return output;
+		const tail = lines.slice(-10).join("\n");
+		const removed = total - 10;
+		return `${COMPACTION_MARKER} ${removed} lines from bash(${JSON.stringify({ command })}) omitted\n${tail}`;
 	},
 
 	formatCall(args: Record<string, unknown>): string {

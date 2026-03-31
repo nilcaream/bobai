@@ -42,21 +42,30 @@ export interface ToolResult {
 export interface Tool {
 	definition: ToolDefinition;
 	mergeable: boolean;
-	/** How strongly this tool's output resists compaction (0.0-1.0). Default: 0.3. */
-	compactionResistance?: number;
+	/**
+	 * Compaction factor threshold for output compaction (0.0-1.0).
+	 * When contextPressure × age exceeds this, compact() is called.
+	 * Undefined means output is never compacted.
+	 */
+	outputThreshold?: number;
+	/**
+	 * Compaction factor threshold for argument compaction (0.0-1.0).
+	 * When contextPressure × age exceeds this, compactArgs() is called.
+	 * Undefined means arguments are never compacted.
+	 */
+	argsThreshold?: number;
 	formatCall(args: Record<string, unknown>): string;
 	execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
-	/** Custom compaction strategy. Falls back to default (head + truncation) if not implemented. */
-	compact?(output: string, strength: number, callArgs: Record<string, unknown>): string;
-	/** Argument fields whose values may be compacted in assistant tool_call messages (e.g. ["content"] for write_file). */
-	compactableArgs?: string[];
 	/**
-	 * Custom argument compaction strategy. When provided, this replaces the generic
-	 * `compactArgument()` for this tool's compactable arguments.
-	 * Receives the parsed args object and strength; must return a new args object
-	 * with compacted values (or the same object if no compaction needed).
+	 * Compact tool output. Called when compactionFactor exceeds outputThreshold.
+	 * Returns compacted output string.
 	 */
-	compactArgs?(args: Record<string, unknown>, strength: number): Record<string, unknown>;
+	compact?(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string;
+	/**
+	 * Compact tool_call arguments. Called when compactionFactor exceeds argsThreshold.
+	 * Returns new args object with compacted values.
+	 */
+	compactArgs?(args: Record<string, unknown>): Record<string, unknown>;
 }
 
 export interface ToolRegistry {

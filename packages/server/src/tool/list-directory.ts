@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown, isPathAccessible } from "./tool";
 
@@ -25,7 +26,16 @@ export const listDirectoryTool: Tool = {
 
 	mergeable: true,
 
-	compactionResistance: 0.1,
+	outputThreshold: 0.2,
+
+	compact(output: string, callArgs: Record<string, unknown>): string {
+		if (output.startsWith("Error")) return output;
+		const lines = output.split("\n");
+		const total = lines.length;
+		if (total <= 5) return output;
+		const kept = lines.slice(0, 5).join("\n");
+		return `${kept}\n${COMPACTION_MARKER} list_directory(${JSON.stringify({ path: callArgs.path ?? "." })}) showed ${total} entries, showing first 5. Re-run to see all.`;
+	},
 
 	formatCall(args: Record<string, unknown>): string {
 		const dir = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";

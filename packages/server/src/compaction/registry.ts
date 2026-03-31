@@ -6,11 +6,13 @@
  * needing the full runtime dependencies that createSkillTool /
  * createTaskTool require (db, provider, skills registry, etc.).
  *
- * Every tool's compactionResistance and custom compact() method
- * are included.  The execute/formatCall methods are stubs — they
- * must never be called through this registry.
+ * Every tool's outputThreshold/argsThreshold and custom compact()
+ * method are included. The execute/formatCall methods are stubs —
+ * they must never be called through this registry.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { bashTool } from "../tool/bash";
 import { editFileTool } from "../tool/edit-file";
 import { fileSearchTool } from "../tool/file-search";
@@ -29,10 +31,10 @@ const skillCompactionStub: Tool = {
 		function: { name: "skill", description: "", parameters: { type: "object", properties: {} } },
 	},
 	mergeable: true,
-	compactionResistance: 0.2,
-	compact(_output: string, _strength: number, callArgs: Record<string, unknown>): string {
+	outputThreshold: 0.4,
+	compact(_output: string, callArgs: Record<string, unknown>): string {
 		const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";
-		return `${COMPACTION_MARKER} skill '${name}' was loaded and applied. Re-invoke with skill('${name}') if needed.`;
+		return `${COMPACTION_MARKER} skill(${JSON.stringify({ name })}) was loaded and applied. Re-invoke if needed.`;
 	},
 	formatCall() {
 		return "";
@@ -46,8 +48,25 @@ const skillCompactionStub: Tool = {
 const taskCompactionStub: Tool = {
 	definition: { type: "function", function: { name: "task", description: "", parameters: { type: "object", properties: {} } } },
 	mergeable: false,
-	compactionResistance: 1.0,
-	// No custom compact — uses default strategy
+	outputThreshold: 0.8,
+	argsThreshold: 0.8,
+	compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
+		if (context) {
+			const dir = path.join(".bobai", "compaction", context.sessionId);
+			fs.mkdirSync(dir, { recursive: true });
+			fs.writeFileSync(path.join(dir, `${context.toolCallId}.md`), output);
+		}
+		const description = typeof callArgs.description === "string" ? callArgs.description : "?";
+		const filePath = context
+			? `.bobai/compaction/${context.sessionId}/${context.toolCallId}.md`
+			: ".bobai/compaction/<unknown>.md";
+		return `${COMPACTION_MARKER} task(${JSON.stringify({ description })}) output saved to ${filePath} — use read_file to see full result.`;
+	},
+	compactArgs(args: Record<string, unknown>): Record<string, unknown> {
+		const result = { ...args };
+		if (typeof result.prompt === "string") result.prompt = COMPACTION_MARKER;
+		return result;
+	},
 	formatCall() {
 		return "";
 	},
@@ -56,7 +75,7 @@ const taskCompactionStub: Tool = {
 	},
 };
 
-/** Build a ToolRegistry with all tools' compaction metadata (resistance + compact methods). */
+/** Build a ToolRegistry with all tools' compaction metadata (thresholds + compact methods). */
 export function createCompactionRegistry(): ToolRegistry {
 	return createToolRegistry([
 		readFileTool,

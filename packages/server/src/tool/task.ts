@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
+import fs from "node:fs";
 import path from "node:path";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { compactMessages } from "../compaction/engine";
 import { FileTime } from "../file/time";
 import type { Logger } from "../log/logger";
@@ -91,7 +93,25 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			},
 		},
 		mergeable: false,
-		compactionResistance: 1.0,
+		outputThreshold: 0.8,
+		argsThreshold: 0.8,
+		compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
+			if (context) {
+				const dir = path.join(".bobai", "compaction", context.sessionId);
+				fs.mkdirSync(dir, { recursive: true });
+				fs.writeFileSync(path.join(dir, `${context.toolCallId}.md`), output);
+			}
+			const description = typeof callArgs.description === "string" ? callArgs.description : "?";
+			const filePath = context
+				? `.bobai/compaction/${context.sessionId}/${context.toolCallId}.md`
+				: ".bobai/compaction/<unknown>.md";
+			return `${COMPACTION_MARKER} task(${JSON.stringify({ description })}) output saved to ${filePath} — use read_file to see full result.`;
+		},
+		compactArgs(args: Record<string, unknown>): Record<string, unknown> {
+			const result = { ...args };
+			if (typeof result.prompt === "string") result.prompt = COMPACTION_MARKER;
+			return result;
+		},
 		formatCall(args: Record<string, unknown>): string {
 			return `▸ ${args.description ?? "task"}`;
 		},
@@ -206,6 +226,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					messages,
 					context: { promptTokens: childPromptTokens, contextWindow: childContextWindow },
 					tools: childTools,
+					sessionId: childSessionId,
 					onReadFileCompacted: invalidateCompactedRead,
 				});
 			}

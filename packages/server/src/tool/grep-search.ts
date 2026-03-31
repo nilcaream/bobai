@@ -35,24 +35,19 @@ export const grepSearchTool: Tool = {
 
 	mergeable: true,
 
-	compactionResistance: 0.2,
+	outputThreshold: 0.2,
 
-	compact(output: string, strength: number, callArgs: Record<string, unknown>): string {
-		const pattern = typeof callArgs.pattern === "string" ? callArgs.pattern : "?";
-		// Don't compact error/empty results
+	compact(output: string, callArgs: Record<string, unknown>): string {
 		if (output === "No matches found." || output.startsWith("Error")) return output;
-
 		const lines = output.split("\n");
-		// Strip any existing truncation notice
 		const matchLines = lines.filter((l) => !l.startsWith("... truncated"));
 		const total = matchLines.length;
-		if (total <= 3) return output;
-
-		const keepCount = Math.max(3, Math.floor(total * (1 - strength)));
-		if (keepCount >= total) return output;
-
-		const kept = matchLines.slice(0, keepCount).join("\n");
-		return `${kept}\n${COMPACTION_MARKER} grep_search('${pattern}') found ${total} matches, showing first ${keepCount}. Re-run to see all.`;
+		if (total <= 5) return output;
+		const kept = matchLines.slice(0, 5).join("\n");
+		const markerArgs: Record<string, unknown> = { pattern: callArgs.pattern };
+		if (callArgs.path !== undefined) markerArgs.path = callArgs.path;
+		if (callArgs.include !== undefined) markerArgs.include = callArgs.include;
+		return `${kept}\n${COMPACTION_MARKER} grep_search(${JSON.stringify(markerArgs)}) found ${total} matches, showing first 5. Re-run to see all.`;
 	},
 
 	formatCall(args: Record<string, unknown>): string {

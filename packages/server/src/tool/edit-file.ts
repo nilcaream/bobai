@@ -35,18 +35,25 @@ export const editFileTool: Tool = {
 
 	mergeable: false,
 
-	compactionResistance: 0.8,
+	outputThreshold: 0.7,
 
-	compactableArgs: ["old_string", "new_string"],
+	argsThreshold: 0.3,
 
-	compactArgs(args: Record<string, unknown>, _strength: number): Record<string, unknown> {
+	compact(output: string, callArgs: Record<string, unknown>): string {
+		if (output.startsWith("Error")) return output;
+		const lines = output.split("\n");
+		const total = lines.length;
+		if (total <= 6) return output;
+		const head = lines.slice(0, 3).join("\n");
+		const tail = lines.slice(-3).join("\n");
+		const removed = total - 6;
+		return `${head}\n${COMPACTION_MARKER} ${removed} lines from edit_file(${JSON.stringify({ path: callArgs.path })}) output omitted. Re-read the file to see current content.\n${tail}`;
+	},
+
+	compactArgs(args: Record<string, unknown>): Record<string, unknown> {
 		const result = { ...args };
-		if (typeof result.old_string === "string") {
-			result.old_string = COMPACTION_MARKER;
-		}
-		if (typeof result.new_string === "string") {
-			result.new_string = COMPACTION_MARKER;
-		}
+		if (typeof result.old_string === "string") result.old_string = COMPACTION_MARKER;
+		if (typeof result.new_string === "string") result.new_string = COMPACTION_MARKER;
 		return result;
 	},
 

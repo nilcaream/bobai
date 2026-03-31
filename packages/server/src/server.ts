@@ -196,6 +196,7 @@ export function createServer(options: ServerOptions) {
 					messages,
 					context: { promptTokens, contextWindow },
 					tools,
+					sessionId,
 				});
 
 				// Convert compacted Message[] back to a StoredMessage-like shape for the UI.

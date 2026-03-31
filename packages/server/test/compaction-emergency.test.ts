@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { EMERGENCY_THRESHOLD, emergencyCompactConversation, shouldEmergencyCompact } from "../src/agent-loop";
+import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
 import type { Message } from "../src/provider/provider";
-import type { ToolRegistry } from "../src/tool/tool";
+import type { Tool, ToolRegistry } from "../src/tool/tool";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -11,6 +12,31 @@ const emptyRegistry: ToolRegistry = {
 	definitions: [],
 	get: () => undefined,
 };
+
+/** Registry with read_file that has an outputThreshold so compaction can fire. */
+function createReadFileRegistry(): ToolRegistry {
+	const readFileTool: Tool = {
+		definition: {
+			type: "function",
+			function: { name: "read_file", description: "", parameters: { type: "object", properties: {} } },
+		},
+		mergeable: true,
+		outputThreshold: 0.3,
+		compact(_output: string, callArgs: Record<string, unknown>): string {
+			const p = typeof callArgs.path === "string" ? callArgs.path : "?";
+			return `${COMPACTION_MARKER} read_file(${JSON.stringify({ path: p })}) was compacted.`;
+		},
+		formatCall: () => "",
+		execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: true }),
+	};
+	return {
+		definitions: [readFileTool.definition],
+		get(name: string) {
+			if (name === "read_file") return readFileTool;
+			return undefined;
+		},
+	};
+}
 
 /** Build a minimal conversation with a system message, assistant tool call, and tool result. */
 function buildConversation(): Message[] {
@@ -69,28 +95,43 @@ describe("shouldEmergencyCompact", () => {
 // ---------------------------------------------------------------------------
 
 describe("emergencyCompactConversation", () => {
-	test("applies compaction with default threshold when above 85%", () => {
+	test("applies compaction when above 85% with known tools", () => {
 		const conversation = buildConversation();
+		const registry = createReadFileRegistry();
+		const result = emergencyCompactConversation(
+			conversation,
+			9000, // 90% of 10000
+			10000,
+			registry,
+		);
+		// compactMessages returns a new array when it compacts
+		// At 90% usage, the read_file output should exceed its outputThreshold
+		expect(result).not.toBe(conversation);
+		// The result should still have the same number of messages (compaction changes content, not count)
+		expect(result.length).toBe(conversation.length);
+	});
+
+	test("returns conversation unchanged when no tools have outputThreshold", () => {
+		const conversation = buildConversation();
+		// emptyRegistry has no tools — engine skips unknown tools
 		const result = emergencyCompactConversation(
 			conversation,
 			9000, // 90% of 10000
 			10000,
 			emptyRegistry,
 		);
-		// compactMessages returns a new array when it compacts
-		// At 90% usage with threshold 0.5, there IS context pressure so compaction should fire
-		expect(result).not.toBe(conversation);
-		// The result should still have the same number of messages (compaction changes content, not count)
-		expect(result.length).toBe(conversation.length);
+		// No registered tools → nothing to compact → same reference
+		expect(result).toBe(conversation);
 	});
 
 	test("returns conversation unchanged when shouldEmergencyCompact is false", () => {
 		const conversation = buildConversation();
+		const registry = createReadFileRegistry();
 		const result = emergencyCompactConversation(
 			conversation,
 			5000, // 50% — well below 85%
 			10000,
-			emptyRegistry,
+			registry,
 		);
 		// Should be the exact same reference
 		expect(result).toBe(conversation);
@@ -102,13 +143,31 @@ describe("emergencyCompactConversation", () => {
 		expect(result).toBe(conversation);
 	});
 
+	test("passes sessionId through to compactMessages", () => {
+		const conversation = buildConversation();
+		const registry = createReadFileRegistry();
+		// Just verify it doesn't throw when sessionId is provided
+		const result = emergencyCompactConversation(
+			conversation,
+			9000,
+			10000,
+			registry,
+			undefined,
+			undefined,
+			undefined,
+			"test-session-123",
+		);
+		expect(result).not.toBe(conversation);
+	});
+
 	test("writes dump file when compaction occurs and logDir is provided", () => {
 		const conversation = buildConversation();
+		const registry = createReadFileRegistry();
 		const fs = require("node:fs");
 		const tmpDir = `${__dirname}/../compaction-emergency-test-dump.tmp`;
 
 		try {
-			const result = emergencyCompactConversation(conversation, 9000, 10000, emptyRegistry, tmpDir);
+			const result = emergencyCompactConversation(conversation, 9000, 10000, registry, tmpDir);
 			// Should have compacted (new array)
 			expect(result).not.toBe(conversation);
 			// Dump files should exist in the tmpDir
@@ -127,13 +186,15 @@ describe("emergencyCompactConversation", () => {
 
 	test("does not write dump when no logDir", () => {
 		const conversation = buildConversation();
+		const registry = createReadFileRegistry();
 		// Just verify it doesn't throw and returns a new array
-		const result = emergencyCompactConversation(conversation, 9000, 10000, emptyRegistry, undefined);
+		const result = emergencyCompactConversation(conversation, 9000, 10000, registry, undefined);
 		expect(result).not.toBe(conversation);
 	});
 
 	test("logs via logger when compaction occurs with logDir and logger", () => {
 		const conversation = buildConversation();
+		const registry = createReadFileRegistry();
 		const fs = require("node:fs");
 		const tmpDir = `${__dirname}/../compaction-emergency-logger-test.tmp`;
 		const infoFn = mock(() => {});
@@ -147,7 +208,7 @@ describe("emergencyCompactConversation", () => {
 		};
 
 		try {
-			const result = emergencyCompactConversation(conversation, 9000, 10000, emptyRegistry, tmpDir, fakeLogger);
+			const result = emergencyCompactConversation(conversation, 9000, 10000, registry, tmpDir, fakeLogger);
 			expect(result).not.toBe(conversation);
 			// Logger.info should have been called with "COMPACTION" system and a message containing "emergency"
 			expect(infoFn).toHaveBeenCalled();

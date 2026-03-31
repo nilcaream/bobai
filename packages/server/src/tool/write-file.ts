@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown } from "./tool";
@@ -30,9 +31,15 @@ export const writeFileTool: Tool = {
 
 	mergeable: true,
 
-	compactionResistance: 0.7,
+	argsThreshold: 0.6,
 
-	compactableArgs: ["content"],
+	compactArgs(args: Record<string, unknown>): Record<string, unknown> {
+		const result = { ...args };
+		if (typeof result.content === "string") {
+			result.content = COMPACTION_MARKER;
+		}
+		return result;
+	},
 
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";

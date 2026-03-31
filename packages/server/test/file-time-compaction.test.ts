@@ -161,7 +161,10 @@ describe("FileTime compaction invalidation", () => {
 				function: { name: "bash", description: "bash", parameters: { type: "object" as const, properties: {} } },
 			},
 			mergeable: false,
-			compactionResistance: 0.3,
+			outputThreshold: 0.4,
+			compact(output: string, _callArgs: Record<string, unknown>): string {
+				return `# COMPACTED\n${output.slice(0, 50)}`;
+			},
 			formatCall: () => "bash",
 			execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: false }),
 		};

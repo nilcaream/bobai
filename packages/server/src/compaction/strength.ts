@@ -1,5 +1,3 @@
-import type { Message } from "../provider/provider";
-
 /**
  * Context about the current session needed for strength calculation.
  */
@@ -59,55 +57,15 @@ export function computeAge(messageIndex: number, totalMessages: number): number 
 	return (raw - rawMin) / (rawMax - rawMin);
 }
 
-/** Default compaction resistance for tools that don't declare one. */
-export const DEFAULT_RESISTANCE = 0.3;
-
 /**
- * Compute the final compaction strength for a single tool message.
+ * Compute the compaction factor for a single tool message.
  *
- * strength = contextPressure × age × compactability
- *
- * The multiplicative formula ensures that recent messages (age ≈ 0) have
- * near-zero strength regardless of tool resistance, while old messages
- * with low resistance are compacted aggressively.
+ * compactionFactor = contextPressure × age
  *
  * @param contextPressure - Effective context pressure (0.0-1.0), from computeContextPressure()
  * @param age - Message age factor (0.0-1.0), from computeAge()
- * @param resistance - Tool's compaction resistance (0.0-1.0)
- * @returns Compaction strength from 0.0 (no compaction) to 1.0 (maximum compaction)
+ * @returns Compaction factor from 0.0 (no compaction) to 1.0 (maximum compaction)
  */
-export function computeStrength(contextPressure: number, age: number, resistance: number): number {
-	if (contextPressure <= 0) return 0;
-	const compactability = 1 - resistance;
-	return Math.min(1, contextPressure * age * compactability);
-}
-
-/**
- * Determine which messages are tool messages and compute their strengths.
- * Returns a Map from message index to compaction strength.
- * Non-tool messages are not included (they are never compacted).
- */
-export function computeMessageStrengths(
-	messages: Message[],
-	contextPressure: number,
-	getResistance: (toolCallId: string) => number,
-): Map<number, number> {
-	const strengths = new Map<number, number>();
-	const total = messages.length;
-
-	for (let i = 0; i < total; i++) {
-		const msg = messages[i];
-		if (!msg || msg.role !== "tool") continue;
-
-		const toolCallId = (msg as { tool_call_id: string }).tool_call_id;
-		const age = computeAge(i, total);
-		const resistance = getResistance(toolCallId);
-		const strength = computeStrength(contextPressure, age, resistance);
-
-		if (strength > 0) {
-			strengths.set(i, strength);
-		}
-	}
-
-	return strengths;
+export function computeCompactionFactor(contextPressure: number, age: number): number {
+	return contextPressure * age;
 }

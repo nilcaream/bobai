@@ -21,6 +21,7 @@ export function emergencyCompactConversation(
 	logDir?: string,
 	logger?: Logger,
 	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void,
+	sessionId?: string,
 ): Message[] {
 	if (!shouldEmergencyCompact(promptTokens, contextWindow)) return conversation;
 
@@ -32,6 +33,7 @@ export function emergencyCompactConversation(
 			contextWindow,
 		},
 		tools,
+		sessionId,
 		onReadFileCompacted,
 	});
 
@@ -230,6 +232,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				options.logDir,
 				options.logger,
 				options.onReadFileCompacted,
+				options.sessionId,
 			);
 			if (compacted !== rawPlusNew) {
 				conversation.length = 0;

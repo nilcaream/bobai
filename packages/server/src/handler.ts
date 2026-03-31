@@ -243,6 +243,7 @@ export async function handlePrompt(req: PromptRequest) {
 				messages,
 				context: { promptTokens: sessionPromptTokens, contextWindow },
 				tools,
+				sessionId: currentSessionId as string,
 				onReadFileCompacted: invalidateCompactedRead,
 			});
 			// Write debug dump if compaction actually changed something

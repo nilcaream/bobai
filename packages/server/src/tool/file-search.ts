@@ -35,24 +35,18 @@ export const fileSearchTool: Tool = {
 
 	mergeable: true,
 
-	compactionResistance: 0.1,
+	outputThreshold: 0.2,
 
-	compact(output: string, strength: number, callArgs: Record<string, unknown>): string {
-		const pattern = typeof callArgs.pattern === "string" ? callArgs.pattern : "?";
-		// Don't compact error messages or "no files found"
+	compact(output: string, callArgs: Record<string, unknown>): string {
 		if (output.startsWith("Error:") || output.startsWith("No files found")) return output;
-
 		const lines = output.split("\n");
-		// Filter out the "Results capped" notice to count actual file paths
 		const filePaths = lines.filter((l) => !l.startsWith("(Results capped"));
 		const total = filePaths.length;
-		if (total <= 3) return output;
-
-		const keepCount = Math.max(3, Math.floor(total * (1 - strength)));
-		if (keepCount >= total) return output;
-
-		const kept = filePaths.slice(0, keepCount).join("\n");
-		return `${kept}\n${COMPACTION_MARKER} file_search('${pattern}') found ${total} files, showing first ${keepCount}. Re-run to see all.`;
+		if (total <= 5) return output;
+		const kept = filePaths.slice(0, 5).join("\n");
+		const markerArgs: Record<string, unknown> = { pattern: callArgs.pattern };
+		if (callArgs.path !== undefined) markerArgs.path = callArgs.path;
+		return `${kept}\n${COMPACTION_MARKER} file_search(${JSON.stringify(markerArgs)}) found ${total} files, showing first 5. Re-run to see all.`;
 	},
 
 	formatCall(args: Record<string, unknown>): string {

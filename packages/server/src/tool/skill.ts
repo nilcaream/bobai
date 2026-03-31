@@ -31,11 +31,11 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 			},
 		},
 		mergeable: true,
-		compactionResistance: 0.2,
+		outputThreshold: 0.4,
 
-		compact(_output: string, _strength: number, callArgs: Record<string, unknown>): string {
+		compact(_output: string, callArgs: Record<string, unknown>): string {
 			const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";
-			return `${COMPACTION_MARKER} skill '${name}' was loaded and applied. Re-invoke with skill('${name}') if needed.`;
+			return `${COMPACTION_MARKER} skill(${JSON.stringify({ name })}) was loaded and applied. Re-invoke if needed.`;
 		},
 
 		formatCall(args: Record<string, unknown>): string {
