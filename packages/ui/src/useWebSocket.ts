@@ -97,6 +97,7 @@ export function useWebSocket() {
 	const eventRouter = useRef(createEventRouter());
 	const viewingSubagentIdRef = useRef<string | null>(null);
 	const parentMessagesRef = useRef<Message[]>([]);
+	const parentStatusRef = useRef("");
 	const messagesRef = useRef<Message[]>([]);
 
 	// Keep refs in sync with state
@@ -195,6 +196,8 @@ export function useWebSocket() {
 								summary: msg.summary,
 							}),
 						);
+					} else if (msg.type === "status") {
+						setStatus(msg.text);
 					}
 				}
 				return;
@@ -273,7 +276,11 @@ export function useWebSocket() {
 			}
 
 			if (msg.type === "status") {
-				setStatus(msg.text);
+				if (isPeeking) {
+					parentStatusRef.current = msg.text;
+				} else {
+					setStatus(msg.text);
+				}
 			}
 
 			if (msg.type === "prompt_echo") {
@@ -305,29 +312,39 @@ export function useWebSocket() {
 		if (!viewingSubagentIdRef.current) return;
 		setViewingSubagentId(null);
 		setMessages(parentMessagesRef.current);
+		setStatus(parentStatusRef.current);
 		parentMessagesRef.current = [];
+		parentStatusRef.current = "";
 	}, []);
 
-	const peekSubagent = useCallback((childSessionId: string) => {
-		parentMessagesRef.current = messagesRef.current;
-		setViewingSubagentId(childSessionId);
-		const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
-		const childMessages = replayBufferToMessages(bufferedEvents);
-		setMessages(childMessages);
-	}, []);
-
-	const peekSubagentFromDb = useCallback(async (childSessionId: string) => {
-		try {
-			const res = await fetch(`/bobai/session/${childSessionId}/load`);
-			if (!res.ok) return;
-			const data = (await res.json()) as { session: { id: string }; messages: StoredMessage[] };
+	const peekSubagent = useCallback(
+		(childSessionId: string) => {
 			parentMessagesRef.current = messagesRef.current;
+			parentStatusRef.current = status;
 			setViewingSubagentId(childSessionId);
-			setMessages(reconstructMessages(data.messages));
-		} catch {
-			// fetch failed — ignore
-		}
-	}, []);
+			const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
+			const childMessages = replayBufferToMessages(bufferedEvents);
+			setMessages(childMessages);
+		},
+		[status],
+	);
+
+	const peekSubagentFromDb = useCallback(
+		async (childSessionId: string) => {
+			try {
+				const res = await fetch(`/bobai/session/${childSessionId}/load`);
+				if (!res.ok) return;
+				const data = (await res.json()) as { session: { id: string }; messages: StoredMessage[] };
+				parentMessagesRef.current = messagesRef.current;
+				parentStatusRef.current = status;
+				setViewingSubagentId(childSessionId);
+				setMessages(reconstructMessages(data.messages));
+			} catch {
+				// fetch failed — ignore
+			}
+		},
+		[status],
+	);
 
 	const sendPrompt = useCallback(
 		(text: string, stagedSkills?: StagedSkill[]) => {
