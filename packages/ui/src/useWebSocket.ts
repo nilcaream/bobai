@@ -316,6 +316,19 @@ export function useWebSocket() {
 		setMessages(childMessages);
 	}, []);
 
+	const peekSubagentFromDb = useCallback(async (childSessionId: string) => {
+		try {
+			const res = await fetch(`/bobai/session/${childSessionId}/load`);
+			if (!res.ok) return;
+			const data = (await res.json()) as { session: { id: string }; messages: StoredMessage[] };
+			parentMessagesRef.current = messagesRef.current;
+			setViewingSubagentId(childSessionId);
+			setMessages(reconstructMessages(data.messages));
+		} catch {
+			// fetch failed — ignore
+		}
+	}, []);
+
 	const sendPrompt = useCallback(
 		(text: string, stagedSkills?: StagedSkill[]) => {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
@@ -476,6 +489,7 @@ export function useWebSocket() {
 		sessionLocked,
 		viewingSubagentId,
 		peekSubagent,
+		peekSubagentFromDb,
 		exitSubagentPeek,
 	};
 }

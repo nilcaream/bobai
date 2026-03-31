@@ -261,6 +261,7 @@ export function App() {
 		sessionLocked,
 		viewingSubagentId,
 		peekSubagent,
+		peekSubagentFromDb,
 		exitSubagentPeek,
 	} = useWebSocket();
 	const [input, setInput] = useState("");
@@ -295,6 +296,15 @@ export function App() {
 			peekSubagent(childSessionId);
 		},
 		[peekSubagent],
+	);
+
+	// Wrap peekSubagentFromDb to save scroll position before switching to child view
+	const peekSubagentFromDbWithScroll = useCallback(
+		(childSessionId: string) => {
+			savedScrollTop.current = messagesRef.current?.scrollTop ?? null;
+			peekSubagentFromDb(childSessionId);
+		},
+		[peekSubagentFromDb],
 	);
 
 	// Wrap exitSubagentPeek to restore scroll position after returning to parent view
@@ -824,7 +834,7 @@ export function App() {
 				if (liveSubagent) {
 					peekSubagentWithScroll(liveSubagent.sessionId);
 				} else {
-					loadSession(targetSubagent.sessionId);
+					peekSubagentFromDbWithScroll(targetSubagent.sessionId);
 				}
 				setStagedSkills([]);
 				clearInput();
@@ -1217,7 +1227,7 @@ export function App() {
 								if (linkedSubagent?.status === "running") {
 									peekSubagentWithScroll(subagentSessionId);
 								} else {
-									loadSession(subagentSessionId);
+									peekSubagentFromDbWithScroll(subagentSessionId);
 								}
 							}
 						: undefined;
