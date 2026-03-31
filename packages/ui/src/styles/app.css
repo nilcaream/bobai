@@ -110,7 +110,7 @@ body,
 	display: flex;
 	flex-direction: column;
 	gap: 1em;
-	padding: 1em;
+	padding: 0 1em;
 	scrollbar-width: thin;
 	scrollbar-color: var(--text-muted) var(--bg-primary);
 }
