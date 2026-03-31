@@ -243,14 +243,27 @@ function compactMessagesInternal(options: CompactionOptions): {
 
 				let modified = false;
 				let savedInThisCall = 0;
-				for (const field of tool.compactableArgs) {
-					const val = args[field];
-					if (typeof val !== "string") continue;
-					const compacted = compactArgument(val, effectiveStrength, tc.function.name, field);
-					if (val.length - compacted.length >= MIN_COMPACTION_SAVINGS) {
-						savedInThisCall += val.length - compacted.length;
-						args[field] = compacted;
+
+				if (tool.compactArgs) {
+					// Tool provides custom argument compaction — use it
+					const compactedArgs = tool.compactArgs(args, effectiveStrength);
+					const compactedJson = JSON.stringify(compactedArgs);
+					const originalJson = tc.function.arguments;
+					if (originalJson.length - compactedJson.length >= MIN_COMPACTION_SAVINGS) {
+						savedInThisCall = originalJson.length - compactedJson.length;
+						args = compactedArgs;
 						modified = true;
+					}
+				} else {
+					for (const field of tool.compactableArgs) {
+						const val = args[field];
+						if (typeof val !== "string") continue;
+						const compacted = compactArgument(val, effectiveStrength, tc.function.name, field);
+						if (val.length - compacted.length >= MIN_COMPACTION_SAVINGS) {
+							savedInThisCall += val.length - compacted.length;
+							args[field] = compacted;
+							modified = true;
+						}
 					}
 				}
 

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown } from "./tool";
@@ -37,6 +38,17 @@ export const editFileTool: Tool = {
 	compactionResistance: 0.8,
 
 	compactableArgs: ["old_string", "new_string"],
+
+	compactArgs(args: Record<string, unknown>, _strength: number): Record<string, unknown> {
+		const result = { ...args };
+		if (typeof result.old_string === "string") {
+			result.old_string = COMPACTION_MARKER;
+		}
+		if (typeof result.new_string === "string") {
+			result.new_string = COMPACTION_MARKER;
+		}
+		return result;
+	},
 
 	formatCall(args: Record<string, unknown>): string {
 		const filePath = typeof args.path === "string" ? args.path : "?";

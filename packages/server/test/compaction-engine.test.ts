@@ -21,6 +21,7 @@ function createMockRegistry(
 			resistance?: number;
 			compact?: (output: string, strength: number, args: Record<string, unknown>) => string;
 			compactableArgs?: string[];
+			compactArgs?: (args: Record<string, unknown>, strength: number) => Record<string, unknown>;
 		}
 	>,
 ): ToolRegistry {
@@ -38,6 +39,7 @@ function createMockRegistry(
 				compactionResistance: t.resistance,
 				compact: t.compact,
 				compactableArgs: t.compactableArgs,
+				compactArgs: t.compactArgs,
 				formatCall: () => "",
 				execute: async () => ({ llmOutput: "", uiOutput: null, mergeable: true }),
 			} as ReturnType<ToolRegistry["get"]>;
@@ -1090,6 +1092,95 @@ describe("assistant tool_call argument compaction", () => {
 		expect(args.path).toBe("big.ts");
 		expect(args.old_string).toContain("# COMPACTED");
 		expect(args.new_string).toContain("# COMPACTED");
+	});
+
+	test("uses compactArgs when tool provides custom argument compaction", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			editFileAssistant("tc1", "big.ts", largeContent, largeContent),
+			toolResult("tc1", "Edited big.ts"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			edit_file: {
+				resistance: 0.8,
+				compactableArgs: ["old_string", "new_string"],
+				compactArgs(args: Record<string, unknown>) {
+					return { ...args, old_string: "# COMPACTED", new_string: "# COMPACTED" };
+				},
+			},
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.path).toBe("big.ts");
+		expect(args.old_string).toBe("# COMPACTED");
+		expect(args.new_string).toBe("# COMPACTED");
+	});
+
+	test("compactArgs preserves path and replaces only compactable fields", () => {
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			editFileAssistant("tc1", "src/foo/bar.kt", largeContent, largeContent),
+			toolResult("tc1", "Edited src/foo/bar.kt"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			edit_file: {
+				resistance: 0.8,
+				compactableArgs: ["old_string", "new_string"],
+				compactArgs(args: Record<string, unknown>) {
+					return { ...args, old_string: "# COMPACTED", new_string: "# COMPACTED" };
+				},
+			},
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		expect(args.path).toBe("src/foo/bar.kt");
+		expect(args.old_string).toBe("# COMPACTED");
+		expect(args.new_string).toBe("# COMPACTED");
+	});
+
+	test("compactArgs respects MIN_COMPACTION_SAVINGS gate", () => {
+		// Small content where replacing with marker wouldn't save enough
+		const smallContent = "ab";
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			editFileAssistant("tc1", "tiny.ts", smallContent, smallContent),
+			toolResult("tc1", "Edited tiny.ts"),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({
+			edit_file: {
+				resistance: 0.8,
+				compactableArgs: ["old_string", "new_string"],
+				compactArgs(args: Record<string, unknown>) {
+					return { ...args, old_string: "# COMPACTED", new_string: "# COMPACTED" };
+				},
+			},
+		});
+		const result = compactMessages({
+			messages,
+			context: highPressureContext(),
+			tools: registry,
+		});
+
+		const assistantMsg = result[1] as { role: "assistant"; tool_calls?: Array<{ function: { arguments: string } }> };
+		const args = JSON.parse(assistantMsg.tool_calls?.[0]?.function.arguments ?? "{}");
+		// Original args are so small that replacing with marker saves < 128 chars
+		expect(args.old_string).toBe(smallContent);
+		expect(args.new_string).toBe(smallContent);
 	});
 
 	test("does not compact arguments when no pressure", () => {

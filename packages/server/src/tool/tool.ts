@@ -50,6 +50,13 @@ export interface Tool {
 	compact?(output: string, strength: number, callArgs: Record<string, unknown>): string;
 	/** Argument fields whose values may be compacted in assistant tool_call messages (e.g. ["content"] for write_file). */
 	compactableArgs?: string[];
+	/**
+	 * Custom argument compaction strategy. When provided, this replaces the generic
+	 * `compactArgument()` for this tool's compactable arguments.
+	 * Receives the parsed args object and strength; must return a new args object
+	 * with compacted values (or the same object if no compaction needed).
+	 */
+	compactArgs?(args: Record<string, unknown>, strength: number): Record<string, unknown>;
 }
 
 export interface ToolRegistry {

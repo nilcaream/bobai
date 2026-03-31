@@ -432,3 +432,50 @@ describe("compact() method presence", () => {
 		expect(typeof bashTool.compact).toBe("function");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// edit_file compactArgs()
+// ---------------------------------------------------------------------------
+
+describe("edit_file compactArgs()", () => {
+	if (!editFileTool.compactArgs) throw new Error("expected compactArgs on edit_file");
+	const compactArgs = editFileTool.compactArgs;
+
+	test("replaces old_string and new_string with COMPACTION_MARKER", () => {
+		const args = { path: "foo.kt", old_string: "old content here", new_string: "new content here" };
+		const result = compactArgs(args, 0.5);
+		expect(result.old_string).toBe(COMPACTION_MARKER);
+		expect(result.new_string).toBe(COMPACTION_MARKER);
+	});
+
+	test("preserves path unchanged", () => {
+		const args = { path: "src/main/kotlin/Foo.kt", old_string: "old", new_string: "new" };
+		const result = compactArgs(args, 0.5);
+		expect(result.path).toBe("src/main/kotlin/Foo.kt");
+	});
+
+	test("replaces regardless of strength value", () => {
+		const args = { path: "f.ts", old_string: "content", new_string: "content" };
+		for (const strength of [0.01, 0.1, 0.5, 0.9, 1.0]) {
+			const result = compactArgs(args, strength);
+			expect(result.old_string).toBe(COMPACTION_MARKER);
+			expect(result.new_string).toBe(COMPACTION_MARKER);
+		}
+	});
+
+	test("does not mutate the original args object", () => {
+		const args = { path: "f.ts", old_string: "old", new_string: "new" };
+		const result = compactArgs(args, 0.5);
+		expect(result).not.toBe(args);
+		expect(args.old_string).toBe("old");
+		expect(args.new_string).toBe("new");
+	});
+
+	test("handles missing string fields gracefully", () => {
+		const args = { path: "f.ts" };
+		const result = compactArgs(args, 0.5);
+		expect(result.path).toBe("f.ts");
+		expect(result.old_string).toBeUndefined();
+		expect(result.new_string).toBeUndefined();
+	});
+});
