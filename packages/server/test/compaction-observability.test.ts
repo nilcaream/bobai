@@ -70,6 +70,15 @@ function toolMessage(toolCallId: string, content: string): Message {
 	return { role: "tool", content, tool_call_id: toolCallId };
 }
 
+/**
+ * Trailing messages to push tool results into the compactable age zone.
+ * With MAX_AGE_DISTANCE=100, we need 100+ messages after the tool result
+ * so that distanceFromEnd >= 100 and age ≈ 1.0.
+ */
+const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
+	i % 2 === 0 ? ({ role: "user", content: "continue" } as Message) : ({ role: "assistant", content: "ok" } as Message),
+);
+
 // ---------------------------------------------------------------------------
 // compactMessagesWithStats — stats correctness
 // ---------------------------------------------------------------------------
@@ -105,6 +114,7 @@ describe("compactMessagesWithStats", () => {
 			{ role: "user", content: "ok" },
 			assistantWithToolCall("tc3", "edit_file"),
 			toolMessage("tc3", longOutput),
+			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
 			file_search: { outputThreshold: 0.2 },
@@ -170,6 +180,12 @@ describe("compactMessagesWithStats", () => {
 			expect(typeof detail.age).toBe("number");
 			expect(typeof detail.compactionFactor).toBe("number");
 			expect(typeof detail.wasCompacted).toBe("boolean");
+			expect(typeof detail.position).toBe("number");
+			expect(detail.position).toBeGreaterThanOrEqual(0);
+			expect(detail.position).toBeLessThanOrEqual(1);
+			expect(typeof detail.normalizedPosition).toBe("number");
+			expect(detail.normalizedPosition).toBeGreaterThanOrEqual(0);
+			expect(detail.normalizedPosition).toBeLessThanOrEqual(1);
 		}
 
 		// file_search (low threshold) should be compacted more readily than edit_file (high threshold)
@@ -409,6 +425,7 @@ describe("createCompactionRegistry", () => {
 			toolMessage("tc2", longOutput),
 			assistantWithToolCall("tc3", "edit_file", JSON.stringify({ file_path: "src/main.ts" })),
 			toolMessage("tc3", longOutput),
+			...TRAILING_CONTEXT,
 		];
 
 		const { messages: result, stats } = compactMessagesWithStats({

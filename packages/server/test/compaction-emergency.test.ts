@@ -38,6 +38,15 @@ function createReadFileRegistry(): ToolRegistry {
 	};
 }
 
+/**
+ * Trailing messages to push tool results into the compactable age zone.
+ * With MAX_AGE_DISTANCE=100, we need 100+ messages after the tool result
+ * so that distanceFromEnd >= 100 and age ≈ 1.0.
+ */
+const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
+	i % 2 === 0 ? ({ role: "user", content: "continue" } as Message) : ({ role: "assistant", content: "ok" } as Message),
+);
+
 /** Build a minimal conversation with a system message, assistant tool call, and tool result. */
 function buildConversation(): Message[] {
 	return [
@@ -51,10 +60,7 @@ function buildConversation(): Message[] {
 		{ role: "tool", content: "file contents here ".repeat(100), tool_call_id: "tc1" },
 		{ role: "assistant", content: "Here is the file." },
 		// Trailing context to push the tool result into the compactable age zone
-		{ role: "user", content: "Thanks, now do something else" },
-		{ role: "assistant", content: "Sure." },
-		{ role: "user", content: "One more thing" },
-		{ role: "assistant", content: "Done." },
+		...TRAILING_CONTEXT,
 	];
 }
 

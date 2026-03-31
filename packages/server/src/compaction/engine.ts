@@ -1,6 +1,12 @@
 import type { AssistantMessage, Message } from "../provider/provider";
 import type { Tool, ToolRegistry } from "../tool/tool";
-import { computeAge, computeCompactionFactor, computeContextPressure, type StrengthContext } from "./strength";
+import {
+	computeAge,
+	computeCompactionFactor,
+	computeContextPressure,
+	MAX_AGE_DISTANCE,
+	type StrengthContext,
+} from "./strength";
 
 /** Minimum character savings required for compaction to be applied.
  * If compacting saves fewer than this many characters, the original
@@ -39,6 +45,10 @@ export interface CompactionDetail {
 	age: number;
 	/** Compaction factor = contextPressure × age (0.0-1.0). */
 	compactionFactor: number;
+	/** Relative position in conversation (0.0 = oldest, 1.0 = newest). */
+	position: number;
+	/** Normalized position after MAX_AGE_DISTANCE capping (0.0 = oldest/capped, 1.0 = newest). */
+	normalizedPosition: number;
 	/** Tool's outputThreshold (undefined if tool has none). */
 	outputThreshold?: number;
 	/** Tool's argsThreshold (undefined if tool has none). */
@@ -155,6 +165,14 @@ function compactMessagesInternal(options: CompactionOptions): {
 		return { messages, stats: emptyStats, details: new Map() };
 	}
 
+	/** Compute position and normalizedPosition for a message at the given index. */
+	function positionFields(idx: number): { position: number; normalizedPosition: number } {
+		const position = messages.length <= 1 ? 0 : idx / (messages.length - 1);
+		const distanceFromEnd = messages.length - 1 - idx;
+		const normalizedPosition = 1 - Math.min(distanceFromEnd, MAX_AGE_DISTANCE) / MAX_AGE_DISTANCE;
+		return { position, normalizedPosition };
+	}
+
 	const toolCallMap = buildToolCallMap(messages, tools);
 	const callArgsMap = buildCallArgsMap(messages);
 
@@ -162,7 +180,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 	// We need this first because assistant messages (which precede their
 	// paired tool results) use the paired tool message's compactionFactor
 	// for argument compaction decisions.
-	const toolCompactionFactors = new Map<string, { compactionFactor: number; age: number }>();
+	const toolCompactionFactors = new Map<string, { compactionFactor: number; age: number; index: number }>();
 
 	for (let i = 0; i < messages.length; i++) {
 		const msg = messages[i];
@@ -170,7 +188,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 		const toolMsg = msg as { role: "tool"; tool_call_id: string };
 		const age = computeAge(i, messages.length);
 		const compactionFactor = computeCompactionFactor(contextPressure, age);
-		toolCompactionFactors.set(toolMsg.tool_call_id, { compactionFactor, age });
+		toolCompactionFactors.set(toolMsg.tool_call_id, { compactionFactor, age, index: i });
 	}
 
 	// ----- Pass 2: compact messages -----
@@ -230,9 +248,12 @@ function compactMessagesInternal(options: CompactionOptions): {
 					} else {
 						// Detail will be properly filled when we process the paired tool message.
 						const detailFactors = toolCompactionFactors.get(tc.id);
+						const pos = positionFields(detailFactors?.index ?? 0);
 						details.set(tc.id, {
 							age: detailFactors?.age ?? 0,
 							compactionFactor: detailFactors?.compactionFactor ?? 0,
+							position: pos.position,
+							normalizedPosition: pos.normalizedPosition,
 							outputThreshold: tool.outputThreshold,
 							argsThreshold: tool.argsThreshold,
 							wasCompacted: false,
@@ -282,9 +303,12 @@ function compactMessagesInternal(options: CompactionOptions): {
 		// No outputThreshold → never compacted
 		if (!tool || tool.outputThreshold === undefined) {
 			result.push(msg);
+			const pos = positionFields(i);
 			details.set(toolMsg.tool_call_id, {
 				age,
 				compactionFactor,
+				position: pos.position,
+				normalizedPosition: pos.normalizedPosition,
 				outputThreshold: tool?.outputThreshold,
 				argsThreshold: tool?.argsThreshold,
 				wasCompacted: false,
@@ -296,9 +320,12 @@ function compactMessagesInternal(options: CompactionOptions): {
 		// compactionFactor below threshold → no compaction
 		if (compactionFactor <= tool.outputThreshold) {
 			result.push(msg);
+			const pos = positionFields(i);
 			details.set(toolMsg.tool_call_id, {
 				age,
 				compactionFactor,
+				position: pos.position,
+				normalizedPosition: pos.normalizedPosition,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: false,
@@ -313,9 +340,12 @@ function compactMessagesInternal(options: CompactionOptions): {
 				`[compaction] Tool "${toolName}" has outputThreshold=${tool.outputThreshold} but no compact() method — skipping`,
 			);
 			result.push(msg);
+			const pos = positionFields(i);
 			details.set(toolMsg.tool_call_id, {
 				age,
 				compactionFactor,
+				position: pos.position,
+				normalizedPosition: pos.normalizedPosition,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: false,
@@ -342,9 +372,12 @@ function compactMessagesInternal(options: CompactionOptions): {
 			if (toolName === "read_file" && options.onReadFileCompacted) {
 				options.onReadFileCompacted(toolMsg.tool_call_id, callArgs);
 			}
+			const pos = positionFields(i);
 			details.set(toolMsg.tool_call_id, {
 				age,
 				compactionFactor,
+				position: pos.position,
+				normalizedPosition: pos.normalizedPosition,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: true,
@@ -353,9 +386,12 @@ function compactMessagesInternal(options: CompactionOptions): {
 			});
 		} else {
 			result.push(msg);
+			const pos = positionFields(i);
 			details.set(toolMsg.tool_call_id, {
 				age,
 				compactionFactor,
+				position: pos.position,
+				normalizedPosition: pos.normalizedPosition,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: false,

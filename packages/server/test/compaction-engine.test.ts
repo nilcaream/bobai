@@ -83,21 +83,15 @@ function multilineOutput(lineCount: number): string {
 
 /**
  * Trailing messages appended after tool results so that tool messages
- * are not at the newest position (age→0 → compactionFactor→0). The
- * multiplicative formula (contextPressure × age) correctly protects
- * the newest messages from compaction, but test fixtures need trailing
- * context to push tool messages into the compactable zone.
+ * are not at the newest position (age→0 → compactionFactor→0). With
+ * the distance-based age model (MAX_AGE_DISTANCE=100), tool messages
+ * need to be far enough from the end of the conversation to have
+ * meaningful age. 100 trailing pairs push the tool message's
+ * distanceFromEnd past the MAX_AGE_DISTANCE cap, giving age≈1.0.
  */
-const TRAILING_CONTEXT: Message[] = [
-	{ role: "user", content: "continue" },
-	{ role: "assistant", content: "ok" },
-	{ role: "user", content: "continue" },
-	{ role: "assistant", content: "ok" },
-	{ role: "user", content: "continue" },
-	{ role: "assistant", content: "ok" },
-	{ role: "user", content: "continue" },
-	{ role: "assistant", content: "ok" },
-];
+const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
+	i % 2 === 0 ? { role: "user" as const, content: "continue" } : { role: "assistant" as const, content: "ok" },
+);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -724,10 +718,18 @@ describe("compactMessages", () => {
 			expect(d1.outputThreshold).toBe(0.2);
 			expect(d1.wasCompacted).toBe(true);
 			expect(d1.savedChars).toBeGreaterThan(0);
+			expect(d1.position).toBeGreaterThanOrEqual(0);
+			expect(d1.position).toBeLessThanOrEqual(1);
+			expect(d1.normalizedPosition).toBeGreaterThanOrEqual(0);
+			expect(d1.normalizedPosition).toBeLessThanOrEqual(1);
 
 			const d2 = details.get("tc2") as CompactionDetail;
 			expect(d2).toBeDefined();
 			expect(d2.outputThreshold).toBe(0.4);
+			expect(d2.position).toBeGreaterThanOrEqual(0);
+			expect(d2.position).toBeLessThanOrEqual(1);
+			expect(d2.normalizedPosition).toBeGreaterThanOrEqual(0);
+			expect(d2.normalizedPosition).toBeLessThanOrEqual(1);
 		});
 
 		test("marks belowMinSavings when savings are too small", () => {
@@ -756,6 +758,8 @@ describe("compactMessages", () => {
 			expect(d1).toBeDefined();
 			expect(d1.wasCompacted).toBe(false);
 			expect(d1.belowMinSavings).toBe(true);
+			expect(d1.position).toBeGreaterThanOrEqual(0);
+			expect(d1.normalizedPosition).toBeGreaterThanOrEqual(0);
 		});
 
 		test("returns empty details when pressure is zero", () => {
@@ -798,6 +802,8 @@ describe("compactMessages", () => {
 			expect(d1?.wasCompacted).toBe(true);
 			expect(d1?.savedChars).toBeDefined();
 			expect(d1?.savedChars).toBeGreaterThan(0);
+			expect(d1?.position).toBeGreaterThanOrEqual(0);
+			expect(d1?.normalizedPosition).toBeGreaterThanOrEqual(0);
 			const resultContent = (result.find((m) => m.role === "tool") as ToolMessage).content;
 			expect(d1?.savedChars).toBe(longContent.length - resultContent.length);
 		});
@@ -841,6 +847,8 @@ describe("compactMessages", () => {
 			expect(d).toBeDefined();
 			expect(d?.savedArgsChars).toBeDefined();
 			expect(d?.savedArgsChars ?? 0).toBeGreaterThan(0);
+			expect(d?.position).toBeGreaterThanOrEqual(0);
+			expect(d?.normalizedPosition).toBeGreaterThanOrEqual(0);
 		});
 
 		test("stats include assistantArgsCompacted count", () => {

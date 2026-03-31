@@ -6,6 +6,7 @@ import {
 	computeCompactionFactor,
 	computeContextPressure,
 	DEFAULT_THRESHOLD,
+	MAX_AGE_DISTANCE,
 } from "../src/compaction/strength";
 
 describe("computeContextPressure", () => {
@@ -77,12 +78,8 @@ describe("computeAge", () => {
 		expect(computeAge(0, 1)).toBe(0);
 	});
 
-	test("first message (index 0) has age 1.0", () => {
-		expect(computeAge(0, 10)).toBe(1);
-	});
-
-	test("last message has age 0.0", () => {
-		expect(computeAge(9, 10)).toBe(0);
+	test("MAX_AGE_DISTANCE is 100", () => {
+		expect(MAX_AGE_DISTANCE).toBe(100);
 	});
 
 	test("AGE_INFLECTION is 0.7", () => {
@@ -93,32 +90,77 @@ describe("computeAge", () => {
 		expect(AGE_STEEPNESS).toBe(5);
 	});
 
-	test("age follows arctan S-curve", () => {
-		const total = 5;
-		const ages = Array.from({ length: total }, (_, i) => computeAge(i, total));
-		// With inflection=0.7 and steepness=5, the S-curve protects the newest 30%
-		// and compacts older messages with a moderate gradient.
-		// positions: [0.0, 0.25, 0.5, 0.75, 1.0]
-		expect(ages[0]).toBe(1); // oldest
-		expect(ages[1]).toBeCloseTo(0.9385, 3); // position 0.25: still very old
-		expect(ages[2]).toBeCloseTo(0.7771, 3); // position 0.5: above inflection, moderate age
-		expect(ages[3]).toBeCloseTo(0.3243, 3); // position 0.75: near inflection, dropping
-		expect(ages[4]).toBe(0); // newest
+	test("last message always has age 0.0", () => {
+		expect(computeAge(9, 10)).toBe(0);
+		expect(computeAge(199, 200)).toBe(0);
+		expect(computeAge(4, 5)).toBe(0);
+	});
+
+	test("messages at MAX_AGE_DISTANCE or further have age 1.0", () => {
+		// In a 200-message conversation, idx 99 has distFromEnd=100, normPos=0.0
+		expect(computeAge(99, 200)).toBe(1);
+		// idx 0 has distFromEnd=199 > 100, capped to normPos=0.0
+		expect(computeAge(0, 200)).toBe(1);
+	});
+
+	test("MAX_AGE_DISTANCE capping: messages far from end are equally compactable", () => {
+		// In a 300-message conversation, message 0 and message 199 both have
+		// distanceFromEnd >= 100, so they should have the same age.
+		const age0 = computeAge(0, 300);
+		const age199 = computeAge(199, 300);
+		expect(age0).toBe(age199);
+		expect(age0).toBe(1); // both fully compactable
+	});
+
+	test("age follows arctan S-curve within MAX_AGE_DISTANCE window", () => {
+		// 200-message conversation where the capping window maps cleanly.
+		// Messages within the last 100 get graduated protection.
+		const total = 200;
+		// idx=100: distFromEnd=99, normPos=0.01 → near oldest in window → age ≈ 0.998
+		expect(computeAge(100, total)).toBeCloseTo(0.998, 2);
+		// idx=140: distFromEnd=59, normPos=0.41 → moderate age
+		expect(computeAge(140, total)).toBeCloseTo(0.857, 2);
+		// idx=150: distFromEnd=49, normPos=0.51 → above inflection
+		expect(computeAge(150, total)).toBeCloseTo(0.766, 2);
+		// idx=180: distFromEnd=19, normPos=0.81 → well past inflection → low age
+		expect(computeAge(180, total)).toBeCloseTo(0.211, 2);
+		// idx=190: distFromEnd=9, normPos=0.91 → very protected
+		expect(computeAge(190, total)).toBeCloseTo(0.076, 2);
+		// idx=199: newest → 0
+		expect(computeAge(199, total)).toBe(0);
 	});
 
 	test("messages near inflection point have age around 0.43", () => {
-		// Position 0.7 is the inflection. In a 101-message conversation,
-		// index 70 has position ~0.7. The normalized atan curve is slightly
-		// asymmetric, so the inflection maps to ~0.43 rather than exactly 0.5.
+		// In a 101-message conversation, index 70 has distFromEnd=30,
+		// normalizedPosition = 1 - 30/100 = 0.7 = AGE_INFLECTION.
 		const age = computeAge(70, 101);
 		expect(age).toBeCloseTo(0.43, 1);
 	});
 
-	test("arctan curve gives sharper transition than quadratic", () => {
-		// At position 0.5 (mid-conversation), quadratic gives 0.25 (low age),
-		// but arctan with inflection=0.7 gives ~0.78 (high age) — much more aggressive.
-		const age = computeAge(5, 11); // position 0.5
-		expect(age).toBeGreaterThan(0.7);
+	test("short conversations: all messages are near-newest due to MAX_AGE_DISTANCE", () => {
+		// In a 5-message conversation, the oldest message has distFromEnd=4,
+		// normalizedPosition = 1 - 4/100 = 0.96 — nearly newest in the window.
+		// So all messages get very low age (near 0).
+		const ages = Array.from({ length: 5 }, (_, i) => computeAge(i, 5));
+		// All ages should be very close to 0
+		for (const age of ages) {
+			expect(age).toBeLessThan(0.04);
+		}
+		// Oldest still has higher age than newest
+		const ageNewest = ages[4] ?? 0;
+		expect(ages[0]).toBeGreaterThan(ageNewest);
+		// Exact values
+		expect(ages[0]).toBeCloseTo(0.03, 2);
+		expect(ages[4]).toBe(0);
+	});
+
+	test("arctan curve with distance-based age: old messages are fully compactable", () => {
+		// In a 200-message conversation, idx=20 has distFromEnd=179 (>100),
+		// so normalizedPosition=0 → age=1.0.
+		// This is much higher than what a quadratic function would give at
+		// the same position (position=20/199≈0.10, quadratic ≈ 0.81).
+		const age = computeAge(20, 200);
+		expect(age).toBe(1);
 	});
 });
 

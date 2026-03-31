@@ -24,7 +24,6 @@ interface ContextMessage {
 
 interface CompactionStats {
 	compacted: number;
-	superseded: number;
 	assistantArgsCompacted: number;
 	contextPressure: number;
 	totalToolMessages: number;
@@ -32,14 +31,15 @@ interface CompactionStats {
 
 interface CompactionDetail {
 	age: number;
-	resistance: number;
-	strength: number;
+	compactionFactor: number;
+	position: number;
+	normalizedPosition: number;
+	outputThreshold?: number;
+	argsThreshold?: number;
 	wasCompacted: boolean;
-	supersededReason?: string;
 	belowMinSavings?: boolean;
 	savedChars?: number;
 	savedArgsChars?: number;
-	supersededBy?: string;
 }
 
 function formatToolHeader(toolCallId: string, toolName: string, detail: CompactionDetail | undefined): string {
@@ -50,19 +50,19 @@ function formatToolHeader(toolCallId: string, toolName: string, detail: Compacti
 		return parts.join(" | ");
 	}
 
+	// Position info: both raw and normalized (after MAX_AGE_DISTANCE capping)
+	parts.push(`pos=${detail.position.toFixed(3)} norm=${detail.normalizedPosition.toFixed(3)}`);
 	parts.push(`age=${detail.age.toFixed(3)}`);
-	parts.push(`resistance=${detail.resistance}`);
-	parts.push(`strength=${detail.strength.toFixed(3)}`);
+	parts.push(`factor=${detail.compactionFactor.toFixed(3)}`);
 
-	if (detail.supersededReason) {
-		const savings = detail.savedChars !== undefined ? ` | saved ${detail.savedChars} chars` : "";
-		const argsSavings = detail.savedArgsChars !== undefined ? ` + ${detail.savedArgsChars} args` : "";
-		if (detail.supersededBy) {
-			parts.push(`superseded by ${detail.supersededBy}${savings}${argsSavings}`);
-		} else {
-			parts.push(`superseded${savings}${argsSavings}`);
-		}
-	} else if (detail.wasCompacted) {
+	// Show thresholds
+	const thresholds: string[] = [];
+	if (detail.outputThreshold !== undefined) thresholds.push(`out=${detail.outputThreshold}`);
+	if (detail.argsThreshold !== undefined) thresholds.push(`args=${detail.argsThreshold}`);
+	if (thresholds.length > 0) parts.push(`threshold(${thresholds.join(", ")})`);
+
+	// Compaction outcome
+	if (detail.wasCompacted) {
 		if (detail.savedChars !== undefined) {
 			const argsSavings = detail.savedArgsChars !== undefined ? ` + ${detail.savedArgsChars} args` : "";
 			parts.push(`compacted (saved ${detail.savedChars} chars${argsSavings})`);
@@ -75,10 +75,10 @@ function formatToolHeader(toolCallId: string, toolName: string, detail: Compacti
 		parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
 	} else if (detail.belowMinSavings) {
 		parts.push("savings below minimum");
-	} else if (detail.strength <= 0) {
+	} else if (detail.compactionFactor <= 0) {
 		parts.push("no pressure");
 	} else {
-		parts.push("kept (low strength)");
+		parts.push("kept");
 	}
 
 	return parts.join(" | ");
