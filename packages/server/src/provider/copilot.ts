@@ -80,7 +80,7 @@ export function createCopilotProvider(
 	configDir?: string,
 	logger?: Logger,
 	/** @internal — exposed for unit tests to avoid multi-second backoff waits */
-	testOverrides?: { backoffBaseMs?: number },
+	testOverrides?: { backoffBaseMs?: number; bodyTimeoutMs?: number },
 ): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
 
@@ -167,6 +167,7 @@ export function createCopilotProvider(
 
 	const MAX_RETRIES = 8;
 	const REQUEST_TIMEOUT_MS = 15_000;
+	const BODY_TIMEOUT_MS = testOverrides?.bodyTimeoutMs ?? 30_000;
 	const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
 
 	/** Extract an HTTP status code from an error thrown by fetch() or the Anthropic SDK. */
@@ -188,15 +189,27 @@ export function createCopilotProvider(
 		return String(err);
 	}
 
-	/** Build a combined abort signal from our connection timeout + the caller's signal. */
-	function buildTimeoutSignal(callerSignal?: AbortSignal): { signal: AbortSignal; clearTimeout: () => void } {
-		const controller = new AbortController();
-		const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-		const signals: AbortSignal[] = [controller.signal];
-		if (callerSignal) signals.push(callerSignal);
+	/**
+	 * Rolling timer that serves as both connection timeout and body-read watchdog.
+	 * Starts with `initialMs`; call `reset(ms)` to restart with a new duration.
+	 * When the timer fires it aborts via the given controller.
+	 */
+	function createRollingTimer(
+		controller: AbortController,
+		initialMs: number,
+	): { reset: (ms: number) => void; clear: () => void } {
+		let id: ReturnType<typeof setTimeout> | undefined = setTimeout(() => controller.abort(), initialMs);
 		return {
-			signal: AbortSignal.any(signals),
-			clearTimeout: () => clearTimeout(id),
+			reset(ms: number) {
+				if (id !== undefined) clearTimeout(id);
+				id = setTimeout(() => controller.abort(), ms);
+			},
+			clear() {
+				if (id !== undefined) {
+					clearTimeout(id);
+					id = undefined;
+				}
+			},
 		};
 	}
 
@@ -217,57 +230,63 @@ export function createCopilotProvider(
 
 		let lastError: unknown;
 		let retriedAuth = false;
+		let downgradeWarned = false;
 
 		for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-			const timeout = buildTimeoutSignal(options.signal);
+			const effectiveInitiator = attempt > 0 ? "agent" : initiator;
+			if (attempt === 1 && initiator === "user" && !downgradeWarned) {
+				downgradeWarned = true;
+				logger?.warn("RETRY", `Downgrading x-initiator from "user" to "agent" for retry to protect premium quota`);
+			}
+
+			const controller = new AbortController();
+			const signals: AbortSignal[] = [controller.signal];
+			if (options.signal) signals.push(options.signal);
+			const combinedSignal = AbortSignal.any(signals);
+			const timer = createRollingTimer(controller, REQUEST_TIMEOUT_MS);
 
 			try {
 				const client = new Anthropic({
 					apiKey: null,
 					authToken: sessionToken,
 					baseURL: baseUrl,
+					maxRetries: 0,
 					defaultHeaders: {
 						...copilotConfig.headers,
 						"Openai-Intent": "conversation-edits",
-						"x-initiator": initiator,
+						"x-initiator": effectiveInitiator,
 					},
 				});
 
-				const anthropicStream = client.messages.stream(params, { signal: timeout.signal });
-				// Connection established — clear the connection timeout so long
-				// SSE streaming is not killed mid-read (matches OpenAI path behaviour).
-				// The SDK fires the first event after headers arrive, so clearing on
-				// first iteration is equivalent to clearing after fetch() resolves.
-				let timeoutCleared = false;
+				const anthropicStream = client.messages.stream(params, { signal: combinedSignal });
+				anthropicStream.on("connect", () => timer.reset(BODY_TIMEOUT_MS));
 
-				for await (const event of parseAnthropicStream(anthropicStream, options.model, initiator, resolvedConfigDir)) {
-					if (!timeoutCleared) {
-						timeout.clearTimeout();
-						timeoutCleared = true;
-					}
+				for await (const event of parseAnthropicStream(anthropicStream, options.model, effectiveInitiator, resolvedConfigDir)) {
+					timer.reset(BODY_TIMEOUT_MS);
 					if (event.type === "usage") {
 						if (options.onMetrics) {
 							options.onMetrics({
 								model: options.model,
 								promptTokens: event.tokenCount,
 								totalTokens: event.tokenCount,
-								initiator,
+								initiator: effectiveInitiator,
 							});
 						} else {
 							turnModel = options.model;
 							turnTokens += event.tokenCount;
 							turnLastCallTokens = event.tokenCount;
-							if (initiator === "agent") turnAgentCalls++;
+							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
 							const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
-							if (initiator === "user") turnPremiumCost += multiplier;
+							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
 					}
 					yield event;
 				}
+				timer.clear();
 				return;
 			} catch (err: unknown) {
-				timeout.clearTimeout();
+				timer.clear();
 
 				// If the CALLER aborted (not our timeout), do not retry
 				if (options.signal?.aborted) {
@@ -390,15 +409,24 @@ export function createCopilotProvider(
 
 			// ── OpenAI Chat Completions path ─────────────────────────────
 
-			let response: Response | undefined;
 			let lastError: unknown;
 			let retriedAuth = false;
+			let downgradeWarned = false;
 
 			for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-				// Use a manual AbortController for the connection timeout so we can
-				// clear it once headers arrive. AbortSignal.timeout() cannot be
-				// cancelled and would abort the SSE body stream mid-read.
-				const timeout = buildTimeoutSignal(options.signal);
+				const effectiveInitiator = attempt > 0 ? "agent" : initiator;
+				if (attempt === 1 && initiator === "user" && !downgradeWarned) {
+					downgradeWarned = true;
+					logger?.warn("RETRY", `Downgrading x-initiator from "user" to "agent" for retry to protect premium quota`);
+				}
+
+				const controller = new AbortController();
+				const signals: AbortSignal[] = [controller.signal];
+				if (options.signal) signals.push(options.signal);
+				const combinedSignal = AbortSignal.any(signals);
+				const timer = createRollingTimer(controller, REQUEST_TIMEOUT_MS);
+
+				let response: Response | undefined;
 
 				try {
 					response = await fetch(`${baseUrl}/chat/completions`, {
@@ -408,7 +436,7 @@ export function createCopilotProvider(
 							...copilotConfig.headers,
 							"Openai-Intent": "conversation-edits",
 							Authorization: `Bearer ${sessionToken}`,
-							"x-initiator": initiator,
+							"x-initiator": effectiveInitiator,
 						},
 						body: JSON.stringify({
 							model: options.model,
@@ -416,13 +444,12 @@ export function createCopilotProvider(
 							stream: true,
 							...(options.tools?.length ? { tools: options.tools } : {}),
 						}),
-						signal: timeout.signal,
+						signal: combinedSignal,
 					});
-					// Headers received — clear the connection timeout so it does
-					// not abort the SSE body stream during long generations.
-					timeout.clearTimeout();
+					// Headers received — switch from connection timeout to body watchdog
+					timer.reset(BODY_TIMEOUT_MS);
 				} catch (err) {
-					timeout.clearTimeout();
+					timer.clear();
 					// If the CALLER aborted (not our timeout), do not retry
 					if (options.signal?.aborted) {
 						throw err;
@@ -432,123 +459,141 @@ export function createCopilotProvider(
 					if (attempt === MAX_RETRIES) throw lastError;
 					await new Promise((r) => setTimeout(r, BACKOFF_MS));
 					await ensureValidSession();
-					response = undefined;
 					continue;
 				}
 
-				if (response.ok) {
-					break;
+				if (!response.ok) {
+					timer.clear();
+
+					// Non-retryable 4xx (except 429) — fail immediately
+					// Special cases:
+					// - 401 might mean server-side token revocation.
+					// - 400 "badly formatted" can mean a corrupt/stale session token.
+					// Force one token refresh and retry before giving up.
+					if (response.status !== 429 && response.status < 500) {
+						if ((response.status === 401 || response.status === 400) && !retriedAuth) {
+							const body = await response.text();
+							retriedAuth = true;
+							logger?.warn(
+								"AUTH",
+								`Got ${response.status} from chat/completions (body: ${body.slice(0, 200)}), ` +
+									`forcing token refresh. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
+							);
+							sessionExpires = 0; // Force ensureValidSession to refresh
+							await ensureValidSession();
+							continue;
+						}
+						throw new ProviderError(response.status, await response.text());
+					}
+
+					// Retryable: 429 or 5xx
+					lastError = new ProviderError(response.status, await response.text());
+					if (attempt === MAX_RETRIES) throw lastError;
+
+					await new Promise((r) => setTimeout(r, BACKOFF_MS));
+					await ensureValidSession();
+					continue;
 				}
 
-				// Non-retryable 4xx (except 429) — fail immediately
-				// Special cases:
-				// - 401 might mean server-side token revocation.
-				// - 400 "badly formatted" can mean a corrupt/stale session token.
-				// Force one token refresh and retry before giving up.
-				if (response.status !== 429 && response.status < 500) {
-					if ((response.status === 401 || response.status === 400) && !retriedAuth) {
-						const body = await response.text();
-						retriedAuth = true;
-						logger?.warn(
-							"AUTH",
-							`Got ${response.status} from chat/completions (body: ${body.slice(0, 200)}), ` +
-								`forcing token refresh. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
-						);
-						sessionExpires = 0; // Force ensureValidSession to refresh
-						await ensureValidSession();
-						response = undefined;
-						continue;
-					}
-					throw new ProviderError(response.status, await response.text());
-				}
-
-				// Retryable: 429 or 5xx
-				lastError = new ProviderError(response.status, await response.text());
-				if (attempt === MAX_RETRIES) throw lastError;
-
-				await new Promise((r) => setTimeout(r, BACKOFF_MS));
-				await ensureValidSession();
-				response = undefined;
-			}
-
-			if (!response || !response.ok) {
-				throw lastError ?? new Error("Unexpected: no response after retry loop");
-			}
-
-			if (!response.body) {
-				return;
-			}
-
-			for await (const event of parseSSE(response.body)) {
-				const data = event as {
-					choices?: {
-						delta?: {
-							content?: string;
-							tool_calls?: {
-								index: number;
-								id?: string;
-								type?: string;
-								function?: { name?: string; arguments?: string };
-							}[];
-						};
-						finish_reason?: string | null;
-					}[];
-					usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-				};
-
-				const choice = data.choices?.[0];
-
-				if (choice?.finish_reason) {
-					const promptTokens = data.usage?.prompt_tokens ?? 0;
-					const totalTokens = data.usage?.total_tokens ?? 0;
-					const configs = loadModelsConfig(resolvedConfigDir);
-					const contextWindow = configs.find((m) => m.id === options.model)?.contextWindow ?? 0;
-					if (contextWindow <= 0 && !warnedContextWindow.has(options.model)) {
-						warnedContextWindow.add(options.model);
-						console.warn(`[WARN] No contextWindow for model "${options.model}"; context tracking degraded`);
-					}
-					const display = formatModelDisplay(options.model, promptTokens, resolvedConfigDir);
-
-					yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };
-
-					// Accumulate per-turn stats — route to external callback if provided,
-					// otherwise update the provider's own closure-scoped variables.
-					if (options.onMetrics) {
-						options.onMetrics({ model: options.model, promptTokens, totalTokens, initiator });
-					} else {
-						turnModel = options.model;
-						turnTokens += totalTokens;
-						turnLastCallTokens = promptTokens;
-						if (initiator === "agent") turnAgentCalls++;
-						else turnUserCalls++;
-						const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
-						if (initiator === "user") turnPremiumCost += multiplier;
-					}
-
-					const reason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
-					yield { type: "finish" as const, reason } as StreamEvent;
+				if (!response.body) {
+					timer.clear();
+					yield { type: "finish" as const, reason: "stop" as const };
 					return;
 				}
 
-				const content = choice?.delta?.content;
-				if (content) {
-					yield { type: "text" as const, text: content };
-				}
+				try {
+					for await (const event of parseSSE(response.body)) {
+						timer.reset(BODY_TIMEOUT_MS);
 
-				const toolCalls = choice?.delta?.tool_calls;
-				if (toolCalls) {
-					for (const tc of toolCalls) {
-						if (tc.id && tc.function?.name) {
-							yield { type: "tool_call_start" as const, index: tc.index, id: tc.id, name: tc.function.name };
+						const data = event as {
+							choices?: {
+								delta?: {
+									content?: string;
+									tool_calls?: {
+										index: number;
+										id?: string;
+										type?: string;
+										function?: { name?: string; arguments?: string };
+									}[];
+								};
+								finish_reason?: string | null;
+							}[];
+							usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+						};
+
+						const choice = data.choices?.[0];
+
+						if (choice?.finish_reason) {
+							const promptTokens = data.usage?.prompt_tokens ?? 0;
+							const totalTokens = data.usage?.total_tokens ?? 0;
+							const configs = loadModelsConfig(resolvedConfigDir);
+							const contextWindow = configs.find((m) => m.id === options.model)?.contextWindow ?? 0;
+							if (contextWindow <= 0 && !warnedContextWindow.has(options.model)) {
+								warnedContextWindow.add(options.model);
+								console.warn(`[WARN] No contextWindow for model "${options.model}"; context tracking degraded`);
+							}
+							const display = formatModelDisplay(options.model, promptTokens, resolvedConfigDir);
+
+							yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };
+
+							// Accumulate per-turn stats — route to external callback if provided,
+							// otherwise update the provider's own closure-scoped variables.
+							if (options.onMetrics) {
+								options.onMetrics({ model: options.model, promptTokens, totalTokens, initiator: effectiveInitiator });
+							} else {
+								turnModel = options.model;
+								turnTokens += totalTokens;
+								turnLastCallTokens = promptTokens;
+								if (effectiveInitiator === "agent") turnAgentCalls++;
+								else turnUserCalls++;
+								const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+								if (effectiveInitiator === "user") turnPremiumCost += multiplier;
+							}
+
+							const reason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
+							yield { type: "finish" as const, reason } as StreamEvent;
+							timer.clear();
+							return;
 						}
-						if (tc.function?.arguments) {
-							yield { type: "tool_call_delta" as const, index: tc.index, arguments: tc.function.arguments };
+
+						const content = choice?.delta?.content;
+						if (content) {
+							yield { type: "text" as const, text: content };
+						}
+
+						const toolCalls = choice?.delta?.tool_calls;
+						if (toolCalls) {
+							for (const tc of toolCalls) {
+								if (tc.id && tc.function?.name) {
+									yield { type: "tool_call_start" as const, index: tc.index, id: tc.id, name: tc.function.name };
+								}
+								if (tc.function?.arguments) {
+									yield { type: "tool_call_delta" as const, index: tc.index, arguments: tc.function.arguments };
+								}
+							}
 						}
 					}
+
+					timer.clear();
+					yield { type: "finish" as const, reason: "stop" as const };
+					return;
+				} catch (err) {
+					timer.clear();
+
+					// If the CALLER aborted (not our timeout), do not retry
+					if (options.signal?.aborted) {
+						throw err;
+					}
+
+					// Body-read error (timeout or network) — treat as retryable
+					lastError = err;
+					if (attempt === MAX_RETRIES) throw lastError;
+					await new Promise((r) => setTimeout(r, BACKOFF_MS));
+					await ensureValidSession();
 				}
 			}
 
-			yield { type: "finish" as const, reason: "stop" as const };
+			throw lastError ?? new Error("Unexpected: no response after retry loop");
 		},
 	};
 }

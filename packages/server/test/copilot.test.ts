@@ -1381,6 +1381,149 @@ describe("Retry logic", () => {
 		}
 	});
 
+	test("retries when SSE body stalls after headers arrive (OpenAI)", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			attempt++;
+			if (attempt === 1) {
+				// Return 200 with a ReadableStream that never enqueues data (stalls).
+				// Wire the abort signal so the stream errors when our timer fires,
+				// matching real fetch() behaviour.
+				const signal = init?.signal;
+				const stream = new ReadableStream<Uint8Array>({
+					start(controller) {
+						if (signal) {
+							signal.addEventListener("abort", () =>
+								controller.error(signal.reason ?? new DOMException("The operation was aborted", "AbortError")),
+							);
+						}
+						// intentionally never enqueue or close — simulates stall
+					},
+				});
+				return new Response(stream, {
+					status: 200,
+					headers: { "Content-Type": "text/event-stream" },
+				});
+			}
+			// Attempt 2: normal success
+			return new Response(sseStream([chatChunk("recovered"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, {
+			backoffBaseMs: 10,
+			bodyTimeoutMs: 50,
+		});
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(attempt).toBe(2);
+		expect(events.some((e) => e.type === "text" && e.text === "recovered")).toBe(true);
+	});
+
+	test("body timeout resets on each SSE chunk (OpenAI)", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			// Return 200 with a slow stream — chunks arrive every 80ms
+			const stream = new ReadableStream<Uint8Array>({
+				async start(controller) {
+					const encoder = new TextEncoder();
+					const chunks = [chatChunk("a"), chatChunk("b"), chatChunk("c"), "[DONE]"];
+					for (const chunk of chunks) {
+						await new Promise((r) => setTimeout(r, 80));
+						controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+					}
+					controller.close();
+				},
+			});
+			return new Response(stream, {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, {
+			backoffBaseMs: 10,
+			bodyTimeoutMs: 200,
+		});
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		// All chunks received, no retry
+		expect(attempt).toBe(1);
+		expect(events.filter((e) => e.type === "text").map((e) => (e as { text: string }).text)).toEqual(["a", "b", "c"]);
+	});
+
+	test("retries when SSE body stalls after headers arrive (Anthropic)", async () => {
+		let attempt = 0;
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			const url = input instanceof Request ? input.url : input.toString();
+			// Skip token exchange calls
+			if (url.includes("copilot_internal/v2/token")) {
+				return new Response(
+					JSON.stringify({
+						token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			attempt++;
+			if (attempt === 1) {
+				// Return 200 with a stream that stalls after headers.
+				// Wire the abort signal so the stream errors when our timer fires.
+				const signal = init?.signal;
+				const stream = new ReadableStream<Uint8Array>({
+					start(controller) {
+						if (signal) {
+							signal.addEventListener("abort", () =>
+								controller.error(signal.reason ?? new DOMException("The operation was aborted", "AbortError")),
+							);
+						}
+						// intentionally never enqueue or close — simulates stall
+					},
+				});
+				return new Response(stream, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				});
+			}
+			// Attempt 2: normal Anthropic success
+			return new Response(anthropicTextResponse("recovered from stall"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, {
+			backoffBaseMs: 10,
+			bodyTimeoutMs: 50,
+		});
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(attempt).toBe(2);
+		expect(events.some((e) => e.type === "text" && e.text === "recovered from stall")).toBe(true);
+	});
+
 	test("flat backoff waits the same delay between retries", async () => {
 		let attempt = 0;
 		const timestamps: number[] = [];
@@ -1414,6 +1557,140 @@ describe("Retry logic", () => {
 		expect(gap3).toBeGreaterThan(5);
 		// No gap should be more than double another (flat, not exponential)
 		expect(Math.max(gap1, gap2, gap3)).toBeLessThan(Math.min(gap1, gap2, gap3) * 3);
+	});
+
+	test("downgrades x-initiator to agent on retry (OpenAI)", async () => {
+		const capturedInitiators: string[] = [];
+		let attempt = 0;
+
+		globalThis.fetch = mock(async (_input: string | URL | Request, init?: RequestInit) => {
+			attempt++;
+			const headers = init?.headers as Record<string, string> | undefined;
+			if (headers?.["x-initiator"]) {
+				capturedInitiators.push(headers["x-initiator"]);
+			}
+			if (attempt === 1) {
+				return new Response("Server Error", { status: 500 });
+			}
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
+		for await (const _e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		expect(capturedInitiators[0]).toBe("user");
+		expect(capturedInitiators[1]).toBe("agent");
+	});
+
+	test("does not log downgrade when initiator was already agent", async () => {
+		const logs: string[] = [];
+		const testLogger = {
+			debug: () => {},
+			info: () => {},
+			warn: (_tag: string, msg: string) => logs.push(msg),
+			error: () => {},
+		};
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			if (attempt === 1) return new Response("Error", { status: 500 });
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, testLogger, fast);
+		for await (const _e of provider.stream({
+			model: "gpt-4o",
+			messages: [
+				{ role: "user", content: "hi" },
+				{
+					role: "assistant",
+					content: null,
+					tool_calls: [{ id: "c1", type: "function" as const, function: { name: "bash", arguments: "{}" } }],
+				},
+				{ role: "tool", content: "done", tool_call_id: "c1" },
+			],
+		})) {
+			/* drain */
+		}
+
+		// Initiator was "agent" (last message is tool), so no downgrade warning
+		expect(logs.some((l) => l.includes("x-initiator"))).toBe(false);
+	});
+
+	test("logs warning when x-initiator downgraded from user to agent on retry", async () => {
+		const logs: string[] = [];
+		const testLogger = {
+			debug: () => {},
+			info: () => {},
+			warn: (_tag: string, msg: string) => logs.push(msg),
+			error: () => {},
+		};
+		let attempt = 0;
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			if (attempt === 1) return new Response("Error", { status: 500 });
+			return new Response(sseStream([chatChunk("ok"), "[DONE]"]), { status: 200 });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, testLogger, fast);
+		for await (const _e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		// Should log exactly one downgrade warning
+		expect(logs.filter((l) => l.includes("x-initiator")).length).toBe(1);
+	});
+
+	test("downgrades x-initiator to agent on retry (Anthropic)", async () => {
+		const capturedInitiators: string[] = [];
+		let attempt = 0;
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			attempt++;
+			let initiatorValue: string | null = null;
+			if (init?.headers instanceof Headers) {
+				initiatorValue = init.headers.get("x-initiator");
+			} else if (init?.headers) {
+				initiatorValue = (init.headers as Record<string, string>)["x-initiator"] ?? null;
+			} else if (input instanceof Request) {
+				initiatorValue = input.headers.get("x-initiator");
+			}
+			if (initiatorValue) {
+				capturedInitiators.push(initiatorValue);
+			}
+
+			if (attempt === 1) {
+				return new Response(JSON.stringify({ error: { message: "Server Error" } }), {
+					status: 500,
+					headers: { "content-type": "application/json" },
+				});
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, fast);
+		for await (const _e of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		expect(capturedInitiators[0]).toBe("user");
+		expect(capturedInitiators[1]).toBe("agent");
 	});
 });
 
