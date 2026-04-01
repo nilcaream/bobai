@@ -163,10 +163,46 @@ export function createCopilotProvider(
 		return config?.maxOutput ?? 16384;
 	}
 
-	async function* streamClaude(options: ProviderOptions, initiator: "user" | "agent"): AsyncGenerator<StreamEvent> {
-		const MAX_RETRIES = 8;
-		const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
+	// ── Shared retry infrastructure ──────────────────────────────────────
 
+	const MAX_RETRIES = 8;
+	const REQUEST_TIMEOUT_MS = 15_000;
+	const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
+
+	/** Extract an HTTP status code from an error thrown by fetch() or the Anthropic SDK. */
+	function errorStatus(err: unknown): number {
+		if (typeof err === "object" && err !== null) {
+			const obj = err as Record<string, unknown>;
+			if (typeof obj.status === "number") return obj.status;
+			if (typeof obj.statusCode === "number") return obj.statusCode;
+		}
+		return 0;
+	}
+
+	function errorMessage(err: unknown): string {
+		if (err instanceof Error) return err.message;
+		if (typeof err === "object" && err !== null) {
+			const msg = (err as Record<string, unknown>).message;
+			if (typeof msg === "string") return msg;
+		}
+		return String(err);
+	}
+
+	/** Build a combined abort signal from our connection timeout + the caller's signal. */
+	function buildTimeoutSignal(callerSignal?: AbortSignal): { signal: AbortSignal; clearTimeout: () => void } {
+		const controller = new AbortController();
+		const id = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+		const signals: AbortSignal[] = [controller.signal];
+		if (callerSignal) signals.push(callerSignal);
+		return {
+			signal: AbortSignal.any(signals),
+			clearTimeout: () => clearTimeout(id),
+		};
+	}
+
+	// ── Anthropic (Claude) streaming path ────────────────────────────────
+
+	async function* streamClaude(options: ProviderOptions, initiator: "user" | "agent"): AsyncGenerator<StreamEvent> {
 		const { system, messages } = convertMessagesToAnthropic(options.messages);
 		const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
 		const maxTokens = getMaxOutputTokens(options.model);
@@ -183,21 +219,32 @@ export function createCopilotProvider(
 		let retriedAuth = false;
 
 		for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-			const client = new Anthropic({
-				apiKey: null,
-				authToken: sessionToken,
-				baseURL: baseUrl,
-				defaultHeaders: {
-					...copilotConfig.headers,
-					"Openai-Intent": "conversation-edits",
-					"x-initiator": initiator,
-				},
-			});
+			const timeout = buildTimeoutSignal(options.signal);
 
 			try {
-				const anthropicStream = client.messages.stream(params);
+				const client = new Anthropic({
+					apiKey: null,
+					authToken: sessionToken,
+					baseURL: baseUrl,
+					defaultHeaders: {
+						...copilotConfig.headers,
+						"Openai-Intent": "conversation-edits",
+						"x-initiator": initiator,
+					},
+				});
+
+				const anthropicStream = client.messages.stream(params, { signal: timeout.signal });
+				// Connection established — clear the connection timeout so long
+				// SSE streaming is not killed mid-read (matches OpenAI path behaviour).
+				// The SDK fires the first event after headers arrive, so clearing on
+				// first iteration is equivalent to clearing after fetch() resolves.
+				let timeoutCleared = false;
 
 				for await (const event of parseAnthropicStream(anthropicStream, options.model, initiator, resolvedConfigDir)) {
+					if (!timeoutCleared) {
+						timeout.clearTimeout();
+						timeoutCleared = true;
+					}
 					if (event.type === "usage") {
 						if (options.onMetrics) {
 							options.onMetrics({
@@ -220,24 +267,33 @@ export function createCopilotProvider(
 				}
 				return;
 			} catch (err: unknown) {
-				// Check for auth errors (401/400) — force one token refresh
-				const status = (err as Record<string, unknown>)?.status ?? (err as Record<string, unknown>)?.statusCode ?? 0;
+				timeout.clearTimeout();
+
+				// If the CALLER aborted (not our timeout), do not retry
+				if (options.signal?.aborted) {
+					throw err;
+				}
+
+				lastError = err;
+				const status = errorStatus(err);
+
+				// Non-retryable 4xx (except 429) — fail immediately unless auth retry
 				if (status !== 429 && status >= 400 && status < 500) {
 					if ((status === 401 || status === 400) && !retriedAuth) {
 						retriedAuth = true;
 						logger?.warn(
 							"AUTH",
-							`Got ${status} from Anthropic messages (${String((err as Record<string, unknown>)?.message ?? "").slice(0, 200)}), ` +
+							`Got ${status} from Anthropic messages (${errorMessage(err).slice(0, 200)}), ` +
 								`forcing token refresh. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
 						);
 						sessionExpires = 0;
 						await ensureValidSession();
 						continue;
 					}
-					throw new ProviderError(status as number, String((err as Record<string, unknown>)?.message ?? err));
+					throw new ProviderError(status, errorMessage(err));
 				}
 
-				// Retryable: 429, 5xx, network errors
+				// Retryable: 429, 5xx, network/timeout errors
 				if (attempt === MAX_RETRIES) throw lastError;
 				await new Promise((r) => setTimeout(r, BACKOFF_MS));
 				await ensureValidSession();
@@ -332,10 +388,7 @@ export function createCopilotProvider(
 				return;
 			}
 
-			// Retry constants
-			const MAX_RETRIES = 8;
-			const REQUEST_TIMEOUT_MS = 15_000;
-			const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
+			// ── OpenAI Chat Completions path ─────────────────────────────
 
 			let response: Response | undefined;
 			let lastError: unknown;
@@ -345,11 +398,7 @@ export function createCopilotProvider(
 				// Use a manual AbortController for the connection timeout so we can
 				// clear it once headers arrive. AbortSignal.timeout() cannot be
 				// cancelled and would abort the SSE body stream mid-read.
-				const timeoutController = new AbortController();
-				const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
-				const signals: AbortSignal[] = [timeoutController.signal];
-				if (options.signal) signals.push(options.signal);
-				const combinedSignal = AbortSignal.any(signals);
+				const timeout = buildTimeoutSignal(options.signal);
 
 				try {
 					response = await fetch(`${baseUrl}/chat/completions`, {
@@ -367,13 +416,13 @@ export function createCopilotProvider(
 							stream: true,
 							...(options.tools?.length ? { tools: options.tools } : {}),
 						}),
-						signal: combinedSignal,
+						signal: timeout.signal,
 					});
 					// Headers received — clear the connection timeout so it does
 					// not abort the SSE body stream during long generations.
-					clearTimeout(timeoutId);
+					timeout.clearTimeout();
 				} catch (err) {
-					clearTimeout(timeoutId);
+					timeout.clearTimeout();
 					// If the CALLER aborted (not our timeout), do not retry
 					if (options.signal?.aborted) {
 						throw err;
