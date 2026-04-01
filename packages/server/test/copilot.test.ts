@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { StoredAuth } from "../src/auth/store";
-import { createCopilotProvider } from "../src/provider/copilot";
+import { createCopilotProvider, isCopilotClaude } from "../src/provider/copilot";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 
@@ -1075,8 +1075,8 @@ describe("Retry logic", () => {
 			caught = err;
 		}
 
-		// 1 initial + 3 retries = 4 total attempts
-		expect(attempt).toBe(4);
+		// 1 initial + 8 retries = 9 total attempts
+		expect(attempt).toBe(9);
 		expect(caught).toBeInstanceOf(ProviderError);
 		expect((caught as ProviderError).status).toBe(502);
 	});
@@ -1381,7 +1381,7 @@ describe("Retry logic", () => {
 		}
 	});
 
-	test("exponential backoff increases delay between retries", async () => {
+	test("flat backoff waits the same delay between retries", async () => {
 		let attempt = 0;
 		const timestamps: number[] = [];
 
@@ -1403,15 +1403,17 @@ describe("Retry logic", () => {
 		}
 
 		expect(attempt).toBe(4);
-		// Verify backoff is increasing: gap2 > gap1, gap3 > gap2
-		// With backoffBaseMs=10: delays are 10ms, 20ms, 40ms
-		const gap1 = timestamps[1] - timestamps[0]; // ~10ms
-		const gap2 = timestamps[2] - timestamps[1]; // ~20ms
-		const gap3 = timestamps[3] - timestamps[2]; // ~40ms
+		// Verify backoff is flat: all gaps should be approximately equal
+		// With backoffBaseMs=10: all delays are 10ms
+		const gap1 = timestamps[1] - timestamps[0];
+		const gap2 = timestamps[2] - timestamps[1];
+		const gap3 = timestamps[3] - timestamps[2];
 
 		expect(gap1).toBeGreaterThan(5);
-		expect(gap2).toBeGreaterThan(gap1);
-		expect(gap3).toBeGreaterThan(gap2);
+		expect(gap2).toBeGreaterThan(5);
+		expect(gap3).toBeGreaterThan(5);
+		// No gap should be more than double another (flat, not exponential)
+		expect(Math.max(gap1, gap2, gap3)).toBeLessThan(Math.min(gap1, gap2, gap3) * 3);
 	});
 });
 
@@ -1470,5 +1472,358 @@ describe("Corrupt token detection", () => {
 		);
 
 		expect(logs.some((l) => l.includes("corrupt"))).toBe(false);
+	});
+});
+
+// ── Anthropic routing for Claude models ───────────────────────────────────
+
+function anthropicSseStream(events: { event: string; data: Record<string, unknown> }[]): ReadableStream<Uint8Array> {
+	const text = events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join("");
+	return new ReadableStream({
+		start(controller) {
+			controller.enqueue(new TextEncoder().encode(text));
+			controller.close();
+		},
+	});
+}
+
+function anthropicTextResponse(text: string, inputTokens = 10): ReadableStream<Uint8Array> {
+	return anthropicSseStream([
+		{
+			event: "message_start",
+			data: {
+				type: "message_start",
+				message: {
+					id: "msg_1",
+					type: "message",
+					role: "assistant",
+					content: [],
+					model: "claude-sonnet-4.6",
+					usage: { input_tokens: inputTokens, output_tokens: 0 },
+				},
+			},
+		},
+		{
+			event: "content_block_start",
+			data: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+		},
+		{
+			event: "content_block_delta",
+			data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+		},
+		{ event: "content_block_stop", data: { type: "content_block_stop", index: 0 } },
+		{
+			event: "message_delta",
+			data: { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 5 } },
+		},
+		{ event: "message_stop", data: { type: "message_stop" } },
+	]);
+}
+
+describe("isCopilotClaude", () => {
+	test("matches claude-sonnet-4.6", () => {
+		expect(isCopilotClaude("claude-sonnet-4.6")).toBe(true);
+	});
+
+	test("matches claude-haiku-4.5", () => {
+		expect(isCopilotClaude("claude-haiku-4.5")).toBe(true);
+	});
+
+	test("matches claude-opus-4.6", () => {
+		expect(isCopilotClaude("claude-opus-4.6")).toBe(true);
+	});
+
+	test("matches claude-sonnet-4", () => {
+		expect(isCopilotClaude("claude-sonnet-4")).toBe(true);
+	});
+
+	test("matches claude-sonnet-4-20250514", () => {
+		expect(isCopilotClaude("claude-sonnet-4-20250514")).toBe(true);
+	});
+
+	test("does not match gpt-4o", () => {
+		expect(isCopilotClaude("gpt-4o")).toBe(false);
+	});
+
+	test("does not match gpt-5-mini", () => {
+		expect(isCopilotClaude("gpt-5-mini")).toBe(false);
+	});
+
+	test("does not match claude-3.5-sonnet (old generation)", () => {
+		expect(isCopilotClaude("claude-3.5-sonnet")).toBe(false);
+	});
+});
+
+describe("Anthropic routing for Claude models", () => {
+	const originalFetch = globalThis.fetch;
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-anthropic-"));
+		const modelsConfig = [
+			{
+				id: "claude-sonnet-4.6",
+				name: "Claude Sonnet 4.6",
+				contextWindow: 200000,
+				maxOutput: 16384,
+				premiumRequestMultiplier: 1,
+				enabled: true,
+			},
+			{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 0, enabled: true },
+		];
+		fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(modelsConfig));
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	test("routes claude-sonnet-4.6 to /v1/messages endpoint", async () => {
+		let capturedUrl = "";
+		let capturedBody: Record<string, unknown> = {};
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			const url = input instanceof Request ? input.url : input.toString();
+			capturedUrl = url;
+			if (init?.body) {
+				capturedBody = JSON.parse(init.body as string);
+			} else if (input instanceof Request) {
+				capturedBody = await input.clone().json();
+			}
+			return new Response(anthropicTextResponse("Hello from Claude"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(e);
+		}
+
+		// Should hit /v1/messages, NOT chat/completions
+		expect(capturedUrl).toContain("/v1/messages");
+		expect(capturedUrl).not.toContain("chat/completions");
+
+		// Body should be in Anthropic format
+		expect(capturedBody.model).toBe("claude-sonnet-4.6");
+		expect(capturedBody.max_tokens).toBeDefined();
+		expect(capturedBody.stream).toBe(true);
+		// Anthropic format: no "choices", no "messages" wrapping in OpenAI style
+		expect(capturedBody.messages).toBeDefined();
+
+		// Should yield text events
+		expect(events.some((e) => e.type === "text" && e.text === "Hello from Claude")).toBe(true);
+		expect(events.some((e) => e.type === "finish")).toBe(true);
+	});
+
+	test("routes gpt-4o through existing chat/completions path", async () => {
+		let capturedUrl = "";
+
+		globalThis.fetch = mock(async (input: string | URL | Request, _init?: RequestInit) => {
+			const url = input instanceof Request ? input.url : input.toString();
+			capturedUrl = url;
+			return new Response(sseStream([chatChunk("hi"), "[DONE]"]), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(e);
+		}
+
+		// Should hit chat/completions, NOT /v1/messages
+		expect(capturedUrl).toContain("chat/completions");
+		expect(capturedUrl).not.toContain("/v1/messages");
+	});
+
+	test("includes Copilot static headers on Anthropic requests", async () => {
+		let capturedHeaders: Record<string, string> = {};
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			if (init?.headers instanceof Headers) {
+				capturedHeaders = Object.fromEntries(init.headers.entries());
+			} else if (init?.headers) {
+				capturedHeaders = { ...(init.headers as Record<string, string>) };
+			} else if (input instanceof Request) {
+				capturedHeaders = Object.fromEntries(input.headers.entries());
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		// Copilot standard headers (Anthropic SDK lowercases header names)
+		expect(capturedHeaders["user-agent"]).toMatch(/^GitHubCopilotChat\//);
+		expect(capturedHeaders["editor-version"]).toBeDefined();
+		expect(capturedHeaders["copilot-integration-id"]).toBeDefined();
+		// Custom routing headers
+		expect(capturedHeaders["x-initiator"]).toBe("user");
+		expect(capturedHeaders["openai-intent"]).toBe("conversation-edits");
+	});
+
+	test("does not include fine-grained-tool-streaming beta header", async () => {
+		let capturedHeaders: Record<string, string> = {};
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			if (init?.headers instanceof Headers) {
+				capturedHeaders = Object.fromEntries(init.headers.entries());
+			} else if (init?.headers) {
+				capturedHeaders = { ...(init.headers as Record<string, string>) };
+			} else if (input instanceof Request) {
+				capturedHeaders = Object.fromEntries(input.headers.entries());
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const betaHeader = capturedHeaders["anthropic-beta"] || "";
+		expect(betaHeader).not.toContain("fine-grained-tool-streaming");
+	});
+
+	test("yields usage event from Anthropic stream", async () => {
+		globalThis.fetch = mock(async (_input: string | URL | Request) => {
+			return new Response(anthropicTextResponse("Hello", 42), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		const usage = events.find((e) => e.type === "usage");
+		expect(usage).toBeDefined();
+		if (usage?.type === "usage") {
+			expect(usage.tokenCount).toBe(42);
+			expect(usage.tokenLimit).toBe(200000);
+		}
+	});
+
+	test("uses max_tokens from model config", async () => {
+		let capturedBody: Record<string, unknown>;
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			if (init?.body) {
+				capturedBody = JSON.parse(init.body as string);
+			} else if (input instanceof Request) {
+				capturedBody = await input.clone().json();
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		expect(capturedBody.max_tokens).toBe(16384);
+	});
+
+	test("converts tools to Anthropic format", async () => {
+		let capturedBody: Record<string, unknown>;
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			if (init?.body) {
+				capturedBody = JSON.parse(init.body as string);
+			} else if (input instanceof Request) {
+				capturedBody = await input.clone().json();
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const tools = [
+			{
+				type: "function" as const,
+				function: {
+					name: "read_file",
+					description: "Read a file",
+					parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+				},
+			},
+		];
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+			tools,
+		})) {
+			/* drain */
+		}
+
+		// Anthropic format: tools have name, description, input_schema (not function wrapper)
+		expect(capturedBody.tools).toBeDefined();
+		expect(capturedBody.tools[0].name).toBe("read_file");
+		expect(capturedBody.tools[0].input_schema).toBeDefined();
+		expect(capturedBody.tools[0].function).toBeUndefined();
+	});
+
+	test("accumulates turn metrics for Anthropic path", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(anthropicTextResponse("Hello", 500), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		provider.beginTurn?.(0);
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const summary = provider.getTurnSummary?.();
+		expect(summary).toBeDefined();
+		expect(summary).toContain("claude-sonnet-4.6");
+		expect(summary).toContain("user: 1");
+		expect(summary).toContain("premium: 1.00");
 	});
 });

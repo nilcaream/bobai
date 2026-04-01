@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Anthropic from "@anthropic-ai/sdk";
 import { type StoredAuth, saveAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { fetchCatalog } from "../models-catalog";
+import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
+import { parseAnthropicStream } from "./anthropic-stream";
 import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { AuthError, ProviderError } from "./provider";
@@ -66,6 +69,10 @@ export async function exchangeToken(refreshToken: string): Promise<{ access: str
 function resolveInitiator(messages: Message[]): "user" | "agent" {
 	const last = messages[messages.length - 1];
 	return last?.role === "user" ? "user" : "agent";
+}
+
+export function isCopilotClaude(modelId: string): boolean {
+	return /^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId);
 }
 
 export function createCopilotProvider(
@@ -150,6 +157,96 @@ export function createCopilotProvider(
 		}
 	}
 
+	function getMaxOutputTokens(modelId: string): number {
+		const configs = loadModelsConfig(resolvedConfigDir);
+		const config = configs.find((m) => m.id === modelId);
+		return config?.maxOutput ?? 16384;
+	}
+
+	async function* streamClaude(options: ProviderOptions, initiator: "user" | "agent"): AsyncGenerator<StreamEvent> {
+		const MAX_RETRIES = 8;
+		const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
+
+		const { system, messages } = convertMessagesToAnthropic(options.messages);
+		const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
+		const maxTokens = getMaxOutputTokens(options.model);
+
+		const params: Record<string, unknown> = {
+			model: options.model,
+			messages,
+			max_tokens: maxTokens,
+			...(system ? { system } : {}),
+			...(tools ? { tools } : {}),
+		};
+
+		let lastError: unknown;
+		let retriedAuth = false;
+
+		for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+			const client = new Anthropic({
+				apiKey: null,
+				authToken: sessionToken,
+				baseURL: baseUrl,
+				defaultHeaders: {
+					...copilotConfig.headers,
+					"Openai-Intent": "conversation-edits",
+					"x-initiator": initiator,
+				},
+			});
+
+			try {
+				const anthropicStream = client.messages.stream(params);
+
+				for await (const event of parseAnthropicStream(anthropicStream, options.model, initiator, resolvedConfigDir)) {
+					if (event.type === "usage") {
+						if (options.onMetrics) {
+							options.onMetrics({
+								model: options.model,
+								promptTokens: event.tokenCount,
+								totalTokens: event.tokenCount,
+								initiator,
+							});
+						} else {
+							turnModel = options.model;
+							turnTokens += event.tokenCount;
+							turnLastCallTokens = event.tokenCount;
+							if (initiator === "agent") turnAgentCalls++;
+							else turnUserCalls++;
+							const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+							if (initiator === "user") turnPremiumCost += multiplier;
+						}
+					}
+					yield event;
+				}
+				return;
+			} catch (err: unknown) {
+				// Check for auth errors (401/400) — force one token refresh
+				const status = (err as Record<string, unknown>)?.status ?? (err as Record<string, unknown>)?.statusCode ?? 0;
+				if (status !== 429 && status >= 400 && status < 500) {
+					if ((status === 401 || status === 400) && !retriedAuth) {
+						retriedAuth = true;
+						logger?.warn(
+							"AUTH",
+							`Got ${status} from Anthropic messages (${String((err as Record<string, unknown>)?.message ?? "").slice(0, 200)}), ` +
+								`forcing token refresh. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
+						);
+						sessionExpires = 0;
+						await ensureValidSession();
+						continue;
+					}
+					throw new ProviderError(status as number, String((err as Record<string, unknown>)?.message ?? err));
+				}
+
+				// Retryable: 429, 5xx, network errors
+				if (attempt === MAX_RETRIES) throw lastError;
+				await new Promise((r) => setTimeout(r, BACKOFF_MS));
+				await ensureValidSession();
+			}
+		}
+
+		throw lastError ?? new Error("Unexpected: no response after retry loop");
+	}
+
 	return {
 		id: "github-copilot",
 
@@ -230,10 +327,15 @@ export function createCopilotProvider(
 			await ensureValidSession();
 			const initiator = options.initiator ?? resolveInitiator(options.messages);
 
+			if (isCopilotClaude(options.model)) {
+				yield* streamClaude(options, initiator);
+				return;
+			}
+
 			// Retry constants
-			const MAX_RETRIES = 3;
-			const REQUEST_TIMEOUT_MS = 60_000;
-			const BACKOFF_BASE_MS = testOverrides?.backoffBaseMs ?? 2_000;
+			const MAX_RETRIES = 8;
+			const REQUEST_TIMEOUT_MS = 15_000;
+			const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
 
 			let response: Response | undefined;
 			let lastError: unknown;
@@ -279,8 +381,7 @@ export function createCopilotProvider(
 					lastError = err;
 					// Timeout errors and network errors are retryable; fall through to backoff
 					if (attempt === MAX_RETRIES) throw lastError;
-					const backoffMs = BACKOFF_BASE_MS * 2 ** attempt;
-					await new Promise((r) => setTimeout(r, backoffMs));
+					await new Promise((r) => setTimeout(r, BACKOFF_MS));
 					await ensureValidSession();
 					response = undefined;
 					continue;
@@ -316,8 +417,7 @@ export function createCopilotProvider(
 				lastError = new ProviderError(response.status, await response.text());
 				if (attempt === MAX_RETRIES) throw lastError;
 
-				const backoffMs = BACKOFF_BASE_MS * 2 ** attempt;
-				await new Promise((r) => setTimeout(r, backoffMs));
+				await new Promise((r) => setTimeout(r, BACKOFF_MS));
 				await ensureValidSession();
 				response = undefined;
 			}
@@ -460,22 +560,45 @@ export async function refreshModels(sessionToken: string, baseUrl: string, confi
 	for (const config of configs) {
 		process.stdout.write(`- ${config.id.padEnd(20)}`);
 		try {
-			const response = await fetch(`${baseUrl}/chat/completions`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					...copilotConfig.headers,
-					"Openai-Intent": "conversation-edits",
-					Authorization: `Bearer ${sessionToken}`,
-					"x-initiator": "agent",
-				},
-				body: JSON.stringify({
-					model: config.id,
-					messages: [{ role: "user", content: "Ping. Respond pong." }],
-					stream: false,
-				}),
-				signal: AbortSignal.timeout(20_000),
-			});
+			let response: Response;
+			if (isCopilotClaude(config.id)) {
+				// Claude models: probe via Anthropic Messages API
+				response = await fetch(`${baseUrl}/v1/messages`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...copilotConfig.headers,
+						"Openai-Intent": "conversation-edits",
+						Authorization: `Bearer ${sessionToken}`,
+						"x-initiator": "agent",
+					},
+					body: JSON.stringify({
+						model: config.id,
+						messages: [{ role: "user", content: "Ping. Respond pong." }],
+						max_tokens: 16,
+						stream: false,
+					}),
+					signal: AbortSignal.timeout(20_000),
+				});
+			} else {
+				// Non-Claude models: probe via OpenAI Chat Completions
+				response = await fetch(`${baseUrl}/chat/completions`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...copilotConfig.headers,
+						"Openai-Intent": "conversation-edits",
+						Authorization: `Bearer ${sessionToken}`,
+						"x-initiator": "agent",
+					},
+					body: JSON.stringify({
+						model: config.id,
+						messages: [{ role: "user", content: "Ping. Respond pong." }],
+						stream: false,
+					}),
+					signal: AbortSignal.timeout(20_000),
+				});
+			}
 			if (response.ok) {
 				config.enabled = true;
 				console.log(": OK");

@@ -13,6 +13,7 @@
 		"@types/bun": "latest"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.81.0",
 		"gray-matter": "^4.0.3"
 	}
 }
