@@ -76,4 +76,35 @@ describe("grepSearchTool", () => {
 		const result = await grepSearchTool.execute({}, ctx);
 		expect(result.llmOutput).toContain("pattern");
 	});
+
+	test("truncates individual lines longer than 500 characters", async () => {
+		const longContent = `const x = "${"A".repeat(600)}";\n`;
+		fs.writeFileSync(path.join(tmpDir, "long-line.ts"), longContent);
+		const result = await grepSearchTool.execute({ pattern: "AAAA" }, ctx);
+		const lines = result.llmOutput.split("\n");
+		const longLineMatch = lines.find((l: string) => l.includes("long-line.ts"));
+		expect(longLineMatch).toBeDefined();
+		expect(longLineMatch?.length).toBeLessThanOrEqual(600); // 500 + file path/line num prefix + truncation notice
+		expect(longLineMatch).toContain("... (truncated)");
+	});
+
+	test("truncates total output to 20000 characters", async () => {
+		// Create many files with long (but under 500-char) lines to exceed 20K total
+		const subDir = path.join(tmpDir, "bulk");
+		fs.mkdirSync(subDir, { recursive: true });
+		for (let i = 0; i < 100; i++) {
+			const content = `const match_${i} = "${"X".repeat(300)}";\n`;
+			fs.writeFileSync(path.join(subDir, `file${String(i).padStart(3, "0")}.ts`), content);
+		}
+		const result = await grepSearchTool.execute({ pattern: "match_", path: "bulk" }, ctx);
+		expect(result.llmOutput.length).toBeLessThanOrEqual(20_100); // small buffer for the truncation notice itself
+		expect(result.llmOutput).toContain("truncated");
+		expect(result.llmOutput).toContain("output limit");
+	});
+
+	test("uiOutput reflects total result count even when output is truncated", async () => {
+		// Reuse the bulk files from above (they persist in tmpDir/bulk)
+		const result = await grepSearchTool.execute({ pattern: "match_", path: "bulk" }, ctx);
+		expect(result.uiOutput).toContain("100 results");
+	});
 });

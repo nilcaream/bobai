@@ -4,6 +4,8 @@ import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown, isPathAccessible } from "./tool";
 
 const MAX_RESULTS = 100;
+const MAX_LINE_LENGTH = 500;
+const MAX_OUTPUT_CHARS = 20_000;
 
 export const grepSearchTool: Tool = {
 	definition: {
@@ -113,17 +115,40 @@ export const grepSearchTool: Tool = {
 			}
 
 			const lines = stdout.trimEnd().split("\n");
-			if (lines.length > MAX_RESULTS) {
-				return {
-					llmOutput: `${lines.slice(0, MAX_RESULTS).join("\n")}\n\n... truncated (${lines.length} total matches, showing first ${MAX_RESULTS})`,
-					uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${lines.length} results)`,
+			const totalMatches = lines.length;
 
-					mergeable: true,
-				};
+			// Truncate individual long lines
+			const trimmedLines = lines.map((line) =>
+				line.length > MAX_LINE_LENGTH ? `${line.substring(0, MAX_LINE_LENGTH)}... (truncated)` : line,
+			);
+
+			// Apply line-count limit
+			const capped = totalMatches > MAX_RESULTS ? trimmedLines.slice(0, MAX_RESULTS) : trimmedLines;
+
+			// Apply total output character limit
+			const outputLines: string[] = [];
+			let charCount = 0;
+			let hitCharLimit = false;
+			for (const line of capped) {
+				const added = charCount > 0 ? line.length + 1 : line.length; // +1 for newline
+				if (charCount + added > MAX_OUTPUT_CHARS) {
+					hitCharLimit = true;
+					break;
+				}
+				outputLines.push(line);
+				charCount += added;
 			}
+
+			let llmOutput = outputLines.join("\n");
+			if (hitCharLimit) {
+				llmOutput += `\n\n... truncated (output limit: showing ${outputLines.length} of ${totalMatches} matches, output capped at ${MAX_OUTPUT_CHARS} characters)`;
+			} else if (totalMatches > MAX_RESULTS) {
+				llmOutput += `\n\n... truncated (${totalMatches} total matches, showing first ${MAX_RESULTS})`;
+			}
+
 			return {
-				llmOutput: stdout.trimEnd(),
-				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${lines.length} results)`,
+				llmOutput,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${totalMatches} results)`,
 
 				mergeable: true,
 			};
