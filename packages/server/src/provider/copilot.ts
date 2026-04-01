@@ -247,9 +247,20 @@ export function createCopilotProvider(
 
 			try {
 				const client = new Anthropic({
+					// apiKey: null suppresses the SDK's default env-var lookup
+					// (ANTHROPIC_API_KEY). Without it, an unrelated env var could
+					// override our Copilot session token and route requests to
+					// api.anthropic.com instead of the Copilot proxy.
 					apiKey: null,
+					// authToken makes the SDK send "Authorization: Bearer <token>"
+					// (not "x-api-key"), which is what Copilot's proxy expects.
 					authToken: sessionToken,
 					baseURL: baseUrl,
+					// The SDK has built-in retry logic (default: 2 retries). We must
+					// disable it because our own retry loop handles x-initiator
+					// downgrade, token refresh, and body-read timeout — the SDK's
+					// retries would bypass all of that and send duplicate requests
+					// with the original headers.
 					maxRetries: 0,
 					defaultHeaders: {
 						...copilotConfig.headers,
