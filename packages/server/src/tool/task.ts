@@ -7,19 +7,24 @@ import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { compactMessages } from "../compaction/engine";
 import { evictOldTurns } from "../compaction/eviction";
 import { FileTime } from "../file/time";
+import type { InstructionFile } from "../instructions";
 import type { Logger } from "../log/logger";
 import { runWithScope } from "../log/logger";
 import { subagentScope } from "../log/session-tag";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
+import type { SkillRegistry } from "../skill/skill";
 import type { SubagentStatus } from "../subagent-status";
+import { buildSystemPrompt } from "../system-prompt";
 import { bashTool } from "./bash";
 import { editFileTool } from "./edit-file";
 import { fileSearchTool } from "./file-search";
 import { grepSearchTool } from "./grep-search";
 import { listDirectoryTool } from "./list-directory";
 import { readFileTool } from "./read-file";
+import { createSkillTool } from "./skill";
+import { sqlite3Tool } from "./sqlite3";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { createToolRegistry } from "./tool";
 import { writeFileTool } from "./write-file";
@@ -37,7 +42,8 @@ export interface TaskToolDeps {
 	parentSessionId: string;
 	projectRoot: string;
 	accessibleDirectories?: string[];
-	systemPrompt: string;
+	skills: SkillRegistry;
+	instructions: InstructionFile[];
 	maxIterations?: number;
 	signal?: AbortSignal;
 	onEvent: (event: AgentEvent & { sessionId?: string }) => void;
@@ -55,7 +61,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		parentSessionId,
 		projectRoot,
 		accessibleDirectories,
-		systemPrompt,
+		skills,
+		instructions,
 		signal,
 		onEvent,
 		sendWs,
@@ -196,9 +203,11 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				});
 
 			// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
-			messages.unshift({ role: "system", content: systemPrompt });
+			const subagentPrompt = buildSystemPrompt(skills.list(), instructions, { subagent: true });
+			messages.unshift({ role: "system", content: subagentPrompt });
 
 			// Build tool registry without the task tool itself (no recursion)
+			const skillTool = createSkillTool(skills);
 			const childTools = createToolRegistry([
 				readFileTool,
 				listDirectoryTool,
@@ -207,6 +216,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				editFileTool,
 				grepSearchTool,
 				bashTool,
+				sqlite3Tool,
+				skillTool,
 			]);
 
 			// Compact old tool outputs for resumed subagent sessions.

@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { InstructionFile } from "../src/instructions";
 import type { Skill } from "../src/skill/skill";
-import { buildSystemPrompt, SYSTEM_PROMPT } from "../src/system-prompt";
-
-describe("SYSTEM_PROMPT constant", () => {
-	test("is a non-empty string", () => {
-		expect(typeof SYSTEM_PROMPT).toBe("string");
-		expect(SYSTEM_PROMPT.length).toBeGreaterThan(50);
-	});
-});
+import { buildSystemPrompt } from "../src/system-prompt";
 
 describe("buildSystemPrompt", () => {
 	test("wraps base prompt in <base> tags", () => {
@@ -19,7 +12,11 @@ describe("buildSystemPrompt", () => {
 
 	test("returns only base section when no skills or instructions provided", () => {
 		const result = buildSystemPrompt([]);
-		expect(result).toBe(`<base>\n${SYSTEM_PROMPT}\n</base>`);
+		expect(result).toStartWith("<base>\n");
+		expect(result).toEndWith("\n</base>");
+		// No sections beyond <base>
+		const afterBase = result.slice(result.indexOf("</base>") + "</base>".length);
+		expect(afterBase).toBe("");
 	});
 
 	test("identifies as Bob AI", () => {
@@ -152,7 +149,10 @@ describe("buildSystemPrompt", () => {
 
 	test("returns only base section when instructions array is empty", () => {
 		const result = buildSystemPrompt([], []);
-		expect(result).toBe(`<base>\n${SYSTEM_PROMPT}\n</base>`);
+		expect(result).toStartWith("<base>\n");
+		expect(result).toEndWith("\n</base>");
+		const afterBase = result.slice(result.indexOf("</base>") + "</base>".length);
+		expect(afterBase).toBe("");
 	});
 
 	test("context compaction section uses plain label instead of markdown heading", () => {
@@ -178,5 +178,49 @@ describe("buildSystemPrompt", () => {
 	test("mentions reading subdirectory context files on demand", () => {
 		const result = buildSystemPrompt([]);
 		expect(result).toContain("subdirector");
+	});
+
+	// --- Subagent system prompt ---
+
+	test("subagent prompt excludes task tool from tool list", () => {
+		const result = buildSystemPrompt([], [], { subagent: true });
+		// Should not list task as an available tool
+		expect(result).not.toContain("- task:");
+		// Should not mention delegating to subagents in the guidance
+		expect(result).not.toContain("Use the task tool");
+	});
+
+	test("subagent prompt includes all other tools", () => {
+		const result = buildSystemPrompt([], [], { subagent: true });
+		expect(result).toContain("- read_file:");
+		expect(result).toContain("- list_directory:");
+		expect(result).toContain("- write_file:");
+		expect(result).toContain("- edit_file:");
+		expect(result).toContain("- grep_search:");
+		expect(result).toContain("- bash:");
+		expect(result).toContain("- sqlite3:");
+		expect(result).toContain("- skill:");
+	});
+
+	test("subagent prompt includes subagent context note", () => {
+		const result = buildSystemPrompt([], [], { subagent: true });
+		expect(result).toContain("running as a subagent");
+		expect(result).toContain("task");
+		expect(result).toContain("not available in this context");
+	});
+
+	test("parent prompt does not include subagent context note", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).not.toContain("running as a subagent");
+	});
+
+	test("subagent prompt still includes skills and instructions", () => {
+		const skills: Skill[] = [
+			{ name: "debugging", description: "Systematic debugging", content: "...", filePath: "/a/SKILL.md" },
+		];
+		const instructions: InstructionFile[] = [{ type: "bobai-global", source: "/global/AGENT.md", content: "Be helpful." }];
+		const result = buildSystemPrompt(skills, instructions, { subagent: true });
+		expect(result).toContain("- **debugging**: Systematic debugging");
+		expect(result).toContain("Be helpful.");
 	});
 });

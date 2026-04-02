@@ -4,9 +4,15 @@ import type { AgentEvent } from "../src/agent-loop";
 import type { ServerMessage } from "../src/protocol";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { createSession, getMessages, listSubagentSessions } from "../src/session/repository";
+import type { SkillRegistry } from "../src/skill/skill";
 import { SubagentStatus } from "../src/subagent-status";
 import { createTaskTool } from "../src/tool/task";
 import { createTestDb } from "./helpers";
+
+const emptySkills: SkillRegistry = {
+	get: () => undefined,
+	list: () => [],
+};
 
 // Minimal mock provider: yields text, done.
 function textOnlyProvider(text: string): Provider {
@@ -49,7 +55,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "You are a subagent.",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -66,7 +73,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "You are a subagent.",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: (e) => events.push(e),
 			subagentStatus: status,
 		});
@@ -101,7 +109,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -117,7 +126,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "You are a subagent.",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -164,7 +174,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: status,
 		});
@@ -197,7 +208,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -218,7 +230,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -262,7 +275,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -295,7 +309,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -330,7 +345,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -349,7 +365,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			sendWs: (msg) => wsMsgs.push(msg),
 			subagentStatus: new SubagentStatus(),
@@ -375,7 +392,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			sendWs: (msg) => wsMsgs.push(msg),
 			subagentStatus: new SubagentStatus(),
@@ -402,7 +420,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			sendWs: (msg) => wsMsgs.push(msg),
 			subagentStatus: new SubagentStatus(),
@@ -450,7 +469,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "You are a subagent.",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			subagentStatus: new SubagentStatus(),
 		});
@@ -495,7 +515,8 @@ describe("createTaskTool", () => {
 			model: "test-model",
 			parentSessionId,
 			projectRoot: "/tmp",
-			systemPrompt: "sys",
+			skills: emptySkills,
+			instructions: [],
 			onEvent: () => {},
 			sendWs: (msg) => wsMsgs.push(msg),
 			subagentStatus: new SubagentStatus(),
