@@ -22,17 +22,62 @@ function headersToRecord(headers: HeadersInit | undefined): Record<string, strin
 	return { ...headers } as Record<string, string>;
 }
 
-async function collectStream(stream: ReadableStream<Uint8Array>): Promise<string> {
-	const reader = stream.getReader();
+// ── Recording stream ────────────────────────────────────────────────────
+//
+// History: this module originally used response.body.tee() to split the
+// stream into two branches — one for the caller, one for the dump
+// collector. While tee() worked, it introduced unnecessary complexity:
+//
+//  1. Backpressure coupling — if the dump reader fell behind the caller
+//     reader, the runtime had to buffer the delta in memory invisibly.
+//  2. Two independent error channels — network errors propagated to both
+//     branches separately, and cleanup behaviour varied across runtimes
+//     (especially Bun, where tee edge cases have been observed).
+//  3. Fire-and-forget timing — the dump side ran independently of the
+//     caller, so on process exit or abort the dump could be incomplete.
+//
+// The recording stream replaces tee() with a pass-through wrapper. Each
+// chunk flows to the caller exactly once; the wrapper accumulates a copy
+// as a side effect. When the caller finishes reading (or an error
+// occurs), the recorded payload is flushed to disk. This gives us:
+//
+//  - Single reader path: no extra buffering, natural backpressure.
+//  - One error channel: the caller's error IS the recording's error.
+//  - Deterministic dump timing: written right after stream completion.
+//
+// If you're considering switching back to tee(), check git history for
+// the original implementation and weigh the trade-offs above.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Wrap a ReadableStream so every chunk is forwarded to the caller while
+ * also being recorded. On stream completion the full text is passed to
+ * `onComplete`; on error it goes to `onError`.
+ */
+function createRecordingStream(
+	original: ReadableStream<Uint8Array>,
+	onComplete: (body: string) => void,
+	onError: (err: unknown) => void,
+): ReadableStream<Uint8Array> {
 	const decoder = new TextDecoder();
-	let text = "";
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		text += decoder.decode(value, { stream: true });
-	}
-	text += decoder.decode();
-	return text;
+	let recorded = "";
+
+	return new ReadableStream<Uint8Array>({
+		async start(controller) {
+			try {
+				for await (const chunk of original) {
+					recorded += decoder.decode(chunk, { stream: true });
+					controller.enqueue(chunk);
+				}
+				recorded += decoder.decode(); // flush incomplete multi-byte sequences
+				controller.close();
+				onComplete(recorded);
+			} catch (err) {
+				controller.error(err);
+				onError(err);
+			}
+		},
+	});
 }
 
 export function createFetchInterceptor(originalFetch: typeof fetch, options: FetchInterceptorOptions): typeof fetch {
@@ -70,10 +115,12 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 		const respHeaders = headersToRecord(response.headers);
 
 		if (response.body) {
-			const [callerStream, dumpStream] = response.body.tee();
-
-			collectStream(dumpStream)
-				.then((responseBody) => {
+			// Record the response body as it streams through to the caller.
+			// The dump is written once the caller finishes consuming the stream
+			// (or on error). No parallel reader, no tee — see comment above.
+			const recordingStream = createRecordingStream(
+				response.body,
+				(responseBody) => {
 					const filename = writeDump(
 						options.logDir,
 						{ method, url, headers: reqHeaders, body: requestBody },
@@ -86,12 +133,13 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 						},
 					);
 					options.logger.debug("HTTP", `Dumped to ${filename}`);
-				})
-				.catch((err) => {
+				},
+				(err) => {
 					options.logger.error("HTTP", `Dump failed: ${err}`);
-				});
+				},
+			);
 
-			return new Response(callerStream, {
+			return new Response(recordingStream, {
 				status: response.status,
 				statusText: response.statusText,
 				headers: response.headers,
