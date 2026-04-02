@@ -244,8 +244,8 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 
 		const rawMessages = [...messages];
+		const beforeCompaction = messages;
 		if (contextWindow > 0 && sessionPromptTokens > 0) {
-			const beforeCompaction = messages;
 			messages = compactMessages({
 				messages,
 				context: { promptTokens: sessionPromptTokens, contextWindow },
@@ -253,16 +253,25 @@ export async function handlePrompt(req: PromptRequest) {
 				sessionId: currentSessionId as string,
 				onReadFileCompacted: invalidateCompactedRead,
 			});
-			// Write debug dump if compaction actually changed something
-			if (messages !== beforeCompaction && req.logDir) {
-				const { preFile } = writeCompactionDump(req.logDir, beforeCompaction, messages, "pre-prompt");
-				if (preFile && scopedLogger) {
-					scopedLogger.debug("COMPACTION", `pre-prompt dump: ${preFile}`);
-				}
+		}
+		const afterCompaction = messages;
+		messages = evictOldTurns(messages);
+
+		// Write debug dump if compaction or eviction changed something
+		if (messages !== beforeCompaction && req.logDir) {
+			const { preFile } = writeCompactionDump({
+				logDir: req.logDir,
+				before: beforeCompaction,
+				afterCompaction,
+				afterEviction: messages,
+				code: "pre",
+				tag: sessionTag(currentSessionId as string),
+				debug: scopedLogger?.level === "debug",
+			});
+			if (preFile && scopedLogger) {
+				scopedLogger.debug("COMPACTION", `pre-prompt dump: ${preFile}`);
 			}
 		}
-
-		messages = evictOldTurns(messages);
 
 		// Signal the provider to start tracking turn stats
 		provider.beginTurn?.(sessionPromptTokens);

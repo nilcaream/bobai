@@ -176,14 +176,22 @@ describe("emergencyCompactConversation", () => {
 		const registry = createReadFileRegistry();
 		const fs = require("node:fs");
 		const tmpDir = `${__dirname}/../compaction-emergency-test-dump.tmp`;
+		const fakeLogger = {
+			level: "debug" as const,
+			logDir: tmpDir,
+			debug: mock(() => {}),
+			info: mock(() => {}),
+			warn: mock(() => {}),
+			error: mock(() => {}),
+		};
 
 		try {
-			const result = emergencyCompactConversation(conversation, 9000, 10000, registry, tmpDir);
+			const result = emergencyCompactConversation(conversation, 9000, 10000, registry, tmpDir, fakeLogger);
 			// Should have compacted (new array)
 			expect(result).not.toBe(conversation);
 			// Dump files should exist in the tmpDir
 			const files = fs.readdirSync(tmpDir);
-			const emergencyFiles = files.filter((f: string) => f.includes("emergency"));
+			const emergencyFiles = files.filter((f: string) => f.includes("emg"));
 			expect(emergencyFiles.length).toBeGreaterThanOrEqual(2); // pre and post
 		} finally {
 			// Clean up
@@ -210,7 +218,7 @@ describe("emergencyCompactConversation", () => {
 		const tmpDir = `${__dirname}/../compaction-emergency-logger-test.tmp`;
 		const infoFn = mock(() => {});
 		const fakeLogger = {
-			level: "info" as const,
+			level: "debug" as const,
 			logDir: tmpDir,
 			debug: mock(() => {}),
 			info: infoFn,

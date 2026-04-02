@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { formatMessageForDump, writeCompactionDump } from "../src/compaction/dump";
+import { type CompactionDumpOptions, formatMessageForDump, writeCompactionDump } from "../src/compaction/dump";
 import type { Message } from "../src/provider/provider";
 
 const TEST_DIR = path.join(import.meta.dir, ".compaction-dump-test.tmp");
@@ -45,6 +45,18 @@ describe("formatMessageForDump", () => {
 	});
 });
 
+function dumpOpts(overrides?: Partial<CompactionDumpOptions>): CompactionDumpOptions {
+	return {
+		logDir: TEST_DIR,
+		before: [{ role: "user", content: "hello" }],
+		afterCompaction: [{ role: "user", content: "hello compacted" }],
+		code: "pre",
+		tag: "abcd1234",
+		debug: true,
+		...overrides,
+	};
+}
+
 describe("writeCompactionDump", () => {
 	beforeEach(() => {
 		fs.mkdirSync(TEST_DIR, { recursive: true });
@@ -54,25 +66,78 @@ describe("writeCompactionDump", () => {
 		fs.rmSync(TEST_DIR, { recursive: true, force: true });
 	});
 
-	test("writes paired pre/post files with correct naming pattern and same random suffix", () => {
-		const before: Message[] = [
-			{ role: "system", content: "sys" },
-			{ role: "user", content: "hello" },
-		];
-		const after: Message[] = [
-			{ role: "system", content: "sys" },
-			{ role: "user", content: "hello compacted" },
-		];
+	test("filename matches debug-YYYYMMDD-HHMMSSmmm-<parent>-<child>-<code>.txt pattern", () => {
+		const { preFile, postFile } = writeCompactionDump(dumpOpts());
 
-		const { preFile, postFile } = writeCompactionDump(TEST_DIR, before, after, "pre-prompt");
+		expect(preFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-main-pre-0\.txt$/);
+		expect(postFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-main-pre-1\.txt$/);
+	});
 
-		expect(preFile).toMatch(/^comp-\d{8}_\d{9}-pre-prompt-[a-z0-9]{4}-0\.txt$/);
-		expect(postFile).toMatch(/^comp-\d{8}_\d{9}-pre-prompt-[a-z0-9]{4}-1\.txt$/);
+	test("all three files share the same prefix", () => {
+		const afterCompaction: Message[] = [{ role: "user", content: "compacted" }];
+		const afterEviction: Message[] = [{ role: "user", content: "evicted" }];
 
-		// Pre and post files must share the same prefix (timestamp + suffix + random)
-		const prePrefix = preFile.replace(/-0\.txt$/, "");
-		const postPrefix = postFile.replace(/-1\.txt$/, "");
+		const { preFile, postFile, evictionFile } = writeCompactionDump(dumpOpts({ afterCompaction, afterEviction }));
+
+		const prePrefix = preFile.replace(/-pre-0\.txt$/, "");
+		const postPrefix = postFile.replace(/-pre-1\.txt$/, "");
+		const evictionPrefix = evictionFile.replace(/-pre-2\.txt$/, "");
+
 		expect(prePrefix).toBe(postPrefix);
+		expect(postPrefix).toBe(evictionPrefix);
+	});
+
+	test("eviction file written when afterEviction differs from afterCompaction", () => {
+		const afterCompaction: Message[] = [{ role: "user", content: "compacted" }];
+		const afterEviction: Message[] = [{ role: "user", content: "evicted" }];
+
+		const { evictionFile } = writeCompactionDump(dumpOpts({ afterCompaction, afterEviction }));
+
+		expect(evictionFile).toMatch(/^debug-.*-pre-2\.txt$/);
+		const content = fs.readFileSync(path.join(TEST_DIR, evictionFile), "utf8");
+		expect(content).toContain("evicted");
+	});
+
+	test("eviction file NOT written when afterEviction === afterCompaction (same ref)", () => {
+		const shared: Message[] = [{ role: "user", content: "same" }];
+
+		const { evictionFile } = writeCompactionDump(dumpOpts({ afterCompaction: shared, afterEviction: shared }));
+
+		expect(evictionFile).toBe("");
+		const files = fs.readdirSync(TEST_DIR);
+		expect(files.length).toBe(2);
+	});
+
+	test("eviction file NOT written when afterEviction not provided", () => {
+		const { evictionFile } = writeCompactionDump(dumpOpts());
+
+		expect(evictionFile).toBe("");
+		const files = fs.readdirSync(TEST_DIR);
+		expect(files.length).toBe(2);
+	});
+
+	test("nothing written when debug is false", () => {
+		const result = writeCompactionDump(dumpOpts({ debug: false }));
+
+		expect(result.preFile).toBe("");
+		expect(result.postFile).toBe("");
+		expect(result.evictionFile).toBe("");
+
+		const files = fs.readdirSync(TEST_DIR);
+		expect(files.length).toBe(0);
+	});
+
+	test("childTag defaults to main when tag has no colon", () => {
+		const { preFile } = writeCompactionDump(dumpOpts({ tag: "xyz99999" }));
+
+		expect(preFile).toContain("-xyz99999-main-");
+	});
+
+	test("subagent tag parsed correctly", () => {
+		const { preFile, postFile } = writeCompactionDump(dumpOpts({ tag: "abc12345:def67890" }));
+
+		expect(preFile).toContain("-abc12345-def67890-");
+		expect(postFile).toContain("-abc12345-def67890-");
 	});
 
 	test("pre file contains original messages", () => {
@@ -80,9 +145,9 @@ describe("writeCompactionDump", () => {
 			{ role: "user", content: "original question" },
 			{ role: "tool", content: "tool output", tool_call_id: "call_x" },
 		];
-		const after: Message[] = [{ role: "user", content: "original question" }];
+		const afterCompaction: Message[] = [{ role: "user", content: "original question" }];
 
-		const { preFile } = writeCompactionDump(TEST_DIR, before, after, "test");
+		const { preFile } = writeCompactionDump(dumpOpts({ before, afterCompaction }));
 
 		const content = fs.readFileSync(path.join(TEST_DIR, preFile), "utf8");
 		expect(content).toContain("original question");
@@ -97,40 +162,27 @@ describe("writeCompactionDump", () => {
 			{ role: "user", content: "original" },
 			{ role: "tool", content: "long output", tool_call_id: "call_y" },
 		];
-		const after: Message[] = [
+		const afterCompaction: Message[] = [
 			{ role: "user", content: "original" },
 			{ role: "tool", content: "[compacted]", tool_call_id: "call_y" },
 		];
 
-		const { postFile } = writeCompactionDump(TEST_DIR, before, after, "test");
+		const { postFile } = writeCompactionDump(dumpOpts({ before, afterCompaction }));
 
 		const content = fs.readFileSync(path.join(TEST_DIR, postFile), "utf8");
 		expect(content).toContain("[compacted]");
 		expect(content).toContain("original");
 	});
 
-	test("filenames contain suffix tag", () => {
-		const before: Message[] = [{ role: "user", content: "a" }];
-		const after: Message[] = [{ role: "user", content: "a" }];
-
-		const { preFile, postFile } = writeCompactionDump(TEST_DIR, before, after, "my-tag");
-
-		expect(preFile).toContain("my-tag");
-		expect(postFile).toContain("my-tag");
-	});
-
 	test("returns empty strings on write failure", () => {
-		const before: Message[] = [{ role: "user", content: "a" }];
-		const after: Message[] = [{ role: "user", content: "a" }];
-
-		// Use a path that cannot be created (nested under a file, not a directory)
-		const badDir = path.join(TEST_DIR, "nonexistent-file.txt", "subdir");
 		// Create a file at the parent path so mkdirSync fails
 		fs.writeFileSync(path.join(TEST_DIR, "nonexistent-file.txt"), "block");
+		const badDir = path.join(TEST_DIR, "nonexistent-file.txt", "subdir");
 
-		const { preFile, postFile } = writeCompactionDump(badDir, before, after, "fail");
+		const result = writeCompactionDump(dumpOpts({ logDir: badDir }));
 
-		expect(preFile).toBe("");
-		expect(postFile).toBe("");
+		expect(result.preFile).toBe("");
+		expect(result.postFile).toBe("");
+		expect(result.evictionFile).toBe("");
 	});
 });
