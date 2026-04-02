@@ -8,7 +8,7 @@ import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
-import { sessionTag } from "./log/session-tag";
+import { sessionScope } from "./log/session-tag";
 import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
@@ -152,7 +152,7 @@ export function createServer(options: ServerOptions) {
 				const contextWindow = modelConfig?.contextWindow ?? 0;
 				if (contextWindow <= 0) {
 					options.logger
-						?.withSession(sessionTag(sessionId))
+						?.withScope(sessionScope(sessionId))
 						.warn("CONFIG", `No contextWindow for model "${modelId}"; compacted context view unavailable`);
 				}
 

@@ -76,7 +76,7 @@ describe("loadPlugins", () => {
 
 		await loadPlugins(tmpDir, logger);
 
-		expect(readLog()).toContain(`INFO  PLUGIN main Loaded plugin ${pluginPath}`);
+		expect(readLog()).toContain(`INFO PLUGIN global Loaded plugin ${pluginPath}`);
 	});
 
 	test("loads a .ts plugin and logs its full path at INFO level", async () => {
@@ -88,7 +88,7 @@ describe("loadPlugins", () => {
 
 		await loadPlugins(tmpDir, logger);
 
-		expect(readLog()).toContain(`INFO  PLUGIN main Loaded plugin ${pluginPath}`);
+		expect(readLog()).toContain(`INFO PLUGIN global Loaded plugin ${pluginPath}`);
 	});
 
 	test("loads plugins in alphabetical filename order", async () => {

@@ -11,7 +11,7 @@ export interface Logger {
 	info(system: string, message: string): void;
 	warn(system: string, message: string): void;
 	error(system: string, message: string): void;
-	withSession(tag: string): Logger;
+	withScope(scope: string): Logger;
 }
 
 const LEVELS: Record<LogLevel, number> = {
@@ -21,14 +21,14 @@ const LEVELS: Record<LogLevel, number> = {
 	error: 3,
 };
 
-const sessionTagStore = new AsyncLocalStorage<string>();
+const scopeStore = new AsyncLocalStorage<string>();
 
-export function runWithSessionTag<T>(tag: string, fn: () => T): T {
-	return sessionTagStore.run(tag, fn);
+export function runWithScope<T>(scope: string, fn: () => T): T {
+	return scopeStore.run(scope, fn);
 }
 
-export function getSessionTag(): string | undefined {
-	return sessionTagStore.getStore();
+export function getScope(): string | undefined {
+	return scopeStore.getStore();
 }
 
 export function localTimestamp(): string {
@@ -49,14 +49,14 @@ export function createLogger(options: { level: LogLevel; logDir: string }): Logg
 		}
 	}
 
-	function write(level: LogLevel, system: string, message: string, sessionTag?: string): void {
+	function write(level: LogLevel, system: string, message: string, scope?: string): void {
 		if (LEVELS[level] < threshold) return;
 		ensureDir();
-		const tag = sessionTag ?? getSessionTag() ?? "main";
+		const scope_ = scope ?? getScope() ?? "global";
 		const ts = localTimestamp();
 		const date = ts.slice(0, 10);
 		const filePath = path.join(options.logDir, `${date}.log`);
-		const line = `${ts} ${level.toUpperCase().padEnd(5)} ${system} ${tag} ${message}`;
+		const line = `${ts} ${level.toUpperCase()} ${system} ${scope_} ${message}`;
 		try {
 			fs.appendFileSync(filePath, `${line}\n`);
 		} catch {
@@ -64,15 +64,15 @@ export function createLogger(options: { level: LogLevel; logDir: string }): Logg
 		}
 	}
 
-	function makeLogger(sessionTag?: string): Logger {
+	function makeLogger(scope?: string): Logger {
 		return {
 			level: options.level,
 			logDir: options.logDir,
-			debug: (system, message) => write("debug", system, message, sessionTag),
-			info: (system, message) => write("info", system, message, sessionTag),
-			warn: (system, message) => write("warn", system, message, sessionTag),
-			error: (system, message) => write("error", system, message, sessionTag),
-			withSession: (tag: string) => makeLogger(tag),
+			debug: (system, message) => write("debug", system, message, scope),
+			info: (system, message) => write("info", system, message, scope),
+			warn: (system, message) => write("warn", system, message, scope),
+			error: (system, message) => write("error", system, message, scope),
+			withScope: (scope: string) => makeLogger(scope),
 		};
 	}
 

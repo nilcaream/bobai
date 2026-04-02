@@ -1,8 +1,8 @@
-export function sessionTag(sessionId: string): string {
+export function sessionScope(sessionId: string): string {
 	const dash = sessionId.indexOf("-");
 	return dash > 0 ? sessionId.slice(0, dash) : sessionId;
 }
 
-export function subagentTag(parentSessionId: string, childSessionId: string): string {
-	return `${sessionTag(parentSessionId)}:${sessionTag(childSessionId)}`;
+export function subagentScope(parentSessionId: string, childSessionId: string): string {
+	return `${sessionScope(parentSessionId)}-${sessionScope(childSessionId)}`;
 }

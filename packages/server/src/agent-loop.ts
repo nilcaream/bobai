@@ -2,7 +2,7 @@ import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
 import { evictOldTurns } from "./compaction/eviction";
 import type { Logger } from "./log/logger";
-import { getSessionTag } from "./log/logger";
+import { getScope } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
@@ -43,14 +43,14 @@ export function emergencyCompactConversation(
 	if (compacted !== conversation) {
 		const evicted = evictOldTurns(compacted);
 		if (logDir) {
-			const tag = getSessionTag() ?? "main";
+			const scope = getScope() ?? "global";
 			const { preFile } = writeCompactionDump({
 				logDir,
 				before: beforeEmergency,
 				afterCompaction: compacted,
 				afterEviction: evicted,
 				code: "emg",
-				tag,
+				scope,
 				debug: logger?.level === "debug",
 			});
 			if (preFile && logger) {

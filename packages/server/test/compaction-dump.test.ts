@@ -51,7 +51,7 @@ function dumpOpts(overrides?: Partial<CompactionDumpOptions>): CompactionDumpOpt
 		before: [{ role: "user", content: "hello" }],
 		afterCompaction: [{ role: "user", content: "hello compacted" }],
 		code: "pre",
-		tag: "abcd1234",
+		scope: "abcd1234",
 		debug: true,
 		...overrides,
 	};
@@ -66,11 +66,11 @@ describe("writeCompactionDump", () => {
 		fs.rmSync(TEST_DIR, { recursive: true, force: true });
 	});
 
-	test("filename matches debug-YYYYMMDD-HHMMSSmmm-<parent>-<child>-<code>.txt pattern", () => {
+	test("filename matches debug-YYYYMMDD-HHMMSSmmm-<scope>-<code>.txt pattern", () => {
 		const { preFile, postFile } = writeCompactionDump(dumpOpts());
 
-		expect(preFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-main-pre-0\.txt$/);
-		expect(postFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-main-pre-1\.txt$/);
+		expect(preFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-pre-0\.txt$/);
+		expect(postFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-pre-1\.txt$/);
 	});
 
 	test("all three files share the same prefix", () => {
@@ -127,14 +127,14 @@ describe("writeCompactionDump", () => {
 		expect(files.length).toBe(0);
 	});
 
-	test("childTag defaults to main when tag has no colon", () => {
-		const { preFile } = writeCompactionDump(dumpOpts({ tag: "xyz99999" }));
+	test("defaults to global scope in filename", () => {
+		const { preFile } = writeCompactionDump(dumpOpts({ scope: "xyz99999" }));
 
-		expect(preFile).toContain("-xyz99999-main-");
+		expect(preFile).toContain("-xyz99999-");
 	});
 
-	test("subagent tag parsed correctly", () => {
-		const { preFile, postFile } = writeCompactionDump(dumpOpts({ tag: "abc12345:def67890" }));
+	test("subagent scope in filename", () => {
+		const { preFile, postFile } = writeCompactionDump(dumpOpts({ scope: "abc12345-def67890" }));
 
 		expect(preFile).toContain("-abc12345-def67890-");
 		expect(postFile).toContain("-abc12345-def67890-");

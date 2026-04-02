@@ -8,8 +8,8 @@ import { compactMessages } from "../compaction/engine";
 import { evictOldTurns } from "../compaction/eviction";
 import { FileTime } from "../file/time";
 import type { Logger } from "../log/logger";
-import { runWithSessionTag } from "../log/logger";
-import { subagentTag } from "../log/session-tag";
+import { runWithScope } from "../log/logger";
+import { subagentScope } from "../log/session-tag";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
@@ -156,8 +156,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				});
 			}
 
-			const childTag = subagentTag(parentSessionId, childSessionId);
-			const childLogger = logger?.withSession(childTag);
+			const scope = subagentScope(parentSessionId, childSessionId);
+			const childLogger = logger?.withScope(scope);
 
 			// Emit initial prompt as prompt_echo for the child session
 			// so the UI can display it when peeking at the subagent
@@ -259,7 +259,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			let lastAssistantMessageId: string | undefined;
 
 			try {
-				newMessages = await runWithSessionTag(childTag, () =>
+				newMessages = await runWithScope(scope, () =>
 					runAgentLoop({
 						provider: activeProvider,
 						model,

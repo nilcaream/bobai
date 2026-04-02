@@ -8,8 +8,8 @@ import { evictOldTurns } from "./compaction/eviction";
 import { FileTime } from "./file/time";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
-import { runWithSessionTag } from "./log/logger";
-import { sessionTag } from "./log/session-tag";
+import { runWithScope } from "./log/logger";
+import { sessionScope } from "./log/session-tag";
 import { repairMessageOrdering } from "./message-repair";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
@@ -110,7 +110,7 @@ export async function handlePrompt(req: PromptRequest) {
 
 		effectiveModel = sessionObj?.model ?? model;
 
-		const scopedLogger = req.logger?.withSession(sessionTag(currentSessionId as string));
+		const scopedLogger = req.logger?.withScope(sessionScope(currentSessionId as string));
 
 		// Persist the effective model so session load can reconstruct the status bar
 		if (!sessionObj?.model && currentSessionId) {
@@ -265,7 +265,7 @@ export async function handlePrompt(req: PromptRequest) {
 				afterCompaction,
 				afterEviction: messages,
 				code: "pre",
-				tag: sessionTag(currentSessionId as string),
+				scope: sessionScope(currentSessionId as string),
 				debug: scopedLogger?.level === "debug",
 			});
 			if (preFile && scopedLogger) {
@@ -288,7 +288,7 @@ export async function handlePrompt(req: PromptRequest) {
 				resultMetadata?: Record<string, unknown>;
 			}
 		>();
-		await runWithSessionTag(sessionTag(currentSessionId as string), () =>
+		await runWithScope(sessionScope(currentSessionId as string), () =>
 			runAgentLoop({
 				provider,
 				model: effectiveModel,

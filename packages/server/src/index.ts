@@ -75,7 +75,7 @@ const skillDirectories = [path.join(globalConfigDir, "skills"), path.join(proces
 const skills = discoverSkills(skillDirectories);
 logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
 for (const skill of skills.list()) {
-	logger.info("SKILL", `  ${skill.name}: ${skill.filePath}`);
+	logger.info("SKILL", `${skill.name}: ${skill.filePath}`);
 }
 
 if (!modelsConfigExists(globalConfigDir)) {

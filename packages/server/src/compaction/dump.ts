@@ -14,10 +14,14 @@ export interface CompactionDumpOptions {
 	afterEviction?: Message[];
 	code: DumpCode;
 	/**
-	 * Session tag string — either `"<parentTag>"` for main sessions or
-	 * `"<parentTag>:<childTag>"` for subagent sessions (as produced by `subagentTag()`).
+	 * Opaque scope string identifying the dump context.
+	 * - `"global"` — global / shared context
+	 * - `"514cc003"` — a session
+	 * - `"514cc003-12345678"` — a subagent within a session
+	 *
+	 * Callers should not parse this value.
 	 */
-	tag: string;
+	scope: string;
 	/** When false, skip writing entirely. */
 	debug: boolean;
 }
@@ -56,12 +60,12 @@ export function formatMessageForDump(msg: Message): string {
 
 /**
  * Build a dump filename following the unified format:
- * `debug-<date>-<time>-<parentTag>-<childTag>-<code>.txt`
+ * `debug-<date>-<time>-<scope>-<code>.txt`
  */
-function dumpFilename(ts: string, parentTag: string, childTag: string, code: string): string {
+function dumpFilename(ts: string, scope: string, code: string): string {
 	const date = ts.slice(0, 8);
 	const time = ts.slice(8);
-	return `debug-${date}-${time}-${parentTag}-${childTag}-${code}.txt`;
+	return `debug-${date}-${time}-${scope}-${code}.txt`;
 }
 
 function formatDump(messages: Message[]): string {
@@ -76,23 +80,14 @@ function formatDump(messages: Message[]): string {
 }
 
 /**
- * Parse a session tag into parent and child components.
- * - `"abc12345"` → `["abc12345", "main"]`
- * - `"abc12345:def67890"` → `["abc12345", "def67890"]`
- */
-function parseTag(tag: string): [string, string] {
-	const colon = tag.indexOf(":");
-	if (colon > 0) return [tag.slice(0, colon), tag.slice(colon + 1)];
-	return [tag, "main"];
-}
-
-/**
  * Write compaction/eviction dump files.
  *
  * Produces up to 3 files:
  * - `*-<code>-0.txt` — original messages before compaction
  * - `*-<code>-1.txt` — messages after compaction
  * - `*-<code>-2.txt` — messages after eviction (only when eviction changed something)
+ *
+ * Filenames follow the format `debug-<date>-<time>-<scope>-<code>.txt`.
  *
  * Returns empty strings when `debug` is false, on write failure, or when a file was skipped.
  */
@@ -103,17 +98,16 @@ export function writeCompactionDump(options: CompactionDumpOptions): CompactionD
 		fs.mkdirSync(options.logDir, { recursive: true });
 
 		const ts = localTimestamp().replace(/[-: .]/g, "");
-		const [parentTag, childTag] = parseTag(options.tag);
 
-		const preFilename = dumpFilename(ts, parentTag, childTag, `${options.code}-0`);
-		const postFilename = dumpFilename(ts, parentTag, childTag, `${options.code}-1`);
+		const preFilename = dumpFilename(ts, options.scope, `${options.code}-0`);
+		const postFilename = dumpFilename(ts, options.scope, `${options.code}-1`);
 
 		fs.writeFileSync(path.join(options.logDir, preFilename), formatDump(options.before));
 		fs.writeFileSync(path.join(options.logDir, postFilename), formatDump(options.afterCompaction));
 
 		let evictionFilename = "";
 		if (options.afterEviction && options.afterEviction !== options.afterCompaction) {
-			evictionFilename = dumpFilename(ts, parentTag, childTag, `${options.code}-2`);
+			evictionFilename = dumpFilename(ts, options.scope, `${options.code}-2`);
 			fs.writeFileSync(path.join(options.logDir, evictionFilename), formatDump(options.afterEviction));
 		}
 
