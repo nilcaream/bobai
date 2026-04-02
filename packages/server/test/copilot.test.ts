@@ -1075,8 +1075,8 @@ describe("Retry logic", () => {
 			caught = err;
 		}
 
-		// 1 initial + 8 retries = 9 total attempts
-		expect(attempt).toBe(9);
+		// 1 initial + 3 retries = 4 total attempts
+		expect(attempt).toBe(4);
 		expect(caught).toBeInstanceOf(ProviderError);
 		expect((caught as ProviderError).status).toBe(502);
 	});
