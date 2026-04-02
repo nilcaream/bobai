@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { InstructionFile } from "./instructions";
 import type { Skill } from "./skill/skill";
 
@@ -23,7 +24,8 @@ When working with code:
 - Use edit_file for modifying existing files and write_file for creating new ones.
 - After making changes, run relevant tests or builds to verify correctness.
 - Use the task tool for complex multi-step work that can be delegated to a subagent.
-- Projects often contain context files (AGENT.md, CLAUDE.md, README.md, etc.) that describe conventions, architecture, and workflows. In monorepos these may exist in multiple subdirectories. Read them when you need to understand a project or subdirectory you are working in.
+- Projects often contain context files (AGENT.md, CLAUDE.md, README.md, etc.) that describe conventions, architecture, and workflows. Context files found in the project root directory (AGENT.md, AGENTS.md, CLAUDE.md) are automatically included in this system prompt as <instructions type="project-specific"> blocks — do not re-read them. In monorepos, subdirectories may contain their own context files; read those when working in a specific subdirectory.
+- README.md is not auto-injected. Read it when you need to understand a project's purpose, setup, or structure.
 
 Context Compaction:
 - Some tool outputs in this conversation may have been compacted to manage context size. Compacted outputs are marked with "# COMPACTED" followed by a short description of what was removed. If you need the full output, you can re-invoke the tool. The original data is not lost — it has been summarized for efficiency.
@@ -40,7 +42,8 @@ export function buildSystemPrompt(skills: Skill[], instructions: InstructionFile
 	}
 
 	for (const instruction of instructions) {
-		parts.push(`<instructions type="${instruction.type}">\n${instruction.content}\n</instructions>`);
+		const sourceAttr = instruction.type === "project-specific" ? ` source="${path.basename(instruction.source)}"` : "";
+		parts.push(`<instructions type="${instruction.type}"${sourceAttr}>\n${instruction.content}\n</instructions>`);
 	}
 
 	return parts.join("\n\n");
