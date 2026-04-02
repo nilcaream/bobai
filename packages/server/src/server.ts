@@ -6,6 +6,7 @@ import { createCompactionRegistry } from "./compaction/registry";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
+import { sessionTag } from "./log/session-tag";
 import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
@@ -148,7 +149,9 @@ export function createServer(options: ServerOptions) {
 				const modelConfig = modelConfigs.find((m) => m.id === modelId);
 				const contextWindow = modelConfig?.contextWindow ?? 0;
 				if (contextWindow <= 0) {
-					options.logger?.warn("CONFIG", `No contextWindow for model "${modelId}"; compacted context view unavailable`);
+					options.logger
+						?.withSession(sessionTag(sessionId))
+						.warn("CONFIG", `No contextWindow for model "${modelId}"; compacted context view unavailable`);
 				}
 
 				const messages = [

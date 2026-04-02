@@ -7,6 +7,8 @@ import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { compactMessages } from "../compaction/engine";
 import { FileTime } from "../file/time";
 import type { Logger } from "../log/logger";
+import { runWithSessionTag } from "../log/logger";
+import { subagentTag } from "../log/session-tag";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
@@ -153,6 +155,9 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				});
 			}
 
+			const childTag = subagentTag(parentSessionId, childSessionId);
+			const childLogger = logger?.withSession(childTag);
+
 			// Emit initial prompt as prompt_echo for the child session
 			// so the UI can display it when peeking at the subagent
 			sendWs?.({ type: "prompt_echo", text: prompt, sessionId: childSessionId });
@@ -211,7 +216,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			const childModelConfig = childModelConfigs.find((m) => m.id === model);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
 			if (childContextWindow <= 0) {
-				logger?.warn("CONFIG", `No contextWindow for model "${model}"; subagent compaction disabled`);
+				childLogger?.warn("CONFIG", `No contextWindow for model "${model}"; subagent compaction disabled`);
 			}
 			function invalidateCompactedRead(_toolCallId: string, callArgs: Record<string, unknown>) {
 				const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
@@ -251,61 +256,63 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			let lastAssistantMessageId: string | undefined;
 
 			try {
-				newMessages = await runAgentLoop({
-					provider: activeProvider,
-					model,
-					messages,
-					tools: childTools,
-					projectRoot,
-					accessibleDirectories,
-					sessionId: childSessionId,
-					maxIterations: deps.maxIterations,
-					signal,
-					initiator: "agent",
-					contextWindow: childContextWindow,
-					rawMessages,
-					logger,
-					logDir,
-					onReadFileCompacted: invalidateCompactedRead,
-					onEvent(event: AgentEvent) {
-						onEvent({ ...event, sessionId: childSessionId });
-						if (event.type === "tool_call") {
-							const existing = toolMeta.get(event.id) ?? {};
-							toolMeta.set(event.id, { ...existing, formatCall: event.output });
-						}
-						if (event.type === "tool_result") {
-							const existing = toolMeta.get(event.id) ?? {};
-							toolMeta.set(event.id, {
-								...existing,
-								uiOutput: event.output,
-								mergeable: event.mergeable ?? true,
-								summary: event.summary,
-								resultMetadata: event.metadata,
-							});
-						}
-					},
-					onMessage(msg) {
-						if (msg.role === "assistant") {
-							const assistantMsg = msg as AssistantMessage;
-							const metadata = assistantMsg.tool_calls ? { tool_calls: assistantMsg.tool_calls } : undefined;
-							const stored = appendMessage(db, childSessionId, "assistant", assistantMsg.content ?? "", metadata);
-							lastAssistantMessageId = stored.id;
-						} else if (msg.role === "tool") {
-							const toolMsg = msg as { role: "tool"; content: string; tool_call_id: string };
-							const metadata: Record<string, unknown> = { tool_call_id: toolMsg.tool_call_id };
-							const captured = toolMeta.get(toolMsg.tool_call_id);
-							if (captured !== undefined) {
-								if (captured.formatCall !== undefined) metadata.format_call = captured.formatCall;
-								if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
-								if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
-								if (captured.summary) metadata.tool_summary = captured.summary;
-								if (captured.resultMetadata) Object.assign(metadata, captured.resultMetadata);
-								toolMeta.delete(toolMsg.tool_call_id);
+				newMessages = await runWithSessionTag(childTag, () =>
+					runAgentLoop({
+						provider: activeProvider,
+						model,
+						messages,
+						tools: childTools,
+						projectRoot,
+						accessibleDirectories,
+						sessionId: childSessionId,
+						maxIterations: deps.maxIterations,
+						signal,
+						initiator: "agent",
+						contextWindow: childContextWindow,
+						rawMessages,
+						logger: childLogger,
+						logDir,
+						onReadFileCompacted: invalidateCompactedRead,
+						onEvent(event: AgentEvent) {
+							onEvent({ ...event, sessionId: childSessionId });
+							if (event.type === "tool_call") {
+								const existing = toolMeta.get(event.id) ?? {};
+								toolMeta.set(event.id, { ...existing, formatCall: event.output });
 							}
-							appendMessage(db, childSessionId, "tool", toolMsg.content, metadata);
-						}
-					},
-				});
+							if (event.type === "tool_result") {
+								const existing = toolMeta.get(event.id) ?? {};
+								toolMeta.set(event.id, {
+									...existing,
+									uiOutput: event.output,
+									mergeable: event.mergeable ?? true,
+									summary: event.summary,
+									resultMetadata: event.metadata,
+								});
+							}
+						},
+						onMessage(msg) {
+							if (msg.role === "assistant") {
+								const assistantMsg = msg as AssistantMessage;
+								const metadata = assistantMsg.tool_calls ? { tool_calls: assistantMsg.tool_calls } : undefined;
+								const stored = appendMessage(db, childSessionId, "assistant", assistantMsg.content ?? "", metadata);
+								lastAssistantMessageId = stored.id;
+							} else if (msg.role === "tool") {
+								const toolMsg = msg as { role: "tool"; content: string; tool_call_id: string };
+								const metadata: Record<string, unknown> = { tool_call_id: toolMsg.tool_call_id };
+								const captured = toolMeta.get(toolMsg.tool_call_id);
+								if (captured !== undefined) {
+									if (captured.formatCall !== undefined) metadata.format_call = captured.formatCall;
+									if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
+									if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
+									if (captured.summary) metadata.tool_summary = captured.summary;
+									if (captured.resultMetadata) Object.assign(metadata, captured.resultMetadata);
+									toolMeta.delete(toolMsg.tool_call_id);
+								}
+								appendMessage(db, childSessionId, "tool", toolMsg.content, metadata);
+							}
+						},
+					}),
+				);
 			} catch (err) {
 				subagentStatus.set(childSessionId, "error");
 				sendWs?.({ type: "subagent_done", sessionId: childSessionId });

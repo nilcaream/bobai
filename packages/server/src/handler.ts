@@ -7,6 +7,8 @@ import { compactMessages } from "./compaction/engine";
 import { FileTime } from "./file/time";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
+import { runWithSessionTag } from "./log/logger";
+import { sessionTag } from "./log/session-tag";
 import { repairMessageOrdering } from "./message-repair";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
@@ -107,6 +109,8 @@ export async function handlePrompt(req: PromptRequest) {
 
 		effectiveModel = sessionObj?.model ?? model;
 
+		const scopedLogger = req.logger?.withSession(sessionTag(currentSessionId as string));
+
 		// Persist the effective model so session load can reconstruct the status bar
 		if (!sessionObj?.model && currentSessionId) {
 			updateSessionModel(db, currentSessionId, effectiveModel);
@@ -181,7 +185,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const repair = repairMessageOrdering(messages);
 		if (repair.repaired) {
 			messages = repair.messages;
-			req.logger?.warn("REPAIR", `Repaired message ordering in session ${currentSessionId}`);
+			scopedLogger?.warn("REPAIR", `Repaired message ordering in session ${currentSessionId}`);
 		}
 
 		// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
@@ -196,7 +200,7 @@ export async function handlePrompt(req: PromptRequest) {
 			accessibleDirectories: skillDirectories,
 			systemPrompt,
 			maxIterations: req.maxIterations,
-			logger: req.logger,
+			logger: scopedLogger,
 			logDir: req.logDir,
 			onEvent(event) {
 				routeEventToWs(ws, event);
@@ -228,7 +232,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
 		if (contextWindow <= 0) {
-			req.logger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
+			scopedLogger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
 		}
 		function invalidateCompactedRead(_toolCallId: string, callArgs: Record<string, unknown>) {
 			const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
@@ -251,8 +255,8 @@ export async function handlePrompt(req: PromptRequest) {
 			// Write debug dump if compaction actually changed something
 			if (messages !== beforeCompaction && req.logDir) {
 				const { preFile } = writeCompactionDump(req.logDir, beforeCompaction, messages, "pre-prompt");
-				if (preFile && req.logger) {
-					req.logger.debug("COMPACTION", `pre-prompt dump: ${preFile}`);
+				if (preFile && scopedLogger) {
+					scopedLogger.debug("COMPACTION", `pre-prompt dump: ${preFile}`);
 				}
 			}
 		}
@@ -272,59 +276,61 @@ export async function handlePrompt(req: PromptRequest) {
 				resultMetadata?: Record<string, unknown>;
 			}
 		>();
-		await runAgentLoop({
-			provider,
-			model: effectiveModel,
-			messages,
-			tools,
-			projectRoot,
-			accessibleDirectories: skillDirectories,
-			sessionId: currentSessionId as string,
-			maxIterations: req.maxIterations,
-			contextWindow,
-			rawMessages,
-			logger: req.logger,
-			logDir: req.logDir,
-			signal: req.signal,
-			onReadFileCompacted: invalidateCompactedRead,
-			onEvent(event: AgentEvent) {
-				routeEventToWs(ws, event);
-				if (event.type === "tool_call") {
-					const existing = toolMeta.get(event.id) ?? {};
-					toolMeta.set(event.id, { ...existing, formatCall: event.output });
-				}
-				if (event.type === "tool_result") {
-					const existing = toolMeta.get(event.id) ?? {};
-					toolMeta.set(event.id, {
-						...existing,
-						uiOutput: event.output,
-						mergeable: event.mergeable ?? true,
-						summary: event.summary,
-						resultMetadata: event.metadata,
-					});
-				}
-			},
-			onMessage(msg) {
-				if (!currentSessionId) return;
-				if (msg.role === "assistant") {
-					const metadata = msg.tool_calls ? { tool_calls: msg.tool_calls } : undefined;
-					const stored = appendMessage(db, currentSessionId, "assistant", msg.content ?? "", metadata);
-					lastAssistantMessageId = stored.id;
-				} else if (msg.role === "tool") {
-					const metadata: Record<string, unknown> = { tool_call_id: msg.tool_call_id };
-					const captured = toolMeta.get(msg.tool_call_id);
-					if (captured !== undefined) {
-						if (captured.formatCall !== undefined) metadata.format_call = captured.formatCall;
-						if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
-						if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
-						if (captured.summary) metadata.tool_summary = captured.summary;
-						if (captured.resultMetadata) Object.assign(metadata, captured.resultMetadata);
-						toolMeta.delete(msg.tool_call_id);
+		await runWithSessionTag(sessionTag(currentSessionId as string), () =>
+			runAgentLoop({
+				provider,
+				model: effectiveModel,
+				messages,
+				tools,
+				projectRoot,
+				accessibleDirectories: skillDirectories,
+				sessionId: currentSessionId as string,
+				maxIterations: req.maxIterations,
+				contextWindow,
+				rawMessages,
+				logger: scopedLogger,
+				logDir: req.logDir,
+				signal: req.signal,
+				onReadFileCompacted: invalidateCompactedRead,
+				onEvent(event: AgentEvent) {
+					routeEventToWs(ws, event);
+					if (event.type === "tool_call") {
+						const existing = toolMeta.get(event.id) ?? {};
+						toolMeta.set(event.id, { ...existing, formatCall: event.output });
 					}
-					appendMessage(db, currentSessionId, "tool", msg.content, metadata);
-				}
-			},
-		});
+					if (event.type === "tool_result") {
+						const existing = toolMeta.get(event.id) ?? {};
+						toolMeta.set(event.id, {
+							...existing,
+							uiOutput: event.output,
+							mergeable: event.mergeable ?? true,
+							summary: event.summary,
+							resultMetadata: event.metadata,
+						});
+					}
+				},
+				onMessage(msg) {
+					if (!currentSessionId) return;
+					if (msg.role === "assistant") {
+						const metadata = msg.tool_calls ? { tool_calls: msg.tool_calls } : undefined;
+						const stored = appendMessage(db, currentSessionId, "assistant", msg.content ?? "", metadata);
+						lastAssistantMessageId = stored.id;
+					} else if (msg.role === "tool") {
+						const metadata: Record<string, unknown> = { tool_call_id: msg.tool_call_id };
+						const captured = toolMeta.get(msg.tool_call_id);
+						if (captured !== undefined) {
+							if (captured.formatCall !== undefined) metadata.format_call = captured.formatCall;
+							if (captured.uiOutput !== undefined) metadata.ui_output = captured.uiOutput;
+							if (captured.mergeable !== undefined) metadata.mergeable = captured.mergeable;
+							if (captured.summary) metadata.tool_summary = captured.summary;
+							if (captured.resultMetadata) Object.assign(metadata, captured.resultMetadata);
+							toolMeta.delete(msg.tool_call_id);
+						}
+						appendMessage(db, currentSessionId, "tool", msg.content, metadata);
+					}
+				},
+			}),
+		);
 
 		const summary = provider.getTurnSummary?.();
 		const promptTokens = provider.getTurnPromptTokens?.() ?? 0;
