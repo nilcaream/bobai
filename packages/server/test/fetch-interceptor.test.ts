@@ -72,7 +72,7 @@ describe("fetch interceptor", () => {
 		await response.text();
 		await Bun.sleep(50);
 
-		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("io-"));
+		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("debug-") && f.endsWith("-http.txt"));
 		expect(dumpFiles.length).toBe(1);
 		const content = fs.readFileSync(path.join(tmpDir, dumpFiles[0]), "utf8");
 		expect(content).toContain(">>> POST");
@@ -94,7 +94,7 @@ describe("fetch interceptor", () => {
 		await response.text();
 		await Bun.sleep(50);
 
-		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("io-"));
+		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("debug-") && f.endsWith("-http.txt"));
 		expect(dumpFiles.length).toBe(0);
 	});
 
@@ -117,7 +117,7 @@ describe("fetch interceptor", () => {
 		await Bun.sleep(50);
 
 		// Should have created a dump file with correct method (POST, not GET)
-		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("io-"));
+		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("debug-") && f.endsWith("-http.txt"));
 		expect(dumpFiles.length).toBe(1);
 		const content = fs.readFileSync(path.join(tmpDir, dumpFiles[0]), "utf8");
 		expect(content).toContain(">>> POST");

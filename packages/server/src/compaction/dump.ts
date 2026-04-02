@@ -83,9 +83,9 @@ function formatDump(messages: Message[]): string {
  * Write compaction/eviction dump files.
  *
  * Produces up to 3 files:
- * - `*-<code>-0.txt` — original messages before compaction
- * - `*-<code>-1.txt` — messages after compaction
- * - `*-<code>-2.txt` — messages after eviction (only when eviction changed something)
+ * - `*-<code>0.txt` — original messages before compaction
+ * - `*-<code>1.txt` — messages after compaction
+ * - `*-<code>2.txt` — messages after eviction (only when eviction changed something)
  *
  * Filenames follow the format `debug-<date>-<time>-<scope>-<code>.txt`.
  *
@@ -99,15 +99,15 @@ export function writeCompactionDump(options: CompactionDumpOptions): CompactionD
 
 		const ts = localTimestamp().replace(/[-: .]/g, "");
 
-		const preFilename = dumpFilename(ts, options.scope, `${options.code}-0`);
-		const postFilename = dumpFilename(ts, options.scope, `${options.code}-1`);
+		const preFilename = dumpFilename(ts, options.scope, `${options.code}0`);
+		const postFilename = dumpFilename(ts, options.scope, `${options.code}1`);
 
 		fs.writeFileSync(path.join(options.logDir, preFilename), formatDump(options.before));
 		fs.writeFileSync(path.join(options.logDir, postFilename), formatDump(options.afterCompaction));
 
 		let evictionFilename = "";
 		if (options.afterEviction && options.afterEviction !== options.afterCompaction) {
-			evictionFilename = dumpFilename(ts, options.scope, `${options.code}-2`);
+			evictionFilename = dumpFilename(ts, options.scope, `${options.code}2`);
 			fs.writeFileSync(path.join(options.logDir, evictionFilename), formatDump(options.afterEviction));
 		}
 

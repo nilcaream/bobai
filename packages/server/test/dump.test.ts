@@ -24,7 +24,7 @@ describe("writeDump", () => {
 
 		const files = fs.readdirSync(tmpDir);
 		expect(files.length).toBe(1);
-		expect(files[0]).toMatch(/^io-\d{8}_\d{9}-[a-z0-9]{4}\.txt$/);
+		expect(files[0]).toMatch(/^debug-\d{8}-\d{9}-global-http\.txt$/);
 	});
 
 	test("formats HTTP request and response", () => {

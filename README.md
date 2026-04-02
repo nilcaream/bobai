@@ -183,7 +183,10 @@ The Compaction view is the key transparency feature. It exposes context pressure
 
 Bob AI writes logs to `~/.local/share/bobai/log/`, rotating daily. Each file is named `YYYY-MM-DD.log`.
 
-With `--debug`, Bob AI also writes HTTP dump files (`io-*.txt`) capturing full API request/response bodies and compaction dump files (`compaction-*.txt`) showing before/after state.
+With `--debug`, Bob AI also writes debug dump files to the log directory. All dump files follow a unified naming pattern: `debug-<date>-<time>-<scope>-<code>.txt`.
+
+- **HTTP dumps** (`debug-*-http.txt`) — full API request/response bodies.
+- **Compaction dumps** (`debug-*-{pre,emg}{0,1,2}.txt`) — message snapshots before compaction (`0`), after compaction (`1`), and after eviction (`2`).
 
 ## Tools
 

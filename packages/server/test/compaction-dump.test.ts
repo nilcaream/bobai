@@ -69,8 +69,8 @@ describe("writeCompactionDump", () => {
 	test("filename matches debug-YYYYMMDD-HHMMSSmmm-<scope>-<code>.txt pattern", () => {
 		const { preFile, postFile } = writeCompactionDump(dumpOpts());
 
-		expect(preFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-pre-0\.txt$/);
-		expect(postFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-pre-1\.txt$/);
+		expect(preFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-pre0\.txt$/);
+		expect(postFile).toMatch(/^debug-\d{8}-\d{9}-abcd1234-pre1\.txt$/);
 	});
 
 	test("all three files share the same prefix", () => {
@@ -79,9 +79,9 @@ describe("writeCompactionDump", () => {
 
 		const { preFile, postFile, evictionFile } = writeCompactionDump(dumpOpts({ afterCompaction, afterEviction }));
 
-		const prePrefix = preFile.replace(/-pre-0\.txt$/, "");
-		const postPrefix = postFile.replace(/-pre-1\.txt$/, "");
-		const evictionPrefix = evictionFile.replace(/-pre-2\.txt$/, "");
+		const prePrefix = preFile.replace(/-pre0\.txt$/, "");
+		const postPrefix = postFile.replace(/-pre1\.txt$/, "");
+		const evictionPrefix = evictionFile.replace(/-pre2\.txt$/, "");
 
 		expect(prePrefix).toBe(postPrefix);
 		expect(postPrefix).toBe(evictionPrefix);
@@ -93,7 +93,7 @@ describe("writeCompactionDump", () => {
 
 		const { evictionFile } = writeCompactionDump(dumpOpts({ afterCompaction, afterEviction }));
 
-		expect(evictionFile).toMatch(/^debug-.*-pre-2\.txt$/);
+		expect(evictionFile).toMatch(/^debug-.*-pre2\.txt$/);
 		const content = fs.readFileSync(path.join(TEST_DIR, evictionFile), "utf8");
 		expect(content).toContain("evicted");
 	});

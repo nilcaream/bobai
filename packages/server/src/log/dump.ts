@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { localTimestamp } from "./logger";
+import { getScope, localTimestamp } from "./logger";
 
 export interface DumpRequest {
 	method: string;
@@ -21,8 +21,8 @@ function dumpFilename(): string {
 	const ts = localTimestamp().replace(/[-: .]/g, "");
 	const date = ts.slice(0, 8);
 	const time = ts.slice(8);
-	const suffix = Math.random().toString(36).substring(2, 6);
-	return `io-${date}_${time}-${suffix}.txt`;
+	const scope = getScope() ?? "global";
+	return `debug-${date}-${time}-${scope}-http.txt`;
 }
 
 export function maskAuthHeader(headers: Record<string, string>): Record<string, string> {
