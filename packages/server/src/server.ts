@@ -2,7 +2,9 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { type CommandRequest, handleCommand } from "./command";
 import { compactMessagesWithStats } from "./compaction/engine";
+import { evictOldTurns } from "./compaction/eviction";
 import { createCompactionRegistry } from "./compaction/registry";
+import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
@@ -202,44 +204,9 @@ export function createServer(options: ServerOptions) {
 					sessionId,
 				});
 
-				// Convert compacted Message[] back to a StoredMessage-like shape for the UI.
-				// Index 0 is the dynamic system prompt; conversation messages start at index 1.
-				const compactedStored = compacted.map((m, i) => {
-					if (i === 0 && m.role === "system") {
-						return {
-							id: "system-dynamic",
-							sessionId,
-							role: "system" as const,
-							content: m.content,
-							createdAt: new Date().toISOString(),
-							sortOrder: -1,
-							metadata: null,
-						};
-					}
-					if (m.role === "tool") {
-						const toolMsg = m as { role: "tool"; content: string; tool_call_id: string };
-						// Find original stored message to preserve metadata
-						const original = conversationMessages.find(
-							(s) => s.role === "tool" && s.metadata?.tool_call_id === toolMsg.tool_call_id,
-						);
-						return {
-							...(original ?? { id: `compacted-${i}`, role: "tool", createdAt: "" }),
-							content: toolMsg.content,
-							metadata: { ...original?.metadata, tool_call_id: toolMsg.tool_call_id },
-						};
-					}
-					// For non-tool messages, use the corresponding conversation message (offset by 1 for system prompt)
-					const convIdx = i - 1;
-					return (
-						conversationMessages[convIdx] ?? {
-							id: `msg-${i}`,
-							role: m.role,
-							content: (m as { content: string }).content ?? "",
-							createdAt: "",
-							metadata: null,
-						}
-					);
-				});
+				const evicted = evictOldTurns(compacted);
+
+				const compactedStored = mapEvictedToStored(compacted, evicted, conversationMessages, sessionId);
 
 				return Response.json({ messages: compactedStored, stats, details: Object.fromEntries(details) });
 			}

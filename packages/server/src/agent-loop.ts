@@ -1,5 +1,6 @@
 import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
+import { evictOldTurns } from "./compaction/eviction";
 import type { Logger } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
@@ -45,10 +46,10 @@ export function emergencyCompactConversation(
 				logger.info("COMPACTION", `emergency mid-loop compaction: ${preFile}`);
 			}
 		}
-		return compacted;
+		return evictOldTurns(compacted);
 	}
 
-	return conversation;
+	return evictOldTurns(conversation);
 }
 
 export type AgentEvent =

@@ -5,6 +5,7 @@ import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { compactMessages } from "../compaction/engine";
+import { evictOldTurns } from "../compaction/eviction";
 import { FileTime } from "../file/time";
 import type { Logger } from "../log/logger";
 import { runWithSessionTag } from "../log/logger";
@@ -236,6 +237,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					onReadFileCompacted: invalidateCompactedRead,
 				});
 			}
+
+			messages = evictOldTurns(messages);
 
 			// Run agent loop with provider turn state isolation
 			let newMessages: Message[];

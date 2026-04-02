@@ -4,6 +4,7 @@ import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
 import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
+import { evictOldTurns } from "./compaction/eviction";
 import { FileTime } from "./file/time";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
@@ -260,6 +261,8 @@ export async function handlePrompt(req: PromptRequest) {
 				}
 			}
 		}
+
+		messages = evictOldTurns(messages);
 
 		// Signal the provider to start tracking turn stats
 		provider.beginTurn?.(sessionPromptTokens);
