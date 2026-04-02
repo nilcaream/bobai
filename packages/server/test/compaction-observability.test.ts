@@ -273,7 +273,7 @@ describe("compactMessagesWithStats", () => {
 describe("createCompactionRegistry", () => {
 	const registry = createCompactionRegistry();
 
-	test("contains all 9 tools", () => {
+	test("contains all 10 tools", () => {
 		const toolNames = [
 			"read_file",
 			"list_directory",
@@ -282,6 +282,7 @@ describe("createCompactionRegistry", () => {
 			"edit_file",
 			"grep_search",
 			"bash",
+			"sqlite3",
 			"skill",
 			"task",
 		];
@@ -302,6 +303,7 @@ describe("createCompactionRegistry", () => {
 			read_file: 0.3,
 			skill: 0.4,
 			bash: 0.4,
+			sqlite3: 0.4,
 			edit_file: 0.7,
 			task: 0.8,
 		};
@@ -329,7 +331,7 @@ describe("createCompactionRegistry", () => {
 	});
 
 	test("tools without argsThreshold have it undefined", () => {
-		const noArgs = ["list_directory", "file_search", "grep_search", "read_file", "skill", "bash"];
+		const noArgs = ["list_directory", "file_search", "grep_search", "read_file", "skill", "bash", "sqlite3"];
 		for (const name of noArgs) {
 			const tool = registry.get(name);
 			expect(tool?.argsThreshold).toBeUndefined();

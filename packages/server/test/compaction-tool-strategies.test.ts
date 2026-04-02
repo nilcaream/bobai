@@ -10,6 +10,7 @@ import { grepSearchTool } from "../src/tool/grep-search";
 import { listDirectoryTool } from "../src/tool/list-directory";
 import { readFileTool } from "../src/tool/read-file";
 import { createSkillTool } from "../src/tool/skill";
+import { sqlite3Tool } from "../src/tool/sqlite3";
 import { createTaskTool } from "../src/tool/task";
 import { writeFileTool } from "../src/tool/write-file";
 
@@ -95,6 +96,11 @@ describe("threshold values", () => {
 		expect(makeSkillTool().argsThreshold).toBeUndefined();
 	});
 
+	test("sqlite3: outputThreshold = 0.4", () => {
+		expect(sqlite3Tool.outputThreshold).toBe(0.4);
+		expect(sqlite3Tool.argsThreshold).toBeUndefined();
+	});
+
 	test("write_file: argsThreshold = 0.6, no outputThreshold", () => {
 		expect(writeFileTool.argsThreshold).toBe(0.6);
 		expect(writeFileTool.outputThreshold).toBeUndefined();
@@ -145,6 +151,10 @@ describe("compact() method presence", () => {
 		expect(typeof editFileTool.compact).toBe("function");
 	});
 
+	test("sqlite3 has compact()", () => {
+		expect(typeof sqlite3Tool.compact).toBe("function");
+	});
+
 	test("task has compact()", () => {
 		expect(typeof makeTaskTool().compact).toBe("function");
 	});
@@ -189,6 +199,10 @@ describe("compactArgs() method presence", () => {
 
 	test("list_directory has NO compactArgs()", () => {
 		expect(listDirectoryTool.compactArgs).toBeUndefined();
+	});
+
+	test("sqlite3 has NO compactArgs()", () => {
+		expect(sqlite3Tool.compactArgs).toBeUndefined();
 	});
 });
 
@@ -691,6 +705,39 @@ describe("task compactArgs()", () => {
 
 		expect(result.description).toBe("Task");
 		expect(result.prompt).toBeUndefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// sqlite3 compact()
+// ---------------------------------------------------------------------------
+
+describe("sqlite3 compact()", () => {
+	const compact = requireMethod(sqlite3Tool.compact, "sqlite3.compact");
+
+	test("preserves error messages", () => {
+		expect(compact("Error: no such table", { database: "db", query: "q" })).toBe("Error: no such table");
+	});
+
+	test("preserves short output (20 lines or fewer)", () => {
+		const short = makeLines(20, "| row");
+		expect(compact(short, { database: "db", query: "q" })).toBe(short);
+	});
+
+	test("compacts output longer than 20 lines — head + tail", () => {
+		const lines = makeLines(50, "| row");
+		const result = compact(lines, { database: "test.db", query: "SELECT * FROM big" });
+		expect(result).toContain(COMPACTION_MARKER);
+		expect(result).toContain("30 rows");
+		expect(result).toContain("| row 1");
+		expect(result).toContain("| row 50");
+	});
+
+	test("uses '?' for missing args", () => {
+		const lines = makeLines(30, "| row");
+		const result = compact(lines, {});
+		expect(result).toContain('"database":"?"');
+		expect(result).toContain('"query":"?"');
 	});
 });
 

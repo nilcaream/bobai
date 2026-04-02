@@ -19,6 +19,7 @@ import { fileSearchTool } from "../tool/file-search";
 import { grepSearchTool } from "../tool/grep-search";
 import { listDirectoryTool } from "../tool/list-directory";
 import { readFileTool } from "../tool/read-file";
+import { sqlite3Tool } from "../tool/sqlite3";
 import type { Tool, ToolRegistry } from "../tool/tool";
 import { createToolRegistry } from "../tool/tool";
 import { writeFileTool } from "../tool/write-file";
@@ -85,6 +86,7 @@ export function createCompactionRegistry(): ToolRegistry {
 		editFileTool,
 		grepSearchTool,
 		bashTool,
+		sqlite3Tool,
 		skillCompactionStub,
 		taskCompactionStub,
 	]);
