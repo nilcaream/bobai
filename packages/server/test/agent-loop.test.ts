@@ -654,7 +654,7 @@ describe("parallel task execution", () => {
 		expect(elapsed).toBeLessThan(90);
 	});
 
-	test("parallel task results are injected in dispatch order", async () => {
+	test("parallel task UI events stream on completion, messages stay in dispatch order", async () => {
 		const executionLog: string[] = [];
 		const taskTool = createMockTaskTool({
 			executionLog,
@@ -682,13 +682,13 @@ describe("parallel task execution", () => {
 			},
 		});
 
-		// tool_result events should be in dispatch order (tc1 before tc2)
+		// tool_result events arrive in completion order (tc2 finishes first)
 		const resultEvents = events.filter((e) => e.type === "tool_result");
 		expect(resultEvents).toHaveLength(2);
-		expect((resultEvents[0] as { id: string }).id).toBe("tc1");
-		expect((resultEvents[1] as { id: string }).id).toBe("tc2");
+		expect((resultEvents[0] as { id: string }).id).toBe("tc2");
+		expect((resultEvents[1] as { id: string }).id).toBe("tc1");
 
-		// Tool messages in conversation should also be in dispatch order
+		// Tool messages in conversation should still be in dispatch order
 		const toolMsgs = collectedMessages.filter((m) => m.role === "tool");
 		expect(toolMsgs).toHaveLength(2);
 		expect((toolMsgs[0] as ToolMessage).tool_call_id).toBe("tc1");
@@ -814,6 +814,7 @@ describe("parallel task execution", () => {
 		};
 
 		const events: AgentEvent[] = [];
+		const collectedMessages: Message[] = [];
 		await runAgentLoop({
 			provider,
 			model: "test",
@@ -824,7 +825,9 @@ describe("parallel task execution", () => {
 			onEvent(e) {
 				events.push(e);
 			},
-			onMessage() {},
+			onMessage(m) {
+				collectedMessages.push(m);
+			},
 		});
 
 		// echo("first") runs sequentially before the tasks
@@ -839,10 +842,176 @@ describe("parallel task execution", () => {
 		// echo("last") runs sequentially after the tasks
 		expect(echoExecOrder[1]).toBe("echo:last");
 
-		// Results in event order should match dispatch order:
-		// tool_call(e1), tool_call(t1), tool_call(t2), tool_call(e2),
-		// tool_result(e1), tool_result(t1), tool_result(t2), tool_result(e2)
+		// Result events: e1 (sequential), then t1/t2 in completion order (parallel,
+		// same delay so order may vary), then e2 (sequential after parallel group).
 		const resultIds = events.filter((e) => e.type === "tool_result").map((e) => (e as { id: string }).id);
-		expect(resultIds).toEqual(["e1", "t1", "t2", "e2"]);
+		expect(resultIds[0]).toBe("e1");
+		expect(resultIds.slice(1, 3).sort()).toEqual(["t1", "t2"]);
+		expect(resultIds[3]).toBe("e2");
+
+		// onMessage calls (conversation/DB) preserve dispatch order regardless of completion order
+		const toolMsgIds = collectedMessages.filter((m) => m.role === "tool").map((m) => (m as ToolMessage).tool_call_id);
+		expect(toolMsgIds).toEqual(["e1", "t1", "t2", "e2"]);
+	});
+
+	test("tool_result events stream incrementally as each parallel task completes", async () => {
+		const eventTimestamps: { id: string; time: number }[] = [];
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			// task-C is instant, task-A is slow, task-B is in between
+			delays: { "task-A": 80, "task-B": 40, "task-C": 5 },
+		});
+
+		const start = performance.now();
+		await runAgentLoop({
+			provider: multiTaskProvider([
+				{ id: "tc1", description: "task-A", prompt: "do A" },
+				{ id: "tc2", description: "task-B", prompt: "do B" },
+				{ id: "tc3", description: "task-C", prompt: "do C" },
+			]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(e) {
+				if (e.type === "tool_result") {
+					eventTimestamps.push({ id: (e as { id: string }).id, time: performance.now() - start });
+				}
+			},
+			onMessage() {},
+		});
+
+		// All three tool_result events should have been emitted
+		expect(eventTimestamps).toHaveLength(3);
+
+		// Events should arrive in completion order: tc3 (5ms), tc2 (40ms), tc1 (80ms)
+		expect(eventTimestamps[0].id).toBe("tc3");
+		expect(eventTimestamps[1].id).toBe("tc2");
+		expect(eventTimestamps[2].id).toBe("tc1");
+
+		// The first event (tc3) should arrive well before the last (tc1),
+		// proving incremental streaming rather than batching
+		const tc3Time = eventTimestamps[0].time;
+		const tc1Time = eventTimestamps[2].time;
+		expect(tc1Time - tc3Time).toBeGreaterThan(20);
+	});
+
+	test("onMessage calls are batched after all parallel tasks complete", async () => {
+		const messageTimestamps: { id: string; time: number }[] = [];
+		const executionLog: string[] = [];
+		const taskTool = createMockTaskTool({
+			executionLog,
+			delays: { "task-A": 60, "task-B": 10 },
+		});
+
+		const start = performance.now();
+		await runAgentLoop({
+			provider: multiTaskProvider([
+				{ id: "tc1", description: "task-A", prompt: "do A" },
+				{ id: "tc2", description: "task-B", prompt: "do B" },
+			]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([taskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent() {},
+			onMessage(m) {
+				if (m.role === "tool") {
+					messageTimestamps.push({
+						id: (m as ToolMessage).tool_call_id,
+						time: performance.now() - start,
+					});
+				}
+			},
+		});
+
+		// Both messages should arrive after all tasks complete (~60ms)
+		expect(messageTimestamps).toHaveLength(2);
+
+		// Messages arrive in dispatch order
+		expect(messageTimestamps[0].id).toBe("tc1");
+		expect(messageTimestamps[1].id).toBe("tc2");
+
+		// Both messages should arrive at roughly the same time (after slowest task)
+		const timeDiff = Math.abs(messageTimestamps[1].time - messageTimestamps[0].time);
+		expect(timeDiff).toBeLessThan(20); // effectively simultaneous
+	});
+
+	test("parallel task error does not block other tasks from emitting results", async () => {
+		const eventIds: string[] = [];
+
+		// Custom tool: task-A throws, task-B succeeds
+		const errorTaskTool: Tool = {
+			definition: {
+				type: "function",
+				function: {
+					name: "task",
+					description: "Run a subagent task",
+					parameters: {
+						type: "object",
+						properties: {
+							description: { type: "string" },
+							prompt: { type: "string" },
+						},
+						required: ["description", "prompt"],
+					},
+				},
+			},
+			mergeable: false,
+			formatCall(args: Record<string, unknown>): string {
+				return `▸ ${args.description}`;
+			},
+			async execute(args: Record<string, unknown>): Promise<ToolResult> {
+				const desc = args.description as string;
+				if (desc === "task-A") {
+					await new Promise((resolve) => setTimeout(resolve, 5));
+					throw new Error("task-A exploded");
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return {
+					llmOutput: `result of ${desc}`,
+					uiOutput: null,
+					mergeable: false,
+					summary: `summary:${desc}`,
+				};
+			},
+		};
+
+		const collectedMessages: Message[] = [];
+		await runAgentLoop({
+			provider: multiTaskProvider([
+				{ id: "tc1", description: "task-A", prompt: "do A" },
+				{ id: "tc2", description: "task-B", prompt: "do B" },
+			]),
+			model: "test",
+			messages: [{ role: "user", content: "go" }],
+			tools: createToolRegistry([errorTaskTool]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(e) {
+				if (e.type === "tool_result") {
+					eventIds.push((e as { id: string }).id);
+				}
+			},
+			onMessage(m) {
+				collectedMessages.push(m);
+			},
+		});
+
+		// Both tool_result events should be emitted (error is caught per-task)
+		expect(eventIds).toHaveLength(2);
+		expect(eventIds).toContain("tc1");
+		expect(eventIds).toContain("tc2");
+
+		// Messages should be in dispatch order
+		const toolMsgs = collectedMessages.filter((m) => m.role === "tool");
+		expect(toolMsgs).toHaveLength(2);
+		expect((toolMsgs[0] as ToolMessage).tool_call_id).toBe("tc1");
+		expect((toolMsgs[0] as { content: string }).content).toContain("task-A exploded");
+		expect((toolMsgs[1] as ToolMessage).tool_call_id).toBe("tc2");
+		expect((toolMsgs[1] as { content: string }).content).toBe("result of task-B");
 	});
 });

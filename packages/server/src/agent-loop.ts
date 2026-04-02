@@ -227,7 +227,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 					resultMetadata?: Record<string, unknown>;
 				}
 
-				const promises = group.items.map(async (tc): Promise<ParallelResult> => {
+				const resultMap = new Map<string, ParallelResult>();
+
+				const promises = group.items.map(async (tc): Promise<void> => {
 					let args: Record<string, unknown>;
 					try {
 						args = JSON.parse(tc.function.arguments);
@@ -235,54 +237,62 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 						args = {};
 					}
 					const tool = tools.get(tc.function.name);
+					let result: ParallelResult;
 					if (!tool) {
-						return {
+						result = {
 							tc,
 							llmOutput: `Unknown tool: ${tc.function.name}`,
 							uiOutput: `Unknown tool: ${tc.function.name}`,
 							mergeable: false,
 						};
+					} else {
+						try {
+							const isolated = createIsolatedTurnProvider(provider);
+							const execResult = await tool.execute(args, {
+								projectRoot,
+								accessibleDirectories,
+								sessionId,
+								toolCallId: tc.id,
+								provider: isolated,
+							});
+							result = {
+								tc,
+								llmOutput: execResult.llmOutput,
+								uiOutput: execResult.uiOutput,
+								mergeable: execResult.mergeable,
+								summary: execResult.summary,
+								resultMetadata: execResult.metadata,
+							};
+						} catch (err) {
+							result = {
+								tc,
+								llmOutput: `Tool execution error: ${(err as Error).message}`,
+								uiOutput: `Tool execution error: ${(err as Error).message}`,
+								mergeable: false,
+							};
+						}
 					}
-					try {
-						const isolated = createIsolatedTurnProvider(provider);
-						const result = await tool.execute(args, {
-							projectRoot,
-							accessibleDirectories,
-							sessionId,
-							toolCallId: tc.id,
-							provider: isolated,
-						});
-						return {
-							tc,
-							llmOutput: result.llmOutput,
-							uiOutput: result.uiOutput,
-							mergeable: result.mergeable,
-							summary: result.summary,
-							resultMetadata: result.metadata,
-						};
-					} catch (err) {
-						return {
-							tc,
-							llmOutput: `Tool execution error: ${(err as Error).message}`,
-							uiOutput: `Tool execution error: ${(err as Error).message}`,
-							mergeable: false,
-						};
-					}
-				});
 
-				const results = await Promise.all(promises);
+					resultMap.set(tc.id, result);
 
-				// Inject results in dispatch order
-				for (const r of results) {
+					// Emit UI event immediately so the user sees each task's
+					// status bar as soon as it completes (not after all finish).
 					onEvent({
 						type: "tool_result",
-						id: r.tc.id,
-						output: r.uiOutput,
-						mergeable: r.mergeable,
-						summary: r.summary,
-						metadata: r.resultMetadata,
+						id: tc.id,
+						output: result.uiOutput,
+						mergeable: result.mergeable,
+						summary: result.summary,
+						metadata: result.resultMetadata,
 					});
-					const toolMsg: ToolMessage = { role: "tool", content: r.llmOutput, tool_call_id: r.tc.id };
+				});
+
+				await Promise.all(promises);
+
+				// Inject conversation messages in dispatch order (deterministic for LLM + DB)
+				for (const tc of group.items) {
+					const r = resultMap.get(tc.id) as ParallelResult;
+					const toolMsg: ToolMessage = { role: "tool", content: r.llmOutput, tool_call_id: tc.id };
 					conversation.push(toolMsg);
 					newMessages.push(toolMsg);
 					onMessage(toolMsg);
