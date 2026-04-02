@@ -165,10 +165,10 @@ export function createCopilotProvider(
 
 	// ── Shared retry infrastructure ──────────────────────────────────────
 
-	const MAX_RETRIES = 8;
-	const REQUEST_TIMEOUT_MS = 15_000;
+	const MAX_RETRIES = 3;
+	const REQUEST_TIMEOUT_MS = 30_000;
 	const BODY_TIMEOUT_MS = testOverrides?.bodyTimeoutMs ?? 30_000;
-	const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 2_000;
+	const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 10_000;
 
 	/** Extract an HTTP status code from an error thrown by fetch() or the Anthropic SDK. */
 	function errorStatus(err: unknown): number {
