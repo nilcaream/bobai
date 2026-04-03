@@ -165,7 +165,16 @@ describe("sqlite3Tool", () => {
 	test("uiOutput contains SQL and results", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users" }, ctx);
 		expect(result.uiOutput).toContain("sqlite3 test.db");
-		expect(result.uiOutput).toContain("SELECT * FROM users");
+		expect(result.uiOutput).toContain("```sql\nSELECT * FROM users\n```");
 		expect(result.uiOutput).toContain("Alice");
+	});
+
+	test("uiOutput does not wrap result table in code fence", async () => {
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users" }, ctx);
+		const uiOutput = result.uiOutput ?? "";
+		// The SQL block is code-fenced, but the result table after it should be bare markdown
+		const afterSqlBlock = uiOutput.split("```\n\n").pop() ?? "";
+		expect(afterSqlBlock).not.toMatch(/^```/);
+		expect(afterSqlBlock).toContain("| id | name | email |");
 	});
 });

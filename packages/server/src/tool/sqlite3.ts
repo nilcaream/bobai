@@ -156,5 +156,5 @@ export const sqlite3Tool: Tool = {
 };
 
 function formatUiOutput(database: string, query: string, output: string): string {
-	return `\`sqlite3 ${database}\`\n\n\`\`\`sql\n${query}\n\`\`\`\n\n\`\`\`\n${output}\n\`\`\``;
+	return `\`sqlite3 ${database}\`\n\n\`\`\`sql\n${query}\n\`\`\`\n\n${output}`;
 }
