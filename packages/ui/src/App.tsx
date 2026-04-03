@@ -261,6 +261,7 @@ export function App() {
 		setVolatileMessage,
 		sessionLocked,
 		viewingSubagentId,
+		viewingSubagentTitle,
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,
@@ -295,6 +296,7 @@ export function App() {
 	const peekSubagentWithScroll = useCallback(
 		(childSessionId: string) => {
 			savedScrollTop.current = messagesRef.current?.scrollTop ?? null;
+			setView((prev) => ({ ...prev, mode: "chat" }));
 			peekSubagent(childSessionId);
 		},
 		[peekSubagent],
@@ -304,6 +306,7 @@ export function App() {
 	const peekSubagentFromDbWithScroll = useCallback(
 		(childSessionId: string) => {
 			savedScrollTop.current = messagesRef.current?.scrollTop ?? null;
+			setView((prev) => ({ ...prev, mode: "chat" }));
 			peekSubagentFromDb(childSessionId);
 		},
 		[peekSubagentFromDb],
@@ -312,6 +315,7 @@ export function App() {
 	// Wrap exitSubagentPeek to restore scroll position after returning to parent view
 	const exitSubagentPeekWithScroll = useCallback(() => {
 		const scrollPos = savedScrollTop.current;
+		setView((prev) => ({ ...prev, mode: "chat" }));
 		exitSubagentPeek();
 		if (scrollPos !== null) {
 			autoScroll.current = false;
@@ -426,7 +430,7 @@ export function App() {
 	}, []);
 
 	const fetchContext = useCallback(() => {
-		const sid = getSessionId();
+		const sid = viewingSubagentId ?? getSessionId();
 		if (!sid) {
 			setContextMessages(null);
 			return;
@@ -435,10 +439,10 @@ export function App() {
 			.then((res) => res.json())
 			.then((data: ContextMessage[]) => setContextMessages(data))
 			.catch(() => setContextMessages(null));
-	}, [getSessionId]);
+	}, [getSessionId, viewingSubagentId]);
 
 	const fetchCompactedContext = useCallback(() => {
-		const sid = getSessionId();
+		const sid = viewingSubagentId ?? getSessionId();
 		if (!sid) {
 			setCompactionData(null);
 			return;
@@ -455,7 +459,7 @@ export function App() {
 				},
 			)
 			.catch(() => setCompactionData(null));
-	}, [getSessionId]);
+	}, [getSessionId, viewingSubagentId]);
 
 	// Adjust textarea height when navigating history
 	// biome-ignore lint/correctness/useExhaustiveDependencies: adjustHeight is stable via useCallback
@@ -1213,9 +1217,10 @@ export function App() {
 			if (!msg) continue;
 			const isLastMsg = m === messages.length - 1;
 			if (msg.role === "user") {
+				const isSubagentView = viewingSubagentId !== null || parentId !== null;
 				elements.push(
 					<div key={key++} className="panel panel--user">
-						{msg.text}
+						{isSubagentView ? <Markdown>{msg.text}</Markdown> : msg.text}
 						<div className="panel-status">{msg.timestamp}</div>
 					</div>,
 				);
@@ -1449,7 +1454,9 @@ export function App() {
 	}
 
 	const agentActive = isStreaming || subagents.some((s) => s.status === "running");
-	const peekingSubagent = viewingSubagentId ? subagents.find((s) => s.sessionId === viewingSubagentId) : null;
+	const peekingSubagentTitle = viewingSubagentId
+		? (viewingSubagentTitle ?? subagents.find((s) => s.sessionId === viewingSubagentId)?.title ?? null)
+		: null;
 
 	return (
 		<main className="app">
@@ -1466,10 +1473,10 @@ export function App() {
 									| {projectInfo.git.branch}:{projectInfo.git.revision}
 								</span>
 							)}
-							{peekingSubagent ? (
+							{peekingSubagentTitle !== null ? (
 								<span className="status-bar-title">
 									{" "}
-									| {title ?? "(untitled)"} | {peekingSubagent.title}
+									| {title ?? "(untitled)"} | {peekingSubagentTitle}
 								</span>
 							) : parentId ? (
 								<span className="status-bar-title">

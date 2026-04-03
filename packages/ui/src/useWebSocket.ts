@@ -93,6 +93,7 @@ export function useWebSocket() {
 	const [volatileMessage, setVolatileMessage] = useState<{ text: string; kind: "error" | "success" } | null>(null);
 	const [sessionLocked, setSessionLocked] = useState(false);
 	const [viewingSubagentId, setViewingSubagentId] = useState<string | null>(null);
+	const [viewingSubagentTitle, setViewingSubagentTitle] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
 	const eventRouter = useRef(createEventRouter());
 	const viewingSubagentIdRef = useRef<string | null>(null);
@@ -311,6 +312,7 @@ export function useWebSocket() {
 	const exitSubagentPeek = useCallback(() => {
 		if (!viewingSubagentIdRef.current) return;
 		setViewingSubagentId(null);
+		setViewingSubagentTitle(null);
 		setMessages(parentMessagesRef.current);
 		setStatus(parentStatusRef.current);
 		parentMessagesRef.current = [];
@@ -322,6 +324,7 @@ export function useWebSocket() {
 			parentMessagesRef.current = messagesRef.current;
 			parentStatusRef.current = status;
 			setViewingSubagentId(childSessionId);
+			setViewingSubagentTitle(null); // live peeks fall back to subagents array lookup
 			const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
 			const childMessages = replayBufferToMessages(bufferedEvents);
 			setMessages(childMessages);
@@ -334,10 +337,14 @@ export function useWebSocket() {
 			try {
 				const res = await fetch(`/bobai/session/${childSessionId}/load`);
 				if (!res.ok) return;
-				const data = (await res.json()) as { session: { id: string }; messages: StoredMessage[] };
+				const data = (await res.json()) as {
+					session: { id: string; title: string | null };
+					messages: StoredMessage[];
+				};
 				parentMessagesRef.current = messagesRef.current;
 				parentStatusRef.current = status;
 				setViewingSubagentId(childSessionId);
+				setViewingSubagentTitle(data.session.title);
 				setMessages(reconstructMessages(data.messages));
 			} catch {
 				// fetch failed — ignore
@@ -393,6 +400,7 @@ export function useWebSocket() {
 		// Clear peek state
 		if (viewingSubagentIdRef.current) {
 			setViewingSubagentId(null);
+			setViewingSubagentTitle(null);
 			parentMessagesRef.current = [];
 		}
 		eventRouter.current.clearAllBuffers();
@@ -416,6 +424,7 @@ export function useWebSocket() {
 			// Clear peek state
 			if (viewingSubagentIdRef.current) {
 				setViewingSubagentId(null);
+				setViewingSubagentTitle(null);
 				parentMessagesRef.current = [];
 			}
 			eventRouter.current.clearAllBuffers();
@@ -512,6 +521,7 @@ export function useWebSocket() {
 		setVolatileMessage,
 		sessionLocked,
 		viewingSubagentId,
+		viewingSubagentTitle,
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,
