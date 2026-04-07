@@ -55,4 +55,37 @@ describe("bashTool", () => {
 		const result = await bashTool.execute({}, ctx);
 		expect(result.llmOutput).toContain("command");
 	});
+
+	describe("formatCall", () => {
+		test("single-line command uses inline code", () => {
+			const result = bashTool.formatCall({ command: "echo hello" });
+			expect(result).toBe("`$ echo hello`");
+		});
+
+		test("multi-line command uses fenced bash block", () => {
+			const result = bashTool.formatCall({ command: "# list files\nls -la\necho done" });
+			expect(result).toBe("```bash\n# list files\nls -la\necho done\n```");
+		});
+
+		test("missing command falls back to inline code", () => {
+			const result = bashTool.formatCall({});
+			expect(result).toBe("`$ ?`");
+		});
+	});
+
+	describe("uiOutput formatting", () => {
+		test("single-line command uses inline code header", async () => {
+			const result = await bashTool.execute({ command: "echo hello" }, ctx);
+			expect(result.uiOutput).toMatch(/^`\$ echo hello`/);
+			// Output block follows
+			expect(result.uiOutput).toContain("```\n");
+		});
+
+		test("multi-line command uses fenced bash block header", async () => {
+			const result = await bashTool.execute({ command: "# greet\necho hello" }, ctx);
+			expect(result.uiOutput).toMatch(/^```bash\n# greet\necho hello\n```/);
+			// Output block follows after
+			expect(result.uiOutput).toContain("\n\n```\n");
+		});
+	});
 });

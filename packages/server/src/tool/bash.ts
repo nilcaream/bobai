@@ -45,7 +45,7 @@ export const bashTool: Tool = {
 
 	formatCall(args: Record<string, unknown>): string {
 		const command = typeof args.command === "string" ? args.command : "?";
-		return `\`$ ${command}\``;
+		return formatBashCommand(command);
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -119,6 +119,13 @@ function truncate(text: string): string {
 	return `... truncated (${totalBytes} bytes total, showing last ${MAX_OUTPUT_BYTES})\n${kept}`;
 }
 
+function formatBashCommand(command: string): string {
+	if (command.includes("\n")) {
+		return `\`\`\`bash\n${command}\n\`\`\``;
+	}
+	return `\`$ ${command}\``;
+}
+
 function formatBashOutput(command: string, output: string): string {
-	return `\`$ ${command}\`\n\n\`\`\`\n${output}\n\`\`\``;
+	return `${formatBashCommand(command)}\n\n\`\`\`\n${output}\n\`\`\``;
 }
