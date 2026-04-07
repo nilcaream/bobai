@@ -301,7 +301,7 @@ body,
 	border-collapse: collapse;
 	margin: 1em 0;
 	width: 100%;
-	overflow-x: auto;
+	overflow-x: hidden;
 	display: block;
 }
 

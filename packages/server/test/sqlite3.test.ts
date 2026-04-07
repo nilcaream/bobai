@@ -177,4 +177,36 @@ describe("sqlite3Tool", () => {
 		expect(afterSqlBlock).not.toMatch(/^```/);
 		expect(afterSqlBlock).toContain("| id | name | email |");
 	});
+
+	test("sanitizes newlines in cell values so table rows stay on one line", async () => {
+		// Insert a value with newlines and pipes
+		await sqlite3Tool.execute(
+			{ database: "test.db", query: "CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, body TEXT)" },
+			ctx,
+		);
+		await sqlite3Tool.execute({ database: "test.db", query: "INSERT INTO notes (body) VALUES ('line1\nline2\nline3')" }, ctx);
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM notes" }, ctx);
+
+		// Each data row must be a single line (no newlines between pipes)
+		const lines = result.llmOutput.split("\n");
+		const dataLines = lines.slice(2); // skip header + separator
+		for (const line of dataLines) {
+			expect(line).toMatch(/^\|.*\|$/);
+		}
+		// Original newlines are replaced with spaces
+		expect(result.llmOutput).toContain("line1 line2 line3");
+		expect(result.llmOutput).not.toContain("line1\nline2");
+	});
+
+	test("escapes pipe characters in cell values", async () => {
+		await sqlite3Tool.execute(
+			{ database: "test.db", query: "CREATE TABLE IF NOT EXISTS pipes (id INTEGER PRIMARY KEY, expr TEXT)" },
+			ctx,
+		);
+		await sqlite3Tool.execute({ database: "test.db", query: "INSERT INTO pipes (expr) VALUES ('a|b|c')" }, ctx);
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM pipes" }, ctx);
+
+		// Pipes in cell values must be escaped
+		expect(result.llmOutput).toContain("a\\|b\\|c");
+	});
 });

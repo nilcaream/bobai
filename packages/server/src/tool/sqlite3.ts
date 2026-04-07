@@ -24,9 +24,15 @@ function formatTable(rows: Record<string, unknown>[]): string {
 	const columns = Object.keys(rows[0]);
 	const header = `| ${columns.join(" | ")} |`;
 	const separator = `| ${columns.map(() => "---").join(" | ")} |`;
-	const body = rows.map((row) => `| ${columns.map((col) => String(row[col] ?? "NULL")).join(" | ")} |`).join("\n");
+	const body = rows.map((row) => `| ${columns.map((col) => sanitizeCell(row[col])).join(" | ")} |`).join("\n");
 
 	return `${header}\n${separator}\n${body}`;
+}
+
+/** Make a cell value safe for a single-line GFM table row. */
+function sanitizeCell(value: unknown): string {
+	const str = String(value ?? "NULL");
+	return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 /** Truncate output keeping the tail (most recent/relevant output). */
