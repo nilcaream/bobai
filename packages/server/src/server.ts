@@ -4,6 +4,7 @@ import { type CommandRequest, handleCommand } from "./command";
 import { compactMessagesWithStats } from "./compaction/engine";
 import { evictOldTurns } from "./compaction/eviction";
 import { createCompactionRegistry } from "./compaction/registry";
+import { estimatePromptTokens } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
@@ -145,7 +146,7 @@ export function createServer(options: ServerOptions) {
 
 				// Compacted view: convert to Message[], run compaction, return with stats
 				const session = getSession(options.db, sessionId);
-				const promptTokens = session?.promptTokens ?? 0;
+				const storedPromptTokens = session?.promptTokens ?? 0;
 				const modelId = session?.model ?? options.model ?? "";
 				const modelConfigs = loadModelsConfig();
 				const modelConfig = modelConfigs.find((m) => m.id === modelId);
@@ -173,7 +174,10 @@ export function createServer(options: ServerOptions) {
 					}),
 				];
 
-				if (contextWindow <= 0 || promptTokens <= 0) {
+				// Estimate effective token count from raw content (see handler.ts for rationale)
+				const effectivePromptTokens = estimatePromptTokens(messages, storedPromptTokens);
+
+				if (contextWindow <= 0 || effectivePromptTokens <= 0) {
 					// No pressure data — return the dynamic system prompt + conversation messages as-is
 					const systemMessage = {
 						id: "system-dynamic",
@@ -199,7 +203,7 @@ export function createServer(options: ServerOptions) {
 					details,
 				} = compactMessagesWithStats({
 					messages,
-					context: { promptTokens, contextWindow },
+					context: { promptTokens: effectivePromptTokens, contextWindow },
 					tools,
 					sessionId,
 				});
@@ -408,8 +412,12 @@ export function createServer(options: ServerOptions) {
 									wsAbortControllers.delete(ws);
 								});
 
-						// Session-level concurrency guard: chain onto any existing promise for this session
-						const sessionKey = msg.sessionId ?? "__new__";
+						// Session-level concurrency guard: chain onto any existing promise for this session.
+						// For existing sessions this serialises prompts to prevent double-submit races.
+						// New sessions (no sessionId yet) each get a unique key so they run concurrently —
+						// a shared "__new__" sentinel would serialise unrelated tabs. The real session ID
+						// is created inside handlePrompt, but by then the lock key is already chosen.
+						const sessionKey = msg.sessionId ?? crypto.randomUUID();
 						const existing = sessionLocks.get(sessionKey) ?? Promise.resolve();
 						const next = existing.then(runPrompt, runPrompt);
 						sessionLocks.set(sessionKey, next);
