@@ -209,4 +209,22 @@ describe("sqlite3Tool", () => {
 		// Pipes in cell values must be escaped
 		expect(result.llmOutput).toContain("a\\|b\\|c");
 	});
+
+	test("escapes markdown formatting characters in cell values", async () => {
+		await sqlite3Tool.execute(
+			{ database: "test.db", query: "CREATE TABLE IF NOT EXISTS md (id INTEGER PRIMARY KEY, val TEXT)" },
+			ctx,
+		);
+		await sqlite3Tool.execute(
+			{ database: "test.db", query: "INSERT INTO md (val) VALUES ('**bold** and `code` and _italic_')" },
+			ctx,
+		);
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM md" }, ctx);
+
+		// Markdown characters must be escaped so they render as literal text
+		expect(result.llmOutput).not.toContain("**bold**");
+		expect(result.llmOutput).toContain("\\*\\*bold\\*\\*");
+		expect(result.llmOutput).toContain("\\`code\\`");
+		expect(result.llmOutput).toContain("\\_italic\\_");
+	});
 });

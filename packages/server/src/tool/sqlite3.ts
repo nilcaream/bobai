@@ -29,10 +29,14 @@ function formatTable(rows: Record<string, unknown>[]): string {
 	return `${header}\n${separator}\n${body}`;
 }
 
-/** Make a cell value safe for a single-line GFM table row. */
+/** Make a cell value safe for a single-line GFM table row with no markdown formatting. */
 function sanitizeCell(value: unknown): string {
 	const str = String(value ?? "NULL");
-	return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
+	return str
+		.replace(/\\/g, "\\\\")
+		.replace(/\|/g, "\\|")
+		.replace(/\n/g, " ")
+		.replace(/[*_`~[\]#>]/g, (ch) => `\\${ch}`);
 }
 
 /** Truncate output keeping the tail (most recent/relevant output). */
