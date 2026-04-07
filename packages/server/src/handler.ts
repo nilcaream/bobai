@@ -5,6 +5,7 @@ import { runAgentLoop } from "./agent-loop";
 import { writeCompactionDump } from "./compaction/dump";
 import { compactMessages } from "./compaction/engine";
 import { evictOldTurns } from "./compaction/eviction";
+import { estimatePromptTokens } from "./compaction/strength";
 import { FileTime } from "./file/time";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
@@ -236,6 +237,13 @@ export async function handlePrompt(req: PromptRequest) {
 		if (contextWindow <= 0) {
 			scopedLogger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
 		}
+
+		// The stored prompt_tokens reflects the last API call's token count, measured
+		// against already-compacted messages. After a tab refresh the conversation is
+		// reloaded from DB uncompacted, so the actual token cost may be higher.
+		// Estimate from raw content to avoid under-compacting in that scenario.
+		const effectivePromptTokens = estimatePromptTokens(messages, sessionPromptTokens);
+
 		function invalidateCompactedRead(_toolCallId: string, callArgs: Record<string, unknown>) {
 			const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
 			if (filePath) {
@@ -246,10 +254,10 @@ export async function handlePrompt(req: PromptRequest) {
 
 		const rawMessages = [...messages];
 		const beforeCompaction = messages;
-		if (contextWindow > 0 && sessionPromptTokens > 0) {
+		if (contextWindow > 0 && effectivePromptTokens > 0) {
 			messages = compactMessages({
 				messages,
-				context: { promptTokens: sessionPromptTokens, contextWindow },
+				context: { promptTokens: effectivePromptTokens, contextWindow },
 				tools,
 				sessionId: currentSessionId as string,
 				onReadFileCompacted: invalidateCompactedRead,

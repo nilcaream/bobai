@@ -83,3 +83,35 @@ export function computeAge(messageIndex: number, totalMessages: number): number 
 export function computeCompactionFactor(contextPressure: number, age: number): number {
 	return contextPressure * age;
 }
+
+/**
+ * Average characters per token used to estimate token counts from raw message
+ * content. This is a model-independent approximation — English text with code
+ * typically tokenizes at 3–4 characters per token across modern LLMs.
+ */
+export const CHARS_PER_TOKEN = 3.5;
+
+/**
+ * Estimate the effective prompt token count from raw message content.
+ *
+ * The stored `session.prompt_tokens` reflects the last API call's token count,
+ * which was measured against already-compacted messages. After a tab refresh
+ * (or any scenario where messages are reloaded from the database), the raw
+ * content may be significantly larger than what the stored value suggests,
+ * causing the compaction engine to underestimate context pressure and compact
+ * too little.
+ *
+ * This function computes a rough token estimate from the total character length
+ * of all message content (divided by {@link CHARS_PER_TOKEN}), then returns the
+ * higher of the estimate and the stored value. This ensures compaction is never
+ * weaker than what the stored value alone would produce, while correctly
+ * increasing pressure when the raw content is larger.
+ */
+export function estimatePromptTokens(messages: { content: string | null | undefined }[], storedPromptTokens: number): number {
+	let totalChars = 0;
+	for (const msg of messages) {
+		if (msg.content) totalChars += msg.content.length;
+	}
+	const estimate = Math.round(totalChars / CHARS_PER_TOKEN);
+	return Math.max(estimate, storedPromptTokens);
+}

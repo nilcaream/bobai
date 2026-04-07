@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
 	AGE_INFLECTION,
 	AGE_STEEPNESS,
+	CHARS_PER_TOKEN,
 	computeAge,
 	computeCompactionFactor,
 	computeContextPressure,
 	DEFAULT_THRESHOLD,
+	estimatePromptTokens,
 	MAX_AGE_DISTANCE,
 } from "../src/compaction/strength";
 
@@ -182,5 +184,48 @@ describe("computeCompactionFactor", () => {
 
 	test("example: computeCompactionFactor(0.6, 0.95) ≈ 0.57", () => {
 		expect(computeCompactionFactor(0.6, 0.95)).toBeCloseTo(0.57, 2);
+	});
+});
+
+describe("estimatePromptTokens", () => {
+	test("CHARS_PER_TOKEN is 3.5", () => {
+		expect(CHARS_PER_TOKEN).toBe(3.5);
+	});
+
+	test("returns stored value when estimate is lower", () => {
+		// Short messages — stored value is higher than the estimate
+		const messages = [{ content: "You are helpful." }, { content: "Hi" }];
+		expect(estimatePromptTokens(messages, 10000)).toBe(10000);
+	});
+
+	test("returns estimate when it exceeds stored value", () => {
+		// 3500 chars → 1000 tokens estimate, stored is 500
+		const content = "x".repeat(3500);
+		const messages = [{ content }];
+		expect(estimatePromptTokens(messages, 500)).toBe(1000);
+	});
+
+	test("sums content across all messages", () => {
+		const messages = [
+			{ content: "a".repeat(350) }, // 100 tokens
+			{ content: "b".repeat(700) }, // 200 tokens
+			{ content: "c".repeat(1050) }, // 300 tokens
+		];
+		// Total: 2100 chars → 600 tokens, stored is 400
+		expect(estimatePromptTokens(messages, 400)).toBe(600);
+	});
+
+	test("handles null/undefined content gracefully", () => {
+		const messages = [{ content: null }, { content: "x".repeat(350) }];
+		// 350 chars → 100 tokens
+		expect(estimatePromptTokens(messages, 50)).toBe(100);
+	});
+
+	test("returns 0 when stored value is 0 and messages are empty", () => {
+		expect(estimatePromptTokens([], 0)).toBe(0);
+	});
+
+	test("returns stored value for empty message array", () => {
+		expect(estimatePromptTokens([], 5000)).toBe(5000);
 	});
 });
