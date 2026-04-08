@@ -215,7 +215,9 @@ function ToolPanel({
 		const md = ref.current.querySelector(".md");
 		if (!md) return;
 		const lineHeight = parseFloat(getComputedStyle(md).fontSize);
-		const maxHeight = lineHeight * COLLAPSE_LINES;
+		// Small tolerance so <hr> borders (1px each) don't push a
+		// panel that fits in COLLAPSE_LINES over the threshold.
+		const maxHeight = lineHeight * COLLAPSE_LINES + 4;
 		const overflows = md.scrollHeight > maxHeight;
 		collapsible.current = overflows;
 		setCollapsed(overflows);
