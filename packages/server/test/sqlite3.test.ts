@@ -54,6 +54,8 @@ describe("sqlite3Tool", () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users WHERE id = 999" }, ctx);
 		expect(result.llmOutput).toContain("(empty result set)");
 		expect(result.summary).toContain("rows: 0");
+		// uiOutput shows only the script section — "rows: 0" in status bar is sufficient
+		expect(result.uiOutput).not.toContain("empty result set");
 	});
 
 	test("executes CREATE TABLE and returns changes summary", async () => {

@@ -138,7 +138,7 @@ export const sqlite3Tool: Tool = {
 				const rowCount = rows.length;
 				return {
 					llmOutput: output,
-					uiOutput: formatUiOutput(database, query, output),
+					uiOutput: formatUiOutput(database, query, rowCount > 0 ? output : null),
 					mergeable: false,
 					summary: formatSummary(`rows: ${rowCount}`, elapsed),
 				};
