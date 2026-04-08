@@ -67,6 +67,8 @@ describe("sqlite3Tool", () => {
 		);
 		expect(result.llmOutput).toContain("Query executed successfully");
 		expect(fs.existsSync(newDb)).toBe(true);
+		// uiOutput shows only the script section (no result text)
+		expect(result.uiOutput).not.toContain("Query executed");
 	});
 
 	test("executes INSERT and reports rows affected", async () => {
@@ -75,6 +77,7 @@ describe("sqlite3Tool", () => {
 			ctx,
 		);
 		expect(result.llmOutput).toContain("Rows affected: 3");
+		expect(result.uiOutput).not.toContain("Rows affected");
 	});
 
 	test("executes PRAGMA as a read query", async () => {
@@ -116,12 +119,17 @@ describe("sqlite3Tool", () => {
 	test("handles SQL syntax errors gracefully", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECTT * FORM users" }, ctx);
 		expect(result.llmOutput).toContain("Error");
+		// uiOutput shows only the script, error details go to summary
+		expect(result.uiOutput).not.toContain("Error");
+		expect(result.summary).toContain("SELECTT");
 	});
 
 	test("handles querying a non-existent table gracefully", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM nonexistent" }, ctx);
 		expect(result.llmOutput).toContain("Error");
 		expect(result.llmOutput).toContain("nonexistent");
+		expect(result.uiOutput).not.toContain("Error");
+		expect(result.summary).toContain("no such table: nonexistent");
 	});
 
 	test("formatCall shows database and query as fenced SQL block with horizontal rule", () => {
@@ -166,9 +174,9 @@ describe("sqlite3Tool", () => {
 		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| rows affected: 1 \| \d+\.\d{2}s$/);
 	});
 
-	test("error summary has error status and duration", async () => {
+	test("error summary contains error message and duration", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM nonexistent2" }, ctx);
-		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \| \d+\.\d{2}s$/);
+		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| no such table: nonexistent2 \| \d+\.\d{2}s$/);
 	});
 
 	test("uiOutput has horizontal rule between header and SQL query", async () => {

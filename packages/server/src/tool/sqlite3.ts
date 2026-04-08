@@ -147,21 +147,20 @@ export const sqlite3Tool: Tool = {
 			db.run(query);
 			const changes = db.query("SELECT changes() as count").get() as { count: number };
 			const elapsed = (performance.now() - startTime) / 1000;
-			const output = `Query executed successfully. Rows affected: ${changes.count}`;
 			return {
-				llmOutput: output,
-				uiOutput: formatUiOutput(database, query, output),
+				llmOutput: `Query executed successfully. Rows affected: ${changes.count}`,
+				uiOutput: formatUiOutput(database, query, null),
 				mergeable: false,
 				summary: formatSummary(`rows affected: ${changes.count}`, elapsed),
 			};
 		} catch (err) {
 			const elapsed = (performance.now() - startTime) / 1000;
-			const message = `Error: ${(err as Error).message}`;
+			const errorMsg = (err as Error).message;
 			return {
-				llmOutput: message,
-				uiOutput: formatUiOutput(database, query, message),
+				llmOutput: `Error: ${errorMsg}`,
+				uiOutput: formatUiOutput(database, query, null),
 				mergeable: false,
-				summary: formatSummary("error", elapsed),
+				summary: formatSummary(errorMsg, elapsed),
 			};
 		} finally {
 			db?.close();
@@ -180,7 +179,8 @@ function formatScript(database: string, query: string): string {
 }
 
 /** Build the full UI output: script section + result. */
-function formatUiOutput(database: string, query: string, output: string): string {
+function formatUiOutput(database: string, query: string, output: string | null): string {
+	if (output === null) return formatScript(database, query);
 	return `${formatScript(database, query)}\n\n${output}`;
 }
 
