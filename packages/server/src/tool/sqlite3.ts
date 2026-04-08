@@ -93,8 +93,7 @@ export const sqlite3Tool: Tool = {
 	formatCall(args: Record<string, unknown>): string {
 		const database = typeof args.database === "string" ? args.database : "?";
 		const query = typeof args.query === "string" ? args.query : "?";
-		const truncatedQuery = query.length > 80 ? `${query.slice(0, 77)}...` : query;
-		return `\`sqlite3 ${database}\` → \`${truncatedQuery}\``;
+		return formatScript(database, query);
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -126,38 +125,43 @@ export const sqlite3Tool: Tool = {
 		}
 
 		let db: Database | undefined;
+		const startTime = performance.now();
 		try {
 			db = new Database(resolved, { create: true });
 			db.exec("PRAGMA journal_mode = WAL");
 
 			if (isReadQuery(query)) {
 				const rows = db.prepare(query).all() as Record<string, unknown>[];
+				const elapsed = (performance.now() - startTime) / 1000;
 				const table = formatTable(rows);
 				const output = truncate(table);
 				const rowCount = rows.length;
-				const summary = `${rowCount} row${rowCount !== 1 ? "s" : ""}`;
 				return {
 					llmOutput: output,
 					uiOutput: formatUiOutput(database, query, output),
 					mergeable: false,
-					summary,
+					summary: formatSummary(`rows: ${rowCount}`, elapsed),
 				};
 			}
 
 			db.run(query);
 			const changes = db.query("SELECT changes() as count").get() as { count: number };
+			const elapsed = (performance.now() - startTime) / 1000;
 			const output = `Query executed successfully. Rows affected: ${changes.count}`;
 			return {
 				llmOutput: output,
 				uiOutput: formatUiOutput(database, query, output),
 				mergeable: false,
+				summary: formatSummary(`rows affected: ${changes.count}`, elapsed),
 			};
 		} catch (err) {
+			const elapsed = (performance.now() - startTime) / 1000;
 			const message = `Error: ${(err as Error).message}`;
 			return {
 				llmOutput: message,
 				uiOutput: formatUiOutput(database, query, message),
 				mergeable: false,
+				summary: formatSummary("error", elapsed),
 			};
 		} finally {
 			db?.close();
@@ -165,6 +169,20 @@ export const sqlite3Tool: Tool = {
 	},
 };
 
+/** Render the header + query as a fenced SQL code block (script section). */
+function formatScript(database: string, query: string): string {
+	return `\`sqlite3 ${database}\`\n\n\`\`\`sql\n${query}\n\`\`\``;
+}
+
+/** Build the full UI output: script + horizontal rule + result. */
 function formatUiOutput(database: string, query: string, output: string): string {
-	return `\`sqlite3 ${database}\`\n\n\`\`\`sql\n${query}\n\`\`\`\n\n${output}`;
+	return `${formatScript(database, query)}\n\n---\n\n${output}`;
+}
+
+/** Build the summary line: "YYYY-MM-DD HH:MM:SS | rows: N | 1.23s" */
+function formatSummary(status: string, elapsedSec: number): string {
+	const now = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+	return `${ts} | ${status} | ${elapsedSec.toFixed(2)}s`;
 }

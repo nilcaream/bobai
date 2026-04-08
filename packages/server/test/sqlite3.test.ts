@@ -47,13 +47,13 @@ describe("sqlite3Tool", () => {
 		expect(result.llmOutput).toContain("Alice");
 		expect(result.llmOutput).toContain("Bob");
 		expect(result.llmOutput).toContain("Charlie");
-		expect(result.summary).toBe("3 rows");
+		expect(result.summary).toContain("rows: 3");
 	});
 
 	test("returns empty result set for SELECT with no matches", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users WHERE id = 999" }, ctx);
 		expect(result.llmOutput).toContain("(empty result set)");
-		expect(result.summary).toBe("0 rows");
+		expect(result.summary).toContain("rows: 0");
 	});
 
 	test("executes CREATE TABLE and returns changes summary", async () => {
@@ -124,14 +124,10 @@ describe("sqlite3Tool", () => {
 		expect(result.llmOutput).toContain("nonexistent");
 	});
 
-	test("formatCall shows database and truncated query", () => {
-		const short = sqlite3Tool.formatCall({ database: "app.db", query: "SELECT * FROM users" });
-		expect(short).toBe("`sqlite3 app.db` → `SELECT * FROM users`");
-
-		const longQuery = `SELECT ${"a, ".repeat(50)}z FROM very_long_table WHERE condition = true`;
-		const long = sqlite3Tool.formatCall({ database: "app.db", query: longQuery });
-		expect(long).toContain("...");
-		expect(long.length).toBeLessThan(120);
+	test("formatCall shows database and query as fenced SQL block", () => {
+		const result = sqlite3Tool.formatCall({ database: "app.db", query: "SELECT * FROM users" });
+		expect(result).toContain("`sqlite3 app.db`");
+		expect(result).toContain("```sql\nSELECT * FROM users\n```");
 	});
 
 	test("compact() preserves small output", () => {
@@ -157,25 +153,40 @@ describe("sqlite3Tool", () => {
 		expect(compact(error, { database: "db", query: "q" })).toBe(error);
 	});
 
-	test("summary reports singular row correctly", async () => {
+	test("summary has timestamp, row count, and duration", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users WHERE id = 1" }, ctx);
-		expect(result.summary).toBe("1 row");
+		// Format: "YYYY-MM-DD HH:MM:SS | rows: 1 | 0.01s"
+		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| rows: 1 \| \d+\.\d{2}s$/);
 	});
 
-	test("uiOutput contains SQL and results", async () => {
+	test("write summary has rows affected and duration", async () => {
+		const result = await sqlite3Tool.execute(
+			{ database: "write-test.db", query: "INSERT INTO items (label) VALUES ('summary-test')" },
+			ctx,
+		);
+		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| rows affected: 1 \| \d+\.\d{2}s$/);
+	});
+
+	test("error summary has error status and duration", async () => {
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM nonexistent2" }, ctx);
+		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \| \d+\.\d{2}s$/);
+	});
+
+	test("uiOutput contains SQL and results separated by horizontal rule", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users" }, ctx);
 		expect(result.uiOutput).toContain("sqlite3 test.db");
 		expect(result.uiOutput).toContain("```sql\nSELECT * FROM users\n```");
+		expect(result.uiOutput).toContain("\n\n---\n\n");
 		expect(result.uiOutput).toContain("Alice");
 	});
 
 	test("uiOutput does not wrap result table in code fence", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users" }, ctx);
 		const uiOutput = result.uiOutput ?? "";
-		// The SQL block is code-fenced, but the result table after it should be bare markdown
-		const afterSqlBlock = uiOutput.split("```\n\n").pop() ?? "";
-		expect(afterSqlBlock).not.toMatch(/^```/);
-		expect(afterSqlBlock).toContain("| id | name | email |");
+		// The result table after the horizontal rule should be bare markdown
+		const afterRule = uiOutput.split("---\n\n").pop() ?? "";
+		expect(afterRule).not.toMatch(/^```/);
+		expect(afterRule).toContain("| id | name | email |");
 	});
 
 	test("sanitizes newlines in cell values so table rows stay on one line", async () => {
