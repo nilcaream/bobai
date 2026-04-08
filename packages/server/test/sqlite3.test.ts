@@ -124,10 +124,9 @@ describe("sqlite3Tool", () => {
 		expect(result.llmOutput).toContain("nonexistent");
 	});
 
-	test("formatCall shows database and query as fenced SQL block", () => {
+	test("formatCall shows database and query as fenced SQL block with horizontal rule", () => {
 		const result = sqlite3Tool.formatCall({ database: "app.db", query: "SELECT * FROM users" });
-		expect(result).toContain("`sqlite3 app.db`");
-		expect(result).toContain("```sql\nSELECT * FROM users\n```");
+		expect(result).toBe("`sqlite3 app.db`\n\n---\n\n```sql\nSELECT * FROM users\n```");
 	});
 
 	test("compact() preserves small output", () => {
@@ -172,21 +171,19 @@ describe("sqlite3Tool", () => {
 		expect(result.summary).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \| \d+\.\d{2}s$/);
 	});
 
-	test("uiOutput contains SQL and results separated by horizontal rule", async () => {
+	test("uiOutput has horizontal rule between header and SQL query", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users" }, ctx);
-		expect(result.uiOutput).toContain("sqlite3 test.db");
-		expect(result.uiOutput).toContain("```sql\nSELECT * FROM users\n```");
-		expect(result.uiOutput).toContain("\n\n---\n\n");
+		expect(result.uiOutput).toContain("`sqlite3 test.db`\n\n---\n\n```sql\nSELECT * FROM users\n```");
 		expect(result.uiOutput).toContain("Alice");
 	});
 
 	test("uiOutput does not wrap result table in code fence", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECT * FROM users" }, ctx);
 		const uiOutput = result.uiOutput ?? "";
-		// The result table after the horizontal rule should be bare markdown
-		const afterRule = uiOutput.split("---\n\n").pop() ?? "";
-		expect(afterRule).not.toMatch(/^```/);
-		expect(afterRule).toContain("| id | name | email |");
+		// The result table after the SQL block should be bare markdown
+		const afterSqlBlock = uiOutput.split("```\n\n").pop() ?? "";
+		expect(afterSqlBlock).not.toMatch(/^```/);
+		expect(afterSqlBlock).toContain("| id | name | email |");
 	});
 
 	test("sanitizes newlines in cell values so table rows stay on one line", async () => {

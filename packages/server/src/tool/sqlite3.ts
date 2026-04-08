@@ -169,14 +169,19 @@ export const sqlite3Tool: Tool = {
 	},
 };
 
-/** Render the header + query as a fenced SQL code block (script section). */
-function formatScript(database: string, query: string): string {
-	return `\`sqlite3 ${database}\`\n\n\`\`\`sql\n${query}\n\`\`\``;
+/** Render the header as inline code (used in formatCall). */
+function formatHeader(database: string): string {
+	return `\`sqlite3 ${database}\``;
 }
 
-/** Build the full UI output: script + horizontal rule + result. */
+/** Render header + horizontal rule + query as a fenced SQL code block (script section). */
+function formatScript(database: string, query: string): string {
+	return `${formatHeader(database)}\n\n---\n\n\`\`\`sql\n${query}\n\`\`\``;
+}
+
+/** Build the full UI output: script section + result. */
 function formatUiOutput(database: string, query: string, output: string): string {
-	return `${formatScript(database, query)}\n\n---\n\n${output}`;
+	return `${formatScript(database, query)}\n\n${output}`;
 }
 
 /** Build the summary line: "YYYY-MM-DD HH:MM:SS | rows: N | 1.23s" */
