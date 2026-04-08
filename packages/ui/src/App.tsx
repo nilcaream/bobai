@@ -171,13 +171,38 @@ const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] a
 const LOCKED_DOT_COMMANDS = ["new", "session"] as const;
 const STREAMING_DOT_COMMANDS = ["stop", "subagent"] as const;
 
+/**
+ * Panels taller than COLLAPSE_LINES are auto-collapsed (CSS max-height clips
+ * the .md child). With monospace font and line-height: 1, 1 em = 1 line.
+ */
+const COLLAPSE_LINES = 6;
+
+/**
+ * Wraps a tool-call panel with collapse/expand behaviour.
+ *
+ * Collapse detection: after mount, compare the rendered `.md` child's
+ * scrollHeight against COLLAPSE_LINES × font-size. If content overflows,
+ * the panel auto-collapses (CSS `max-height: 6em` clips the overflow).
+ * Double-click toggles between collapsed and expanded states.
+ *
+ * The `content` prop is the raw markdown string — it is NOT rendered here
+ * (children handles that) but is included as an effect dependency so the
+ * overflow check re-runs when React reuses this component instance for
+ * different content. This happens when positional keys (key={n}) collide
+ * across view transitions (e.g. parent → subagent).
+ * See FINDINGS.md "React key reuse across view transitions".
+ */
 function ToolPanel({
 	children,
+	content,
 	onNavigate,
 	observe,
 }: {
 	children: React.ReactNode;
+	/** Raw markdown — used as a signal dep for re-measurement, not rendered. */
+	content: string;
 	onNavigate?: () => void;
+	/** True while the tool is actively streaming (skip measurement). */
 	observe?: boolean;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -185,34 +210,23 @@ function ToolPanel({
 	const collapsible = useRef(false);
 	const userToggled = useRef(false);
 
-	// One-shot measurement on mount for static (non-streaming) panels.
-	useEffect(() => {
-		if (observe || !ref.current) return;
-		if (userToggled.current) return;
-		const threshold = window.innerHeight * 0.3;
-		const shouldCollapse = ref.current.scrollHeight > threshold;
-		collapsible.current = shouldCollapse;
-		setCollapsed(shouldCollapse);
-	}, [observe]);
+	const checkOverflow = useCallback(() => {
+		if (!ref.current) return;
+		const md = ref.current.querySelector(".md");
+		if (!md) return;
+		const lineHeight = parseFloat(getComputedStyle(md).fontSize);
+		const maxHeight = lineHeight * COLLAPSE_LINES;
+		const overflows = md.scrollHeight > maxHeight;
+		collapsible.current = overflows;
+		setCollapsed(overflows);
+	}, []);
 
-	// ResizeObserver only for the actively-streaming panel.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `content` is an intentional signal dep — re-measure when the panel's markdown changes (see ToolPanel JSDoc)
 	useEffect(() => {
-		if (!observe || !ref.current) return;
-
-		const el = ref.current;
-		const observer = new ResizeObserver(() => {
-			if (userToggled.current) return;
-			const threshold = window.innerHeight * 0.3;
-			const shouldCollapse = el.scrollHeight > threshold;
-			if (shouldCollapse) {
-				collapsible.current = true;
-				setCollapsed(true);
-				observer.disconnect();
-			}
-		});
-		observer.observe(el);
-		return () => observer.disconnect();
-	}, [observe]);
+		if (observe) return;
+		userToggled.current = false;
+		checkOverflow();
+	}, [observe, content, checkOverflow]);
 
 	const handleDoubleClick = () => {
 		if (onNavigate) {
@@ -1261,7 +1275,7 @@ export function App() {
 					const shouldObserve = isStreaming && isLastMsg && !panel.completed;
 
 					elements.push(
-						<ToolPanel key={key++} onNavigate={onNavigate} observe={shouldObserve}>
+						<ToolPanel key={key++} content={panel.content} onNavigate={onNavigate} observe={shouldObserve}>
 							<Markdown>{panel.content}</Markdown>
 							{panel.summary && <div className="panel-status">{panel.summary}</div>}
 							{!panel.summary && isLast && msg.timestamp && (

@@ -153,9 +153,12 @@ body,
 	cursor: pointer;
 }
 
+/* Collapsed tool panel — clips content to COLLAPSE_LINES (6) lines.
+   Uses max-height (not height) so panels shorter than 6em stay at
+   their natural height if incorrectly marked collapsed. */
 .panel--tool.panel--collapsed > .md {
-	height: 6em;
-	overflow: clip;
+	max-height: 6em;
+	overflow: hidden;
 }
 
 .panel--context {
