@@ -45,7 +45,7 @@ export const bashTool: Tool = {
 
 	formatCall(args: Record<string, unknown>): string {
 		const command = typeof args.command === "string" ? args.command : "?";
-		return formatBashCommand(command);
+		return formatScript(command);
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -54,12 +54,12 @@ export const bashTool: Tool = {
 			return {
 				llmOutput: "Error: 'command' argument is required and must be a non-empty string",
 				uiOutput: "Error: 'command' argument is required and must be a non-empty string",
-
 				mergeable: false,
 			};
 		}
 
 		const timeoutMs = typeof args.timeout === "number" && args.timeout > 0 ? args.timeout : DEFAULT_TIMEOUT_MS;
+		const startTime = performance.now();
 
 		try {
 			const proc = Bun.spawn(["/bin/bash", "-c", command], {
@@ -78,6 +78,7 @@ export const bashTool: Tool = {
 
 			if (result === "timeout") {
 				proc.kill();
+				const elapsed = (performance.now() - startTime) / 1000;
 				const partialRead = (stream: ReadableStream<Uint8Array>) =>
 					Promise.race([new Response(stream).text(), new Promise<string>((r) => setTimeout(() => r(""), 2000))]);
 				const stdout = await partialRead(proc.stdout);
@@ -85,26 +86,33 @@ export const bashTool: Tool = {
 				const output = truncate(`${stdout}${stderr}`.trim());
 				const status = `Command timed out after ${timeoutMs}ms`;
 				const llm = output.length > 0 ? `${output}\n\n${status}` : status;
-				return { llmOutput: llm, uiOutput: formatBashOutput(command, llm), mergeable: false };
+				return {
+					llmOutput: llm,
+					uiOutput: formatBashOutput(command, output || "(no output)"),
+					summary: formatSummary("timed out", elapsed),
+					mergeable: false,
+				};
 			}
 
 			if (timerId !== undefined) clearTimeout(timerId);
+			const elapsed = (performance.now() - startTime) / 1000;
 			const stdout = await new Response(proc.stdout).text();
 			const stderr = await new Response(proc.stderr).text();
 			const combined = `${stdout}${stderr}`.trim();
 			const truncated = truncate(combined);
-			const output = truncated ? `${truncated}\n\nexit code: ${result.code}` : `(no output)\n\nexit code: ${result.code}`;
+			const displayOutput = truncated || "(no output)";
+			const llmOutput = truncated ? `${truncated}\n\nexit code: ${result.code}` : `(no output)\n\nexit code: ${result.code}`;
 
 			return {
-				llmOutput: output,
-				uiOutput: formatBashOutput(command, output),
+				llmOutput,
+				uiOutput: formatBashOutput(command, displayOutput),
+				summary: formatSummary(`exit code: ${result.code}`, elapsed),
 				mergeable: false,
 			};
 		} catch (err) {
 			return {
 				llmOutput: `Error executing command: ${(err as Error).message}`,
 				uiOutput: `Error executing command: ${(err as Error).message}`,
-
 				mergeable: false,
 			};
 		}
@@ -119,13 +127,20 @@ function truncate(text: string): string {
 	return `... truncated (${totalBytes} bytes total, showing last ${MAX_OUTPUT_BYTES})\n${kept}`;
 }
 
-function formatBashCommand(command: string): string {
-	if (command.includes("\n")) {
-		return `\`\`\`bash\n${command}\n\`\`\``;
-	}
-	return `\`$ ${command}\``;
+/** Render the command as a fenced bash code block (script section). */
+function formatScript(command: string): string {
+	return `\`\`\`bash\n${command}\n\`\`\``;
 }
 
+/** Build the full UI output: script + horizontal rule + output. */
 function formatBashOutput(command: string, output: string): string {
-	return `${formatBashCommand(command)}\n\n\`\`\`\n${output}\n\`\`\``;
+	return `${formatScript(command)}\n\n---\n\n\`\`\`\n${output}\n\`\`\``;
+}
+
+/** Build the summary line: "YYYY-MM-DD HH:MM:SS | exit code: N | 1.23s" */
+function formatSummary(status: string, elapsedSec: number): string {
+	const now = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+	return `${ts} | ${status} | ${elapsedSec.toFixed(2)}s`;
 }
