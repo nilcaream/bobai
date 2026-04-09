@@ -2,10 +2,9 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
+import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
-import { compactMessages } from "./compaction/engine";
-import { evictOldTurns } from "./compaction/eviction";
-import { estimatePromptTokens } from "./compaction/strength";
+import { PRE_PROMPT_TARGET } from "./compaction/strength";
 import { FileTime } from "./file/time";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
@@ -238,11 +237,7 @@ export async function handlePrompt(req: PromptRequest) {
 			scopedLogger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
 		}
 
-		// The stored prompt_tokens reflects the last API call's token count, measured
-		// against already-compacted messages. After a tab refresh the conversation is
-		// reloaded from DB uncompacted, so the actual token cost may be higher.
-		// Estimate from raw content to avoid under-compacting in that scenario.
-		const effectivePromptTokens = estimatePromptTokens(messages, sessionPromptTokens);
+		const sessionPromptChars = currentSession?.promptChars ?? 0;
 
 		function invalidateCompactedRead(_toolCallId: string, callArgs: Record<string, unknown>) {
 			const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
@@ -254,25 +249,26 @@ export async function handlePrompt(req: PromptRequest) {
 
 		const rawMessages = [...messages];
 		const beforeCompaction = messages;
-		if (contextWindow > 0 && effectivePromptTokens > 0) {
-			messages = compactMessages({
-				messages,
-				context: { promptTokens: effectivePromptTokens, contextWindow },
-				tools,
-				sessionId: currentSessionId as string,
-				onReadFileCompacted: invalidateCompactedRead,
-			});
-		}
-		const afterCompaction = messages;
-		messages = evictOldTurns(messages);
+		const compactionResult = compactToBudget({
+			messages,
+			contextWindow,
+			promptTokens: sessionPromptTokens,
+			promptChars: sessionPromptChars,
+			target: PRE_PROMPT_TARGET,
+			tools,
+			sessionId: currentSessionId as string,
+			onReadFileCompacted: invalidateCompactedRead,
+			logger: scopedLogger,
+		});
+		messages = compactionResult.messages;
 
 		// Write debug dump if compaction or eviction changed something
 		if (messages !== beforeCompaction && req.logDir) {
 			const { preFile } = writeCompactionDump({
 				logDir: req.logDir,
 				before: beforeCompaction,
-				afterCompaction,
-				afterEviction: messages,
+				afterCompaction: messages,
+				// No separate eviction dump — compactToBudget handles both
 				code: "pre",
 				scope: sessionScope(currentSessionId as string),
 				debug: scopedLogger?.level === "debug",
@@ -355,8 +351,9 @@ export async function handlePrompt(req: PromptRequest) {
 
 		const summary = provider.getTurnSummary?.();
 		const promptTokens = provider.getTurnPromptTokens?.() ?? 0;
+		const promptChars = provider.getTurnPromptChars?.() ?? 0;
 		if (currentSessionId && promptTokens > 0) {
-			updateSessionPromptTokens(db, currentSessionId, promptTokens);
+			updateSessionPromptTokens(db, currentSessionId, promptTokens, promptChars);
 		}
 		if (lastAssistantMessageId && (summary || effectiveModel)) {
 			updateMessageMetadata(db, lastAssistantMessageId, {
@@ -404,8 +401,9 @@ export async function handlePrompt(req: PromptRequest) {
 		if (currentSessionId) {
 			const errSummary = provider.getTurnSummary?.();
 			const errPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
+			const errPromptChars = provider.getTurnPromptChars?.() ?? 0;
 			if (errPromptTokens > 0) {
-				updateSessionPromptTokens(db, currentSessionId, errPromptTokens);
+				updateSessionPromptTokens(db, currentSessionId, errPromptTokens, errPromptChars);
 			}
 			if (lastAssistantMessageId && (errSummary || effectiveModel)) {
 				updateMessageMetadata(db, lastAssistantMessageId, {

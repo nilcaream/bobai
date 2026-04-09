@@ -6,6 +6,7 @@ export interface Session {
 	model: string | null;
 	parentId: string | null;
 	promptTokens: number;
+	promptChars: number;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -26,6 +27,7 @@ type SessionRow = {
 	model: string | null;
 	parent_id: string | null;
 	prompt_tokens: number;
+	prompt_chars: number;
 	created_at: string;
 	updated_at: string;
 };
@@ -45,7 +47,7 @@ export function createSession(db: Database): Session {
 
 	db.prepare("INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)").run(id, null, now, now);
 
-	return { id, title: null, model: null, parentId: null, promptTokens: 0, createdAt: now, updatedAt: now };
+	return { id, title: null, model: null, parentId: null, promptTokens: 0, promptChars: 0, createdAt: now, updatedAt: now };
 }
 
 export function appendMessage(
@@ -102,7 +104,9 @@ export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 
 export function getSession(db: Database, sessionId: string): Session | null {
 	const row = db
-		.prepare("SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE id = ?")
+		.prepare(
+			"SELECT id, title, model, parent_id, prompt_tokens, prompt_chars, created_at, updated_at FROM sessions WHERE id = ?",
+		)
 		.get(sessionId) as SessionRow | null;
 
 	if (!row) return null;
@@ -112,6 +116,7 @@ export function getSession(db: Database, sessionId: string): Session | null {
 		model: row.model,
 		parentId: row.parent_id,
 		promptTokens: row.prompt_tokens,
+		promptChars: row.prompt_chars,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -136,8 +141,8 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 
 export function listSessions(db: Database, limit?: number): Session[] {
 	const sql = limit
-		? "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
-		: "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
+		? "SELECT id, title, model, parent_id, prompt_tokens, prompt_chars, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, parent_id, prompt_tokens, prompt_chars, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
 	const rows = (limit ? db.prepare(sql).all(limit) : db.prepare(sql).all()) as SessionRow[];
 
 	return rows.map((r) => ({
@@ -146,6 +151,7 @@ export function listSessions(db: Database, limit?: number): Session[] {
 		model: r.model,
 		parentId: r.parent_id,
 		promptTokens: r.prompt_tokens,
+		promptChars: r.prompt_chars,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -159,9 +165,10 @@ export function updateSessionTitle(db: Database, sessionId: string, title: strin
 	db.prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?").run(title, new Date().toISOString(), sessionId);
 }
 
-export function updateSessionPromptTokens(db: Database, sessionId: string, promptTokens: number): void {
-	db.prepare("UPDATE sessions SET prompt_tokens = ?, updated_at = ? WHERE id = ?").run(
+export function updateSessionPromptTokens(db: Database, sessionId: string, promptTokens: number, promptChars: number): void {
+	db.prepare("UPDATE sessions SET prompt_tokens = ?, prompt_chars = ?, updated_at = ? WHERE id = ?").run(
 		promptTokens,
+		promptChars,
 		new Date().toISOString(),
 		sessionId,
 	);
@@ -185,13 +192,13 @@ export function createSubagentSession(
 		now,
 	);
 
-	return { id, title, model, parentId, promptTokens: 0, createdAt: now, updatedAt: now };
+	return { id, title, model, parentId, promptTokens: 0, promptChars: 0, createdAt: now, updatedAt: now };
 }
 
 export function listSubagentSessions(db: Database, parentId: string, limit?: number): Session[] {
 	const sql = limit
-		? "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?"
-		: "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC";
+		? "SELECT id, title, model, parent_id, prompt_tokens, prompt_chars, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, parent_id, prompt_tokens, prompt_chars, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC";
 	const rows = (limit ? db.prepare(sql).all(parentId, limit) : db.prepare(sql).all(parentId)) as SessionRow[];
 
 	return rows.map((r) => ({
@@ -200,6 +207,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit?: num
 		model: r.model,
 		parentId: r.parent_id,
 		promptTokens: r.prompt_tokens,
+		promptChars: r.prompt_chars,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -208,7 +216,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit?: num
 export function getMostRecentParentSession(db: Database): Session | null {
 	const row = db
 		.prepare(
-			"SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
+			"SELECT id, title, model, parent_id, prompt_tokens, prompt_chars, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
 		)
 		.get() as SessionRow | null;
 
@@ -219,6 +227,7 @@ export function getMostRecentParentSession(db: Database): Session | null {
 		model: row.model,
 		parentId: row.parent_id,
 		promptTokens: row.prompt_tokens,
+		promptChars: row.prompt_chars,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};

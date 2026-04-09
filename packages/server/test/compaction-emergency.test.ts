@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import { EMERGENCY_THRESHOLD, emergencyCompactConversation, shouldEmergencyCompact } from "../src/agent-loop";
+import { emergencyCompactConversation, shouldEmergencyCompact } from "../src/agent-loop";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
+import { EMERGENCY_TARGET } from "../src/compaction/strength";
 import type { Message } from "../src/provider/provider";
 import type { Tool, ToolRegistry } from "../src/tool/tool";
 
@@ -69,35 +70,51 @@ function buildConversation(): Message[] {
 // ---------------------------------------------------------------------------
 
 describe("shouldEmergencyCompact", () => {
-	test("returns true when promptTokens/contextWindow >= 0.85", () => {
-		expect(shouldEmergencyCompact(8500, 10000)).toBe(true);
-		expect(shouldEmergencyCompact(9000, 10000)).toBe(true);
-		expect(shouldEmergencyCompact(10000, 10000)).toBe(true);
+	// With EMERGENCY_TARGET = 0.9, charBudget = contextWindow * 0.9 * (promptChars/promptTokens)
+	// Using promptTokens=1000, promptChars=3500 → charsPerToken=3.5
+	// contextWindow=100000 → charBudget = 100000 * 0.9 * 3.5 = 315000
+
+	test("returns true when total content chars exceed the budget", () => {
+		// Create messages whose total content exceeds 315000 chars
+		const bigContent = "x".repeat(320000);
+		const messages = [{ content: bigContent }];
+		expect(shouldEmergencyCompact(1000, 3500, 100000, messages)).toBe(true);
 	});
 
-	test("returns false when below 0.85", () => {
-		expect(shouldEmergencyCompact(8499, 10000)).toBe(false);
-		expect(shouldEmergencyCompact(5000, 10000)).toBe(false);
-		expect(shouldEmergencyCompact(1, 10000)).toBe(false);
+	test("returns false when total content chars are within budget", () => {
+		const smallContent = "x".repeat(100);
+		const messages = [{ content: smallContent }];
+		expect(shouldEmergencyCompact(1000, 3500, 100000, messages)).toBe(false);
 	});
 
 	test("returns false when contextWindow is 0", () => {
-		expect(shouldEmergencyCompact(1000, 0)).toBe(false);
+		const messages = [{ content: "x".repeat(320000) }];
+		expect(shouldEmergencyCompact(1000, 3500, 0, messages)).toBe(false);
 	});
 
 	test("returns false when promptTokens is 0", () => {
-		expect(shouldEmergencyCompact(0, 10000)).toBe(false);
+		const messages = [{ content: "x".repeat(320000) }];
+		expect(shouldEmergencyCompact(0, 3500, 100000, messages)).toBe(false);
 	});
 
-	test("edge case: exactly at 0.85", () => {
-		// 85% of 10000 is 8500 — should trigger
-		expect(shouldEmergencyCompact(8500, 10000)).toBe(true);
-		// 85% of 20000 is 17000
-		expect(shouldEmergencyCompact(17000, 20000)).toBe(true);
+	test("returns false when promptChars is 0", () => {
+		const messages = [{ content: "x".repeat(320000) }];
+		expect(shouldEmergencyCompact(1000, 0, 100000, messages)).toBe(false);
 	});
 
-	test("threshold constant is 0.85", () => {
-		expect(EMERGENCY_THRESHOLD).toBe(0.85);
+	test("edge case: content exactly at budget does not trigger", () => {
+		// charBudget = 100000 * 0.9 * 3.5 = 315000
+		const messages = [{ content: "x".repeat(315000) }];
+		expect(shouldEmergencyCompact(1000, 3500, 100000, messages)).toBe(false);
+	});
+
+	test("edge case: content one char over budget triggers", () => {
+		const messages = [{ content: "x".repeat(315001) }];
+		expect(shouldEmergencyCompact(1000, 3500, 100000, messages)).toBe(true);
+	});
+
+	test("EMERGENCY_TARGET constant is 0.9", () => {
+		expect(EMERGENCY_TARGET).toBe(0.9);
 	});
 });
 
@@ -106,32 +123,46 @@ describe("shouldEmergencyCompact", () => {
 // ---------------------------------------------------------------------------
 
 describe("emergencyCompactConversation", () => {
-	test("applies compaction when above 85% with known tools", () => {
+	// For these tests we need promptTokens and promptChars that produce a charBudget
+	// smaller than the conversation content. The buildConversation() function produces
+	// messages with ~2000 chars of tool content + trailing context.
+	// Total content ≈ "You are a helpful assistant." (29) + "Hello" (5) + 1900 (tool) +
+	//   "Here is the file." (17) + 100 * ~8 chars = ~2751 chars.
+	// Set charBudget small: contextWindow=1000, promptTokens=100, promptChars=350
+	// → charsPerToken=3.5, charBudget = 1000 * 0.9 * 3.5 = 3150
+	// That's slightly above conversation content. Need to reduce further.
+	// contextWindow=500, promptTokens=100, promptChars=350 → budget = 500 * 0.9 * 3.5 = 1575
+	// That should trigger compaction.
+
+	test("applies compaction when content exceeds character budget with known tools", () => {
 		const conversation = buildConversation();
 		const registry = createReadFileRegistry();
 		const result = emergencyCompactConversation(
 			conversation,
-			9000, // 90% of 10000
-			10000,
+			100, // promptTokens
+			350, // promptChars → charsPerToken = 3.5
+			500, // contextWindow → budget = 500 * 0.9 * 3.5 = 1575
 			registry,
 		);
-		// compactMessages returns a new array when it compacts
-		// At 90% usage, the read_file output should exceed its outputThreshold
+		// compactToBudget returns a new array when it compacts
 		expect(result).not.toBe(conversation);
-		// The result should still have the same number of messages (compaction changes content, not count)
-		expect(result.length).toBe(conversation.length);
+		// The result should still have messages
+		expect(result.length).toBeGreaterThan(0);
 	});
 
 	test("returns conversation unchanged when no tools have outputThreshold", () => {
 		const conversation = buildConversation();
-		// emptyRegistry has no tools — engine skips unknown tools
+		// emptyRegistry has no tools — engine skips unknown tools, but compactToBudget
+		// still calls evictOldTurns. With small enough budget, eviction may still kick in.
+		// Use a large budget so nothing triggers.
 		const result = emergencyCompactConversation(
 			conversation,
-			9000, // 90% of 10000
-			10000,
+			100, // promptTokens
+			350, // promptChars
+			10000, // large contextWindow → budget = 10000 * 0.9 * 3.5 = 31500 — well above content
 			emptyRegistry,
 		);
-		// No registered tools → nothing to compact → same reference
+		// Budget exceeds content → no compaction needed → same reference
 		expect(result).toBe(conversation);
 	});
 
@@ -140,8 +171,9 @@ describe("emergencyCompactConversation", () => {
 		const registry = createReadFileRegistry();
 		const result = emergencyCompactConversation(
 			conversation,
-			5000, // 50% — well below 85%
-			10000,
+			100, // promptTokens
+			350, // promptChars
+			10000, // large contextWindow → budget well above content
 			registry,
 		);
 		// Should be the exact same reference
@@ -150,18 +182,25 @@ describe("emergencyCompactConversation", () => {
 
 	test("returns conversation unchanged when contextWindow is 0", () => {
 		const conversation = buildConversation();
-		const result = emergencyCompactConversation(conversation, 9000, 0, emptyRegistry);
+		const result = emergencyCompactConversation(conversation, 100, 350, 0, emptyRegistry);
 		expect(result).toBe(conversation);
 	});
 
-	test("passes sessionId through to compactMessages", () => {
+	test("returns conversation unchanged when promptTokens and promptChars are 0", () => {
+		const conversation = buildConversation();
+		const result = emergencyCompactConversation(conversation, 0, 0, 10000, emptyRegistry);
+		expect(result).toBe(conversation);
+	});
+
+	test("passes sessionId through to compactToBudget", () => {
 		const conversation = buildConversation();
 		const registry = createReadFileRegistry();
 		// Just verify it doesn't throw when sessionId is provided
 		const result = emergencyCompactConversation(
 			conversation,
-			9000,
-			10000,
+			100,
+			350,
+			500, // small budget to trigger compaction
 			registry,
 			undefined,
 			undefined,
@@ -186,7 +225,15 @@ describe("emergencyCompactConversation", () => {
 		};
 
 		try {
-			const result = emergencyCompactConversation(conversation, 9000, 10000, registry, tmpDir, fakeLogger);
+			const result = emergencyCompactConversation(
+				conversation,
+				100,
+				350,
+				500, // small budget to trigger compaction
+				registry,
+				tmpDir,
+				fakeLogger,
+			);
 			// Should have compacted (new array)
 			expect(result).not.toBe(conversation);
 			// Dump files should exist in the tmpDir
@@ -207,7 +254,14 @@ describe("emergencyCompactConversation", () => {
 		const conversation = buildConversation();
 		const registry = createReadFileRegistry();
 		// Just verify it doesn't throw and returns a new array
-		const result = emergencyCompactConversation(conversation, 9000, 10000, registry, undefined);
+		const result = emergencyCompactConversation(
+			conversation,
+			100,
+			350,
+			500, // small budget to trigger compaction
+			registry,
+			undefined,
+		);
 		expect(result).not.toBe(conversation);
 	});
 
@@ -227,7 +281,15 @@ describe("emergencyCompactConversation", () => {
 		};
 
 		try {
-			const result = emergencyCompactConversation(conversation, 9000, 10000, registry, tmpDir, fakeLogger);
+			const result = emergencyCompactConversation(
+				conversation,
+				100,
+				350,
+				500, // small budget to trigger compaction
+				registry,
+				tmpDir,
+				fakeLogger,
+			);
 			expect(result).not.toBe(conversation);
 			// Logger.info should have been called with "COMPACTION" system and a message containing "emergency"
 			expect(infoFn).toHaveBeenCalled();

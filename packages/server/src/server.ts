@@ -1,10 +1,9 @@
 import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { type CommandRequest, handleCommand } from "./command";
-import { compactMessagesWithStats } from "./compaction/engine";
-import { evictOldTurns } from "./compaction/eviction";
+import { compactToBudget } from "./compaction/compact-to-budget";
 import { createCompactionRegistry } from "./compaction/registry";
-import { estimatePromptTokens } from "./compaction/strength";
+import { PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
@@ -158,6 +157,7 @@ export function createServer(options: ServerOptions) {
 				// Compacted view: convert to Message[], run compaction, return with stats
 				const session = getSession(options.db, sessionId);
 				const storedPromptTokens = session?.promptTokens ?? 0;
+				const storedPromptChars = session?.promptChars ?? 0;
 				const modelId = session?.model ?? options.model ?? "";
 				const modelConfigs = loadModelsConfig();
 				const modelConfig = modelConfigs.find((m) => m.id === modelId);
@@ -185,10 +185,7 @@ export function createServer(options: ServerOptions) {
 					}),
 				];
 
-				// Estimate effective token count from raw content (see handler.ts for rationale)
-				const effectivePromptTokens = estimatePromptTokens(messages, storedPromptTokens);
-
-				if (contextWindow <= 0 || effectivePromptTokens <= 0) {
+				if (contextWindow <= 0 || (storedPromptTokens <= 0 && storedPromptChars <= 0)) {
 					// No pressure data — return the dynamic system prompt + conversation messages as-is
 					const systemMessage = {
 						id: "system-dynamic",
@@ -202,28 +199,41 @@ export function createServer(options: ServerOptions) {
 					return Response.json({
 						messages: [systemMessage, ...conversationMessages],
 						stats: null,
-						details: null,
 						reason: "no context pressure data",
 					});
 				}
 
 				const tools = createCompactionRegistry();
-				const {
-					messages: compacted,
-					stats,
-					details,
-				} = compactMessagesWithStats({
+				const compactionResult = compactToBudget({
 					messages,
-					context: { promptTokens: effectivePromptTokens, contextWindow },
+					contextWindow,
+					promptTokens: storedPromptTokens,
+					promptChars: storedPromptChars,
+					target: PRE_PROMPT_TARGET,
 					tools,
 					sessionId,
 				});
 
-				const evicted = evictOldTurns(compacted);
+				// compactToBudget combines compaction + eviction into one step, so
+				// we pass the same array for both params. mapEvictedToStored uses
+				// the first param to build a reference map and iterates the second.
+				const compactedStored = mapEvictedToStored(
+					compactionResult.messages,
+					compactionResult.messages,
+					conversationMessages,
+					sessionId,
+				);
 
-				const compactedStored = mapEvictedToStored(compacted, evicted, conversationMessages, sessionId);
-
-				return Response.json({ messages: compactedStored, stats, details: Object.fromEntries(details) });
+				return Response.json({
+					messages: compactedStored,
+					stats: {
+						pressure: compactionResult.pressure,
+						iterations: compactionResult.iterations,
+						charsBefore: compactionResult.charsBefore,
+						charsAfter: compactionResult.charsAfter,
+						charBudget: compactionResult.charBudget,
+					},
+				});
 			}
 
 			if (url.pathname === "/bobai/models") {

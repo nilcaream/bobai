@@ -84,34 +84,41 @@ export function computeCompactionFactor(contextPressure: number, age: number): n
 	return contextPressure * age;
 }
 
-/**
- * Average characters per token used to estimate token counts from raw message
- * content. This is a model-independent approximation — English text with code
- * typically tokenizes at 3–4 characters per token across modern LLMs.
- */
-export const CHARS_PER_TOKEN = 3.5;
+/** Pre-prompt compaction targets this fraction of the context window. */
+export const PRE_PROMPT_TARGET = 0.8;
+
+/** Emergency (mid-turn) compaction targets this fraction of the context window. */
+export const EMERGENCY_TARGET = 0.9;
+
+/** Pressure increment per iteration of the compaction loop. */
+export const PRESSURE_STEP = 0.05;
 
 /**
- * Estimate the effective prompt token count from raw message content.
+ * Compute the character budget for a given context window and target fraction.
  *
- * The stored `session.prompt_tokens` reflects the last API call's token count,
- * which was measured against already-compacted messages. After a tab refresh
- * (or any scenario where messages are reloaded from the database), the raw
- * content may be significantly larger than what the stored value suggests,
- * causing the compaction engine to underestimate context pressure and compact
- * too little.
- *
- * This function computes a rough token estimate from the total character length
- * of all message content (divided by {@link CHARS_PER_TOKEN}), then returns the
- * higher of the estimate and the stored value. This ensures compaction is never
- * weaker than what the stored value alone would produce, while correctly
- * increasing pressure when the raw content is larger.
+ * Uses the session's measured charsPerToken ratio (prompt_chars / prompt_tokens).
+ * Returns 0 when no valid ratio is available (signals "skip compaction").
  */
-export function estimatePromptTokens(messages: { content: string | null | undefined }[], storedPromptTokens: number): number {
-	let totalChars = 0;
+export function computeCharBudget(contextWindow: number, target: number, promptTokens: number, promptChars: number): number {
+	if (contextWindow <= 0) return 0;
+	const charsPerToken = promptTokens > 0 && promptChars > 0 ? promptChars / promptTokens : 0;
+	if (charsPerToken <= 0) return 0;
+	return Math.round(contextWindow * target * charsPerToken);
+}
+
+/**
+ * Compute the total character length of all message content in an array.
+ *
+ * Only counts the `content` string of each message. Does not include
+ * assistant tool_call arguments, tool definitions, or message framing —
+ * those contribute to the API's token count but are excluded here. This
+ * is consistent with the provider's `turnLastCallChars` measurement, so
+ * the derived `charsPerToken` ratio is self-consistent.
+ */
+export function totalContentChars(messages: { content: string | null | undefined }[]): number {
+	let total = 0;
 	for (const msg of messages) {
-		if (msg.content) totalChars += msg.content.length;
+		if (msg.content) total += msg.content.length;
 	}
-	const estimate = Math.round(totalChars / CHARS_PER_TOKEN);
-	return Math.max(estimate, storedPromptTokens);
+	return total;
 }

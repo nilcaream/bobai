@@ -2,13 +2,16 @@ import { describe, expect, test } from "bun:test";
 import {
 	AGE_INFLECTION,
 	AGE_STEEPNESS,
-	CHARS_PER_TOKEN,
 	computeAge,
+	computeCharBudget,
 	computeCompactionFactor,
 	computeContextPressure,
 	DEFAULT_THRESHOLD,
-	estimatePromptTokens,
+	EMERGENCY_TARGET,
 	MAX_AGE_DISTANCE,
+	PRE_PROMPT_TARGET,
+	PRESSURE_STEP,
+	totalContentChars,
 } from "../src/compaction/strength";
 
 describe("computeContextPressure", () => {
@@ -187,45 +190,67 @@ describe("computeCompactionFactor", () => {
 	});
 });
 
-describe("estimatePromptTokens", () => {
-	test("CHARS_PER_TOKEN is 3.5", () => {
-		expect(CHARS_PER_TOKEN).toBe(3.5);
+describe("computeCharBudget", () => {
+	test("returns 0 when contextWindow is 0", () => {
+		expect(computeCharBudget(0, 0.8, 1000, 3500)).toBe(0);
 	});
 
-	test("returns stored value when estimate is lower", () => {
-		// Short messages — stored value is higher than the estimate
-		const messages = [{ content: "You are helpful." }, { content: "Hi" }];
-		expect(estimatePromptTokens(messages, 10000)).toBe(10000);
+	test("returns 0 when promptTokens is 0", () => {
+		expect(computeCharBudget(100000, 0.8, 0, 0)).toBe(0);
 	});
 
-	test("returns estimate when it exceeds stored value", () => {
-		// 3500 chars → 1000 tokens estimate, stored is 500
-		const content = "x".repeat(3500);
-		const messages = [{ content }];
-		expect(estimatePromptTokens(messages, 500)).toBe(1000);
+	test("returns 0 when promptChars is 0", () => {
+		expect(computeCharBudget(100000, 0.8, 1000, 0)).toBe(0);
 	});
 
-	test("sums content across all messages", () => {
+	test("computes budget from measured ratio", () => {
+		// charsPerToken = 3500 / 1000 = 3.5
+		// budget = 100000 * 0.8 * 3.5 = 280000
+		expect(computeCharBudget(100000, 0.8, 1000, 3500)).toBe(280000);
+	});
+
+	test("uses PRE_PROMPT_TARGET correctly", () => {
+		// charsPerToken = 4000 / 1000 = 4.0
+		// budget = 50000 * 0.8 * 4.0 = 160000
+		expect(computeCharBudget(50000, PRE_PROMPT_TARGET, 1000, 4000)).toBe(160000);
+	});
+
+	test("uses EMERGENCY_TARGET correctly", () => {
+		// charsPerToken = 4000 / 1000 = 4.0
+		// budget = 50000 * 0.9 * 4.0 = 180000
+		expect(computeCharBudget(50000, EMERGENCY_TARGET, 1000, 4000)).toBe(180000);
+	});
+});
+
+describe("totalContentChars", () => {
+	test("sums content across messages", () => {
 		const messages = [
-			{ content: "a".repeat(350) }, // 100 tokens
-			{ content: "b".repeat(700) }, // 200 tokens
-			{ content: "c".repeat(1050) }, // 300 tokens
+			{ content: "hello" }, // 5
+			{ content: "world!!" }, // 7
 		];
-		// Total: 2100 chars → 600 tokens, stored is 400
-		expect(estimatePromptTokens(messages, 400)).toBe(600);
+		expect(totalContentChars(messages)).toBe(12);
 	});
 
-	test("handles null/undefined content gracefully", () => {
-		const messages = [{ content: null }, { content: "x".repeat(350) }];
-		// 350 chars → 100 tokens
-		expect(estimatePromptTokens(messages, 50)).toBe(100);
+	test("handles null and undefined content", () => {
+		const messages = [{ content: null }, { content: "abc" }, { content: undefined }];
+		expect(totalContentChars(messages)).toBe(3);
 	});
 
-	test("returns 0 when stored value is 0 and messages are empty", () => {
-		expect(estimatePromptTokens([], 0)).toBe(0);
+	test("returns 0 for empty array", () => {
+		expect(totalContentChars([])).toBe(0);
+	});
+});
+
+describe("compaction constants", () => {
+	test("PRE_PROMPT_TARGET is 0.80", () => {
+		expect(PRE_PROMPT_TARGET).toBe(0.8);
 	});
 
-	test("returns stored value for empty message array", () => {
-		expect(estimatePromptTokens([], 5000)).toBe(5000);
+	test("EMERGENCY_TARGET is 0.90", () => {
+		expect(EMERGENCY_TARGET).toBe(0.9);
+	});
+
+	test("PRESSURE_STEP is 0.05", () => {
+		expect(PRESSURE_STEP).toBe(0.05);
 	});
 });

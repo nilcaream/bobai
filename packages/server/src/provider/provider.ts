@@ -81,6 +81,8 @@ export interface Provider {
 	getTurnSummary?(): string | undefined;
 	/** Return the prompt token count from the last LLM call in this turn. */
 	getTurnPromptTokens?(): number;
+	/** Return the total content character count from the last LLM call in this turn. */
+	getTurnPromptChars?(): number;
 	/** Save current turn tracking state (so it can be restored after a subagent run). */
 	saveTurnState?(): unknown;
 	/** Restore previously saved turn tracking state. */

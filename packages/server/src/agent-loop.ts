@@ -1,6 +1,6 @@
+import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
-import { compactMessages } from "./compaction/engine";
-import { evictOldTurns } from "./compaction/eviction";
+import { computeCharBudget, EMERGENCY_TARGET, totalContentChars } from "./compaction/strength";
 import type { Logger } from "./log/logger";
 import { getScope } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
@@ -9,16 +9,21 @@ import type { ToolRegistry } from "./tool/tool";
 
 const DEFAULT_MAX_ITERATIONS = 64;
 
-export const EMERGENCY_THRESHOLD = 0.85;
-
-export function shouldEmergencyCompact(promptTokens: number, contextWindow: number): boolean {
-	if (contextWindow <= 0 || promptTokens <= 0) return false;
-	return promptTokens / contextWindow >= EMERGENCY_THRESHOLD;
+export function shouldEmergencyCompact(
+	promptTokens: number,
+	promptChars: number,
+	contextWindow: number,
+	messages: { content: string | null | undefined }[],
+): boolean {
+	const charBudget = computeCharBudget(contextWindow, EMERGENCY_TARGET, promptTokens, promptChars);
+	if (charBudget <= 0) return false;
+	return totalContentChars(messages) > charBudget;
 }
 
 export function emergencyCompactConversation(
 	conversation: Message[],
 	promptTokens: number,
+	promptChars: number,
 	contextWindow: number,
 	tools: ToolRegistry,
 	logDir?: string,
@@ -26,29 +31,30 @@ export function emergencyCompactConversation(
 	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void,
 	sessionId?: string,
 ): Message[] {
-	if (!shouldEmergencyCompact(promptTokens, contextWindow)) return conversation;
+	if (!shouldEmergencyCompact(promptTokens, promptChars, contextWindow, conversation)) {
+		return conversation;
+	}
 
 	const beforeEmergency = [...conversation];
-	const compacted = compactMessages({
+	const result = compactToBudget({
 		messages: conversation,
-		context: {
-			promptTokens,
-			contextWindow,
-		},
+		contextWindow,
+		promptTokens,
+		promptChars,
+		target: EMERGENCY_TARGET,
 		tools,
 		sessionId,
 		onReadFileCompacted,
+		logger,
 	});
 
-	if (compacted !== conversation) {
-		const evicted = evictOldTurns(compacted);
+	if (result.messages !== conversation) {
 		if (logDir) {
 			const scope = getScope() ?? "global";
 			const { preFile } = writeCompactionDump({
 				logDir,
 				before: beforeEmergency,
-				afterCompaction: compacted,
-				afterEviction: evicted,
+				afterCompaction: result.messages,
 				code: "emg",
 				scope,
 				debug: logger?.level === "debug",
@@ -57,10 +63,10 @@ export function emergencyCompactConversation(
 				logger.info("COMPACTION", `emergency mid-loop compaction: ${preFile}`);
 			}
 		}
-		return evicted;
+		return result.messages;
 	}
 
-	return evictOldTurns(conversation);
+	return conversation;
 }
 
 export type AgentEvent =
@@ -348,13 +354,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			signal?.throwIfAborted();
 		}
 
-		// Emergency compaction: if we've crossed 85% context usage, compact from raw data before next iteration
+		// Emergency compaction: if content exceeds the character budget, compact from raw data before next iteration
 		if (options.contextWindow && options.contextWindow > 0 && options.rawMessages) {
 			const currentPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
+			const currentPromptChars = provider.getTurnPromptChars?.() ?? 0;
 			const rawPlusNew = [...options.rawMessages, ...newMessages];
 			const compacted = emergencyCompactConversation(
 				rawPlusNew,
 				currentPromptTokens,
+				currentPromptChars,
 				options.contextWindow,
 				tools,
 				options.logDir,

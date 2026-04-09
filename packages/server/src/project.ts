@@ -87,6 +87,13 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE sessions ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0");
 	}
 
+	// Migrate: add prompt_chars column to sessions if missing (character count of
+	// messages sent to the API, used alongside prompt_tokens to compute charsPerToken
+	// for character-budget compaction)
+	if (!sessionColumns.some((c) => c.name === "prompt_chars")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN prompt_chars INTEGER NOT NULL DEFAULT 0");
+	}
+
 	return {
 		id,
 		port: config.port,

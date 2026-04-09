@@ -105,6 +105,7 @@ export function createCopilotProvider(
 	let turnPremiumCost = 0;
 	let turnTokens = 0;
 	let turnLastCallTokens = 0;
+	let turnLastCallChars = 0;
 	let baselineTokens = 0;
 	const warnedContextWindow = new Set<string>();
 
@@ -215,7 +216,11 @@ export function createCopilotProvider(
 
 	// ── Anthropic (Claude) streaming path ────────────────────────────────
 
-	async function* streamClaude(options: ProviderOptions, initiator: "user" | "agent"): AsyncGenerator<StreamEvent> {
+	async function* streamClaude(
+		options: ProviderOptions,
+		initiator: "user" | "agent",
+		callChars: number,
+	): AsyncGenerator<StreamEvent> {
 		const { system, messages } = convertMessagesToAnthropic(options.messages);
 		const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
 		const maxTokens = getMaxOutputTokens(options.model);
@@ -286,6 +291,7 @@ export function createCopilotProvider(
 							turnModel = options.model;
 							turnTokens += event.tokenCount;
 							turnLastCallTokens = event.tokenCount;
+							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
 							const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
@@ -344,6 +350,7 @@ export function createCopilotProvider(
 			turnPremiumCost = 0;
 			turnTokens = 0;
 			turnLastCallTokens = 0;
+			turnLastCallChars = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
 
@@ -375,6 +382,10 @@ export function createCopilotProvider(
 			return turnLastCallTokens;
 		},
 
+		getTurnPromptChars(): number {
+			return turnLastCallChars;
+		},
+
 		saveTurnState(): unknown {
 			return {
 				turnStartTime,
@@ -384,6 +395,7 @@ export function createCopilotProvider(
 				turnPremiumCost,
 				turnTokens,
 				turnLastCallTokens,
+				turnLastCallChars,
 				baselineTokens,
 			};
 		},
@@ -397,6 +409,7 @@ export function createCopilotProvider(
 				turnPremiumCost: number;
 				turnTokens: number;
 				turnLastCallTokens: number;
+				turnLastCallChars: number;
 				baselineTokens: number;
 			};
 			turnStartTime = s.turnStartTime;
@@ -406,6 +419,7 @@ export function createCopilotProvider(
 			turnPremiumCost = s.turnPremiumCost;
 			turnTokens = s.turnTokens;
 			turnLastCallTokens = s.turnLastCallTokens;
+			turnLastCallChars = s.turnLastCallChars ?? 0;
 			baselineTokens = s.baselineTokens;
 		},
 
@@ -413,8 +427,16 @@ export function createCopilotProvider(
 			await ensureValidSession();
 			const initiator = options.initiator ?? resolveInitiator(options.messages);
 
+			// Compute total content chars for the messages being sent
+			let callChars = 0;
+			for (const msg of options.messages) {
+				if ("content" in msg && typeof msg.content === "string") {
+					callChars += msg.content.length;
+				}
+			}
+
 			if (isCopilotClaude(options.model)) {
-				yield* streamClaude(options, initiator);
+				yield* streamClaude(options, initiator, callChars);
 				return;
 			}
 
@@ -555,6 +577,7 @@ export function createCopilotProvider(
 								turnModel = options.model;
 								turnTokens += totalTokens;
 								turnLastCallTokens = promptTokens;
+								turnLastCallChars = callChars;
 								if (effectiveInitiator === "agent") turnAgentCalls++;
 								else turnUserCalls++;
 								const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
