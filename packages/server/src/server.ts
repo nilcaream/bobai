@@ -26,6 +26,7 @@ import {
 } from "./session/repository";
 import type { SkillRegistry } from "./skill/skill";
 import { buildSystemPrompt } from "./system-prompt";
+import welcomeTemplate from "./welcome.md" with { type: "text" };
 
 export interface ServerOptions {
 	port: number;
@@ -83,6 +84,16 @@ export function createServer(options: ServerOptions) {
 			if (url.pathname === "/bobai/project-info") {
 				const info = await getProjectInfo(options.projectRoot ?? process.cwd());
 				return Response.json(info);
+			}
+
+			if (url.pathname === "/bobai/welcome") {
+				const vars: Record<string, string> = {
+					__revision__: process.env.BOBAI_BUILD_REV ?? "dev",
+					__date__: process.env.BOBAI_BUILD_DATE ?? "",
+					__directory__: options.projectRoot ?? process.cwd(),
+				};
+				const markdown = welcomeTemplate.replace(/__\w+__/g, (m) => vars[m] ?? m);
+				return Response.json({ markdown });
 			}
 
 			// GET /bobai/skills — list available skills

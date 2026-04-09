@@ -94,6 +94,7 @@ export function useWebSocket() {
 	const [sessionLocked, setSessionLocked] = useState(false);
 	const [viewingSubagentId, setViewingSubagentId] = useState<string | null>(null);
 	const [viewingSubagentTitle, setViewingSubagentTitle] = useState<string | null>(null);
+	const [welcomeMarkdown, setWelcomeMarkdown] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
 	const eventRouter = useRef(createEventRouter());
 	const viewingSubagentIdRef = useRef<string | null>(null);
@@ -416,11 +417,13 @@ export function useWebSocket() {
 		setParentTitle(null);
 		setVolatileMessage(null);
 		setSessionLocked(false);
+		setWelcomeMarkdown(null);
 		history.pushState(null, "", "/bobai");
 	}, [sendUnsubscribe]);
 
 	const loadSession = useCallback(
 		async (targetId: string, options?: { skipUrlUpdate?: boolean }): Promise<boolean> => {
+			setWelcomeMarkdown(null);
 			// Clear peek state
 			if (viewingSubagentIdRef.current) {
 				setViewingSubagentId(null);
@@ -522,6 +525,8 @@ export function useWebSocket() {
 		sessionLocked,
 		viewingSubagentId,
 		viewingSubagentTitle,
+		welcomeMarkdown,
+		setWelcomeMarkdown,
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,

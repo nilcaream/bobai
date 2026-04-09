@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
-import { buildSessionUrl, parseSessionUrl } from "./urlUtils";
+import { parseSessionUrl } from "./urlUtils";
 import type { MessagePart, StagedSkill } from "./useWebSocket";
 import { useWebSocket } from "./useWebSocket";
 
@@ -304,6 +304,8 @@ export function App() {
 		sessionLocked,
 		viewingSubagentId,
 		viewingSubagentTitle,
+		welcomeMarkdown,
+		setWelcomeMarkdown,
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,
@@ -634,7 +636,7 @@ export function App() {
 			.catch(() => setSkillList(null));
 	}, []);
 
-	// Load session from URL or most recent on page load
+	// Load session from URL or show welcome screen
 	// biome-ignore lint/correctness/useExhaustiveDependencies: loadSession is stable via useCallback
 	useEffect(() => {
 		const { sessionId: urlSessionId } = parseSessionUrl(window.location.pathname);
@@ -645,13 +647,11 @@ export function App() {
 				}
 			});
 		} else {
-			fetch("/bobai/sessions/recent")
+			fetch("/bobai/welcome")
 				.then((res) => res.json())
-				.then((data: { id: string; title: string | null; model: string | null } | null) => {
-					if (data) {
-						loadSession(data.id, { skipUrlUpdate: true }).then(() => {
-							history.replaceState(null, "", buildSessionUrl(data.id));
-						});
+				.then((data: { markdown: string }) => {
+					if (data?.markdown) {
+						setWelcomeMarkdown(data.markdown);
 					}
 				})
 				.catch(() => {});
@@ -666,11 +666,17 @@ export function App() {
 				loadSession(urlSessionId, { skipUrlUpdate: true });
 			} else {
 				newChat();
+				fetch("/bobai/welcome")
+					.then((res) => res.json())
+					.then((data: { markdown: string }) => {
+						if (data?.markdown) setWelcomeMarkdown(data.markdown);
+					})
+					.catch(() => {});
 			}
 		};
 		window.addEventListener("popstate", onPopState);
 		return () => window.removeEventListener("popstate", onPopState);
-	}, [loadSession, newChat]);
+	}, [loadSession, newChat, setWelcomeMarkdown]);
 
 	// Escape key exits subagent peek
 	useEffect(() => {
@@ -746,6 +752,7 @@ export function App() {
 		if (!text || !connected) return;
 
 		setVolatileMessage(null);
+		setWelcomeMarkdown(null);
 
 		const parsed = parseDotInput(text);
 
@@ -1562,6 +1569,11 @@ export function App() {
 			</div>
 
 			<div className="messages" role="log" aria-live="polite" ref={messagesRef}>
+				{welcomeMarkdown && messages.length === 0 && (
+					<div className="panel panel--assistant">
+						<Markdown>{welcomeMarkdown}</Markdown>
+					</div>
+				)}
 				{!sessionLocked &&
 					(view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels())}
 			</div>

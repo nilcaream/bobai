@@ -121,6 +121,8 @@ DATA_HOME="\${XDG_DATA_HOME:-\${HOME}/.local/share}"
 BOBAI_HOME="\${DATA_HOME}/bobai"
 echo "Bob AI (${build_rev} ${build_time})"
 export BUN_CONFIG_INSTALL_AUTO=disable
+export BOBAI_BUILD_REV="${build_rev}"
+export BOBAI_BUILD_DATE="${build_time}"
 exec "\${BOBAI_HOME}/bun" "\${BOBAI_HOME}/dist/server.js" "\$@"
 RUNNER
 
