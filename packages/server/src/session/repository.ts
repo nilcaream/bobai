@@ -188,12 +188,11 @@ export function createSubagentSession(
 	return { id, title, model, parentId, promptTokens: 0, createdAt: now, updatedAt: now };
 }
 
-export function listSubagentSessions(db: Database, parentId: string, limit = 9): Session[] {
-	const rows = db
-		.prepare(
-			"SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?",
-		)
-		.all(parentId, limit) as SessionRow[];
+export function listSubagentSessions(db: Database, parentId: string, limit?: number): Session[] {
+	const sql = limit
+		? "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, parent_id, prompt_tokens, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC";
+	const rows = (limit ? db.prepare(sql).all(parentId, limit) : db.prepare(sql).all(parentId)) as SessionRow[];
 
 	return rows.map((r) => ({
 		id: r.id,

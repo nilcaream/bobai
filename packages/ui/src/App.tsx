@@ -166,10 +166,28 @@ function truncateChars(text: string, charLimit: number): string {
 const VIEW_MODES = ["chat", "context", "compaction"] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
-const FULL_DOT_COMMANDS = ["model", "new", "session", "subagent", "title", "view"] as const;
-const READ_ONLY_DOT_COMMANDS = ["new", "session", "subagent", "title", "view"] as const;
-const LOCKED_DOT_COMMANDS = ["new", "session"] as const;
-const STREAMING_DOT_COMMANDS = ["stop", "subagent"] as const;
+type DotCommand = { name: string; description: string };
+
+const ALL_DOT_COMMANDS: Record<string, DotCommand> = {
+	model: { name: "model", description: "Switch the AI model" },
+	new: { name: "new", description: "Start a new chat session" },
+	session: { name: "session", description: "Switch to another session" },
+	stop: { name: "stop", description: "Stop the current response" },
+	subagent: { name: "subagent", description: "View subagent sessions" },
+	title: { name: "title", description: "Rename the current session" },
+	view: { name: "view", description: "Switch view mode" },
+};
+
+const pick = (...keys: string[]): DotCommand[] =>
+	keys.flatMap((k) => {
+		const cmd = ALL_DOT_COMMANDS[k];
+		return cmd ? [cmd] : [];
+	});
+
+const FULL_DOT_COMMANDS = pick("model", "new", "session", "subagent", "title", "view");
+const READ_ONLY_DOT_COMMANDS = pick("new", "session", "subagent", "title", "view");
+const LOCKED_DOT_COMMANDS = pick("new", "session");
+const STREAMING_DOT_COMMANDS = pick("stop", "subagent");
 
 /**
  * Panels taller than COLLAPSE_LINES are auto-collapsed (CSS max-height clips
@@ -504,7 +522,7 @@ export function App() {
 		const spaceIndex = withoutDot.indexOf(" ");
 		if (spaceIndex === -1) {
 			const prefix = withoutDot.toLowerCase();
-			const matches = activeDotCommands.filter((c) => c.startsWith(prefix));
+			const matches = activeDotCommands.filter((c) => c.name.startsWith(prefix));
 			// Number shorthand: .model1 → command="model", args="1"
 			// No dot command name contains a digit, so trailing digits are always an arg.
 			if (matches.length === 0) {
@@ -512,18 +530,24 @@ export function App() {
 				const cmdPart = m?.[1];
 				const numPart = m?.[2];
 				if (cmdPart && numPart) {
-					const cmdMatches = activeDotCommands.filter((c) => c.startsWith(cmdPart));
+					const cmdMatches = activeDotCommands.filter((c) => c.name.startsWith(cmdPart));
 					if (cmdMatches.length === 1) {
-						return { mode: "args" as const, prefix: cmdPart, matches: cmdMatches, args: numPart, command: cmdMatches[0] };
+						return { mode: "args" as const, prefix: cmdPart, matches: cmdMatches, args: numPart, command: cmdMatches[0]?.name };
 					}
 				}
 			}
 			return { mode: "select" as const, prefix, matches, args: "", command: undefined };
 		}
 		const cmdPart = withoutDot.slice(0, spaceIndex).toLowerCase();
-		const matches = activeDotCommands.filter((c) => c.startsWith(cmdPart));
+		const matches = activeDotCommands.filter((c) => c.name.startsWith(cmdPart));
 		if (matches.length === 1) {
-			return { mode: "args" as const, prefix: cmdPart, matches, args: withoutDot.slice(spaceIndex + 1), command: matches[0] };
+			return {
+				mode: "args" as const,
+				prefix: cmdPart,
+				matches,
+				args: withoutDot.slice(spaceIndex + 1),
+				command: matches[0]?.name,
+			};
 		}
 		return { mode: "select" as const, prefix: cmdPart, matches, args: "", command: undefined };
 	}
@@ -721,10 +745,10 @@ export function App() {
 		if (sessionLocked) {
 			const isNewCmd =
 				(parsed?.mode === "args" && parsed.command === "new") ||
-				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "new");
+				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "new");
 			const isSessionCmd =
 				(parsed?.mode === "args" && parsed.command === "session") ||
-				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session");
+				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "session");
 			if (!isNewCmd && !isSessionCmd) {
 				clearInput();
 				return;
@@ -779,14 +803,14 @@ export function App() {
 				}
 				const parts = arg.split(/\s+/);
 				const indexStr = parts[0] ?? "";
-				const index = Number.parseInt(indexStr, 10);
 				const subcommand = parts[1];
-				if (Number.isNaN(index) || index < 1 || !sessionList || index > sessionList.length) {
-					setVolatileMessage({ text: `Invalid session index: ${indexStr}`, kind: "error" });
+				if (!sessionList) {
+					setVolatileMessage({ text: "Session list not loaded", kind: "error" });
 					clearInput();
 					return;
 				}
-				const targetSession = sessionList[index - 1];
+				const index = Number.parseInt(indexStr, 10);
+				const targetSession = !Number.isNaN(index) ? sessionList.find((s) => s.index === index) : undefined;
 				if (!targetSession) {
 					setVolatileMessage({ text: `Invalid session index: ${indexStr}`, kind: "error" });
 					clearInput();
@@ -852,13 +876,13 @@ export function App() {
 					clearInput();
 					return;
 				}
-				const index = Number.parseInt(arg, 10);
-				if (Number.isNaN(index) || index < 1 || !subagentList || index > subagentList.length) {
-					setVolatileMessage({ text: `Invalid subagent index: ${arg}`, kind: "error" });
+				if (!subagentList) {
+					setVolatileMessage({ text: "Subagent list not loaded", kind: "error" });
 					clearInput();
 					return;
 				}
-				const targetSubagent = subagentList[index - 1];
+				const index = Number.parseInt(arg, 10);
+				const targetSubagent = !Number.isNaN(index) ? subagentList.find((s) => s.index === index) : undefined;
 				if (!targetSubagent) {
 					setVolatileMessage({ text: `Invalid subagent index: ${arg}`, kind: "error" });
 					clearInput();
@@ -911,7 +935,7 @@ export function App() {
 		}
 
 		// View command without space (e.g. ".view", ".v", ".vi", ".vie")
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "view") {
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "view") {
 			setView((prev) => {
 				const currentIdx = VIEW_MODES.indexOf(prev.mode);
 				const next = VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat";
@@ -924,7 +948,7 @@ export function App() {
 		}
 
 		// .session (no space): exit peek, return to parent if in subagent, no-op if in parent
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "session") {
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "session") {
 			if (viewingSubagentId) {
 				exitSubagentPeekWithScroll();
 				setStagedSkills([]);
@@ -937,7 +961,7 @@ export function App() {
 		}
 
 		// .new (no space): start a new chat session
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "new") {
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "new") {
 			newChat();
 			setStagedSkills([]);
 			setStatus(defaultStatus.current);
@@ -947,7 +971,7 @@ export function App() {
 		}
 
 		// .stop (no space): cancel the running agent loop
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0] === "stop") {
+		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "stop") {
 			sendCancel();
 			clearInput();
 			return;
@@ -1092,7 +1116,15 @@ export function App() {
 
 		if (parsed.mode === "select") {
 			content =
-				parsed.matches.length > 0 ? parsed.matches.map((cmd) => <div key={cmd}>{cmd}</div>) : <div>No matching commands</div>;
+				parsed.matches.length > 0 ? (
+					parsed.matches.map((cmd) => (
+						<div key={cmd.name} className="slash-skill-row">
+							{cmd.name} <span className="slash-skill-desc">— {cmd.description}</span>
+						</div>
+					))
+				) : (
+					<div>No matching commands</div>
+				);
 		} else if (parsed.command === "model") {
 			if (!modelList) {
 				content = "Loading models...";
@@ -1121,26 +1153,30 @@ export function App() {
 			} else if (sessionList.length === 0) {
 				content = "No sessions";
 			} else {
+				const SESSION_DISPLAY_LIMIT = 32;
 				const argText = (parsed.args ?? "").trim();
 				const argParts = argText.split(/\s+/);
 				const indexPart = argParts[0] ?? "";
 				const subcommand = argParts[1];
+				const filtered = indexPart ? sessionList.filter((s) => String(s.index).includes(indexPart)) : sessionList;
 
 				// If user typed "N delete", show a delete preview instead of the session list
 				if (subcommand === "delete") {
 					const idx = Number.parseInt(indexPart, 10);
-					if (!Number.isNaN(idx) && idx >= 1 && idx <= sessionList.length) {
-						const target = sessionList[idx - 1];
-						const label = target?.title ? `"${target.title}"` : `#${idx}`;
+					const target = !Number.isNaN(idx) ? sessionList.find((s) => s.index === idx) : undefined;
+					if (target) {
+						const label = target.title ? `"${target.title}"` : `#${target.index}`;
 						content = `Delete session ${label}`;
 					} else {
 						content = `Invalid session index: ${indexPart}`;
 					}
 				} else {
-					const filtered = argText ? sessionList.filter((s) => String(s.index).startsWith(indexPart)) : sessionList;
+					const display = filtered.slice(0, SESSION_DISPLAY_LIMIT);
+					const maxIndex = Math.max(...display.map((s) => s.index));
+					const padWidth = String(maxIndex).length;
 					content =
-						filtered.length > 0 ? (
-							filtered.map((s) => {
+						display.length > 0 ? (
+							display.map((s) => {
 								const isCurrentSession = s.id === getSessionId();
 								const isOwnedBySelf = isCurrentSession && !sessionLocked;
 								const isOwnedByOther = s.owned && !isOwnedBySelf;
@@ -1155,9 +1191,10 @@ export function App() {
 										hour12: false,
 									})
 									.replace(",", "");
+								const paddedIndex = String(s.index).padStart(padWidth, " ");
 								return (
 									<div key={s.id}>
-										{s.index}: {localTime} {s.title ?? ""}
+										{paddedIndex}: {localTime} {s.title ?? ""}
 										{isOwnedByOther ? " (active in another tab)" : ""}
 										{isOwnedBySelf ? " (this session)" : ""}
 									</div>
@@ -1174,16 +1211,22 @@ export function App() {
 			} else if (subagentList.length === 0) {
 				content = "No subagent sessions";
 			} else {
-				const filtered = parsed.args
-					? subagentList.filter((s) => String(s.index).startsWith(parsed.args.trim()))
-					: subagentList;
+				const SUBAGENT_DISPLAY_LIMIT = 32;
+				const indexPart = (parsed.args ?? "").trim();
+				const filtered = indexPart ? subagentList.filter((s) => String(s.index).includes(indexPart)) : subagentList;
+				const display = filtered.slice(0, SUBAGENT_DISPLAY_LIMIT);
+				const maxIndex = display.length > 0 ? Math.max(...display.map((s) => s.index)) : 0;
+				const padWidth = String(maxIndex).length;
 				content =
-					filtered.length > 0 ? (
-						filtered.map((s) => (
-							<div key={s.sessionId}>
-								{s.index}: {s.title}
-							</div>
-						))
+					display.length > 0 ? (
+						display.map((s) => {
+							const paddedIndex = String(s.index).padStart(padWidth, " ");
+							return (
+								<div key={s.sessionId}>
+									{paddedIndex}: {s.title}
+								</div>
+							);
+						})
 					) : (
 						<div>No matching subagents</div>
 					);
@@ -1214,7 +1257,7 @@ export function App() {
 			parsed.matches.length > 0 ? (
 				parsed.matches.map((s) => (
 					<div key={s.name} className="slash-skill-row">
-						{s.name} <span className="slash-skill-desc">({s.description})</span>
+						{s.name} <span className="slash-skill-desc">— {s.description}</span>
 					</div>
 				))
 			) : (

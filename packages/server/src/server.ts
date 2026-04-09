@@ -268,7 +268,7 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return new Response("Database not available", { status: 503 });
 				}
-				const sessions = listSessions(options.db, 20);
+				const sessions = listSessions(options.db);
 				const body = sessions.map((s, i) => ({
 					index: i + 1,
 					id: s.id,
