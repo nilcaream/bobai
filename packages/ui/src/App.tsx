@@ -227,6 +227,7 @@ function ToolPanel({
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
 	const collapsible = useRef(false);
 	const userToggled = useRef(false);
+	const prevContent = useRef(content);
 
 	const checkOverflow = useCallback(() => {
 		if (!ref.current) return;
@@ -241,10 +242,17 @@ function ToolPanel({
 		setCollapsed(overflows);
 	}, []);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `content` is an intentional signal dep — re-measure when the panel's markdown changes (see ToolPanel JSDoc)
+	// Re-measure when content changes (e.g. key reuse across parent/subagent
+	// views — see ToolPanel JSDoc). Respect userToggled for same-content
+	// re-renders so a manual expand/collapse is preserved during streaming.
 	useEffect(() => {
 		if (observe) return;
-		userToggled.current = false;
+		const contentChanged = prevContent.current !== content;
+		prevContent.current = content;
+		// Content swap (key reuse across views) — reset user toggle
+		// so the new content gets a fresh measurement.
+		if (contentChanged) userToggled.current = false;
+		if (userToggled.current) return;
 		checkOverflow();
 	}, [observe, content, checkOverflow]);
 
