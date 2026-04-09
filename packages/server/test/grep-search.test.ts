@@ -108,13 +108,19 @@ describe("grepSearchTool", () => {
 		expect(result.uiOutput).toContain("100 results");
 	});
 
-	test("returns friendly error when path is a file, not a directory", async () => {
+	test("searches within a single file when path is a file", async () => {
 		const result = await grepSearchTool.execute({ pattern: "greeting", path: "hello.ts" }, ctx);
-		expect(result.llmOutput).toContain("not a directory");
-		expect(result.llmOutput).toContain("hello.ts");
+		expect(result.llmOutput).toContain("greeting");
 		expect(result.uiOutput).toContain("▸ Searching");
 		expect(result.uiOutput).toContain("hello.ts");
-		expect(result.uiOutput).toContain("not a directory");
+		expect(result.uiOutput).toContain("2 results");
+		// Should not match content from other files
+		expect(result.llmOutput).not.toContain("planet");
+	});
+
+	test("single file search returns no results when pattern not in file", async () => {
+		const result = await grepSearchTool.execute({ pattern: "planet", path: "hello.ts" }, ctx);
+		expect(result.llmOutput).toContain("No matches");
 	});
 
 	test("supports ERE alternation with pipe character", async () => {

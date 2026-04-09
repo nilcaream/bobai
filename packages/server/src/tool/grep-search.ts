@@ -14,7 +14,7 @@ export const grepSearchTool: Tool = {
 		function: {
 			name: "grep_search",
 			description:
-				"Search file contents using extended regular expressions (ERE). Returns matching lines with file paths and line numbers. Searches recursively from the given path (defaults to project root).",
+				"Search file contents using extended regular expressions (ERE). Returns matching lines with file paths and line numbers. Searches recursively from the given path (defaults to project root). Path can be a file to search within that single file.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -87,24 +87,27 @@ export const grepSearchTool: Tool = {
 		} catch {
 			// path does not exist — let grep handle it (will report "No matches")
 		}
-		if (stat && !stat.isDirectory()) {
-			const msg = "not a directory";
-			return {
-				llmOutput: `Error: '${searchPath}' is ${msg}. Provide a directory path, not a file.`,
-				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${msg})`,
-				mergeable: true,
-			};
-		}
+		const isFile = stat !== undefined && !stat.isDirectory();
 
-		const grepArgs = ["-rn", "-E", "--color=never"];
-		if (typeof args.include === "string" && args.include.length > 0) {
-			grepArgs.push(`--include=${args.include}`);
+		let grepArgs: string[];
+		let cwd: string;
+		if (isFile) {
+			// Single-file search: no -r, search the file by name from its parent dir
+			grepArgs = ["-n", "-E", "--color=never", "--", pattern, path.basename(resolved)];
+			cwd = path.dirname(resolved);
+		} else {
+			// Directory search: recursive
+			grepArgs = ["-rn", "-E", "--color=never"];
+			if (typeof args.include === "string" && args.include.length > 0) {
+				grepArgs.push(`--include=${args.include}`);
+			}
+			grepArgs.push("--", pattern, ".");
+			cwd = resolved;
 		}
-		grepArgs.push("--", pattern, ".");
 
 		try {
 			const proc = Bun.spawn(["grep", ...grepArgs], {
-				cwd: resolved,
+				cwd,
 				stdout: "pipe",
 				stderr: "pipe",
 			});
