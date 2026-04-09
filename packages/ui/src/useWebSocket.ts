@@ -417,7 +417,6 @@ export function useWebSocket() {
 		setParentTitle(null);
 		setVolatileMessage(null);
 		setSessionLocked(false);
-		setWelcomeMarkdown(null);
 		history.pushState(null, "", "/bobai");
 	}, [sendUnsubscribe]);
 

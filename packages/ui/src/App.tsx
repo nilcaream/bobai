@@ -752,7 +752,6 @@ export function App() {
 		if (!text || !connected) return;
 
 		setVolatileMessage(null);
-		setWelcomeMarkdown(null);
 
 		const parsed = parseDotInput(text);
 
@@ -789,6 +788,12 @@ export function App() {
 					setTitle(newTitle);
 					pendingNewTitle.current = newTitle;
 				}
+				fetch("/bobai/welcome")
+					.then((res) => res.json())
+					.then((data: { markdown: string }) => {
+						if (data?.markdown) setWelcomeMarkdown(data.markdown);
+					})
+					.catch(() => {});
 				clearInput();
 				return;
 			}
@@ -981,6 +986,12 @@ export function App() {
 			setStagedSkills([]);
 			setStatus(defaultStatus.current);
 			setView((prev) => ({ ...prev, mode: "chat" }));
+			fetch("/bobai/welcome")
+				.then((res) => res.json())
+				.then((data: { markdown: string }) => {
+					if (data?.markdown) setWelcomeMarkdown(data.markdown);
+				})
+				.catch(() => {});
 			clearInput();
 			return;
 		}
@@ -1021,6 +1032,7 @@ export function App() {
 		if (isStreaming) return;
 		autoScroll.current = true;
 		setView((prev) => ({ ...prev, mode: "chat" }));
+		setWelcomeMarkdown(null);
 		sendPrompt(text, stagedSkills.length > 0 ? stagedSkills : undefined);
 		setStagedSkills([]);
 		setHistoryIndex(-1);
