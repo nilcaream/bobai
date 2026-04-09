@@ -54,7 +54,7 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 				const msg = namesList
 					? `Skill "${name}" not found. Available skills: ${namesList}`
 					: `Skill "${name}" not found. No skills are available.`;
-				return { llmOutput: msg, uiOutput: msg, mergeable: true };
+				return { llmOutput: msg, uiOutput: `▸ Loading ${name} skill — not found`, mergeable: true };
 			}
 
 			const baseDir = path.dirname(skill.filePath);

@@ -70,7 +70,7 @@ export const writeFileTool: Tool = {
 		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
 			return {
 				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
-				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
+				uiOutput: `▸ Writing ${escapeMarkdown(filePath)} — outside project root`,
 
 				mergeable: true,
 			};
@@ -102,7 +102,7 @@ export const writeFileTool: Tool = {
 		} catch (err) {
 			return {
 				llmOutput: `Error writing file: ${(err as Error).message}`,
-				uiOutput: `Error writing file: ${(err as Error).message}`,
+				uiOutput: `▸ Writing ${escapeMarkdown(filePath)} — error: ${(err as Error).message}`,
 
 				mergeable: true,
 			};

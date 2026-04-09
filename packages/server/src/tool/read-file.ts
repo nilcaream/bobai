@@ -106,7 +106,7 @@ export const readFileTool: Tool = {
 			}
 			return {
 				llmOutput: `Error reading file: ${(err as Error).message}`,
-				uiOutput: `Error reading file: ${(err as Error).message}`,
+				uiOutput: `▸ Reading ${escapeMarkdown(filePath)} — error: ${(err as Error).message}`,
 
 				mergeable: true,
 			};
@@ -122,7 +122,7 @@ export const readFileTool: Tool = {
 		if (from > totalLines) {
 			return {
 				llmOutput: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`,
-				uiOutput: `Error: 'from' (${from}) is beyond end of file (${totalLines} lines)`,
+				uiOutput: `▸ Reading ${escapeMarkdown(filePath)} — from (${from}) is beyond end of file (${totalLines} lines)`,
 
 				mergeable: true,
 			};

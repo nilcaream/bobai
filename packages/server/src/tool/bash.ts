@@ -110,9 +110,10 @@ export const bashTool: Tool = {
 				mergeable: false,
 			};
 		} catch (err) {
+			const msg = (err as Error).message;
 			return {
-				llmOutput: `Error executing command: ${(err as Error).message}`,
-				uiOutput: `Error executing command: ${(err as Error).message}`,
+				llmOutput: `Error executing command: ${msg}`,
+				uiOutput: formatBashOutput(command, `Error: ${msg}`),
 				mergeable: false,
 			};
 		}

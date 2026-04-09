@@ -107,4 +107,19 @@ describe("grepSearchTool", () => {
 		const result = await grepSearchTool.execute({ pattern: "match_", path: "bulk" }, ctx);
 		expect(result.uiOutput).toContain("100 results");
 	});
+
+	test("returns friendly error when path is a file, not a directory", async () => {
+		const result = await grepSearchTool.execute({ pattern: "greeting", path: "hello.ts" }, ctx);
+		expect(result.llmOutput).toContain("not a directory");
+		expect(result.llmOutput).toContain("hello.ts");
+		expect(result.uiOutput).toContain("▸ Searching");
+		expect(result.uiOutput).toContain("hello.ts");
+		expect(result.uiOutput).toContain("not a directory");
+	});
+
+	test("supports ERE alternation with pipe character", async () => {
+		const result = await grepSearchTool.execute({ pattern: "greeting|planet" }, ctx);
+		expect(result.llmOutput).toContain("hello.ts");
+		expect(result.llmOutput).toContain("world.ts");
+	});
 });

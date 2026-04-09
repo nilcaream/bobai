@@ -84,7 +84,7 @@ export const listDirectoryTool: Tool = {
 			}
 			return {
 				llmOutput: `Error listing directory: ${(err as Error).message}`,
-				uiOutput: `Error listing directory: ${(err as Error).message}`,
+				uiOutput: `▸ Listing ${escapeMarkdown(dirPath)} — error: ${(err as Error).message}`,
 
 				mergeable: true,
 			};

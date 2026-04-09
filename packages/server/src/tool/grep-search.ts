@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
@@ -13,7 +14,7 @@ export const grepSearchTool: Tool = {
 		function: {
 			name: "grep_search",
 			description:
-				"Search file contents for a pattern. Returns matching lines with file paths and line numbers. Searches recursively from the given path (defaults to project root).",
+				"Search file contents using extended regular expressions (ERE). Returns matching lines with file paths and line numbers. Searches recursively from the given path (defaults to project root).",
 			parameters: {
 				type: "object",
 				properties: {
@@ -80,7 +81,22 @@ export const grepSearchTool: Tool = {
 			};
 		}
 
-		const grepArgs = ["-rn", "--color=never"];
+		let stat: fs.Stats | undefined;
+		try {
+			stat = fs.statSync(resolved);
+		} catch {
+			// path does not exist — let grep handle it (will report "No matches")
+		}
+		if (stat && !stat.isDirectory()) {
+			const msg = "not a directory";
+			return {
+				llmOutput: `Error: '${searchPath}' is ${msg}. Provide a directory path, not a file.`,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (${msg})`,
+				mergeable: true,
+			};
+		}
+
+		const grepArgs = ["-rn", "-E", "--color=never"];
 		if (typeof args.include === "string" && args.include.length > 0) {
 			grepArgs.push(`--include=${args.include}`);
 		}
@@ -106,9 +122,10 @@ export const grepSearchTool: Tool = {
 				};
 			}
 			if (exitCode > 1) {
+				const brief = stderr.trim().split("\n")[0] || "unknown error";
 				return {
-					llmOutput: `Error running grep: ${stderr}`,
-					uiOutput: `Error running grep: ${stderr}`,
+					llmOutput: `Error running grep: ${brief}`,
+					uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (error: ${escapeMarkdown(brief)})`,
 
 					mergeable: true,
 				};
@@ -153,9 +170,10 @@ export const grepSearchTool: Tool = {
 				mergeable: true,
 			};
 		} catch (err) {
+			const msg = (err as Error).message;
 			return {
-				llmOutput: `Error running search: ${(err as Error).message}`,
-				uiOutput: `Error running search: ${(err as Error).message}`,
+				llmOutput: `Error running search: ${msg}`,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(searchPath)} (error: ${escapeMarkdown(msg)})`,
 
 				mergeable: true,
 			};

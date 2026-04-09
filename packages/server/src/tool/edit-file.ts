@@ -104,7 +104,7 @@ export const editFileTool: Tool = {
 		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
 			return {
 				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
-				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
+				uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — outside project root`,
 
 				mergeable: false,
 			};
@@ -135,7 +135,7 @@ export const editFileTool: Tool = {
 			}
 			return {
 				llmOutput: `Error reading file: ${(err as Error).message}`,
-				uiOutput: `Error reading file: ${(err as Error).message}`,
+				uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — error: ${(err as Error).message}`,
 
 				mergeable: false,
 			};

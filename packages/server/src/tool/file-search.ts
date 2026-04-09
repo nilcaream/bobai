@@ -59,7 +59,7 @@ export const fileSearchTool: Tool = {
 		if (pattern.length === 0) {
 			return {
 				llmOutput: "Error: 'pattern' argument is required and must be a non-empty string",
-				uiOutput: null,
+				uiOutput: "Error: 'pattern' argument is required and must be a non-empty string",
 				mergeable: true,
 			};
 		}
@@ -70,7 +70,7 @@ export const fileSearchTool: Tool = {
 		if (!isPathAccessible(resolved, ctx)) {
 			return {
 				llmOutput: `Error: path '${dirPath}' resolves outside the project root`,
-				uiOutput: null,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(dirPath)} — outside project root`,
 				mergeable: true,
 			};
 		}
@@ -81,7 +81,7 @@ export const fileSearchTool: Tool = {
 			if (!stat.isDirectory()) {
 				return {
 					llmOutput: `Error: '${dirPath}' is not a directory`,
-					uiOutput: null,
+					uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(dirPath)} — not a directory`,
 					mergeable: true,
 				};
 			}
@@ -90,13 +90,13 @@ export const fileSearchTool: Tool = {
 			if (code === "ENOENT") {
 				return {
 					llmOutput: `Error: directory not found: ${dirPath}`,
-					uiOutput: null,
+					uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(dirPath)} — directory not found`,
 					mergeable: true,
 				};
 			}
 			return {
 				llmOutput: `Error: ${(err as Error).message}`,
-				uiOutput: null,
+				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(dirPath)} — error: ${(err as Error).message}`,
 				mergeable: true,
 			};
 		}
