@@ -1,7 +1,8 @@
 import type { Logger } from "../log/logger";
 import type { Message } from "../provider/provider";
 import type { ToolRegistry } from "../tool/tool";
-import { compactMessages } from "./engine";
+import type { CompactionDetail } from "./engine";
+import { compactMessages, compactMessagesWithStats } from "./engine";
 import { evictOldTurns } from "./eviction";
 import { computeCharBudget, DEFAULT_THRESHOLD, PRESSURE_STEP, totalContentChars } from "./strength";
 
@@ -27,6 +28,8 @@ export interface CompactToBudgetResult {
 	charsAfter: number;
 	charBudget: number;
 	charsPerToken: number;
+	/** Per-tool-call compaction details from the final iteration. */
+	details: Map<string, CompactionDetail>;
 }
 
 /**
@@ -57,6 +60,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 			charsAfter: charsBefore,
 			charBudget: 0,
 			charsPerToken,
+			details: new Map(),
 		};
 	}
 
@@ -70,6 +74,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 			charsAfter: charsBefore,
 			charBudget,
 			charsPerToken,
+			details: new Map(),
 		};
 	}
 
@@ -119,6 +124,21 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		}
 	}
 
+	// Collect per-tool details from the final pressure level for observability.
+	// Re-uses the same synthetic context so details match what was actually applied.
+	const finalSyntheticPromptTokens = Math.round(
+		syntheticContextWindow * (finalPressure * (1 - DEFAULT_THRESHOLD) + DEFAULT_THRESHOLD),
+	);
+	const { details } = compactMessagesWithStats({
+		messages,
+		context: {
+			promptTokens: finalSyntheticPromptTokens,
+			contextWindow: syntheticContextWindow,
+		},
+		tools,
+		sessionId,
+	});
+
 	const elapsed = performance.now() - startTime;
 	logger?.debug(
 		"COMPACTION",
@@ -135,5 +155,6 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		charsAfter: bestCharsAfter,
 		charBudget,
 		charsPerToken,
+		details,
 	};
 }

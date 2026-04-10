@@ -1,5 +1,5 @@
-import type { CompactionDetail, ContextMessage } from "./formatUtils";
-import { formatToolHeader, truncateChars, truncateContent } from "./formatUtils";
+import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
+import { formatCompactionSummary, formatToolHeader, truncateChars, truncateContent } from "./formatUtils";
 
 export type ContextViewMode = "raw" | "compaction";
 
@@ -33,16 +33,18 @@ function renderMessagePanels(
 
 	for (const msg of msgs) {
 		if (msg.role === "system") {
+			const indexPrefix = !isRaw && msg.messageIndex !== undefined ? `#${msg.messageIndex} ` : "";
 			elements.push(
 				<div key={key++} className="panel panel--context">
-					<div className="context-header">{`system${headerSuffix}`}</div>
+					<div className="context-header">{`${indexPrefix}system${headerSuffix}`}</div>
 					<pre className="context-body">{isRaw ? truncateContent(msg.content, opts.lineLimit) : msg.content?.trim()}</pre>
 				</div>,
 			);
 		} else if (msg.role === "user") {
+			const indexPrefix = !isRaw && msg.messageIndex !== undefined ? `#${msg.messageIndex} ` : "";
 			elements.push(
 				<div key={key++} className="panel panel--context">
-					<div className="context-header">{`user${headerSuffix}`}</div>
+					<div className="context-header">{`${indexPrefix}user${headerSuffix}`}</div>
 					<pre className="context-body">{isRaw ? truncateContent(msg.content, opts.lineLimit) : msg.content?.trim()}</pre>
 				</div>,
 			);
@@ -52,9 +54,10 @@ function renderMessagePanels(
 				| undefined;
 
 			if (msg.content) {
+				const indexPrefix = !isRaw && msg.messageIndex !== undefined ? `#${msg.messageIndex} ` : "";
 				elements.push(
 					<div key={key++} className="panel panel--context">
-						<div className="context-header">{`assistant${headerSuffix}`}</div>
+						<div className="context-header">{`${indexPrefix}assistant${headerSuffix}`}</div>
 						<pre className="context-body">{isRaw ? truncateContent(msg.content, opts.lineLimit) : msg.content.trim()}</pre>
 					</div>,
 				);
@@ -83,7 +86,7 @@ function renderMessagePanels(
 				header = `tool | ${toolCallId ?? ""} | ${toolName}`;
 			} else {
 				const detail = toolCallId && opts.details ? opts.details[toolCallId] : undefined;
-				header = formatToolHeader(toolCallId ?? "", toolName, detail);
+				header = formatToolHeader(toolCallId ?? "", toolName, detail, msg.messageIndex);
 			}
 
 			elements.push(
@@ -107,7 +110,7 @@ export function ContextMessageList({
 	contextMessages: ContextMessage[] | null;
 	compactionData: {
 		messages: ContextMessage[];
-		stats: import("./formatUtils").CompactionStats | null;
+		stats: CompactionStats | null;
 		details: Record<string, CompactionDetail> | null;
 	} | null;
 	viewMode: "context" | "compaction";
@@ -138,5 +141,15 @@ export function ContextMessageList({
 		{ mode: "compaction", lineLimit, details: compactionData.details },
 		0,
 	);
-	return <>{elements}</>;
+	return (
+		<>
+			{elements}
+			{viewMode === "compaction" && compactionData?.stats && (
+				<div className="context-message system">
+					<div className="context-header">compaction summary</div>
+					<pre className="context-content">{formatCompactionSummary(compactionData.stats)}</pre>
+				</div>
+			)}
+		</>
+	);
 }

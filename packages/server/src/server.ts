@@ -199,6 +199,7 @@ export function createServer(options: ServerOptions) {
 					return Response.json({
 						messages: [systemMessage, ...conversationMessages],
 						stats: null,
+						details: null,
 						reason: "no context pressure data",
 					});
 				}
@@ -226,14 +227,17 @@ export function createServer(options: ServerOptions) {
 				);
 
 				return Response.json({
-					messages: compactedStored,
+					messages: compactedStored.map((m, i) => ({ ...m, messageIndex: i })),
 					stats: {
 						pressure: compactionResult.pressure,
 						iterations: compactionResult.iterations,
 						charsBefore: compactionResult.charsBefore,
 						charsAfter: compactionResult.charsAfter,
 						charBudget: compactionResult.charBudget,
+						charsPerToken: compactionResult.charsPerToken,
+						type: "pre-prompt",
 					},
+					details: Object.fromEntries(compactionResult.details),
 				});
 			}
 

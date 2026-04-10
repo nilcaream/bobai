@@ -16,13 +16,17 @@ export interface ContextMessage {
 	role: "system" | "user" | "assistant" | "tool";
 	content: string;
 	metadata: Record<string, unknown> | null;
+	messageIndex?: number;
 }
 
 export interface CompactionStats {
-	compacted: number;
-	assistantArgsCompacted: number;
-	contextPressure: number;
-	totalToolMessages: number;
+	pressure: number;
+	iterations: number;
+	charsBefore: number;
+	charsAfter: number;
+	charBudget: number;
+	charsPerToken: number;
+	type: string;
 }
 
 export interface CompactionDetail {
@@ -38,8 +42,14 @@ export interface CompactionDetail {
 	savedArgsChars?: number;
 }
 
-export function formatToolHeader(toolCallId: string, toolName: string, detail: CompactionDetail | undefined): string {
-	const parts = ["tool", toolCallId, toolName];
+export function formatToolHeader(
+	toolCallId: string,
+	toolName: string,
+	detail: CompactionDetail | undefined,
+	messageIndex?: number,
+): string {
+	const prefix = messageIndex !== undefined ? `#${messageIndex} ` : "";
+	const parts = [`${prefix}tool`, toolCallId, toolName];
 
 	if (!detail) {
 		parts.push("no detail available");
@@ -157,4 +167,17 @@ export function truncateContent(text: string, lineLimit: number): string {
 export function truncateChars(text: string, charLimit: number): string {
 	if (charLimit <= 0 || text.length <= charLimit) return text;
 	return `${text.slice(0, charLimit)}... (${text.length - charLimit} more chars)`;
+}
+
+export function formatCompactionSummary(stats: CompactionStats): string {
+	const lines = [
+		`budget: ${stats.charBudget}`,
+		`pressure: ${stats.pressure.toFixed(2)}`,
+		`iterations: ${stats.iterations}`,
+		`chars/token: ${stats.charsPerToken.toFixed(2)}`,
+		`chars in: ${stats.charsBefore}`,
+		`chars out: ${stats.charsAfter}`,
+		`type: ${stats.type}`,
+	];
+	return lines.join("\n");
 }
