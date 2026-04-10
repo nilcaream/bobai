@@ -325,7 +325,7 @@ describe("generateFactorsTable", () => {
 // formatCompactionSummary
 // ---------------------------------------------------------------------------
 describe("formatCompactionSummary", () => {
-	test("includes all three sections", () => {
+	test("includes all four sections", () => {
 		const stats: CompactionStats = {
 			usage: 0.35,
 			iterations: 7,
@@ -339,10 +339,13 @@ describe("formatCompactionSummary", () => {
 				inflection: 0.7,
 				steepness: 5,
 				maxAgeDistance: 100,
+				evictionDistance: 200,
 			},
 			estimatedContextNeeded: 0.65,
 			target: 0.8,
 			elapsedMs: 12.5,
+			messagesBefore: { total: 100, system: 1, user: 20, assistant: 40, tool: 39 },
+			messagesAfter: { total: 80, system: 1, user: 15, assistant: 30, tool: 34 },
 		};
 		const result = formatCompactionSummary(stats);
 
@@ -352,10 +355,15 @@ describe("formatCompactionSummary", () => {
 		expect(result).toContain("- inflection: 0.7");
 		expect(result).toContain("- steepness: 5");
 		expect(result).toContain("- max age distance: 100");
+		expect(result).toContain("- eviction distance: 200");
 
 		// Section 2: Factors table
 		expect(result).toContain("# Usage vs. normalized position");
 		expect(result).toContain("| 0.00 |");
+		// Vertical axis uses percentage with bold
+		expect(result).toContain("**0%**");
+		expect(result).toContain("**50%**");
+		expect(result).toContain("**100%**");
 
 		// Section 3: Compaction details
 		expect(result).toContain("# Compaction details");
@@ -367,5 +375,13 @@ describe("formatCompactionSummary", () => {
 		expect(result).toContain("- calculated compaction usage: 35%");
 		expect(result).toContain("- compaction iterations: 7");
 		expect(result).toContain("- compaction time: 12.5ms");
+
+		// Section 4: Context details
+		expect(result).toContain("# Context details");
+		expect(result).toContain("| total | 100 | 80 |");
+		expect(result).toContain("| system | 1 | 1 |");
+		expect(result).toContain("| user | 20 | 15 |");
+		expect(result).toContain("| assistant | 40 | 30 |");
+		expect(result).toContain("| tool | 39 | 34 |");
 	});
 });

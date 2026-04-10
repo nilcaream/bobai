@@ -32,10 +32,13 @@ export interface CompactionStats {
 		inflection: number;
 		steepness: number;
 		maxAgeDistance: number;
+		evictionDistance: number;
 	};
 	estimatedContextNeeded: number;
 	target: number;
 	elapsedMs: number;
+	messagesBefore: Record<string, number>;
+	messagesAfter: Record<string, number>;
 }
 
 export interface CompactionDetail {
@@ -200,6 +203,7 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 	sections.push(`- inflection: ${stats.parameters.inflection}`);
 	sections.push(`- steepness: ${stats.parameters.steepness}`);
 	sections.push(`- max age distance: ${stats.parameters.maxAgeDistance}`);
+	sections.push(`- eviction distance: ${stats.parameters.evictionDistance}`);
 	sections.push("");
 
 	// Section 2: Factors table
@@ -207,6 +211,7 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 	sections.push("");
 	const table = generateFactorsTable(stats.parameters.threshold, stats.parameters.inflection, stats.parameters.steepness);
 	const steps = Array.from({ length: 21 }, (_, i) => (i * 0.05).toFixed(2));
+	const pctSteps = Array.from({ length: 21 }, (_, i) => `${i * 5}%`);
 
 	// Header row
 	sections.push(`|  | ${steps.join(" | ")} |`);
@@ -214,7 +219,7 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 
 	// Data rows
 	for (let r = 0; r < table.length; r++) {
-		const rowLabel = steps[r];
+		const rowLabel = `**${pctSteps[r]}**`;
 		const cells = (table[r] as number[]).map((v) => v.toFixed(2));
 		sections.push(`| ${rowLabel} | ${cells.join(" | ")} |`);
 	}
@@ -234,6 +239,26 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 	sections.push(`- calculated compaction usage: ${(stats.usage * 100).toFixed(0)}%`);
 	sections.push(`- compaction iterations: ${stats.iterations}`);
 	sections.push(`- compaction time: ${stats.elapsedMs.toFixed(1)}ms`);
+	sections.push("");
+
+	// Section 4: Context details (message counts by role)
+	sections.push("# Context details");
+	sections.push("");
+	const roles = ["total", "system", "user", "assistant", "tool"];
+	// Include any roles present in the data but not in the default list
+	for (const role of Object.keys(stats.messagesBefore)) {
+		if (!roles.includes(role)) roles.push(role);
+	}
+	for (const role of Object.keys(stats.messagesAfter)) {
+		if (!roles.includes(role)) roles.push(role);
+	}
+	sections.push("| | before | after |");
+	sections.push("|---|---|---|");
+	for (const role of roles) {
+		const before = stats.messagesBefore[role] ?? 0;
+		const after = stats.messagesAfter[role] ?? 0;
+		sections.push(`| ${role} | ${before} | ${after} |`);
+	}
 
 	return sections.join("\n");
 }

@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { type CommandRequest, handleCommand } from "./command";
 import { compactToBudget } from "./compaction/compact-to-budget";
+import { EVICTION_DISTANCE } from "./compaction/eviction";
 import { createCompactionRegistry } from "./compaction/registry";
 import { AGE_INFLECTION, AGE_STEEPNESS, DEFAULT_THRESHOLD, MAX_AGE_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
@@ -229,6 +230,16 @@ export function createServer(options: ServerOptions) {
 				const charsPerToken = compactionResult.charsPerToken;
 				const estimatedContextNeeded = charsPerToken > 0 ? compactionResult.charsBefore / (contextWindow * charsPerToken) : 0;
 
+				// Count messages by role before and after compaction+eviction
+				function countByRole(msgs: { role: string }[]): Record<string, number> {
+					const counts: Record<string, number> = {};
+					for (const m of msgs) {
+						counts[m.role] = (counts[m.role] ?? 0) + 1;
+					}
+					counts.total = msgs.length;
+					return counts;
+				}
+
 				return Response.json({
 					messages: compactedStored.map((m) => ({ ...m, messageIndex: m.originalIndex })),
 					stats: {
@@ -244,10 +255,13 @@ export function createServer(options: ServerOptions) {
 							inflection: AGE_INFLECTION,
 							steepness: AGE_STEEPNESS,
 							maxAgeDistance: MAX_AGE_DISTANCE,
+							evictionDistance: EVICTION_DISTANCE,
 						},
 						estimatedContextNeeded,
 						target: PRE_PROMPT_TARGET,
 						elapsedMs: compactionResult.elapsedMs,
+						messagesBefore: countByRole(messages),
+						messagesAfter: countByRole(compactionResult.messages),
 					},
 					details: Object.fromEntries(compactionResult.details),
 				});
