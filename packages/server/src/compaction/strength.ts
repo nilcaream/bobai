@@ -107,18 +107,28 @@ export function computeCharBudget(contextWindow: number, target: number, promptT
 }
 
 /**
- * Compute the total character length of all message content in an array.
+ * Compute the total character length of all message data in an array.
  *
- * Only counts the `content` string of each message. Does not include
- * assistant tool_call arguments, tool definitions, or message framing —
- * those contribute to the API's token count but are excluded here. This
- * is consistent with the provider's `turnLastCallChars` measurement, so
- * the derived `charsPerToken` ratio is self-consistent.
+ * Counts both the `content` string and any `tool_calls[].function.arguments`
+ * on assistant messages — these are the two main variable-size payloads we
+ * send to the API. This is consistent with the provider's `turnLastCallChars`
+ * measurement, so the derived `charsPerToken` ratio is self-consistent.
+ *
+ * Does not include tool definitions or per-message framing (role strings,
+ * tool_call IDs, JSON structure). Those are roughly constant within a
+ * session and contribute a fixed offset to the API's token count.
  */
-export function totalContentChars(messages: { content: string | null | undefined }[]): number {
+export function totalContentChars(
+	messages: { role?: string; content: string | null | undefined; tool_calls?: { function: { arguments: string } }[] }[],
+): number {
 	let total = 0;
 	for (const msg of messages) {
 		if (msg.content) total += msg.content.length;
+		if (msg.tool_calls) {
+			for (const tc of msg.tool_calls) {
+				total += tc.function.arguments.length;
+			}
+		}
 	}
 	return total;
 }

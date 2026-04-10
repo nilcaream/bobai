@@ -427,11 +427,19 @@ export function createCopilotProvider(
 			await ensureValidSession();
 			const initiator = options.initiator ?? resolveInitiator(options.messages);
 
-			// Compute total content chars for the messages being sent
+			// Compute total content + tool_call argument chars for the messages
+			// being sent. Must stay consistent with totalContentChars() in
+			// compaction/strength.ts — both count the same message payloads so
+			// the derived charsPerToken ratio is self-consistent.
 			let callChars = 0;
 			for (const msg of options.messages) {
 				if ("content" in msg && typeof msg.content === "string") {
 					callChars += msg.content.length;
+				}
+				if ("tool_calls" in msg && Array.isArray(msg.tool_calls)) {
+					for (const tc of msg.tool_calls) {
+						callChars += tc.function.arguments.length;
+					}
 				}
 			}
 

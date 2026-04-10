@@ -239,6 +239,31 @@ describe("totalContentChars", () => {
 	test("returns 0 for empty array", () => {
 		expect(totalContentChars([])).toBe(0);
 	});
+
+	test("includes tool_calls arguments in char count", () => {
+		const messages = [
+			{ content: "hello" }, // 5
+			{
+				content: null,
+				tool_calls: [
+					{ function: { arguments: '{"path":"a.txt"}' } }, // 16
+					{ function: { arguments: '{"cmd":"ls"}' } }, // 12
+				],
+			},
+		];
+		expect(totalContentChars(messages)).toBe(5 + 16 + 12);
+	});
+
+	test("counts both content and tool_calls on the same message", () => {
+		const messages = [
+			{
+				content: "thinking...",
+				tool_calls: [{ function: { arguments: '{"x":1}' } }],
+			},
+		];
+		// "thinking..." = 11, '{"x":1}' = 7
+		expect(totalContentChars(messages)).toBe(18);
+	});
 });
 
 describe("compaction constants", () => {
