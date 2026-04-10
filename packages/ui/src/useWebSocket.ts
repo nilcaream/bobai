@@ -332,6 +332,10 @@ export function useWebSocket() {
 			const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
 			const childMessages = replayBufferToMessages(bufferedEvents);
 			setMessages(childMessages);
+			const lastStatusEvent = bufferedEvents.findLast((e) => e.type === "status");
+			if (lastStatusEvent && "text" in lastStatusEvent) {
+				setStatus((lastStatusEvent as { type: "status"; text: string }).text);
+			}
 		},
 		[status],
 	);
@@ -345,6 +349,7 @@ export function useWebSocket() {
 				const data = (await res.json()) as {
 					session: { id: string; title: string | null };
 					messages: StoredMessage[];
+					status: string | null;
 				};
 				if (!viewingSubagentIdRef.current) {
 					parentMessagesRef.current = messagesRef.current;
@@ -353,6 +358,9 @@ export function useWebSocket() {
 				setViewingSubagentId(childSessionId);
 				setViewingSubagentTitle(data.session.title);
 				setMessages(reconstructMessages(data.messages));
+				if (data.status) {
+					setStatus(data.status);
+				}
 			} catch {
 				// fetch failed — ignore
 			}

@@ -13,7 +13,14 @@ import { runWithScope } from "../log/logger";
 import { subagentScope } from "../log/session-tag";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
-import { appendMessage, createSubagentSession, getMessages, getSession, updateMessageMetadata } from "../session/repository";
+import {
+	appendMessage,
+	createSubagentSession,
+	getMessages,
+	getSession,
+	updateMessageMetadata,
+	updateSessionPromptTokens,
+} from "../session/repository";
 import type { SkillRegistry } from "../skill/skill";
 import type { SubagentStatus } from "../subagent-status";
 import { buildSystemPrompt } from "../system-prompt";
@@ -331,7 +338,13 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				subagentStatus.set(childSessionId, "error");
 				sendWs?.({ type: "subagent_done", sessionId: childSessionId });
 				const turnSummary = activeProvider.getTurnSummary?.() ?? "";
+				const errChildTokens = activeProvider.getTurnPromptTokens?.() ?? 0;
+				const errChildChars = activeProvider.getTurnPromptChars?.() ?? 0;
 				if (parentState !== undefined) activeProvider.restoreTurnState?.(parentState);
+				// Persist child session's prompt token count
+				if (errChildTokens > 0) {
+					updateSessionPromptTokens(db, childSessionId, errChildTokens, errChildChars);
+				}
 				// Persist turn summary on last assistant message for reconstruction
 				if (lastAssistantMessageId && turnSummary) {
 					updateMessageMetadata(db, lastAssistantMessageId, { summary: turnSummary, turn_model: model });
@@ -347,7 +360,14 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			}
 
 			const turnSummary = activeProvider.getTurnSummary?.();
+			const childPromptTokensFinal = activeProvider.getTurnPromptTokens?.() ?? 0;
+			const childPromptCharsFinal = activeProvider.getTurnPromptChars?.() ?? 0;
 			if (parentState !== undefined) activeProvider.restoreTurnState?.(parentState);
+
+			// Persist child session's prompt token count so it can be displayed when loading from DB
+			if (childPromptTokensFinal > 0) {
+				updateSessionPromptTokens(db, childSessionId, childPromptTokensFinal, childPromptCharsFinal);
+			}
 
 			// Persist turn summary on last assistant message for reconstruction
 			if (lastAssistantMessageId && (turnSummary || model)) {
