@@ -49,6 +49,8 @@ export interface CompactionDetail {
 	position: number;
 	/** Normalized position after MAX_AGE_DISTANCE capping (0.0 = oldest/capped, 1.0 = newest). */
 	normalizedPosition: number;
+	/** Distance from end of conversation in messages. */
+	distance: number;
 	/** Tool's outputThreshold (undefined if tool has none). */
 	outputThreshold?: number;
 	/** Tool's argsThreshold (undefined if tool has none). */
@@ -166,11 +168,11 @@ function compactMessagesInternal(options: CompactionOptions): {
 	}
 
 	/** Compute position and normalizedPosition for a message at the given index. */
-	function positionFields(idx: number): { position: number; normalizedPosition: number } {
+	function positionFields(idx: number): { position: number; normalizedPosition: number; distance: number } {
 		const position = messages.length <= 1 ? 0 : idx / (messages.length - 1);
 		const distanceFromEnd = messages.length - 1 - idx;
 		const normalizedPosition = 1 - Math.min(distanceFromEnd, MAX_AGE_DISTANCE) / MAX_AGE_DISTANCE;
-		return { position, normalizedPosition };
+		return { position, normalizedPosition, distance: distanceFromEnd };
 	}
 
 	const toolCallMap = buildToolCallMap(messages, tools);
@@ -254,6 +256,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 							compactionFactor: detailFactors?.compactionFactor ?? 0,
 							position: pos.position,
 							normalizedPosition: pos.normalizedPosition,
+							distance: pos.distance,
 							outputThreshold: tool.outputThreshold,
 							argsThreshold: tool.argsThreshold,
 							wasCompacted: false,
@@ -309,6 +312,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				compactionFactor,
 				position: pos.position,
 				normalizedPosition: pos.normalizedPosition,
+				distance: pos.distance,
 				outputThreshold: tool?.outputThreshold,
 				argsThreshold: tool?.argsThreshold,
 				wasCompacted: false,
@@ -326,6 +330,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				compactionFactor,
 				position: pos.position,
 				normalizedPosition: pos.normalizedPosition,
+				distance: pos.distance,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: false,
@@ -346,6 +351,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				compactionFactor,
 				position: pos.position,
 				normalizedPosition: pos.normalizedPosition,
+				distance: pos.distance,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: false,
@@ -378,6 +384,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				compactionFactor,
 				position: pos.position,
 				normalizedPosition: pos.normalizedPosition,
+				distance: pos.distance,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: true,
@@ -392,6 +399,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 				compactionFactor,
 				position: pos.position,
 				normalizedPosition: pos.normalizedPosition,
+				distance: pos.distance,
 				outputThreshold: tool.outputThreshold,
 				argsThreshold: tool.argsThreshold,
 				wasCompacted: false,

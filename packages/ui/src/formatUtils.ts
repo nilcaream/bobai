@@ -20,13 +20,22 @@ export interface ContextMessage {
 }
 
 export interface CompactionStats {
-	pressure: number;
+	usage: number;
 	iterations: number;
 	charsBefore: number;
 	charsAfter: number;
 	charBudget: number;
 	charsPerToken: number;
 	type: string;
+	parameters: {
+		threshold: number;
+		inflection: number;
+		steepness: number;
+		maxAgeDistance: number;
+	};
+	estimatedContextNeeded: number;
+	target: number;
+	elapsedMs: number;
 }
 
 export interface CompactionDetail {
@@ -34,6 +43,7 @@ export interface CompactionDetail {
 	compactionFactor: number;
 	position: number;
 	normalizedPosition: number;
+	distance: number;
 	outputThreshold?: number;
 	argsThreshold?: number;
 	wasCompacted: boolean;
@@ -47,47 +57,45 @@ export function formatToolHeader(
 	toolName: string,
 	detail: CompactionDetail | undefined,
 	messageIndex?: number,
+	charsPerToken?: number,
 ): string {
 	const prefix = messageIndex !== undefined ? `#${messageIndex} ` : "";
-	const parts = [`${prefix}tool`, toolCallId, toolName];
+	const idParts = [`${prefix}tool`, toolCallId, toolName];
 
 	if (!detail) {
-		parts.push("no detail available");
-		return parts.join(" | ");
+		idParts.push("excluded");
+		return idParts.join(" | ");
 	}
 
-	// Position info: both raw and normalized (after MAX_AGE_DISTANCE capping)
-	parts.push(`pos=${detail.position.toFixed(3)} norm=${detail.normalizedPosition.toFixed(3)}`);
-	parts.push(`age=${detail.age.toFixed(3)}`);
-	parts.push(`factor=${detail.compactionFactor.toFixed(3)}`);
+	const detailParts: string[] = [];
+	detailParts.push(`distance=${detail.distance}`);
+	detailParts.push(`position=${detail.normalizedPosition.toFixed(2)}`);
+	detailParts.push(`factor=${detail.compactionFactor.toFixed(3)}`);
 
-	// Show thresholds
-	const thresholds: string[] = [];
-	if (detail.outputThreshold !== undefined) thresholds.push(`out=${detail.outputThreshold}`);
-	if (detail.argsThreshold !== undefined) thresholds.push(`args=${detail.argsThreshold}`);
-	if (thresholds.length > 0) parts.push(`threshold(${thresholds.join(", ")})`);
+	if (detail.outputThreshold !== undefined) {
+		detailParts.push(`output=${detail.outputThreshold.toFixed(2)}`);
+	}
+	if (detail.argsThreshold !== undefined) {
+		detailParts.push(`arguments=${detail.argsThreshold.toFixed(2)}`);
+	}
 
-	// Compaction outcome
-	if (detail.wasCompacted) {
-		if (detail.savedChars !== undefined) {
-			const argsSavings = detail.savedArgsChars !== undefined ? ` + ${detail.savedArgsChars} args` : "";
-			parts.push(`compacted (saved ${detail.savedChars} chars${argsSavings})`);
-		} else if (detail.savedArgsChars !== undefined) {
-			parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
-		} else {
-			parts.push("compacted");
-		}
-	} else if (detail.savedArgsChars !== undefined) {
-		parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
+	// Action
+	if (detail.wasCompacted || detail.savedArgsChars !== undefined) {
+		detailParts.push("compacted");
 	} else if (detail.belowMinSavings) {
-		parts.push("savings below minimum");
-	} else if (detail.compactionFactor <= 0) {
-		parts.push("no pressure");
+		detailParts.push("too small");
 	} else {
-		parts.push("kept");
+		detailParts.push("no change");
 	}
 
-	return parts.join(" | ");
+	// Token savings (only when something was saved)
+	const totalSavedChars = (detail.savedChars ?? 0) + (detail.savedArgsChars ?? 0);
+	if (totalSavedChars > 0 && charsPerToken && charsPerToken > 0) {
+		const savedTokens = Math.round(totalSavedChars / charsPerToken);
+		detailParts.push(`tokens=-${savedTokens}`);
+	}
+
+	return `${idParts.join(" | ")} | ${detailParts.join(" | ")}`;
 }
 
 export function groupParts(parts: MessagePart[]): Panel[] {
@@ -169,15 +177,63 @@ export function truncateChars(text: string, charLimit: number): string {
 	return `${text.slice(0, charLimit)}... (${text.length - charLimit} more chars)`;
 }
 
+export function generateFactorsTable(threshold: number, inflection: number, steepness: number): number[][] {
+	const steps = Array.from({ length: 21 }, (_, i) => i * 0.05);
+	return steps.map((usage) => {
+		const pressure = usage <= threshold ? 0 : Math.min(1, (usage - threshold) / (1 - threshold));
+		return steps.map((normPos) => {
+			const raw = Math.atan(steepness * (inflection - normPos));
+			const rawMin = Math.atan(steepness * (inflection - 1));
+			const rawMax = Math.atan(steepness * inflection);
+			const age = (raw - rawMin) / (rawMax - rawMin);
+			return pressure * age;
+		});
+	});
+}
+
 export function formatCompactionSummary(stats: CompactionStats): string {
-	const lines = [
-		`budget: ${stats.charBudget}`,
-		`pressure: ${stats.pressure.toFixed(2)}`,
-		`iterations: ${stats.iterations}`,
-		`chars/token: ${stats.charsPerToken.toFixed(2)}`,
-		`chars in: ${stats.charsBefore}`,
-		`chars out: ${stats.charsAfter}`,
-		`type: ${stats.type}`,
-	];
-	return lines.join("\n");
+	const sections: string[] = [];
+
+	// Section 1: Compaction parameters
+	sections.push("# Compaction parameters");
+	sections.push(`- threshold: ${stats.parameters.threshold}`);
+	sections.push(`- inflection: ${stats.parameters.inflection}`);
+	sections.push(`- steepness: ${stats.parameters.steepness}`);
+	sections.push(`- max age distance: ${stats.parameters.maxAgeDistance}`);
+	sections.push("");
+
+	// Section 2: Factors table
+	sections.push("# Usage vs. normalized position");
+	sections.push("");
+	const table = generateFactorsTable(stats.parameters.threshold, stats.parameters.inflection, stats.parameters.steepness);
+	const steps = Array.from({ length: 21 }, (_, i) => (i * 0.05).toFixed(2));
+
+	// Header row
+	sections.push(`|  | ${steps.join(" | ")} |`);
+	sections.push(`|---|${steps.map(() => "---").join("|")}|`);
+
+	// Data rows
+	for (let r = 0; r < table.length; r++) {
+		const rowLabel = steps[r];
+		const cells = (table[r] as number[]).map((v) => v.toFixed(2));
+		sections.push(`| ${rowLabel} | ${cells.join(" | ")} |`);
+	}
+
+	sections.push("");
+	sections.push("- horizontal: normalized message position");
+	sections.push("- vertical: calculated compaction usage");
+	sections.push("");
+
+	// Section 3: Compaction details
+	sections.push("# Compaction details");
+	sections.push(`- target context usage: ${(stats.target * 100).toFixed(0)}%`);
+	sections.push(`- estimated context needed: ${(stats.estimatedContextNeeded * 100).toFixed(0)}%`);
+	sections.push(`- average characters per token: ${stats.charsPerToken.toFixed(2)}`);
+	sections.push(`- total content before compaction: ${stats.charsBefore} characters`);
+	sections.push(`- total content after compaction: ${stats.charsAfter} characters`);
+	sections.push(`- calculated compaction usage: ${(stats.usage * 100).toFixed(0)}%`);
+	sections.push(`- compaction iterations: ${stats.iterations}`);
+	sections.push(`- compaction time: ${stats.elapsedMs.toFixed(1)}ms`);
+
+	return sections.join("\n");
 }

@@ -122,7 +122,7 @@ describe("ContextMessageList — compaction mode", () => {
 		expect(screen.queryByText("No compaction data available.")).not.toBeNull();
 	});
 
-	test("renders system message with 'system | excluded from compaction' header", () => {
+	test("renders system message with 'system | excluded' header", () => {
 		const data = {
 			messages: [mkMsg("system", "System prompt")],
 			stats: null,
@@ -133,10 +133,10 @@ describe("ContextMessageList — compaction mode", () => {
 		);
 		const headers = container.querySelectorAll(".context-header");
 		expect(headers).toHaveLength(1);
-		expect(headers[0]?.textContent).toBe("system | excluded from compaction");
+		expect(headers[0]?.textContent).toBe("system | excluded");
 	});
 
-	test("renders user message with 'user | excluded from compaction' header", () => {
+	test("renders user message with 'user | excluded' header", () => {
 		const data = {
 			messages: [mkMsg("user", "Hello")],
 			stats: null,
@@ -147,7 +147,7 @@ describe("ContextMessageList — compaction mode", () => {
 		);
 		const headers = container.querySelectorAll(".context-header");
 		expect(headers).toHaveLength(1);
-		expect(headers[0]?.textContent).toBe("user | excluded from compaction");
+		expect(headers[0]?.textContent).toBe("user | excluded");
 	});
 
 	test("renders tool message with formatToolHeader output", () => {
@@ -165,6 +165,7 @@ describe("ContextMessageList — compaction mode", () => {
 					compactionFactor: 0.3,
 					position: 0.1,
 					normalizedPosition: 0.2,
+					distance: 42,
 					wasCompacted: false,
 				},
 			},
@@ -176,9 +177,9 @@ describe("ContextMessageList — compaction mode", () => {
 		// 1 for assistant tool_call + 1 for tool
 		const toolHeader = headers[headers.length - 1]?.textContent ?? "";
 		expect(toolHeader.startsWith("tool |")).toBe(true);
-		// Should contain position/age info from formatToolHeader, NOT "excluded from compaction"
 		expect(toolHeader).toContain("call_x");
 		expect(toolHeader).toContain("bash");
+		expect(toolHeader).toContain("distance=42");
 	});
 
 	test("does NOT truncate content in compaction mode", () => {

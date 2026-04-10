@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
 	type CompactionDetail,
+	type CompactionStats,
+	formatCompactionSummary,
 	formatMsgSummary,
 	formatToolHeader,
+	generateFactorsTable,
 	groupParts,
 	truncateChars,
 	truncateContent,
@@ -186,59 +189,183 @@ describe("formatMsgSummary", () => {
 // formatToolHeader
 // ---------------------------------------------------------------------------
 describe("formatToolHeader", () => {
-	test("no detail → returns header with 'no detail available'", () => {
+	test("no detail → returns header with 'excluded'", () => {
 		const result = formatToolHeader("tc1", "read_file", undefined);
-		expect(result).toBe("tool | tc1 | read_file | no detail available");
+		expect(result).toBe("tool | tc1 | read_file | excluded");
 	});
 
-	test("with detail that wasCompacted with savedChars → includes compacted savings", () => {
+	test("with detail that wasCompacted with savedChars → includes 'compacted'", () => {
 		const detail: CompactionDetail = {
 			age: 0.5,
 			compactionFactor: 0.8,
 			position: 0.3,
 			normalizedPosition: 0.4,
+			distance: 85,
 			wasCompacted: true,
 			savedChars: 1200,
+			outputThreshold: 0.3,
 		};
 		const result = formatToolHeader("tc1", "read_file", detail);
-		expect(result).toContain("compacted (saved 1200 chars)");
-		expect(result).toStartWith("tool | tc1 | read_file");
+		expect(result).toStartWith("tool | tc1 | read_file | ");
+		expect(result).toContain("distance=85");
+		expect(result).toContain("position=0.40");
+		expect(result).toContain("factor=0.800");
+		expect(result).toContain("output=0.30");
+		expect(result).toContain("compacted");
 	});
 
-	test("with detail that was NOT compacted, factor <= 0 → 'no pressure'", () => {
+	test("with charsPerToken → includes token savings", () => {
+		const detail: CompactionDetail = {
+			age: 0.5,
+			compactionFactor: 0.8,
+			position: 0.3,
+			normalizedPosition: 0.4,
+			distance: 85,
+			wasCompacted: true,
+			savedChars: 1200,
+			outputThreshold: 0.3,
+		};
+		const result = formatToolHeader("tc1", "read_file", detail, undefined, 3.5);
+		expect(result).toContain("tokens=-343");
+	});
+
+	test("with detail that was NOT compacted → 'no change'", () => {
 		const detail: CompactionDetail = {
 			age: 0.1,
 			compactionFactor: 0,
 			position: 0.1,
 			normalizedPosition: 0.1,
+			distance: 10,
 			wasCompacted: false,
 		};
 		const result = formatToolHeader("tc1", "bash", detail);
-		expect(result).toContain("no pressure");
+		expect(result).toContain("no change");
 	});
 
-	test("with detail belowMinSavings → 'savings below minimum'", () => {
+	test("with detail belowMinSavings → 'too small'", () => {
 		const detail: CompactionDetail = {
 			age: 0.5,
 			compactionFactor: 0.5,
 			position: 0.3,
 			normalizedPosition: 0.4,
+			distance: 50,
 			wasCompacted: false,
 			belowMinSavings: true,
+			outputThreshold: 0.2,
 		};
 		const result = formatToolHeader("tc1", "write_file", detail);
-		expect(result).toContain("savings below minimum");
+		expect(result).toContain("too small");
 	});
 
-	test("with detail kept (factor > 0, not compacted, not belowMinSavings) → 'kept'", () => {
+	test("with savedArgsChars → 'compacted'", () => {
 		const detail: CompactionDetail = {
 			age: 0.5,
 			compactionFactor: 0.5,
 			position: 0.3,
 			normalizedPosition: 0.4,
+			distance: 50,
+			wasCompacted: false,
+			savedArgsChars: 500,
+			outputThreshold: 0.9,
+			argsThreshold: 0.3,
+		};
+		const result = formatToolHeader("tc1", "edit_file", detail, undefined, 3.5);
+		expect(result).toContain("compacted");
+		expect(result).toContain("arguments=0.30");
+		expect(result).toContain("tokens=-143");
+	});
+
+	test("with messageIndex → includes #N prefix", () => {
+		const detail: CompactionDetail = {
+			age: 0.5,
+			compactionFactor: 0.5,
+			position: 0.3,
+			normalizedPosition: 0.4,
+			distance: 50,
 			wasCompacted: false,
 		};
-		const result = formatToolHeader("tc1", "grep_search", detail);
-		expect(result).toContain("kept");
+		const result = formatToolHeader("tc1", "bash", detail, 7);
+		expect(result).toStartWith("#7 tool | tc1 | bash | ");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// generateFactorsTable
+// ---------------------------------------------------------------------------
+describe("generateFactorsTable", () => {
+	test("returns 21x21 table", () => {
+		const table = generateFactorsTable(0.2, 0.7, 5);
+		expect(table).toHaveLength(21);
+		for (const row of table) {
+			expect(row).toHaveLength(21);
+		}
+	});
+
+	test("usage below threshold produces all zeros", () => {
+		const table = generateFactorsTable(0.2, 0.7, 5);
+		// rows 0-4 (usage 0.00 to 0.20) should all be zero
+		for (let r = 0; r <= 4; r++) {
+			for (const cell of table[r] as number[]) {
+				expect(cell).toBe(0);
+			}
+		}
+	});
+
+	test("usage at 1.0 produces non-zero values", () => {
+		const table = generateFactorsTable(0.2, 0.7, 5);
+		const lastRow = table[20] as number[];
+		// At usage=1.0, normPos=0.0 should have high factor (old messages)
+		expect(lastRow[0]).toBeGreaterThan(0.5);
+		// At usage=1.0, normPos=1.0 should have factor=0 (newest message)
+		expect(lastRow[20]).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// formatCompactionSummary
+// ---------------------------------------------------------------------------
+describe("formatCompactionSummary", () => {
+	test("includes all three sections", () => {
+		const stats: CompactionStats = {
+			usage: 0.35,
+			iterations: 7,
+			charsBefore: 50000,
+			charsAfter: 30000,
+			charBudget: 35000,
+			charsPerToken: 3.5,
+			type: "pre-prompt",
+			parameters: {
+				threshold: 0.2,
+				inflection: 0.7,
+				steepness: 5,
+				maxAgeDistance: 100,
+			},
+			estimatedContextNeeded: 0.65,
+			target: 0.8,
+			elapsedMs: 12.5,
+		};
+		const result = formatCompactionSummary(stats);
+
+		// Section 1: Parameters
+		expect(result).toContain("# Compaction parameters");
+		expect(result).toContain("- threshold: 0.2");
+		expect(result).toContain("- inflection: 0.7");
+		expect(result).toContain("- steepness: 5");
+		expect(result).toContain("- max age distance: 100");
+
+		// Section 2: Factors table
+		expect(result).toContain("# Usage vs. normalized position");
+		expect(result).toContain("| 0.00 |");
+
+		// Section 3: Compaction details
+		expect(result).toContain("# Compaction details");
+		expect(result).toContain("- target context usage: 80%");
+		expect(result).toContain("- estimated context needed: 65%");
+		expect(result).toContain("- average characters per token: 3.50");
+		expect(result).toContain("- total content before compaction: 50000 characters");
+		expect(result).toContain("- total content after compaction: 30000 characters");
+		expect(result).toContain("- calculated compaction usage: 35%");
+		expect(result).toContain("- compaction iterations: 7");
+		expect(result).toContain("- compaction time: 12.5ms");
 	});
 });

@@ -56,7 +56,7 @@ describe("compactToBudget", () => {
 			tools,
 		});
 		expect(result.messages).toBe(messages); // same reference
-		expect(result.pressure).toBe(0);
+		expect(result.usage).toBe(0);
 		expect(result.iterations).toBe(0);
 		expect(result.charBudget).toBe(0);
 	});
@@ -77,7 +77,7 @@ describe("compactToBudget", () => {
 			tools,
 		});
 		expect(result.messages).toBe(messages);
-		expect(result.pressure).toBe(0);
+		expect(result.usage).toBe(0);
 		expect(result.iterations).toBe(0);
 		expect(result.charBudget).toBeGreaterThan(0);
 	});
@@ -115,10 +115,10 @@ describe("compactToBudget", () => {
 		expect(result.charsBefore).toBeGreaterThan(result.charBudget);
 		expect(result.charsAfter).toBeLessThan(result.charsBefore);
 		expect(result.iterations).toBeGreaterThan(0);
-		expect(result.pressure).toBeGreaterThan(0);
+		expect(result.usage).toBeGreaterThan(0);
 	});
 
-	test("iterations and pressure increase until content fits", () => {
+	test("iterations and usage increase until content fits", () => {
 		const tool = createCompactableTool("bash", 0.3);
 		const tools = createToolRegistry([tool]);
 
@@ -148,8 +148,8 @@ describe("compactToBudget", () => {
 
 		expect(result.charBudget).toBe(1400);
 		expect(result.iterations).toBeGreaterThanOrEqual(1);
-		expect(result.pressure).toBeGreaterThan(0);
-		expect(result.pressure).toBeLessThanOrEqual(1.0);
+		expect(result.usage).toBeGreaterThan(0);
+		expect(result.usage).toBeLessThanOrEqual(1.0);
 	});
 
 	test("EMERGENCY_TARGET produces larger budget than PRE_PROMPT_TARGET", () => {
@@ -158,7 +158,7 @@ describe("compactToBudget", () => {
 		expect(emgBudget).toBeGreaterThan(preBudget);
 	});
 
-	test("runs all iterations when content cannot fit even at max pressure", () => {
+	test("runs all iterations when content cannot fit even at max usage", () => {
 		// Conversation with only user/assistant messages — nothing compactable.
 		// The loop should exhaust all pressure steps and return best-effort result.
 		const messages: Message[] = [
@@ -182,7 +182,7 @@ describe("compactToBudget", () => {
 
 		expect(result.charBudget).toBe(280);
 		expect(result.charsAfter).toBe(result.charsBefore); // nothing was compacted
-		expect(result.pressure).toBe(1.0);
+		expect(result.usage).toBe(1.0);
 		expect(result.iterations).toBe(20); // 1/0.05 = 20 steps
 	});
 });

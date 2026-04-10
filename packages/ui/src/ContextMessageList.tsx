@@ -7,6 +7,7 @@ interface ContextRenderOptions {
 	mode: ContextViewMode;
 	lineLimit: number;
 	details: Record<string, CompactionDetail> | null;
+	charsPerToken?: number;
 }
 
 function renderMessagePanels(
@@ -29,7 +30,7 @@ function renderMessagePanels(
 	}
 
 	const isRaw = opts.mode === "raw";
-	const headerSuffix = isRaw ? "" : " | excluded from compaction";
+	const headerSuffix = isRaw ? "" : " | excluded";
 
 	for (const msg of msgs) {
 		if (msg.role === "system") {
@@ -68,9 +69,7 @@ function renderMessagePanels(
 					const callBody = `${tc.function.name}(${tc.function.arguments})`;
 					elements.push(
 						<div key={key++} className="panel panel--context">
-							<div className="context-header">
-								{isRaw ? `assistant | ${tc.id}` : `assistant | ${tc.id} | excluded from compaction`}
-							</div>
+							<div className="context-header">{isRaw ? `assistant | ${tc.id}` : `assistant | ${tc.id} | excluded`}</div>
 							<pre className="context-body">{isRaw ? truncateChars(callBody, 512) : callBody}</pre>
 						</div>,
 					);
@@ -86,7 +85,7 @@ function renderMessagePanels(
 				header = `tool | ${toolCallId ?? ""} | ${toolName}`;
 			} else {
 				const detail = toolCallId && opts.details ? opts.details[toolCallId] : undefined;
-				header = formatToolHeader(toolCallId ?? "", toolName, detail, msg.messageIndex);
+				header = formatToolHeader(toolCallId ?? "", toolName, detail, msg.messageIndex, opts.charsPerToken);
 			}
 
 			elements.push(
@@ -138,16 +137,16 @@ export function ContextMessageList({
 	}
 	const { elements } = renderMessagePanels(
 		compactionData.messages,
-		{ mode: "compaction", lineLimit, details: compactionData.details },
+		{ mode: "compaction", lineLimit, details: compactionData.details, charsPerToken: compactionData.stats?.charsPerToken },
 		0,
 	);
 	return (
 		<>
 			{elements}
 			{viewMode === "compaction" && compactionData?.stats && (
-				<div className="context-message system">
+				<div className="panel panel--context">
 					<div className="context-header">compaction summary</div>
-					<pre className="context-content">{formatCompactionSummary(compactionData.stats)}</pre>
+					<pre className="context-body">{formatCompactionSummary(compactionData.stats)}</pre>
 				</div>
 			)}
 		</>
