@@ -21,7 +21,11 @@ export interface CompactToBudgetOptions {
 }
 
 export interface CompactToBudgetResult {
+	/** Post-eviction messages — what gets sent to the LLM. */
 	messages: Message[];
+	/** Pre-eviction compacted messages (same length as input). Needed by
+	 *  mapEvictedToStored to map evicted messages back to original indices. */
+	compacted: Message[];
 	/** The calculated compaction usage level (0.0-1.0). */
 	usage: number;
 	iterations: number;
@@ -57,6 +61,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 	if (charBudget <= 0) {
 		return {
 			messages,
+			compacted: messages,
 			usage: 0,
 			iterations: 0,
 			charsBefore,
@@ -72,6 +77,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 	if (charsBefore <= charBudget) {
 		return {
 			messages,
+			compacted: messages,
 			usage: 0,
 			iterations: 0,
 			charsBefore,
@@ -91,6 +97,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 	// contextWindow and derive promptTokens = usage × contextWindow.
 	const syntheticContextWindow = 100_000;
 
+	let bestCompacted = messages;
 	let bestMessages = messages;
 	let bestCharsAfter = charsBefore;
 	let iterations = 0;
@@ -115,6 +122,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		const evicted = evictOldTurns(compacted);
 		const charsAfter = totalContentChars(evicted);
 
+		bestCompacted = compacted;
 		bestMessages = evicted;
 		bestCharsAfter = charsAfter;
 		finalUsage = clampedUsage;
@@ -146,6 +154,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 
 	return {
 		messages: bestMessages,
+		compacted: bestCompacted,
 		usage: finalUsage,
 		iterations,
 		charsBefore,

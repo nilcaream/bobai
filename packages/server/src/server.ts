@@ -216,11 +216,11 @@ export function createServer(options: ServerOptions) {
 					sessionId,
 				});
 
-				// compactToBudget combines compaction + eviction into one step, so
-				// we pass the same array for both params. mapEvictedToStored uses
-				// the first param to build a reference map and iterates the second.
+				// mapEvictedToStored uses the pre-eviction array (compacted, same
+				// length as original) to build index-based identity map, and iterates
+				// the post-eviction array (messages) to produce the final output.
 				const compactedStored = mapEvictedToStored(
-					compactionResult.messages,
+					compactionResult.compacted,
 					compactionResult.messages,
 					conversationMessages,
 					sessionId,
