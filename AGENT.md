@@ -27,6 +27,13 @@ bun build --target=bun --minify --outfile=dist/server.js packages/server/src/ind
 cd packages/ui && bunx vite build
 ```
 
+## Glossary
+
+Application vocabulary, UI anatomy, and core concepts are documented in
+[`docs/glossary.md`](docs/glossary.md). Read it before any session that
+involves UI work, dot commands, or domain concepts — it saves significant
+code-diving time.
+
 ## Hard Constraints
 
 - **Never include personally identifiable information** — no names, usernames, or hostnames in tracked files, commit messages, or pull requests.
