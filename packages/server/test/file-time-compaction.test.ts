@@ -34,6 +34,10 @@ describe("FileTime compaction invalidation", () => {
 		// Verify stamp is valid before compaction
 		expect(() => FileTime.assert(SESSION, file)).not.toThrow();
 
+		// Move time forward past the grace period so invalidation takes effect
+		const origNow = Date.now;
+		Date.now = () => origNow() + 61_000;
+
 		// Build a message array where the read_file output will get compacted
 		// (high context pressure forces compaction).
 		// We need enough messages after the tool output so it appears "old"
@@ -86,6 +90,7 @@ describe("FileTime compaction invalidation", () => {
 		expect(toolMsg?.content).toContain(COMPACTION_MARKER);
 
 		// Verify stamp was invalidated
+		Date.now = origNow;
 		expect(() => FileTime.assert(SESSION, file)).toThrow("must read");
 	});
 

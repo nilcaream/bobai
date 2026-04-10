@@ -63,11 +63,27 @@ describe("FileTime", () => {
 		FileTime.clearSession("session-b");
 	});
 
-	test("invalidate marks a file as stale, causing assert to throw", () => {
+	test("invalidate within grace period keeps stamp (recently read files are protected)", () => {
 		const file = path.join(tmpDir, "invalidated.ts");
 		fs.writeFileSync(file, "data");
 		FileTime.read("test-session", file);
+		// Invalidation within 60s grace period is a no-op
 		FileTime.invalidate("test-session", file);
+		expect(() => FileTime.assert("test-session", file)).not.toThrow();
+	});
+
+	test("invalidate after grace period removes stamp", () => {
+		const file = path.join(tmpDir, "invalidated-old.ts");
+		fs.writeFileSync(file, "data");
+		FileTime.read("test-session", file);
+		// Move readAt back beyond the 60s grace period
+		const origNow = Date.now;
+		Date.now = () => origNow() + 61_000;
+		try {
+			FileTime.invalidate("test-session", file);
+		} finally {
+			Date.now = origNow;
+		}
 		expect(() => FileTime.assert("test-session", file)).toThrow("must read");
 	});
 

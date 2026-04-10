@@ -4,6 +4,8 @@ interface Stamp {
 	readonly mtime: number | undefined;
 	readonly ctime: number | undefined;
 	readonly size: number | undefined;
+	/** Wall-clock time (ms) when this file was read into the conversation. */
+	readonly readAt: number;
 }
 
 function stat(filepath: string): Stamp {
@@ -13,9 +15,10 @@ function stat(filepath: string): Stamp {
 			mtime: s.mtimeMs,
 			ctime: s.ctimeMs,
 			size: s.size,
+			readAt: Date.now(),
 		};
 	} catch {
-		return { mtime: undefined, ctime: undefined, size: undefined };
+		return { mtime: undefined, ctime: undefined, size: undefined, readAt: Date.now() };
 	}
 }
 
@@ -48,7 +51,16 @@ function assert(sessionId: string, filepath: string): void {
 	}
 }
 
+/** Minimum age (ms) before a read stamp can be invalidated by compaction.
+ *  Files read within this window are still in the active conversation and
+ *  their content has not been compacted away — safe to keep the stamp. */
+const INVALIDATION_GRACE_PERIOD_MS = 60_000;
+
 function invalidate(sessionId: string, filepath: string): void {
+	const stamp = sessions.get(sessionId)?.get(filepath);
+	if (stamp && Date.now() - stamp.readAt < INVALIDATION_GRACE_PERIOD_MS) {
+		return; // recently read — content is still in the conversation
+	}
 	sessions.get(sessionId)?.delete(filepath);
 }
 
