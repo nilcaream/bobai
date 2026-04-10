@@ -304,6 +304,8 @@ export async function handlePrompt(req: PromptRequest) {
 				sessionId: currentSessionId as string,
 				maxIterations: req.maxIterations,
 				contextWindow,
+				sessionPromptTokens,
+				sessionPromptChars,
 				rawMessages,
 				logger: scopedLogger,
 				logDir: req.logDir,

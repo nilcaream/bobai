@@ -94,6 +94,12 @@ export interface AgentLoopOptions {
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
 	contextWindow?: number;
+	/** Stored prompt_tokens from the DB at turn start — used for a stable
+	 *  charsPerToken ratio in emergency compaction (avoids oscillation from
+	 *  live values that shift after each API call). */
+	sessionPromptTokens?: number;
+	/** Stored prompt_chars from the DB at turn start — paired with sessionPromptTokens. */
+	sessionPromptChars?: number;
 	/** Original uncompacted messages from DB, for emergency compaction input. */
 	rawMessages?: Message[];
 	logger?: Logger;
@@ -354,15 +360,18 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			signal?.throwIfAborted();
 		}
 
-		// Emergency compaction: if content exceeds the character budget, compact from raw data before next iteration
+		// Emergency compaction: if content exceeds the character budget, compact from raw data before next iteration.
+		// Uses the session's stored prompt_tokens/prompt_chars (from DB at turn start) for a stable
+		// charsPerToken ratio. Live provider values shift after each API call (compacted vs uncompacted
+		// payloads produce different ratios), causing budget oscillation and pressure flip-flopping.
 		if (options.contextWindow && options.contextWindow > 0 && options.rawMessages) {
-			const currentPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
-			const currentPromptChars = provider.getTurnPromptChars?.() ?? 0;
+			const emgPromptTokens = options.sessionPromptTokens ?? 0;
+			const emgPromptChars = options.sessionPromptChars ?? 0;
 			const rawPlusNew = [...options.rawMessages, ...newMessages];
 			const compacted = emergencyCompactConversation(
 				rawPlusNew,
-				currentPromptTokens,
-				currentPromptChars,
+				emgPromptTokens,
+				emgPromptChars,
 				options.contextWindow,
 				tools,
 				options.logDir,
