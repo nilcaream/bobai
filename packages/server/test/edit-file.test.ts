@@ -109,4 +109,105 @@ describe("editFileTool", () => {
 		// Output should show surrounding lines for context
 		expect(result.llmOutput).toContain("LINE_THREE");
 	});
+
+	describe("formatCall", () => {
+		test("produces interleaved unified diff for a single changed line", () => {
+			const output = editFileTool.formatCall({
+				path: "src/app.ts",
+				old_string: "const x = 1;\nconst y = 2;\nconst z = 3;",
+				new_string: "const x = 1;\nconst y = 42;\nconst z = 3;",
+			});
+			// Context lines (unchanged) should appear with a space prefix
+			expect(output).toContain("  const x = 1;");
+			expect(output).toContain("  const z = 3;");
+			// Changed lines should be interleaved: removal then addition
+			expect(output).toContain("- const y = 2;");
+			expect(output).toContain("+ const y = 42;");
+			// The removal should come before the addition
+			const minusIdx = output.indexOf("- const y = 2;");
+			const plusIdx = output.indexOf("+ const y = 42;");
+			expect(minusIdx).toBeLessThan(plusIdx);
+		});
+
+		test("produces interleaved diff for multiple changed lines", () => {
+			const output = editFileTool.formatCall({
+				path: "src/app.ts",
+				old_string: "aaa\nbbb\nccc\nddd",
+				new_string: "aaa\nBBB\nCCC\nddd",
+			});
+			expect(output).toContain("  aaa");
+			expect(output).toContain("- bbb");
+			expect(output).toContain("- ccc");
+			expect(output).toContain("+ BBB");
+			expect(output).toContain("+ CCC");
+			expect(output).toContain("  ddd");
+		});
+
+		test("handles pure insertion (old_string is subset of new_string)", () => {
+			const output = editFileTool.formatCall({
+				path: "file.ts",
+				old_string: "line1\nline2",
+				new_string: "line1\ninserted\nline2",
+			});
+			expect(output).toContain("  line1");
+			expect(output).toContain("+ inserted");
+			expect(output).toContain("  line2");
+			// No removal lines
+			expect(output).not.toContain("- ");
+		});
+
+		test("handles pure deletion", () => {
+			const output = editFileTool.formatCall({
+				path: "file.ts",
+				old_string: "line1\nremoved\nline2",
+				new_string: "line1\nline2",
+			});
+			expect(output).toContain("  line1");
+			expect(output).toContain("- removed");
+			expect(output).toContain("  line2");
+			expect(output).not.toContain("+ ");
+		});
+
+		test("handles completely different content", () => {
+			const output = editFileTool.formatCall({
+				path: "file.ts",
+				old_string: "old1\nold2",
+				new_string: "new1\nnew2",
+			});
+			expect(output).toContain("- old1");
+			expect(output).toContain("- old2");
+			expect(output).toContain("+ new1");
+			expect(output).toContain("+ new2");
+		});
+
+		test("includes file path and diff code fence", () => {
+			const output = editFileTool.formatCall({
+				path: "src/app.ts",
+				old_string: "old",
+				new_string: "new",
+			});
+			expect(output).toContain("▸ Editing src/app.ts");
+			expect(output).toContain("```diff");
+			expect(output).toContain("```");
+		});
+
+		test("handles single-line change", () => {
+			const output = editFileTool.formatCall({
+				path: "file.ts",
+				old_string: "hello",
+				new_string: "world",
+			});
+			expect(output).toContain("- hello");
+			expect(output).toContain("+ world");
+		});
+
+		test("handles empty new_string (full deletion)", () => {
+			const output = editFileTool.formatCall({
+				path: "file.ts",
+				old_string: "delete me",
+				new_string: "",
+			});
+			expect(output).toContain("- delete me");
+		});
+	});
 });

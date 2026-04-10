@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { diffLines } from "diff";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
@@ -61,14 +62,15 @@ export const editFileTool: Tool = {
 		const filePath = typeof args.path === "string" ? args.path : "?";
 		const oldString = typeof args.old_string === "string" ? args.old_string : "";
 		const newString = typeof args.new_string === "string" ? args.new_string : "";
-		const diffLines: string[] = [];
-		for (const line of oldString.split("\n")) {
-			diffLines.push(`- ${line}`);
+		const diffLines_: string[] = [];
+		for (const change of diffLines(oldString, newString)) {
+			const lines = change.value.replace(/\n$/, "").split("\n");
+			const prefix = change.added ? "+" : change.removed ? "-" : " ";
+			for (const line of lines) {
+				diffLines_.push(`${prefix} ${line}`);
+			}
 		}
-		for (const line of newString.split("\n")) {
-			diffLines.push(`+ ${line}`);
-		}
-		return `▸ Editing ${escapeMarkdown(filePath)}\n\n\`\`\`diff\n${diffLines.join("\n")}\n\`\`\``;
+		return `▸ Editing ${escapeMarkdown(filePath)}\n\n\`\`\`diff\n${diffLines_.join("\n")}\n\`\`\``;
 	},
 
 	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
