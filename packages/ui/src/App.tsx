@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChatMessageList } from "./ChatMessageList";
+import { ContextMessageList } from "./ContextMessageList";
 import {
 	handleGenericCommand,
 	handleNewCommand,
@@ -18,15 +20,15 @@ import {
 	READ_ONLY_DOT_COMMANDS,
 	STREAMING_DOT_COMMANDS,
 } from "./commandParser";
+import { DotCommandPanel } from "./DotCommandPanel";
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
-import { formatMsgSummary, formatToolHeader, groupParts, truncateChars, truncateContent } from "./formatUtils";
 import { useAutoScroll } from "./hooks/useAutoScroll";
 import { useGlobalKeyboard } from "./hooks/useGlobalKeyboard";
 import { useInputHistory } from "./hooks/useInputHistory";
 import { useSessionRouting } from "./hooks/useSessionRouting";
 import { Markdown } from "./Markdown";
 import type { StagedSkill } from "./protocol";
-import { ToolPanel } from "./ToolPanel";
+import { SlashCommandPanel } from "./SlashCommandPanel";
 import { useWebSocket } from "./useWebSocket";
 
 export function App() {
@@ -396,409 +398,8 @@ export function App() {
 		}
 	}
 
-	function renderDotPanel() {
-		const parsed = parseDotInput(input, activeDotCommands);
-		if (!parsed) return null;
-
-		let content: React.ReactNode;
-
-		if (parsed.mode === "select") {
-			content =
-				parsed.matches.length > 0 ? (
-					parsed.matches.map((cmd) => (
-						<div key={cmd.name} className="slash-skill-row">
-							{cmd.name} <span className="slash-skill-desc">— {cmd.description}</span>
-						</div>
-					))
-				) : (
-					<div>No matching commands</div>
-				);
-		} else if (parsed.command === "model") {
-			if (!modelList) {
-				content = "Loading models...";
-			} else {
-				const filtered = parsed.args ? modelList.filter((m) => String(m.index).startsWith(parsed.args.trim())) : modelList;
-				content =
-					filtered.length > 0 ? (
-						filtered.map((m) => (
-							<div key={m.id}>
-								{m.index}: {m.id} ({m.cost})
-							</div>
-						))
-					) : (
-						<div>No matching models</div>
-					);
-			}
-		} else if (parsed.command === "new") {
-			const newTitle = parsed.args.trim();
-			content = newTitle ? `Start a new chat session: ${newTitle}` : "Start a new chat session (optional title)";
-		} else if (parsed.command === "title") {
-			const titleText = parsed.args.trim();
-			content = titleText ? `Set session title: ${titleText}` : "Enter session title";
-		} else if (parsed.command === "session") {
-			if (!sessionList) {
-				content = "Loading sessions...";
-			} else if (sessionList.length === 0) {
-				content = "No sessions";
-			} else {
-				const SESSION_DISPLAY_LIMIT = 32;
-				const argText = (parsed.args ?? "").trim();
-				const argParts = argText.split(/\s+/);
-				const indexPart = argParts[0] ?? "";
-				const subcommand = argParts[1];
-				const filtered = indexPart ? sessionList.filter((s) => String(s.index).includes(indexPart)) : sessionList;
-
-				// If user typed "N delete", show a delete preview instead of the session list
-				if (subcommand === "delete") {
-					const idx = Number.parseInt(indexPart, 10);
-					const target = !Number.isNaN(idx) ? sessionList.find((s) => s.index === idx) : undefined;
-					if (target) {
-						const label = target.title ? `"${target.title}"` : `#${target.index}`;
-						content = `Delete session ${label}`;
-					} else {
-						content = `Invalid session index: ${indexPart}`;
-					}
-				} else {
-					const display = filtered.slice(0, SESSION_DISPLAY_LIMIT);
-					const maxIndex = Math.max(...display.map((s) => s.index));
-					const padWidth = String(maxIndex).length;
-					content =
-						display.length > 0 ? (
-							display.map((s) => {
-								const isCurrentSession = s.id === getSessionId();
-								const isOwnedBySelf = isCurrentSession && !sessionLocked;
-								const isOwnedByOther = s.owned && !isOwnedBySelf;
-								const localTime = new Date(s.updatedAt)
-									.toLocaleString("sv-SE", {
-										year: "numeric",
-										month: "2-digit",
-										day: "2-digit",
-										hour: "2-digit",
-										minute: "2-digit",
-										second: "2-digit",
-										hour12: false,
-									})
-									.replace(",", "");
-								const paddedIndex = String(s.index).padStart(padWidth, " ");
-								return (
-									<div key={s.id}>
-										{paddedIndex}: {localTime} {s.title ?? ""}
-										{isOwnedByOther ? " (active in another tab)" : ""}
-										{isOwnedBySelf ? " (this session)" : ""}
-									</div>
-								);
-							})
-						) : (
-							<div>No matching sessions</div>
-						);
-				}
-			}
-		} else if (parsed.command === "subagent") {
-			if (!subagentList) {
-				content = "Loading subagents...";
-			} else if (subagentList.length === 0) {
-				content = "No subagent sessions";
-			} else {
-				const SUBAGENT_DISPLAY_LIMIT = 32;
-				const indexPart = (parsed.args ?? "").trim();
-				const filtered = indexPart ? subagentList.filter((s) => String(s.index).includes(indexPart)) : subagentList;
-				const display = filtered.slice(0, SUBAGENT_DISPLAY_LIMIT);
-				const maxIndex = display.length > 0 ? Math.max(...display.map((s) => s.index)) : 0;
-				const padWidth = String(maxIndex).length;
-				content =
-					display.length > 0 ? (
-						display.map((s) => {
-							const paddedIndex = String(s.index).padStart(padWidth, " ");
-							return (
-								<div key={s.sessionId}>
-									{paddedIndex}: {s.title}
-								</div>
-							);
-						})
-					) : (
-						<div>No matching subagents</div>
-					);
-			}
-		} else if (parsed.command === "view") {
-			const views = [
-				{ index: 1, name: "Chat", desc: "Grouped panels, markdown" },
-				{ index: 2, name: "Context", desc: "Raw DB messages, plain text" },
-				{ index: 3, name: "Compaction", desc: "Compacted view (what LLM sees)" },
-			];
-			content = views.map((v) => (
-				<div key={v.index}>
-					{v.index}: {v.name} — {v.desc}
-				</div>
-			));
-		} else {
-			return null;
-		}
-
-		return <div className="panel panel--dot">{content}</div>;
-	}
-
-	function renderSlashPanel() {
-		const parsed = parseSlashInput(input, skillList, isReadOnly);
-		if (!parsed) return null;
-
-		const content =
-			parsed.matches.length > 0 ? (
-				parsed.matches.map((s) => (
-					<div key={s.name} className="slash-skill-row">
-						{s.name} <span className="slash-skill-desc">— {s.description}</span>
-					</div>
-				))
-			) : (
-				<div>No matching skills</div>
-			);
-
-		return <div className="panel panel--dot">{content}</div>;
-	}
-
-	function renderPanels() {
-		const elements: React.ReactNode[] = [];
-		let key = 0;
-
-		for (let m = 0; m < messages.length; m++) {
-			const msg = messages[m];
-			if (!msg) continue;
-			const isLastMsg = m === messages.length - 1;
-			if (msg.role === "user") {
-				const isSubagentView = viewingSubagentId !== null || parentId !== null;
-				elements.push(
-					<div key={key++} className="panel panel--user">
-						{isSubagentView ? <Markdown>{msg.text}</Markdown> : msg.text}
-						<div className="panel-status">{msg.timestamp}</div>
-					</div>,
-				);
-				continue;
-			}
-
-			const panels = groupParts(msg.parts);
-			const msgSummary = formatMsgSummary(msg);
-			for (let i = 0; i < panels.length; i++) {
-				const panel = panels[i];
-				if (!panel) continue;
-				const isLast = i === panels.length - 1;
-
-				if (panel.type === "text") {
-					elements.push(
-						<div key={key++} className="panel panel--assistant">
-							<Markdown>{panel.content}</Markdown>
-							{isLast && msg.timestamp && (
-								<div className="panel-status">
-									{msg.timestamp}
-									{msgSummary}
-								</div>
-							)}
-						</div>,
-					);
-				} else {
-					const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
-					const subagentSessionId = linkedSubagent?.sessionId ?? panel.subagentSessionId;
-					const onNavigate = subagentSessionId
-						? () => {
-								if (linkedSubagent?.status === "running") {
-									peekSubagentWithScroll(subagentSessionId);
-								} else {
-									peekSubagentFromDbWithScroll(subagentSessionId);
-								}
-							}
-						: undefined;
-					const shouldObserve = isStreaming && isLastMsg && !panel.completed;
-
-					elements.push(
-						<ToolPanel key={key++} content={panel.content} onNavigate={onNavigate} observe={shouldObserve}>
-							<Markdown>{panel.content}</Markdown>
-							{panel.summary && <div className="panel-status">{panel.summary}</div>}
-							{!panel.summary && isLast && msg.timestamp && (
-								<div className="panel-status">
-									{msg.timestamp}
-									{msgSummary}
-								</div>
-							)}
-						</ToolPanel>,
-					);
-				}
-			}
-		}
-
-		return elements;
-	}
-
-	function renderRawMessagePanels(
-		msgs: ContextMessage[],
-		limit: number,
-		startKey: number,
-	): { elements: React.ReactNode[]; nextKey: number } {
-		const elements: React.ReactNode[] = [];
-		let key = startKey;
-
-		// Build a map from tool_call_id -> tool function name
-		const toolCallNames = new Map<string, string>();
-		for (const msg of msgs) {
-			if (msg.role === "assistant" && msg.metadata?.tool_calls) {
-				const calls = msg.metadata.tool_calls as Array<{ id: string; function: { name: string } }>;
-				for (const tc of calls) {
-					toolCallNames.set(tc.id, tc.function.name);
-				}
-			}
-		}
-
-		for (const msg of msgs) {
-			if (msg.role === "system") {
-				elements.push(
-					<div key={key++} className="panel panel--context">
-						<div className="context-header">system</div>
-						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
-					</div>,
-				);
-			} else if (msg.role === "user") {
-				elements.push(
-					<div key={key++} className="panel panel--context">
-						<div className="context-header">user</div>
-						<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
-					</div>,
-				);
-			} else if (msg.role === "assistant") {
-				const toolCalls = msg.metadata?.tool_calls as
-					| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
-					| undefined;
-
-				if (msg.content) {
-					elements.push(
-						<div key={key++} className="panel panel--context">
-							<div className="context-header">assistant</div>
-							<pre className="context-body">{truncateContent(msg.content, limit)}</pre>
-						</div>,
-					);
-				}
-
-				if (toolCalls && toolCalls.length > 0) {
-					for (const tc of toolCalls) {
-						elements.push(
-							<div key={key++} className="panel panel--context">
-								<div className="context-header">{`assistant | ${tc.id}`}</div>
-								<pre className="context-body">{truncateChars(`${tc.function.name}(${tc.function.arguments})`, 512)}</pre>
-							</div>,
-						);
-					}
-				}
-			} else if (msg.role === "tool") {
-				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
-				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
-				const rawContent = (msg.content || "(no output)").trim();
-				elements.push(
-					<div key={key++} className="panel panel--context">
-						<div className="context-header">{`tool | ${toolCallId ?? ""} | ${toolName}`}</div>
-						<pre className="context-body">{truncateContent(rawContent, limit)}</pre>
-					</div>,
-				);
-			}
-		}
-
-		return { elements, nextKey: key };
-	}
-
-	function renderContextPanels() {
-		if (!contextMessages) {
-			return [
-				<div key="empty" className="panel panel--context">
-					No session context available.
-				</div>,
-			];
-		}
-		const { elements } = renderRawMessagePanels(contextMessages, view.lineLimit, 0);
-		return elements;
-	}
-
-	function renderCompactionMessagePanels(
-		msgs: ContextMessage[],
-		details: Record<string, CompactionDetail> | null,
-		startKey: number,
-	): { elements: React.ReactNode[]; nextKey: number } {
-		const elements: React.ReactNode[] = [];
-		let key = startKey;
-
-		// Build a map from tool_call_id -> tool function name
-		const toolCallNames = new Map<string, string>();
-		for (const msg of msgs) {
-			if (msg.role === "assistant" && msg.metadata?.tool_calls) {
-				const calls = msg.metadata.tool_calls as Array<{ id: string; function: { name: string } }>;
-				for (const tc of calls) {
-					toolCallNames.set(tc.id, tc.function.name);
-				}
-			}
-		}
-
-		for (const msg of msgs) {
-			if (msg.role === "system") {
-				elements.push(
-					<div key={key++} className="panel panel--context">
-						<div className="context-header">system | excluded from compaction</div>
-						<pre className="context-body">{msg.content?.trim()}</pre>
-					</div>,
-				);
-			} else if (msg.role === "user") {
-				elements.push(
-					<div key={key++} className="panel panel--context">
-						<div className="context-header">user | excluded from compaction</div>
-						<pre className="context-body">{msg.content?.trim()}</pre>
-					</div>,
-				);
-			} else if (msg.role === "assistant") {
-				const toolCalls = msg.metadata?.tool_calls as
-					| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
-					| undefined;
-
-				if (msg.content) {
-					elements.push(
-						<div key={key++} className="panel panel--context">
-							<div className="context-header">assistant | excluded from compaction</div>
-							<pre className="context-body">{msg.content.trim()}</pre>
-						</div>,
-					);
-				}
-
-				if (toolCalls && toolCalls.length > 0) {
-					for (const tc of toolCalls) {
-						elements.push(
-							<div key={key++} className="panel panel--context">
-								<div className="context-header">{`assistant | ${tc.id} | excluded from compaction`}</div>
-								<pre className="context-body">{`${tc.function.name}(${tc.function.arguments})`}</pre>
-							</div>,
-						);
-					}
-				}
-			} else if (msg.role === "tool") {
-				const toolCallId = msg.metadata?.tool_call_id as string | undefined;
-				const toolName = toolCallId ? (toolCallNames.get(toolCallId) ?? "unknown") : "unknown";
-				const detail = toolCallId && details ? details[toolCallId] : undefined;
-				const header = formatToolHeader(toolCallId ?? "", toolName, detail);
-				const rawContent = (msg.content || "(no output)").trim();
-				elements.push(
-					<div key={key++} className="panel panel--context">
-						<div className="context-header">{header}</div>
-						<pre className="context-body">{rawContent}</pre>
-					</div>,
-				);
-			}
-		}
-
-		return { elements, nextKey: key };
-	}
-
-	function renderCompactionPanels() {
-		if (!compactionData) {
-			return [
-				<div key="empty" className="panel panel--context">
-					No compaction data available.
-				</div>,
-			];
-		}
-		const { elements } = renderCompactionMessagePanels(compactionData.messages, compactionData.details, 0);
-		return elements;
-	}
+	const parsedDotInput = parseDotInput(input, activeDotCommands);
+	const parsedSlashInput = parseSlashInput(input, skillList, isReadOnly);
 
 	const agentActive = isStreaming || subagents.some((s) => s.status === "running");
 	const peekingSubagentTitle = viewingSubagentId
@@ -848,7 +449,24 @@ export function App() {
 					</div>
 				)}
 				{!sessionLocked &&
-					(view.mode === "chat" ? renderPanels() : view.mode === "context" ? renderContextPanels() : renderCompactionPanels())}
+					(view.mode === "chat" ? (
+						<ChatMessageList
+							messages={messages}
+							subagents={subagents}
+							isStreaming={isStreaming}
+							viewingSubagentId={viewingSubagentId}
+							parentId={parentId}
+							peekSubagentWithScroll={peekSubagentWithScroll}
+							peekSubagentFromDbWithScroll={peekSubagentFromDbWithScroll}
+						/>
+					) : (
+						<ContextMessageList
+							contextMessages={contextMessages}
+							compactionData={compactionData}
+							viewMode={view.mode}
+							lineLimit={view.lineLimit}
+						/>
+					))}
 			</div>
 
 			{volatileMessage && (
@@ -865,8 +483,15 @@ export function App() {
 					))}
 				</div>
 			)}
-			{renderDotPanel()}
-			{renderSlashPanel()}
+			<DotCommandPanel
+				parsed={parsedDotInput}
+				modelList={modelList}
+				sessionList={sessionList}
+				subagentList={subagentList}
+				getSessionId={getSessionId}
+				sessionLocked={sessionLocked}
+			/>
+			<SlashCommandPanel parsed={parsedSlashInput} />
 
 			<div className="panel panel--prompt">
 				<textarea
