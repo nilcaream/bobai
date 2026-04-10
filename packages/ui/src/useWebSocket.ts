@@ -323,8 +323,10 @@ export function useWebSocket() {
 	const peekSubagent = useCallback(
 		(childSessionId: string) => {
 			if (viewingSubagentIdRef.current === childSessionId) return;
-			parentMessagesRef.current = messagesRef.current;
-			parentStatusRef.current = status;
+			if (!viewingSubagentIdRef.current) {
+				parentMessagesRef.current = messagesRef.current;
+				parentStatusRef.current = status;
+			}
 			setViewingSubagentId(childSessionId);
 			setViewingSubagentTitle(null); // live peeks fall back to subagents array lookup
 			const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
@@ -344,8 +346,10 @@ export function useWebSocket() {
 					session: { id: string; title: string | null };
 					messages: StoredMessage[];
 				};
-				parentMessagesRef.current = messagesRef.current;
-				parentStatusRef.current = status;
+				if (!viewingSubagentIdRef.current) {
+					parentMessagesRef.current = messagesRef.current;
+					parentStatusRef.current = status;
+				}
 				setViewingSubagentId(childSessionId);
 				setViewingSubagentTitle(data.session.title);
 				setMessages(reconstructMessages(data.messages));

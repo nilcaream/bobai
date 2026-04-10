@@ -208,6 +208,8 @@ The LLM has access to these tools during a conversation:
 
 Favicon based on [Circuit icons created by Prosymbols - Flaticon](https://www.flaticon.com/free-icons/circuit).
 
+Welcome screen ASCII art created with [Text to ASCII Art Generator](https://patorjk.com/software/taag/#p=display&f=Bloody&t=Bob+AI&x=none&v=4&h=4&w=80&we=false).
+
 ## License
 
 Apache 2.0
