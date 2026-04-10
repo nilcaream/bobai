@@ -1,284 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ViewMode } from "./commandParser";
+import {
+	FULL_DOT_COMMANDS,
+	LOCKED_DOT_COMMANDS,
+	parseDotInput,
+	parseSlashInput,
+	READ_ONLY_DOT_COMMANDS,
+	STREAMING_DOT_COMMANDS,
+	VIEW_MODES,
+} from "./commandParser";
+import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
+import { formatMsgSummary, formatToolHeader, groupParts, truncateChars, truncateContent } from "./formatUtils";
+import { useAutoScroll } from "./hooks/useAutoScroll";
+import { useGlobalKeyboard } from "./hooks/useGlobalKeyboard";
+import { useInputHistory } from "./hooks/useInputHistory";
+import { useSessionRouting } from "./hooks/useSessionRouting";
 import { Markdown } from "./Markdown";
-import { parseSessionUrl } from "./urlUtils";
-import type { MessagePart, StagedSkill } from "./useWebSocket";
+import type { StagedSkill } from "./protocol";
+import { ToolPanel } from "./ToolPanel";
 import { useWebSocket } from "./useWebSocket";
-
-type Panel =
-	| { type: "text"; content: string }
-	| {
-			type: "tool";
-			id: string;
-			content: string;
-			completed: boolean;
-			mergeable: boolean;
-			summary?: string;
-			subagentSessionId?: string;
-	  };
-
-interface ContextMessage {
-	role: "system" | "user" | "assistant" | "tool";
-	content: string;
-	metadata: Record<string, unknown> | null;
-}
-
-interface CompactionStats {
-	compacted: number;
-	assistantArgsCompacted: number;
-	contextPressure: number;
-	totalToolMessages: number;
-}
-
-interface CompactionDetail {
-	age: number;
-	compactionFactor: number;
-	position: number;
-	normalizedPosition: number;
-	outputThreshold?: number;
-	argsThreshold?: number;
-	wasCompacted: boolean;
-	belowMinSavings?: boolean;
-	savedChars?: number;
-	savedArgsChars?: number;
-}
-
-function formatToolHeader(toolCallId: string, toolName: string, detail: CompactionDetail | undefined): string {
-	const parts = ["tool", toolCallId, toolName];
-
-	if (!detail) {
-		parts.push("no detail available");
-		return parts.join(" | ");
-	}
-
-	// Position info: both raw and normalized (after MAX_AGE_DISTANCE capping)
-	parts.push(`pos=${detail.position.toFixed(3)} norm=${detail.normalizedPosition.toFixed(3)}`);
-	parts.push(`age=${detail.age.toFixed(3)}`);
-	parts.push(`factor=${detail.compactionFactor.toFixed(3)}`);
-
-	// Show thresholds
-	const thresholds: string[] = [];
-	if (detail.outputThreshold !== undefined) thresholds.push(`out=${detail.outputThreshold}`);
-	if (detail.argsThreshold !== undefined) thresholds.push(`args=${detail.argsThreshold}`);
-	if (thresholds.length > 0) parts.push(`threshold(${thresholds.join(", ")})`);
-
-	// Compaction outcome
-	if (detail.wasCompacted) {
-		if (detail.savedChars !== undefined) {
-			const argsSavings = detail.savedArgsChars !== undefined ? ` + ${detail.savedArgsChars} args` : "";
-			parts.push(`compacted (saved ${detail.savedChars} chars${argsSavings})`);
-		} else if (detail.savedArgsChars !== undefined) {
-			parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
-		} else {
-			parts.push("compacted");
-		}
-	} else if (detail.savedArgsChars !== undefined) {
-		parts.push(`args compacted (saved ${detail.savedArgsChars} chars)`);
-	} else if (detail.belowMinSavings) {
-		parts.push("savings below minimum");
-	} else if (detail.compactionFactor <= 0) {
-		parts.push("no pressure");
-	} else {
-		parts.push("kept");
-	}
-
-	return parts.join(" | ");
-}
-
-function groupParts(parts: MessagePart[]): Panel[] {
-	// Pass 1: Create panels for each part
-	const raw: Panel[] = [];
-	const toolPanelMap = new Map<string, Panel & { type: "tool" }>();
-
-	for (const part of parts) {
-		if (part.type === "text") {
-			raw.push({ type: "text", content: part.content });
-		} else if (part.type === "tool_call") {
-			const panel: Panel & { type: "tool" } = {
-				type: "tool",
-				id: part.id,
-				content: part.content,
-				completed: false,
-				mergeable: false,
-			};
-			raw.push(panel);
-			toolPanelMap.set(part.id, panel);
-		} else if (part.type === "tool_result") {
-			const panel = toolPanelMap.get(part.id);
-			if (panel) {
-				if (part.content !== null) {
-					panel.content = part.content;
-				}
-				panel.completed = true;
-				panel.mergeable = part.mergeable;
-				if (part.summary) {
-					panel.summary = part.summary;
-				}
-				if (part.subagentSessionId) {
-					panel.subagentSessionId = part.subagentSessionId;
-				}
-			}
-		}
-	}
-
-	// Pass 2: Merge adjacent completed+mergeable tool panels
-	const merged: Panel[] = [];
-	for (const panel of raw) {
-		const prev = merged.at(-1);
-		if (
-			panel.type === "tool" &&
-			panel.completed &&
-			panel.mergeable &&
-			prev?.type === "tool" &&
-			prev.completed &&
-			prev.mergeable
-		) {
-			prev.content = `${prev.content}  \n${panel.content}`;
-		} else {
-			merged.push(panel);
-		}
-	}
-
-	return merged;
-}
-
-function formatMsgSummary(msg: { summary?: string; model?: string }): string {
-	return msg.summary ?? (msg.model ? ` | ${msg.model}` : "");
-}
-
-function truncateContent(text: string, lineLimit: number): string {
-	const trimmed = text.trim();
-	if (lineLimit <= 0) return trimmed;
-	const lines = trimmed.split("\n");
-	if (lines.length <= lineLimit) return trimmed;
-	const headCount = 20;
-	const tailCount = 20;
-	const omitted = lines.length - headCount - tailCount;
-	const head = lines.slice(0, headCount).join("\n");
-	const tail = lines.slice(-tailCount).join("\n");
-	return `${head}\n... (${omitted} more lines)\n${tail}`;
-}
-
-function truncateChars(text: string, charLimit: number): string {
-	if (charLimit <= 0 || text.length <= charLimit) return text;
-	return `${text.slice(0, charLimit)}... (${text.length - charLimit} more chars)`;
-}
-
-const VIEW_MODES = ["chat", "context", "compaction"] as const;
-type ViewMode = (typeof VIEW_MODES)[number];
-
-type DotCommand = { name: string; description: string };
-
-const ALL_DOT_COMMANDS: Record<string, DotCommand> = {
-	model: { name: "model", description: "Switch the AI model" },
-	new: { name: "new", description: "Start a new chat session" },
-	session: { name: "session", description: "Switch to another session" },
-	stop: { name: "stop", description: "Stop the current response" },
-	subagent: { name: "subagent", description: "View subagent sessions" },
-	title: { name: "title", description: "Rename the current session" },
-	view: { name: "view", description: "Switch view mode" },
-};
-
-const pick = (...keys: string[]): DotCommand[] =>
-	keys.flatMap((k) => {
-		const cmd = ALL_DOT_COMMANDS[k];
-		return cmd ? [cmd] : [];
-	});
-
-const FULL_DOT_COMMANDS = pick("model", "new", "session", "subagent", "title", "view");
-const READ_ONLY_DOT_COMMANDS = pick("new", "session", "subagent", "title", "view");
-const LOCKED_DOT_COMMANDS = pick("new", "session");
-const STREAMING_DOT_COMMANDS = pick("stop", "subagent");
-
-/**
- * Panels taller than COLLAPSE_LINES are auto-collapsed (CSS max-height clips
- * the .md child). With monospace font and line-height: 1, 1 em = 1 line.
- */
-const COLLAPSE_LINES = 6;
-
-/**
- * Wraps a tool-call panel with collapse/expand behaviour.
- *
- * Collapse detection: after mount, compare the rendered `.md` child's
- * scrollHeight against COLLAPSE_LINES × font-size. If content overflows,
- * the panel auto-collapses (CSS `max-height: 6em` clips the overflow).
- * Double-click toggles between collapsed and expanded states.
- *
- * The `content` prop is the raw markdown string — it is NOT rendered here
- * (children handles that) but is included as an effect dependency so the
- * overflow check re-runs when React reuses this component instance for
- * different content. This happens when positional keys (key={n}) collide
- * across view transitions (e.g. parent → subagent).
- * See FINDINGS.md "React key reuse across view transitions".
- */
-function ToolPanel({
-	children,
-	content,
-	onNavigate,
-	observe,
-}: {
-	children: React.ReactNode;
-	/** Raw markdown — used as a signal dep for re-measurement, not rendered. */
-	content: string;
-	onNavigate?: () => void;
-	/** True while the tool is actively streaming (skip measurement). */
-	observe?: boolean;
-}) {
-	const ref = useRef<HTMLDivElement>(null);
-	const [collapsed, setCollapsed] = useState<boolean | null>(null);
-	const collapsible = useRef(false);
-	const userToggled = useRef(false);
-	const prevContent = useRef(content);
-
-	const checkOverflow = useCallback(() => {
-		if (!ref.current) return;
-		const md = ref.current.querySelector(".md");
-		if (!md) return;
-		const lineHeight = parseFloat(getComputedStyle(md).fontSize);
-		// Small tolerance so <hr> borders (1px each) don't push a
-		// panel that fits in COLLAPSE_LINES over the threshold.
-		const maxHeight = lineHeight * COLLAPSE_LINES + 4;
-		const overflows = md.scrollHeight > maxHeight;
-		collapsible.current = overflows;
-		setCollapsed(overflows);
-	}, []);
-
-	// Re-measure when content changes (e.g. key reuse across parent/subagent
-	// views — see ToolPanel JSDoc). Respect userToggled for same-content
-	// re-renders so a manual expand/collapse is preserved during streaming.
-	useEffect(() => {
-		if (observe) return;
-		const contentChanged = prevContent.current !== content;
-		prevContent.current = content;
-		// Content swap (key reuse across views) — reset user toggle
-		// so the new content gets a fresh measurement.
-		if (contentChanged) userToggled.current = false;
-		if (userToggled.current) return;
-		checkOverflow();
-	}, [observe, content, checkOverflow]);
-
-	const handleDoubleClick = () => {
-		if (onNavigate) {
-			onNavigate();
-			window.getSelection()?.removeAllRanges();
-			return;
-		}
-		if (collapsible.current) {
-			userToggled.current = true;
-			setCollapsed((prev) => !prev);
-			window.getSelection()?.removeAllRanges();
-		}
-	};
-
-	const isExpanded = collapsible.current && !collapsed;
-	const cls = `panel panel--tool${collapsed ? " panel--collapsed" : ""}${isExpanded ? " panel--expanded" : ""}${onNavigate ? " panel--navigable" : ""}`;
-
-	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: double-click fold is a convenience shortcut, not primary interaction
-		<div ref={ref} className={cls} onDoubleClick={handleDoubleClick}>
-			{children}
-		</div>
-	);
-}
 
 export function App() {
 	const {
@@ -312,13 +52,10 @@ export function App() {
 		sendCancel,
 	} = useWebSocket();
 	const [input, setInput] = useState("");
-	const [historyIndex, setHistoryIndex] = useState(-1);
 	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
 	const defaultStatus = useRef("");
-	const pendingNewTitle = useRef<string | null>(null);
-	const historyEntries = useRef<string[]>([]);
 	const [view, setView] = useState<{ mode: ViewMode; lineLimit: number }>({
 		mode: "chat",
 		lineLimit: 48,
@@ -329,142 +66,27 @@ export function App() {
 		stats: CompactionStats | null;
 		details: Record<string, CompactionDetail> | null;
 	} | null>(null);
-	const savedDraft = useRef("");
-	const fetchGen = useRef(0);
-	const messagesRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
-	const autoScroll = useRef(true);
-	const savedScrollTop = useRef<number | null>(null);
 
-	// Wrap peekSubagent to save scroll position before switching to child view
-	const peekSubagentWithScroll = useCallback(
-		(childSessionId: string) => {
-			savedScrollTop.current = messagesRef.current?.scrollTop ?? null;
-			setView((prev) => ({ ...prev, mode: "chat" }));
-			peekSubagent(childSessionId);
-		},
-		[peekSubagent],
+	const { messagesRef, autoScrollRef, peekSubagentWithScroll, peekSubagentFromDbWithScroll, exitSubagentPeekWithScroll } =
+		useAutoScroll(messages, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
+
+	const { pendingNewTitle } = useSessionRouting(
+		loadSession,
+		newChat,
+		setWelcomeMarkdown,
+		setVolatileMessage,
+		isStreaming,
+		connected,
+		getSessionId,
 	);
-
-	// Wrap peekSubagentFromDb to save scroll position before switching to child view
-	const peekSubagentFromDbWithScroll = useCallback(
-		(childSessionId: string) => {
-			savedScrollTop.current = messagesRef.current?.scrollTop ?? null;
-			setView((prev) => ({ ...prev, mode: "chat" }));
-			peekSubagentFromDb(childSessionId);
-		},
-		[peekSubagentFromDb],
-	);
-
-	// Wrap exitSubagentPeek to restore scroll position after returning to parent view
-	const exitSubagentPeekWithScroll = useCallback(() => {
-		const scrollPos = savedScrollTop.current;
-		setView((prev) => ({ ...prev, mode: "chat" }));
-		exitSubagentPeek();
-		if (scrollPos !== null) {
-			autoScroll.current = false;
-			requestAnimationFrame(() => {
-				const el = messagesRef.current;
-				if (el) el.scrollTop = scrollPos;
-			});
-			savedScrollTop.current = null;
-		}
-	}, [exitSubagentPeek]);
-
-	// Unified scroll listener: determine autoscroll based on position.
-	// Fires on every scroll event (mouse wheel, PageUp/Down, programmatic).
-	useEffect(() => {
-		const el = messagesRef.current;
-		if (!el) return;
-		const THRESHOLD = 2;
-		const onScroll = () => {
-			const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - THRESHOLD;
-			autoScroll.current = atBottom;
-		};
-		el.addEventListener("scroll", onScroll);
-		return () => el.removeEventListener("scroll", onScroll);
-	}, []);
 
 	// Update browser tab title when project info changes
 	useEffect(() => {
 		document.title = projectInfo ? `Bob AI | ${projectInfo.dir}` : "Bob AI";
 	}, [projectInfo]);
 
-	// PAGE UP/DOWN scrolls the messages panel globally (works even during streaming)
-	useEffect(() => {
-		const el = messagesRef.current;
-		if (!el) return;
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key !== "PageUp" && e.key !== "PageDown") return;
-			e.preventDefault();
-			const style = getComputedStyle(el);
-			const lineHeight = parseFloat(style.fontSize) * parseFloat(style.lineHeight);
-			const distance = el.clientHeight - lineHeight * 2;
-			if (e.key === "PageUp") {
-				el.scrollTop -= distance;
-			} else {
-				el.scrollTop += distance;
-			}
-			// autoScroll state is handled by the scroll listener above
-		};
-		document.addEventListener("keydown", onKeyDown);
-		return () => document.removeEventListener("keydown", onKeyDown);
-	}, []);
-
-	// Scroll to bottom on new content when autoscroll is active
-	// biome-ignore lint/correctness/useExhaustiveDependencies: messages triggers scroll even though ref is used
-	useEffect(() => {
-		if (!autoScroll.current) return;
-		const el = messagesRef.current;
-		if (!el) return;
-		el.scrollTop = el.scrollHeight;
-	}, [messages]);
-
-	useEffect(() => {
-		if (!isStreaming && connected) {
-			const ta = textareaRef.current;
-			if (ta) {
-				ta.focus();
-				ta.selectionStart = ta.selectionEnd = ta.value.length;
-			}
-		}
-	}, [isStreaming, connected]);
-
-	// Global keydown: redirect printable keystrokes to the prompt textarea
-	// when it's not already focused. Simpler than mousedown/visibility listeners
-	// and doesn't interfere with mouse text selection.
-	useEffect(() => {
-		const onKeyDown = (e: KeyboardEvent) => {
-			const ta = textareaRef.current;
-			if (!ta || document.activeElement === ta) return;
-			// Skip modifier combos (Ctrl+C, etc.) and non-printable keys
-			if (e.ctrlKey || e.altKey || e.metaKey) return;
-			if (e.key.length > 1 && e.key !== "Backspace" && e.key !== "Delete") return;
-			ta.focus();
-			ta.selectionStart = ta.selectionEnd = ta.value.length;
-			// Don't preventDefault — let the keystroke flow to the now-focused textarea
-		};
-		document.addEventListener("keydown", onKeyDown);
-		return () => document.removeEventListener("keydown", onKeyDown);
-	}, []);
-
-	// Persist pending title from `.new <title>` after first prompt creates the session
-	useEffect(() => {
-		if (isStreaming || !connected) return;
-		const pendingTitle = pendingNewTitle.current;
-		if (!pendingTitle) return;
-		const sid = getSessionId();
-		if (!sid) return;
-		// Clear only after confirming we have a sessionId — otherwise the effect
-		// would fire immediately after `.new` (isStreaming=false, sid=null) and
-		// discard the title before the first prompt creates the session.
-		pendingNewTitle.current = null;
-		fetch("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "title", args: pendingTitle, sessionId: sid }),
-		}).catch(() => {});
-	}, [isStreaming, connected, getSessionId]);
+	useGlobalKeyboard(messagesRef, textareaRef, viewingSubagentId, exitSubagentPeekWithScroll, isStreaming, connected);
 
 	const adjustHeight = useCallback(() => {
 		const ta = textareaRef.current;
@@ -472,6 +94,8 @@ export function App() {
 		ta.style.height = "auto";
 		ta.style.height = `${ta.scrollHeight}px`;
 	}, []);
+
+	const { historyIndex, resetHistory, handleHistoryKeyDown } = useInputHistory(input, setInput, adjustHeight);
 
 	const fetchContext = useCallback(() => {
 		const sid = viewingSubagentId ?? getSessionId();
@@ -505,12 +129,6 @@ export function App() {
 			.catch(() => setCompactionData(null));
 	}, [getSessionId, viewingSubagentId]);
 
-	// Adjust textarea height when navigating history
-	// biome-ignore lint/correctness/useExhaustiveDependencies: adjustHeight is stable via useCallback
-	useEffect(() => {
-		requestAnimationFrame(adjustHeight);
-	}, [historyIndex]);
-
 	const isReadOnly =
 		!!parentId || sessionLocked || viewingSubagentId !== null || view.mode === "context" || view.mode === "compaction";
 	const activeDotCommands = isStreaming
@@ -524,94 +142,6 @@ export function App() {
 	function clearInput() {
 		setInput("");
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
-	}
-
-	function parseDotInput(text: string) {
-		if (!text.startsWith(".")) return null;
-		const withoutDot = text.slice(1);
-		const spaceIndex = withoutDot.indexOf(" ");
-		if (spaceIndex === -1) {
-			const prefix = withoutDot.toLowerCase();
-			const matches = activeDotCommands.filter((c) => c.name.startsWith(prefix));
-			// Number shorthand: .model1 → command="model", args="1"
-			// No dot command name contains a digit, so trailing digits are always an arg.
-			if (matches.length === 0) {
-				const m = prefix.match(/^([a-z]+)(\d+)$/);
-				const cmdPart = m?.[1];
-				const numPart = m?.[2];
-				if (cmdPart && numPart) {
-					const cmdMatches = activeDotCommands.filter((c) => c.name.startsWith(cmdPart));
-					if (cmdMatches.length === 1) {
-						return { mode: "args" as const, prefix: cmdPart, matches: cmdMatches, args: numPart, command: cmdMatches[0]?.name };
-					}
-				}
-			}
-			return { mode: "select" as const, prefix, matches, args: "", command: undefined };
-		}
-		const cmdPart = withoutDot.slice(0, spaceIndex).toLowerCase();
-		const matches = activeDotCommands.filter((c) => c.name.startsWith(cmdPart));
-		if (matches.length === 1) {
-			return {
-				mode: "args" as const,
-				prefix: cmdPart,
-				matches,
-				args: withoutDot.slice(spaceIndex + 1),
-				command: matches[0]?.name,
-			};
-		}
-		return { mode: "select" as const, prefix: cmdPart, matches, args: "", command: undefined };
-	}
-
-	function fuzzyMatchSkill(query: string, name: string): number | null {
-		// Returns a score (lower is better) or null if no match.
-		// Every character in query must appear in name in order.
-		// Bonus for: matching at word starts (after '-'), consecutive matches.
-		if (query.length === 0) return 0;
-
-		const q = query.toLowerCase();
-		const n = name.toLowerCase();
-
-		// Fast path: prefix match gets the best possible score
-		if (n.startsWith(q)) return 0;
-
-		let qi = 0;
-		let score = 0;
-		let prevMatchIdx = -2; // track consecutive matches
-		const wordStarts = new Set<number>([0]);
-		for (let i = 0; i < n.length; i++) {
-			if (n[i] === "-") wordStarts.add(i + 1);
-		}
-
-		for (let ni = 0; ni < n.length && qi < q.length; ni++) {
-			if (n[ni] === q[qi]) {
-				// Penalize non-word-start matches more
-				const atWordStart = wordStarts.has(ni);
-				score += atWordStart ? 0 : 1;
-				// Penalize non-consecutive matches
-				score += ni === prevMatchIdx + 1 ? 0 : 1;
-				prevMatchIdx = ni;
-				qi++;
-			}
-		}
-
-		// All query characters consumed?
-		if (qi < q.length) return null;
-		return score;
-	}
-
-	function parseSlashInput(text: string) {
-		if (!text.startsWith("/") || isReadOnly) return null;
-		if (!skillList || skillList.length === 0) return null;
-		const withoutSlash = text.slice(1);
-		const query = withoutSlash.toLowerCase();
-		const scored: { skill: (typeof skillList)[number]; score: number }[] = [];
-		for (const s of skillList) {
-			const score = fuzzyMatchSkill(query, s.name);
-			if (score !== null) scored.push({ skill: s, score });
-		}
-		scored.sort((a, b) => a.score - b.score);
-		const matches = scored.map((s) => s.skill);
-		return { prefix: query, matches };
 	}
 
 	// Fetch models eagerly on mount — needed for status bar and dot panel
@@ -636,69 +166,15 @@ export function App() {
 			.catch(() => setSkillList(null));
 	}, []);
 
-	// Load session from URL or show welcome screen
-	// biome-ignore lint/correctness/useExhaustiveDependencies: loadSession is stable via useCallback
-	useEffect(() => {
-		const { sessionId: urlSessionId } = parseSessionUrl(window.location.pathname);
-		if (urlSessionId) {
-			loadSession(urlSessionId, { skipUrlUpdate: true }).then((success) => {
-				if (!success) {
-					setVolatileMessage({ text: "Session not found", kind: "error" });
-				}
-			});
-		} else {
-			fetch("/bobai/welcome")
-				.then((res) => res.json())
-				.then((data: { markdown: string }) => {
-					if (data?.markdown) {
-						setWelcomeMarkdown(data.markdown);
-					}
-				})
-				.catch(() => {});
-		}
-	}, []);
-
-	// Handle browser back/forward navigation
-	useEffect(() => {
-		const onPopState = () => {
-			const { sessionId: urlSessionId } = parseSessionUrl(window.location.pathname);
-			if (urlSessionId) {
-				loadSession(urlSessionId, { skipUrlUpdate: true });
-			} else {
-				newChat();
-				fetch("/bobai/welcome")
-					.then((res) => res.json())
-					.then((data: { markdown: string }) => {
-						if (data?.markdown) setWelcomeMarkdown(data.markdown);
-					})
-					.catch(() => {});
-			}
-		};
-		window.addEventListener("popstate", onPopState);
-		return () => window.removeEventListener("popstate", onPopState);
-	}, [loadSession, newChat, setWelcomeMarkdown]);
-
-	// Escape key exits subagent peek
-	useEffect(() => {
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape" && viewingSubagentId) {
-				e.preventDefault();
-				exitSubagentPeekWithScroll();
-			}
-		};
-		document.addEventListener("keydown", onKeyDown);
-		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [viewingSubagentId, exitSubagentPeekWithScroll]);
-
 	const [sessionList, setSessionList] = useState<
 		{ index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[] | null
 	>(null);
 	const [subagentList, setSubagentList] = useState<{ index: number; title: string; sessionId: string }[] | null>(null);
 
 	// Fetch session list for .session panel
-	// biome-ignore lint/correctness/useExhaustiveDependencies: parseDotInput is a local function that depends on activeDotCommands
+	// biome-ignore lint/correctness/useExhaustiveDependencies: activeDotCommands depends on component state
 	useEffect(() => {
-		const parsed = parseDotInput(input);
+		const parsed = parseDotInput(input, activeDotCommands);
 		if (parsed?.mode === "args" && parsed.command === "session") {
 			fetch("/bobai/sessions")
 				.then((res) => res.json())
@@ -710,9 +186,9 @@ export function App() {
 	}, [input, parentId]);
 
 	// Fetch subagent list for .subagent panel
-	// biome-ignore lint/correctness/useExhaustiveDependencies: parseDotInput is a local function that depends on activeDotCommands
+	// biome-ignore lint/correctness/useExhaustiveDependencies: activeDotCommands depends on component state
 	useEffect(() => {
-		const parsed = parseDotInput(input);
+		const parsed = parseDotInput(input, activeDotCommands);
 		if (parsed?.mode === "args" && parsed.command === "subagent") {
 			const sid = getSessionId();
 			if (!sid) return;
@@ -753,7 +229,7 @@ export function App() {
 
 		setVolatileMessage(null);
 
-		const parsed = parseDotInput(text);
+		const parsed = parseDotInput(text, activeDotCommands);
 
 		// When session is locked, only .new and .session commands are allowed
 		if (sessionLocked) {
@@ -1007,7 +483,7 @@ export function App() {
 		if (parsed) return;
 
 		// Slash command: stage a skill
-		const slashParsed = parseSlashInput(text);
+		const slashParsed = parseSlashInput(text, skillList, isReadOnly);
 		if (slashParsed) {
 			if (slashParsed.matches.length === 1) {
 				const name = slashParsed.matches[0]?.name;
@@ -1030,91 +506,28 @@ export function App() {
 		}
 
 		if (isStreaming) return;
-		autoScroll.current = true;
+		autoScrollRef.current = true;
 		setView((prev) => ({ ...prev, mode: "chat" }));
 		setWelcomeMarkdown(null);
 		sendPrompt(text, stagedSkills.length > 0 ? stagedSkills : undefined);
 		setStagedSkills([]);
-		setHistoryIndex(-1);
+		resetHistory();
 		clearInput();
 	}
 
-	function exitHistory(restoreValue: string) {
-		setHistoryIndex(-1);
-		setInput(restoreValue);
-	}
-
 	function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-		const inHistory = historyIndex >= 0;
-
-		// History mode: intercept UP/DOWN/ESCAPE/ENTER before anything else
-		if (inHistory) {
-			if (e.key === "ArrowUp") {
-				e.preventDefault();
-				const nextIndex = Math.min(historyIndex + 1, historyEntries.current.length - 1);
-				if (nextIndex !== historyIndex) {
-					setHistoryIndex(nextIndex);
-					setInput(historyEntries.current[nextIndex] ?? "");
-				}
-				return;
-			}
-			if (e.key === "ArrowDown") {
-				e.preventDefault();
-				const nextIndex = historyIndex - 1;
-				if (nextIndex < 0) {
-					exitHistory(savedDraft.current);
-				} else {
-					setHistoryIndex(nextIndex);
-					setInput(historyEntries.current[nextIndex] ?? "");
-				}
-				return;
-			}
-			if (e.key === "Escape") {
-				e.preventDefault();
-				exitHistory(savedDraft.current);
-				return;
-			}
-			if (e.key === "Enter") {
-				e.preventDefault();
-				// Copy history entry into input as editable text
-				exitHistory(historyEntries.current[historyIndex] ?? "");
-				return;
-			}
-			return;
-		}
-
-		// Not in history mode: UP at position 0 enters history mode
-		if (e.key === "ArrowUp" && e.currentTarget.selectionStart === 0) {
-			e.preventDefault();
-			savedDraft.current = input;
-			const gen = ++fetchGen.current;
-			fetch("/bobai/prompts/recent?limit=10")
-				.then((res) => {
-					if (!res.ok) return;
-					return res.json();
-				})
-				.then((entries: string[] | undefined) => {
-					if (!entries || entries.length === 0) return;
-					if (gen !== fetchGen.current) return;
-					historyEntries.current = entries;
-					setHistoryIndex(0);
-					setInput(entries[0] ?? "");
-				})
-				.catch(() => {
-					// Silently ignore fetch errors — user stays in normal mode
-				});
-			return;
-		}
+		// History navigation takes priority
+		if (handleHistoryKeyDown(e)) return;
 
 		if (e.key === "Enter") {
 			// Dot commands: submit on any Enter (no modifier check, never multiline)
-			if (parseDotInput(input)) {
+			if (parseDotInput(input, activeDotCommands)) {
 				e.preventDefault();
 				submit();
 				return;
 			}
 			// Slash commands: submit on any Enter (like dot commands) — blocked during streaming
-			if (!isStreaming && parseSlashInput(input)) {
+			if (!isStreaming && parseSlashInput(input, skillList, isReadOnly)) {
 				e.preventDefault();
 				submit();
 				return;
@@ -1129,14 +542,14 @@ export function App() {
 		// Tab submits dot or slash commands; otherwise suppressed (no tab navigation)
 		if (e.key === "Tab") {
 			e.preventDefault();
-			if (parseDotInput(input) || (!isStreaming && parseSlashInput(input))) {
+			if (parseDotInput(input, activeDotCommands) || (!isStreaming && parseSlashInput(input, skillList, isReadOnly))) {
 				submit();
 			}
 		}
 	}
 
 	function renderDotPanel() {
-		const parsed = parseDotInput(input);
+		const parsed = parseDotInput(input, activeDotCommands);
 		if (!parsed) return null;
 
 		let content: React.ReactNode;
@@ -1277,7 +690,7 @@ export function App() {
 	}
 
 	function renderSlashPanel() {
-		const parsed = parseSlashInput(input);
+		const parsed = parseSlashInput(input, skillList, isReadOnly);
 		if (!parsed) return null;
 
 		const content =

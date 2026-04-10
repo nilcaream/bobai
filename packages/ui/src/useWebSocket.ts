@@ -1,82 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createEventRouter } from "./eventRouter";
-import { reconstructMessages, type StoredMessage } from "./messageReconstruction";
-import { replayBufferToMessages } from "./replayBuffer";
+import { formatTimestamp } from "./format";
+import { useSessionLoader } from "./hooks/useSessionLoader";
+import { useSubagentPeek } from "./hooks/useSubagentPeek";
+import { appendPart, appendText } from "./messageBuilder";
+import type { Message, MessagePart, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo } from "./protocol";
 import { buildSessionUrl } from "./urlUtils";
-
-type ServerMessage =
-	| { type: "token"; text: string; sessionId?: string }
-	| { type: "tool_call"; id: string; output: string; sessionId?: string }
-	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
-	| { type: "prompt_echo"; text: string; sessionId?: string }
-	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
-	| { type: "error"; message: string; sessionId?: string }
-	| { type: "status"; text: string; sessionId?: string }
-	| { type: "session_created"; sessionId: string }
-	| { type: "session_subscribed"; sessionId: string }
-	| { type: "session_locked"; sessionId: string }
-	| { type: "subagent_start"; sessionId: string; title: string; toolCallId: string }
-	| { type: "subagent_done"; sessionId: string };
-
-type SubagentInfo = {
-	sessionId: string;
-	title: string;
-	status: "running" | "done";
-	toolCallId: string;
-};
-
-type ProjectInfo = {
-	dir: string;
-	git?: { branch: string; revision: string };
-};
-
-export type StagedSkill = { name: string; content: string };
-
-export type MessagePart =
-	| { type: "text"; content: string }
-	| { type: "tool_call"; id: string; content: string }
-	| {
-			type: "tool_result";
-			id: string;
-			content: string | null;
-			mergeable: boolean;
-			summary?: string;
-			subagentSessionId?: string;
-	  };
-
-export type Message =
-	| { role: "user"; text: string; timestamp: string }
-	| { role: "assistant"; parts: MessagePart[]; timestamp?: string; model?: string; summary?: string };
-
-function formatTimestamp(): string {
-	const d = new Date();
-	const pad = (n: number) => String(n).padStart(2, "0");
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/** Append to the last assistant message's parts, or create a new assistant message. */
-function appendPart(prev: Message[], part: MessagePart): Message[] {
-	const last = prev.at(-1);
-	if (last?.role === "assistant") {
-		const updated: Message = { ...last, parts: [...last.parts, part] };
-		return [...prev.slice(0, -1), updated];
-	}
-	return [...prev, { role: "assistant", parts: [part] }];
-}
-
-/** Append text to the last text part of the last assistant message, or create one. */
-function appendText(prev: Message[], text: string): Message[] {
-	const last = prev.at(-1);
-	if (last?.role === "assistant" && last.parts.length > 0) {
-		const lastPart = last.parts.at(-1);
-		if (lastPart?.type === "text") {
-			const updatedParts = [...last.parts.slice(0, -1), { type: "text" as const, content: lastPart.content + text }];
-			return [...prev.slice(0, -1), { ...last, parts: updatedParts }];
-		}
-		return appendPart(prev, { type: "text", content: text });
-	}
-	return [...prev, { role: "assistant", parts: [{ type: "text", content: text }] }];
-}
 
 export function useWebSocket() {
 	const ws = useRef<WebSocket | null>(null);
@@ -92,23 +21,28 @@ export function useWebSocket() {
 	const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
 	const [volatileMessage, setVolatileMessage] = useState<{ text: string; kind: "error" | "success" } | null>(null);
 	const [sessionLocked, setSessionLocked] = useState(false);
-	const [viewingSubagentId, setViewingSubagentId] = useState<string | null>(null);
-	const [viewingSubagentTitle, setViewingSubagentTitle] = useState<string | null>(null);
 	const [welcomeMarkdown, setWelcomeMarkdown] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
 	const eventRouter = useRef(createEventRouter());
-	const viewingSubagentIdRef = useRef<string | null>(null);
-	const parentMessagesRef = useRef<Message[]>([]);
-	const parentStatusRef = useRef("");
 	const messagesRef = useRef<Message[]>([]);
 
 	// Keep refs in sync with state
 	useEffect(() => {
 		messagesRef.current = messages;
 	}, [messages]);
-	useEffect(() => {
-		viewingSubagentIdRef.current = viewingSubagentId;
-	}, [viewingSubagentId]);
+
+	const {
+		viewingSubagentId,
+		viewingSubagentTitle,
+		viewingSubagentIdRef,
+		parentMessagesRef,
+		parentStatusRef,
+		setViewingSubagentId,
+		setViewingSubagentTitle,
+		peekSubagent,
+		peekSubagentFromDb,
+		exitSubagentPeek,
+	} = useSubagentPeek(messagesRef, setMessages, status, setStatus, eventRouter);
 
 	const fetchProjectInfo = useCallback(() => {
 		fetch("/bobai/project-info")
@@ -298,7 +232,7 @@ export function useWebSocket() {
 		ws.current = socket;
 		fetchProjectInfo();
 		return () => socket.close();
-	}, [fetchProjectInfo, sendSubscribe]);
+	}, [fetchProjectInfo, sendSubscribe, viewingSubagentIdRef, parentMessagesRef, parentStatusRef]);
 
 	// Warn user before navigating away during active generation
 	useEffect(() => {
@@ -309,64 +243,6 @@ export function useWebSocket() {
 		window.addEventListener("beforeunload", handler);
 		return () => window.removeEventListener("beforeunload", handler);
 	}, [isStreaming]);
-
-	const exitSubagentPeek = useCallback(() => {
-		if (!viewingSubagentIdRef.current) return;
-		setViewingSubagentId(null);
-		setViewingSubagentTitle(null);
-		setMessages(parentMessagesRef.current);
-		setStatus(parentStatusRef.current);
-		parentMessagesRef.current = [];
-		parentStatusRef.current = "";
-	}, []);
-
-	const peekSubagent = useCallback(
-		(childSessionId: string) => {
-			if (viewingSubagentIdRef.current === childSessionId) return;
-			if (!viewingSubagentIdRef.current) {
-				parentMessagesRef.current = messagesRef.current;
-				parentStatusRef.current = status;
-			}
-			setViewingSubagentId(childSessionId);
-			setViewingSubagentTitle(null); // live peeks fall back to subagents array lookup
-			const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
-			const childMessages = replayBufferToMessages(bufferedEvents);
-			setMessages(childMessages);
-			const lastStatusEvent = bufferedEvents.findLast((e) => e.type === "status");
-			if (lastStatusEvent && "text" in lastStatusEvent) {
-				setStatus((lastStatusEvent as { type: "status"; text: string }).text);
-			}
-		},
-		[status],
-	);
-
-	const peekSubagentFromDb = useCallback(
-		async (childSessionId: string) => {
-			if (viewingSubagentIdRef.current === childSessionId) return;
-			try {
-				const res = await fetch(`/bobai/session/${childSessionId}/load`);
-				if (!res.ok) return;
-				const data = (await res.json()) as {
-					session: { id: string; title: string | null };
-					messages: StoredMessage[];
-					status: string | null;
-				};
-				if (!viewingSubagentIdRef.current) {
-					parentMessagesRef.current = messagesRef.current;
-					parentStatusRef.current = status;
-				}
-				setViewingSubagentId(childSessionId);
-				setViewingSubagentTitle(data.session.title);
-				setMessages(reconstructMessages(data.messages));
-				if (data.status) {
-					setStatus(data.status);
-				}
-			} catch {
-				// fetch failed — ignore
-			}
-		},
-		[status],
-	);
 
 	const sendPrompt = useCallback(
 		(text: string, stagedSkills?: StagedSkill[]) => {
@@ -402,7 +278,7 @@ export function useWebSocket() {
 			fetchProjectInfo();
 			ws.current.send(JSON.stringify(payload));
 		},
-		[isStreaming, fetchProjectInfo, exitSubagentPeek],
+		[isStreaming, fetchProjectInfo, exitSubagentPeek, viewingSubagentIdRef],
 	);
 
 	const sendCancel = useCallback(() => {
@@ -432,82 +308,27 @@ export function useWebSocket() {
 		setVolatileMessage(null);
 		setSessionLocked(false);
 		history.pushState(null, "", "/bobai");
-	}, [sendUnsubscribe]);
+	}, [sendUnsubscribe, viewingSubagentIdRef, setViewingSubagentId, setViewingSubagentTitle, parentMessagesRef]);
 
-	const loadSession = useCallback(
-		async (targetId: string, options?: { skipUrlUpdate?: boolean }): Promise<boolean> => {
-			setWelcomeMarkdown(null);
-			// Clear peek state
-			if (viewingSubagentIdRef.current) {
-				setViewingSubagentId(null);
-				setViewingSubagentTitle(null);
-				parentMessagesRef.current = [];
-			}
-			eventRouter.current.clearAllBuffers();
-			setSessionLocked(false);
-
-			// Check ownership before loading to avoid flicker
-			try {
-				const ownershipRes = await fetch(`/bobai/session/${targetId}/ownership`);
-				if (ownershipRes.ok) {
-					const ownershipData = await ownershipRes.json();
-					if (ownershipData.owned) {
-						// Session is owned by another tab — go straight to locked state
-						sessionId.current = targetId;
-						setSessionLocked(true);
-						setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
-						setMessages([]);
-						if (!options?.skipUrlUpdate) {
-							history.pushState(null, "", buildSessionUrl(targetId));
-						}
-						sendSubscribe(targetId);
-						return true;
-					}
-				}
-			} catch {
-				// Ownership check failed — proceed with normal load
-			}
-
-			try {
-				const res = await fetch(`/bobai/session/${targetId}/load`);
-				if (!res.ok) return false;
-				const data = (await res.json()) as {
-					session: { id: string; title: string | null; model: string | null; parentId: string | null };
-					messages: StoredMessage[];
-					status: string | null;
-				};
-				sessionId.current = data.session.id;
-				setTitle(data.session.title);
-				setModel(data.session.model);
-				setParentId(data.session.parentId);
-				setSubagents([]);
-				setStatus(data.status ?? "");
-				setMessages(reconstructMessages(data.messages));
-				setVolatileMessage(null);
-
-				if (!options?.skipUrlUpdate) {
-					history.pushState(null, "", buildSessionUrl(data.session.id));
-				}
-
-				sendSubscribe(data.session.id);
-
-				// Fetch parent title for subagent status bar
-				if (data.session.parentId) {
-					const parentRes = await fetch(`/bobai/session/${data.session.parentId}/load`);
-					if (parentRes.ok) {
-						const parentData = await parentRes.json();
-						setParentTitle(parentData.session.title);
-					}
-				} else {
-					setParentTitle(null);
-				}
-				return true;
-			} catch {
-				return false;
-			}
-		},
-		[sendSubscribe],
-	);
+	const { loadSession } = useSessionLoader({
+		sessionId,
+		sendSubscribe,
+		setMessages,
+		setTitle,
+		setModel,
+		setParentId,
+		setParentTitle,
+		setSubagents,
+		setStatus,
+		setVolatileMessage,
+		setSessionLocked,
+		setWelcomeMarkdown,
+		viewingSubagentIdRef,
+		setViewingSubagentId,
+		setViewingSubagentTitle,
+		parentMessagesRef,
+		eventRouter,
+	});
 
 	return {
 		messages,

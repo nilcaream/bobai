@@ -1,4 +1,5 @@
-import type { Message, MessagePart } from "./useWebSocket";
+import { formatStoredTimestamp } from "./format";
+import type { Message, MessagePart } from "./protocol";
 
 export interface StoredMessage {
 	id: string;
@@ -8,12 +9,6 @@ export interface StoredMessage {
 	createdAt: string;
 	sortOrder: number;
 	metadata: Record<string, unknown> | null;
-}
-
-function formatStoredTimestamp(iso: string): string {
-	const d = new Date(iso);
-	const pad = (n: number) => String(n).padStart(2, "0");
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /** Escape characters that have special meaning in Markdown so they render as literal text. */

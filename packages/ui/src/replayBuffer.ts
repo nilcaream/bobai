@@ -1,29 +1,7 @@
-import type { Message, MessagePart } from "./useWebSocket";
+import { appendPart, appendText } from "./messageBuilder";
+import type { Message } from "./protocol";
 
 type BufferedEvent = { type: string; [key: string]: unknown };
-
-/** Append to the last assistant message's parts, or create a new assistant message. */
-function appendPart(msgs: Message[], part: MessagePart): Message[] {
-	const last = msgs.at(-1);
-	if (last?.role === "assistant") {
-		return [...msgs.slice(0, -1), { ...last, parts: [...last.parts, part] }];
-	}
-	return [...msgs, { role: "assistant", parts: [part] }];
-}
-
-/** Append text to the last text part of the last assistant message, or create one. */
-function appendText(msgs: Message[], text: string): Message[] {
-	const last = msgs.at(-1);
-	if (last?.role === "assistant" && last.parts.length > 0) {
-		const lastPart = last.parts.at(-1);
-		if (lastPart?.type === "text") {
-			const updatedParts = [...last.parts.slice(0, -1), { type: "text" as const, content: lastPart.content + text }];
-			return [...msgs.slice(0, -1), { ...last, parts: updatedParts }];
-		}
-		return appendPart(msgs, { type: "text", content: text });
-	}
-	return [...msgs, { role: "assistant", parts: [{ type: "text", content: text }] }];
-}
 
 /**
  * Replay an array of buffered WebSocket events into a Message[] array.
