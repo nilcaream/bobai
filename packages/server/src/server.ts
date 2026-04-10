@@ -210,6 +210,7 @@ export function createServer(options: ServerOptions) {
 					promptTokens: storedPromptTokens,
 					promptChars: storedPromptChars,
 					target: PRE_PROMPT_TARGET,
+					type: "pre-prompt",
 					tools,
 					sessionId,
 				});

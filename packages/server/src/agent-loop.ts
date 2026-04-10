@@ -42,6 +42,7 @@ export function emergencyCompactConversation(
 		promptTokens,
 		promptChars,
 		target: EMERGENCY_TARGET,
+		type: "emergency",
 		tools,
 		sessionId,
 		onReadFileCompacted,
@@ -51,7 +52,7 @@ export function emergencyCompactConversation(
 	if (result.messages !== conversation) {
 		if (logDir) {
 			const scope = getScope() ?? "global";
-			const { preFile } = writeCompactionDump({
+			writeCompactionDump({
 				logDir,
 				before: beforeEmergency,
 				afterCompaction: result.messages,
@@ -59,9 +60,6 @@ export function emergencyCompactConversation(
 				scope,
 				debug: logger?.level === "debug",
 			});
-			if (preFile && logger) {
-				logger.info("COMPACTION", `emergency mid-loop compaction: ${preFile}`);
-			}
 		}
 		return result.messages;
 	}

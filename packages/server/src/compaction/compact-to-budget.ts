@@ -12,6 +12,8 @@ export interface CompactToBudgetOptions {
 	promptChars: number;
 	target: number;
 	tools: ToolRegistry;
+	/** Label for the log line: "pre-prompt" or "emergency". */
+	type: "pre-prompt" | "emergency";
 	sessionId?: string;
 	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void;
 	logger?: Logger;
@@ -24,6 +26,7 @@ export interface CompactToBudgetResult {
 	charsBefore: number;
 	charsAfter: number;
 	charBudget: number;
+	charsPerToken: number;
 }
 
 /**
@@ -40,6 +43,7 @@ export interface CompactToBudgetResult {
 export function compactToBudget(options: CompactToBudgetOptions): CompactToBudgetResult {
 	const { messages, contextWindow, promptTokens, promptChars, target, tools, sessionId, logger } = options;
 
+	const charsPerToken = promptTokens > 0 && promptChars > 0 ? promptChars / promptTokens : 0;
 	const charBudget = computeCharBudget(contextWindow, target, promptTokens, promptChars);
 	const charsBefore = totalContentChars(messages);
 
@@ -52,6 +56,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 			charsBefore,
 			charsAfter: charsBefore,
 			charBudget: 0,
+			charsPerToken,
 		};
 	}
 
@@ -64,6 +69,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 			charsBefore,
 			charsAfter: charsBefore,
 			charBudget,
+			charsPerToken,
 		};
 	}
 
@@ -116,8 +122,9 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 	const elapsed = performance.now() - startTime;
 	logger?.debug(
 		"COMPACTION",
-		`compactToBudget: ${iterations} iterations in ${elapsed.toFixed(1)}ms, ` +
-			`chars ${charsBefore} → ${bestCharsAfter} (budget: ${charBudget}, pressure: ${finalPressure.toFixed(2)})`,
+		`budget: ${charBudget}, pressure: ${finalPressure.toFixed(2)}, iterations: ${iterations}, ` +
+			`time: ${elapsed.toFixed(1)}ms, chars: ${charsPerToken.toFixed(2)}, ` +
+			`in: ${charsBefore}, out: ${bestCharsAfter}, type: ${options.type}`,
 	);
 
 	return {
@@ -127,5 +134,6 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		charsBefore,
 		charsAfter: bestCharsAfter,
 		charBudget,
+		charsPerToken,
 	};
 }

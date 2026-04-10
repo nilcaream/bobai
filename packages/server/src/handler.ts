@@ -255,6 +255,7 @@ export async function handlePrompt(req: PromptRequest) {
 			promptTokens: sessionPromptTokens,
 			promptChars: sessionPromptChars,
 			target: PRE_PROMPT_TARGET,
+			type: "pre-prompt",
 			tools,
 			sessionId: currentSessionId as string,
 			onReadFileCompacted: invalidateCompactedRead,
@@ -264,18 +265,14 @@ export async function handlePrompt(req: PromptRequest) {
 
 		// Write debug dump if compaction or eviction changed something
 		if (messages !== beforeCompaction && req.logDir) {
-			const { preFile } = writeCompactionDump({
+			writeCompactionDump({
 				logDir: req.logDir,
 				before: beforeCompaction,
 				afterCompaction: messages,
-				// No separate eviction dump — compactToBudget handles both
 				code: "pre",
 				scope: sessionScope(currentSessionId as string),
 				debug: scopedLogger?.level === "debug",
 			});
-			if (preFile && scopedLogger) {
-				scopedLogger.debug("COMPACTION", `pre-prompt dump: ${preFile}`);
-			}
 		}
 
 		// Signal the provider to start tracking turn stats

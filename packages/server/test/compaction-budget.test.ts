@@ -52,6 +52,7 @@ describe("compactToBudget", () => {
 			promptTokens: 0,
 			promptChars: 0,
 			target: PRE_PROMPT_TARGET,
+			type: "pre-prompt",
 			tools,
 		});
 		expect(result.messages).toBe(messages); // same reference
@@ -72,6 +73,7 @@ describe("compactToBudget", () => {
 			promptTokens: 1000,
 			promptChars: 3500,
 			target: PRE_PROMPT_TARGET,
+			type: "pre-prompt",
 			tools,
 		});
 		expect(result.messages).toBe(messages);
@@ -106,6 +108,7 @@ describe("compactToBudget", () => {
 			promptTokens: 100,
 			promptChars: 350,
 			target: PRE_PROMPT_TARGET,
+			type: "pre-prompt",
 			tools,
 		});
 
@@ -139,6 +142,7 @@ describe("compactToBudget", () => {
 			promptTokens: 100,
 			promptChars: 350,
 			target: PRE_PROMPT_TARGET,
+			type: "pre-prompt",
 			tools,
 		});
 
@@ -172,6 +176,7 @@ describe("compactToBudget", () => {
 			promptTokens: 100,
 			promptChars: 350,
 			target: PRE_PROMPT_TARGET,
+			type: "pre-prompt",
 			tools,
 		});
 

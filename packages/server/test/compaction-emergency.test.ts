@@ -270,12 +270,12 @@ describe("emergencyCompactConversation", () => {
 		const registry = createReadFileRegistry();
 		const fs = require("node:fs");
 		const tmpDir = `${__dirname}/../compaction-emergency-logger-test.tmp`;
-		const infoFn = mock(() => {});
+		const debugFn = mock(() => {});
 		const fakeLogger = {
 			level: "debug" as const,
 			logDir: tmpDir,
-			debug: mock(() => {}),
-			info: infoFn,
+			debug: debugFn,
+			info: mock(() => {}),
 			warn: mock(() => {}),
 			error: mock(() => {}),
 		};
@@ -291,11 +291,12 @@ describe("emergencyCompactConversation", () => {
 				fakeLogger,
 			);
 			expect(result).not.toBe(conversation);
-			// Logger.info should have been called with "COMPACTION" system and a message containing "emergency"
-			expect(infoFn).toHaveBeenCalled();
-			const [system, message] = infoFn.mock.calls[0] as [string, string];
-			expect(system).toBe("COMPACTION");
-			expect(message).toContain("emergency");
+			// compactToBudget logs a single debug line with type: emergency
+			expect(debugFn).toHaveBeenCalled();
+			const calls = debugFn.mock.calls as [string, string][];
+			const compactionCall = calls.find(([sys]) => sys === "COMPACTION");
+			expect(compactionCall).toBeDefined();
+			expect(compactionCall?.[1]).toContain("type: emergency");
 		} finally {
 			try {
 				fs.rmSync(tmpDir, { recursive: true, force: true });
