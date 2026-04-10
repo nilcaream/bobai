@@ -1,3 +1,4 @@
 [test]
 coverage = true
 preload = ["./test/setup-dom.ts"]
+coverageThreshold = { line = 90, function = 90 }
