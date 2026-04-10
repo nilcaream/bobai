@@ -322,6 +322,7 @@ export function useWebSocket() {
 
 	const peekSubagent = useCallback(
 		(childSessionId: string) => {
+			if (viewingSubagentIdRef.current === childSessionId) return;
 			parentMessagesRef.current = messagesRef.current;
 			parentStatusRef.current = status;
 			setViewingSubagentId(childSessionId);
@@ -335,6 +336,7 @@ export function useWebSocket() {
 
 	const peekSubagentFromDb = useCallback(
 		async (childSessionId: string) => {
+			if (viewingSubagentIdRef.current === childSessionId) return;
 			try {
 				const res = await fetch(`/bobai/session/${childSessionId}/load`);
 				if (!res.ok) return;
