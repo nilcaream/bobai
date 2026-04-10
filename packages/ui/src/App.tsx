@@ -1,4 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	handleGenericCommand,
+	handleNewCommand,
+	handleSessionCommand,
+	handleSessionShortcut,
+	handleSlashCommand,
+	handleStopCommand,
+	handleSubagentCommand,
+	handleViewCommand,
+} from "./commandHandlers";
 import type { ViewMode } from "./commandParser";
 import {
 	FULL_DOT_COMMANDS,
@@ -7,7 +17,6 @@ import {
 	parseSlashInput,
 	READ_ONLY_DOT_COMMANDS,
 	STREAMING_DOT_COMMANDS,
-	VIEW_MODES,
 } from "./commandParser";
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
 import { formatMsgSummary, formatToolHeader, groupParts, truncateChars, truncateContent } from "./formatUtils";
@@ -202,27 +211,6 @@ export function App() {
 		}
 	}, [input, parentId, getSessionId]);
 
-	function stageSkill(name: string) {
-		// Deduplicate
-		if (stagedSkills.some((s) => s.name === name)) return;
-		fetch("/bobai/skill", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name }),
-		})
-			.then((res) => {
-				if (!res.ok) return;
-				return res.json();
-			})
-			.then((data) => {
-				if (!data) return;
-				setStagedSkills((prev) => [...prev, { name: data.name, content: data.content }]);
-			})
-			.catch(() => {
-				// Silently ignore
-			});
-	}
-
 	function submit() {
 		const text = input.trim();
 		if (!text || !connected) return;
@@ -246,235 +234,95 @@ export function App() {
 		}
 
 		if (parsed?.mode === "args" && parsed.command) {
-			// Stop: cancel the running agent loop
 			if (parsed.command === "stop") {
-				sendCancel();
-				clearInput();
-				return;
-			}
-
-			// New chat: .new [optional title]
-			if (parsed.command === "new") {
-				newChat();
-				setStagedSkills([]);
-				setStatus(defaultStatus.current);
-				setView((prev) => ({ ...prev, mode: "chat" }));
-				const newTitle = (parsed.args ?? "").trim();
-				if (newTitle) {
-					setTitle(newTitle);
-					pendingNewTitle.current = newTitle;
-				}
-				fetch("/bobai/welcome")
-					.then((res) => res.json())
-					.then((data: { markdown: string }) => {
-						if (data?.markdown) setWelcomeMarkdown(data.markdown);
-					})
-					.catch(() => {});
-				clearInput();
-				return;
-			}
-
-			// View command: select by index or cycle when no args
-			if (parsed.command === "view") {
-				const arg = (parsed.args ?? "").trim();
-				const viewMap: Record<string, ViewMode> = { "1": "chat", "2": "context", "3": "compaction" };
-				setView((prev) => {
-					const currentIdx = VIEW_MODES.indexOf(prev.mode);
-					const next = arg ? (viewMap[arg] ?? prev.mode) : (VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat");
-					if (next === "context") fetchContext();
-					if (next === "compaction") fetchCompactedContext();
-					return { ...prev, mode: next };
+				handleStopCommand({ sendCancel });
+			} else if (parsed.command === "new") {
+				handleNewCommand({
+					newChat,
+					setStagedSkills,
+					setStatus,
+					defaultStatus: defaultStatus.current,
+					setView,
+					setTitle,
+					pendingNewTitle,
+					setWelcomeMarkdown,
+					newTitle: (parsed.args ?? "").trim(),
 				});
-				clearInput();
-				return;
-			}
-
-			// Session switching: .session <N> or .session (no args = list shown in panel)
-			if (parsed.command === "session") {
-				const arg = (parsed.args ?? "").trim();
-				if (!arg) {
-					// .session with space but no number — no-op (list is in dot panel)
-					clearInput();
-					return;
-				}
-				const parts = arg.split(/\s+/);
-				const indexStr = parts[0] ?? "";
-				const subcommand = parts[1];
-				if (!sessionList) {
-					setVolatileMessage({ text: "Session list not loaded", kind: "error" });
-					clearInput();
-					return;
-				}
-				const index = Number.parseInt(indexStr, 10);
-				const targetSession = !Number.isNaN(index) ? sessionList.find((s) => s.index === index) : undefined;
-				if (!targetSession) {
-					setVolatileMessage({ text: `Invalid session index: ${indexStr}`, kind: "error" });
-					clearInput();
-					return;
-				}
-
-				// Delete subcommand: .session N delete
-				if (subcommand === "delete") {
-					const isTargetSelf = targetSession.id === getSessionId();
-					const isOwnedByOther = targetSession.owned && !isTargetSelf;
-					if (isOwnedByOther) {
-						setVolatileMessage({ text: "Cannot delete: session is active in another tab", kind: "error" });
-						clearInput();
-						return;
-					}
-					// If deleting current session, clear it first (releases ownership)
-					if (isTargetSelf) {
-						newChat();
-						setStagedSkills([]);
-						setStatus(defaultStatus.current);
-						setView((prev) => ({ ...prev, mode: "chat" }));
-					}
-					fetch(`/bobai/session/${targetSession.id}`, { method: "DELETE" })
-						.then((res) => res.json())
-						.then((data: { ok: boolean; id?: string; title?: string | null; error?: string }) => {
-							if (data.ok) {
-								const label = data.title ? `${data.id} "${data.title}"` : (data.id ?? targetSession.id);
-								setVolatileMessage({ text: `Session ${label} has been removed`, kind: "success" });
-							} else {
-								setVolatileMessage({ text: data.error ?? "Failed to delete session", kind: "error" });
-							}
-						})
-						.catch(() => {
-							setVolatileMessage({ text: "Failed to delete session", kind: "error" });
-						});
-					clearInput();
-					return;
-				}
-
-				// Session switching (no subcommand)
-				const isTargetSelf = targetSession.id === getSessionId();
-				if (isTargetSelf) {
-					// Already viewing this session — no-op
-					clearInput();
-					return;
-				}
-				if (targetSession.owned) {
-					setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
-					clearInput();
-					return;
-				}
-				loadSession(targetSession.id);
-				setStagedSkills([]);
-				clearInput();
-				return;
-			}
-
-			// Subagent switching: .subagent <N>
-			if (parsed.command === "subagent") {
-				const arg = (parsed.args ?? "").trim();
-				if (!arg) {
-					// .subagent with space but no number — no-op
-					clearInput();
-					return;
-				}
-				if (!subagentList) {
-					setVolatileMessage({ text: "Subagent list not loaded", kind: "error" });
-					clearInput();
-					return;
-				}
-				const index = Number.parseInt(arg, 10);
-				const targetSubagent = !Number.isNaN(index) ? subagentList.find((s) => s.index === index) : undefined;
-				if (!targetSubagent) {
-					setVolatileMessage({ text: `Invalid subagent index: ${arg}`, kind: "error" });
-					clearInput();
-					return;
-				}
-				// Check if this subagent is currently live (running) — use peek instead of DB load
-				const liveSubagent = subagents.find((s) => s.sessionId === targetSubagent.sessionId && s.status === "running");
-				if (liveSubagent) {
-					peekSubagentWithScroll(liveSubagent.sessionId);
-				} else {
-					peekSubagentFromDbWithScroll(targetSubagent.sessionId);
-				}
-				setStagedSkills([]);
-				clearInput();
-				return;
-			}
-
-			const sid = getSessionId();
-			fetch("/bobai/command", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ command: parsed.command, args: (parsed.args ?? "").trim(), sessionId: sid }),
-			})
-				.then((res) => res.json())
-				.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string }) => {
-					if (result.ok) {
-						if (result.sessionId) {
-							setSessionId(result.sessionId);
-						}
-						if (parsed.command === "model" && modelList) {
-							const idx = Number.parseInt((parsed.args ?? "").trim(), 10);
-							const selected = modelList.find((m) => m.index === idx);
-							if (selected) setModel(selected.id);
-						}
-						if (parsed.command === "title") {
-							setTitle((parsed.args ?? "").trim());
-						}
-						if (result.status) {
-							setStatus(result.status);
-						}
-					} else {
-						setVolatileMessage({ text: result.error ?? "Command failed", kind: "error" });
-					}
-				})
-				.catch(() => {
-					setVolatileMessage({ text: "Failed to execute command", kind: "error" });
+			} else if (parsed.command === "view") {
+				handleViewCommand({
+					arg: (parsed.args ?? "").trim(),
+					setView,
+					fetchContext,
+					fetchCompactedContext,
 				});
-			clearInput();
-			return;
-		}
-
-		// View command without space (e.g. ".view", ".v", ".vi", ".vie")
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "view") {
-			setView((prev) => {
-				const currentIdx = VIEW_MODES.indexOf(prev.mode);
-				const next = VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat";
-				if (next === "context") fetchContext();
-				if (next === "compaction") fetchCompactedContext();
-				return { ...prev, mode: next };
-			});
-			clearInput();
-			return;
-		}
-
-		// .session (no space): exit peek, return to parent if in subagent, no-op if in parent
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "session") {
-			if (viewingSubagentId) {
-				exitSubagentPeekWithScroll();
-				setStagedSkills([]);
-			} else if (parentId) {
-				loadSession(parentId);
-				setStagedSkills([]);
+			} else if (parsed.command === "session") {
+				handleSessionCommand({
+					arg: (parsed.args ?? "").trim(),
+					sessionList,
+					getSessionId,
+					loadSession,
+					newChat,
+					setStagedSkills,
+					setStatus,
+					defaultStatus: defaultStatus.current,
+					setView,
+					setVolatileMessage,
+				});
+			} else if (parsed.command === "subagent") {
+				handleSubagentCommand({
+					arg: (parsed.args ?? "").trim(),
+					subagentList,
+					subagents,
+					peekSubagentWithScroll,
+					peekSubagentFromDbWithScroll,
+					setStagedSkills,
+					setVolatileMessage,
+				});
+			} else {
+				handleGenericCommand({
+					command: parsed.command,
+					args: (parsed.args ?? "").trim(),
+					getSessionId,
+					setSessionId,
+					setModel,
+					setTitle,
+					setStatus,
+					setVolatileMessage,
+					modelList,
+				});
 			}
 			clearInput();
 			return;
 		}
 
-		// .new (no space): start a new chat session
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "new") {
-			newChat();
-			setStagedSkills([]);
-			setStatus(defaultStatus.current);
-			setView((prev) => ({ ...prev, mode: "chat" }));
-			fetch("/bobai/welcome")
-				.then((res) => res.json())
-				.then((data: { markdown: string }) => {
-					if (data?.markdown) setWelcomeMarkdown(data.markdown);
-				})
-				.catch(() => {});
-			clearInput();
-			return;
-		}
-
-		// .stop (no space): cancel the running agent loop
-		if (parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "stop") {
-			sendCancel();
+		// Single-match select shortcuts: .view, .session, .new, .stop (no space)
+		if (parsed?.mode === "select" && parsed.matches.length === 1) {
+			const name = parsed.matches[0]?.name;
+			if (name === "view") {
+				handleViewCommand({ arg: "", setView, fetchContext, fetchCompactedContext });
+			} else if (name === "session") {
+				handleSessionShortcut({
+					viewingSubagentId,
+					exitSubagentPeekWithScroll,
+					parentId,
+					loadSession,
+					setStagedSkills,
+				});
+			} else if (name === "new") {
+				handleNewCommand({
+					newChat,
+					setStagedSkills,
+					setStatus,
+					defaultStatus: defaultStatus.current,
+					setView,
+					setTitle,
+					pendingNewTitle,
+					setWelcomeMarkdown,
+					newTitle: "",
+				});
+			} else if (name === "stop") {
+				handleStopCommand({ sendCancel });
+			}
 			clearInput();
 			return;
 		}
@@ -487,7 +335,7 @@ export function App() {
 		if (slashParsed) {
 			if (slashParsed.matches.length === 1) {
 				const name = slashParsed.matches[0]?.name;
-				if (name) stageSkill(name);
+				if (name) handleSlashCommand({ name, stagedSkills, setStagedSkills });
 			}
 			clearInput();
 			return;
