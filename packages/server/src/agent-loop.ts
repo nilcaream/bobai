@@ -55,7 +55,8 @@ export function emergencyCompactConversation(
 			writeCompactionDump({
 				logDir,
 				before: beforeEmergency,
-				afterCompaction: result.messages,
+				afterCompaction: result.compacted,
+				afterEviction: result.messages,
 				code: "emg",
 				scope,
 				debug: logger?.level === "debug",

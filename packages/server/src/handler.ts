@@ -268,7 +268,8 @@ export async function handlePrompt(req: PromptRequest) {
 			writeCompactionDump({
 				logDir: req.logDir,
 				before: beforeCompaction,
-				afterCompaction: messages,
+				afterCompaction: compactionResult.compacted,
+				afterEviction: messages,
 				code: "pre",
 				scope: sessionScope(currentSessionId as string),
 				debug: scopedLogger?.level === "debug",
