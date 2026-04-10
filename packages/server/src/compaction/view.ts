@@ -19,12 +19,24 @@ export function mapEvictedToStored(
 	evicted: Message[],
 	conversationMessages: StoredMessage[],
 	sessionId: string,
-): StoredMessage[] {
-	// Build an identity map: compacted Message object → original StoredMessage.
-	const storedByRef = new Map<object, StoredMessage>();
+): (StoredMessage & { originalIndex: number })[] {
+	// Build an identity map: compacted Message object → { stored, originalIndex }.
+	// Index j in the compacted array corresponds to the original message array
+	// (j=0 is the system prompt, j=1+ maps to conversationMessages[j-1]).
+	const refMap = new Map<object, { stored: StoredMessage; originalIndex: number }>();
 	for (let j = 1; j < compacted.length; j++) {
 		const stored = conversationMessages[j - 1];
-		if (stored) storedByRef.set(compacted[j], stored);
+		if (stored) refMap.set(compacted[j], { stored, originalIndex: j });
+	}
+
+	// For tool messages looked up by tool_call_id, pre-build an index map.
+	const toolOriginalIndex = new Map<string, number>();
+	for (let j = 1; j < compacted.length; j++) {
+		const msg = compacted[j];
+		if (msg.role === "tool") {
+			const toolMsg = msg as { role: "tool"; tool_call_id: string };
+			toolOriginalIndex.set(toolMsg.tool_call_id, j);
+		}
 	}
 
 	return evicted.map((m, i) => {
@@ -37,6 +49,7 @@ export function mapEvictedToStored(
 				createdAt: new Date().toISOString(),
 				sortOrder: -1,
 				metadata: null,
+				originalIndex: 0,
 			};
 		}
 		if (m.role === "tool") {
@@ -47,14 +60,19 @@ export function mapEvictedToStored(
 				...(original ?? { id: `compacted-${i}`, sessionId, role: "tool" as const, createdAt: "", sortOrder: i }),
 				content: toolMsg.content,
 				metadata: { ...original?.metadata, tool_call_id: toolMsg.tool_call_id },
+				originalIndex: toolOriginalIndex.get(toolMsg.tool_call_id) ?? i,
 			};
 		}
 		// Look up the original StoredMessage by object reference.
 		// Messages rebuilt by eviction (e.g. filtered assistant tool_calls)
 		// won't be in the map — use a synthetic fallback with the actual content.
-		const original = storedByRef.get(m);
-		if (original) {
-			return { ...original, content: (m as { content: string }).content ?? original.content };
+		const ref = refMap.get(m);
+		if (ref) {
+			return {
+				...ref.stored,
+				content: (m as { content: string }).content ?? ref.stored.content,
+				originalIndex: ref.originalIndex,
+			};
 		}
 		return {
 			id: `evicted-${i}`,
@@ -64,6 +82,7 @@ export function mapEvictedToStored(
 			createdAt: "",
 			sortOrder: i,
 			metadata: null,
+			originalIndex: i,
 		};
 	});
 }

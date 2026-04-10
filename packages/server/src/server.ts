@@ -230,7 +230,7 @@ export function createServer(options: ServerOptions) {
 				const estimatedContextNeeded = charsPerToken > 0 ? compactionResult.charsBefore / (contextWindow * charsPerToken) : 0;
 
 				return Response.json({
-					messages: compactedStored.map((m, i) => ({ ...m, messageIndex: i })),
+					messages: compactedStored.map((m) => ({ ...m, messageIndex: m.originalIndex })),
 					stats: {
 						usage: compactionResult.usage,
 						iterations: compactionResult.iterations,

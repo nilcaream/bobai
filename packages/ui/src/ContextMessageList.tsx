@@ -1,5 +1,6 @@
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
 import { formatCompactionSummary, formatToolHeader, truncateChars, truncateContent } from "./formatUtils";
+import { Markdown } from "./Markdown";
 
 export type ContextViewMode = "raw" | "compaction";
 
@@ -146,7 +147,9 @@ export function ContextMessageList({
 			{viewMode === "compaction" && compactionData?.stats && (
 				<div className="panel panel--context">
 					<div className="context-header">compaction summary</div>
-					<pre className="context-body">{formatCompactionSummary(compactionData.stats)}</pre>
+					<div className="context-body">
+						<Markdown>{formatCompactionSummary(compactionData.stats)}</Markdown>
+					</div>
 				</div>
 			)}
 		</>
