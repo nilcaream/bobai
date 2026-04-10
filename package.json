@@ -1,5 +1,8 @@
 {
   "name": "bobai",
   "private": true,
-  "workspaces": ["packages/*"]
+  "workspaces": ["packages/*"],
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.8.9"
+  }
 }
