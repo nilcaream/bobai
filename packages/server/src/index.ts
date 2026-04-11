@@ -14,6 +14,7 @@ import { initProject } from "./project";
 import { createCopilotProvider, deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
 import { modelsConfigExists } from "./provider/copilot-models";
 import { createServer } from "./server";
+import { builtinSkills } from "./skill/builtin";
 import { discoverSkills } from "./skill/skill";
 
 const cli = parseCLI(process.argv.slice(2));
@@ -72,7 +73,7 @@ const config = resolveConfig(
 );
 
 const skillDirectories = [path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")];
-const skills = discoverSkills(skillDirectories);
+const skills = discoverSkills(skillDirectories, { debug, builtinSkills });
 logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
 for (const skill of skills.list()) {
 	logger.info("SKILL", `${skill.name}: ${skill.filePath}`);

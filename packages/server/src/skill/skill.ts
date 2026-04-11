@@ -1,11 +1,18 @@
 import fs from "node:fs";
 import matter from "gray-matter";
+import type { BuiltinSkillSource } from "./builtin";
+
+/** Recognized skill modes. Only skills matching the active runtime context are loaded. */
+type SkillMode = "debug";
+
+const VALID_MODES = new Set<string>(["debug"]);
 
 export interface Skill {
 	name: string;
 	description: string;
 	content: string;
 	filePath: string;
+	mode?: SkillMode;
 }
 
 export interface SkillRegistry {
@@ -27,11 +34,35 @@ export function parseSkillFile(raw: string, filePath: string): Skill | null {
 
 	if (!name || !description) return null;
 
-	return { name, description, content: content.trim(), filePath };
+	const mode = typeof data.mode === "string" && VALID_MODES.has(data.mode.trim()) ? (data.mode.trim() as SkillMode) : undefined;
+
+	return { name, description, content: content.trim(), filePath, mode };
 }
 
-export function discoverSkills(directories: string[]): SkillRegistry {
+export interface DiscoverSkillsOptions {
+	debug?: boolean;
+	builtinSkills?: BuiltinSkillSource[];
+}
+
+/** Returns true when a skill is allowed under the current runtime context. */
+function isAllowed(skill: Skill, debug: boolean): boolean {
+	return skill.mode !== "debug" || debug;
+}
+
+export function discoverSkills(directories: string[], options: DiscoverSkillsOptions = {}): SkillRegistry {
 	const skills = new Map<string, Skill>();
+	const debug = options.debug ?? false;
+
+	// Built-in skills are loaded first (lowest precedence).
+	// Directory-scanned skills override them by name.
+	if (options.builtinSkills) {
+		for (const entry of options.builtinSkills) {
+			const skill = parseSkillFile(entry.raw, `<builtin>/${entry.relativePath}`);
+			if (skill && isAllowed(skill, debug)) {
+				skills.set(skill.name, skill);
+			}
+		}
+	}
 
 	for (const dir of directories) {
 		if (!fs.existsSync(dir)) continue;
@@ -42,7 +73,7 @@ export function discoverSkills(directories: string[]): SkillRegistry {
 			try {
 				const raw = fs.readFileSync(filePath, "utf-8");
 				const skill = parseSkillFile(raw, filePath);
-				if (skill) {
+				if (skill && isAllowed(skill, debug)) {
 					skills.set(skill.name, skill);
 				}
 			} catch {

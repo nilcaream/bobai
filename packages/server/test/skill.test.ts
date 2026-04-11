@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { BuiltinSkillSource } from "../src/skill/builtin";
 import { discoverSkills, parseSkillFile } from "../src/skill/skill";
 
 describe("parseSkillFile", () => {
@@ -64,6 +65,34 @@ describe("parseSkillFile", () => {
 		expect(result).not.toBeNull();
 		expect(result?.name).toBe("spaced-name");
 		expect(result?.description).toBe("spaced desc");
+	});
+
+	test("parses mode field when present", () => {
+		const content = ["---", "name: debug-skill", "description: A debug skill", "mode: debug", "---", "Body"].join("\n");
+		const result = parseSkillFile(content, "/test/SKILL.md");
+		expect(result).not.toBeNull();
+		expect(result?.mode).toBe("debug");
+	});
+
+	test("mode is undefined when not present", () => {
+		const content = ["---", "name: normal-skill", "description: A normal skill", "---", "Body"].join("\n");
+		const result = parseSkillFile(content, "/test/SKILL.md");
+		expect(result).not.toBeNull();
+		expect(result?.mode).toBeUndefined();
+	});
+
+	test("ignores invalid mode value", () => {
+		const content = ["---", "name: bad-mode", "description: A skill", "mode: 123", "---", "Body"].join("\n");
+		const result = parseSkillFile(content, "/test/SKILL.md");
+		expect(result).not.toBeNull();
+		expect(result?.mode).toBeUndefined();
+	});
+
+	test("ignores unrecognized mode string", () => {
+		const content = ["---", "name: unknown-mode", "description: A skill", "mode: foobar", "---", "Body"].join("\n");
+		const result = parseSkillFile(content, "/test/SKILL.md");
+		expect(result).not.toBeNull();
+		expect(result?.mode).toBeUndefined();
 	});
 });
 
@@ -181,5 +210,95 @@ describe("discoverSkills", () => {
 		const names = registry.list().map((s) => s.name);
 		expect(names).toContain("skill-a");
 		expect(names).toContain("skill-b");
+	});
+
+	test("excludes debug-mode skills when debug is false", () => {
+		const skillDir = path.join(tmpDir, "skills", "debug-skill");
+		fs.mkdirSync(skillDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(skillDir, "SKILL.md"),
+			["---", "name: debug-only", "description: A debug skill", "mode: debug", "---", "Debug content"].join("\n"),
+		);
+		const registry = discoverSkills([path.join(tmpDir, "skills")]);
+		expect(registry.list()).toHaveLength(0);
+	});
+
+	test("includes debug-mode skills when debug is true", () => {
+		const skillDir = path.join(tmpDir, "skills", "debug-skill");
+		fs.mkdirSync(skillDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(skillDir, "SKILL.md"),
+			["---", "name: debug-only", "description: A debug skill", "mode: debug", "---", "Debug content"].join("\n"),
+		);
+		const registry = discoverSkills([path.join(tmpDir, "skills")], { debug: true });
+		expect(registry.list()).toHaveLength(1);
+		expect(registry.get("debug-only")).not.toBeUndefined();
+	});
+
+	test("includes skills without mode regardless of debug flag", () => {
+		const skillDir = path.join(tmpDir, "skills", "normal-skill");
+		fs.mkdirSync(skillDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(skillDir, "SKILL.md"),
+			["---", "name: normal", "description: A normal skill", "---", "Normal content"].join("\n"),
+		);
+		const registry = discoverSkills([path.join(tmpDir, "skills")], { debug: false });
+		expect(registry.list()).toHaveLength(1);
+		expect(registry.get("normal")).not.toBeUndefined();
+	});
+
+	test("registers built-in skills", () => {
+		const builtinSkills: BuiltinSkillSource[] = [
+			{
+				raw: ["---", "name: builtin-skill", "description: A built-in skill", "---", "Built-in content"].join("\n"),
+				relativePath: "skills/builtin-skill/SKILL.md",
+			},
+		];
+		const registry = discoverSkills([], { builtinSkills });
+		expect(registry.list()).toHaveLength(1);
+		expect(registry.get("builtin-skill")?.description).toBe("A built-in skill");
+		expect(registry.get("builtin-skill")?.filePath).toBe("<builtin>/skills/builtin-skill/SKILL.md");
+	});
+
+	test("directory skills override built-in skills by name", () => {
+		const builtinSkills: BuiltinSkillSource[] = [
+			{
+				raw: ["---", "name: override-me", "description: Built-in version", "---", "Built-in body"].join("\n"),
+				relativePath: "skills/override-me/SKILL.md",
+			},
+		];
+		const skillDir = path.join(tmpDir, "skills", "override-me");
+		fs.mkdirSync(skillDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(skillDir, "SKILL.md"),
+			["---", "name: override-me", "description: Directory version", "---", "Directory body"].join("\n"),
+		);
+		const registry = discoverSkills([path.join(tmpDir, "skills")], { builtinSkills });
+		expect(registry.list()).toHaveLength(1);
+		expect(registry.get("override-me")?.description).toBe("Directory version");
+		expect(registry.get("override-me")?.content).toContain("Directory body");
+	});
+
+	test("filters debug-mode built-in skills when debug is false", () => {
+		const builtinSkills: BuiltinSkillSource[] = [
+			{
+				raw: ["---", "name: debug-builtin", "description: Debug built-in", "mode: debug", "---", "Debug content"].join("\n"),
+				relativePath: "skills/debug-builtin/SKILL.md",
+			},
+		];
+		const registry = discoverSkills([], { builtinSkills });
+		expect(registry.list()).toHaveLength(0);
+	});
+
+	test("includes debug-mode built-in skills when debug is true", () => {
+		const builtinSkills: BuiltinSkillSource[] = [
+			{
+				raw: ["---", "name: debug-builtin", "description: Debug built-in", "mode: debug", "---", "Debug content"].join("\n"),
+				relativePath: "skills/debug-builtin/SKILL.md",
+			},
+		];
+		const registry = discoverSkills([], { debug: true, builtinSkills });
+		expect(registry.list()).toHaveLength(1);
+		expect(registry.get("debug-builtin")).not.toBeUndefined();
 	});
 });
