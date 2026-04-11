@@ -55,6 +55,7 @@ export type StreamEvent =
 export interface StreamMetrics {
 	model: string;
 	promptTokens: number;
+	promptChars: number;
 	totalTokens: number;
 	initiator: "user" | "agent";
 }

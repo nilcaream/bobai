@@ -18,6 +18,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 	let turnPremiumCost = 0;
 	let turnTokens = 0;
 	let turnLastCallTokens = 0;
+	let turnLastCallChars = 0;
 	let baselineTokens = 0;
 
 	return {
@@ -30,6 +31,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 					turnModel = metrics.model;
 					turnTokens += metrics.totalTokens;
 					turnLastCallTokens = metrics.promptTokens;
+					turnLastCallChars = metrics.promptChars;
 					if (metrics.initiator === "agent") turnAgentCalls++;
 					else turnUserCalls++;
 					const multiplier = PREMIUM_REQUEST_MULTIPLIERS[metrics.model] ?? 0;
@@ -46,6 +48,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			turnPremiumCost = 0;
 			turnTokens = 0;
 			turnLastCallTokens = 0;
+			turnLastCallChars = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
 
@@ -76,6 +79,10 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			return turnLastCallTokens;
 		},
 
+		getTurnPromptChars(): number {
+			return turnLastCallChars;
+		},
+
 		saveTurnState(): unknown {
 			return {
 				turnStartTime,
@@ -85,6 +92,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 				turnPremiumCost,
 				turnTokens,
 				turnLastCallTokens,
+				turnLastCallChars,
 				baselineTokens,
 			};
 		},
@@ -98,6 +106,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 				turnPremiumCost: number;
 				turnTokens: number;
 				turnLastCallTokens: number;
+				turnLastCallChars?: number;
 				baselineTokens: number;
 			};
 			turnStartTime = s.turnStartTime;
@@ -107,6 +116,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			turnPremiumCost = s.turnPremiumCost;
 			turnTokens = s.turnTokens;
 			turnLastCallTokens = s.turnLastCallTokens;
+			turnLastCallChars = s.turnLastCallChars ?? 0;
 			baselineTokens = s.baselineTokens;
 		},
 	};

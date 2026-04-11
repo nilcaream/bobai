@@ -331,7 +331,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 						uiOutput = `Unknown tool: ${tc.function.name}`;
 					} else {
 						try {
-							const result = await tool.execute(args, { projectRoot, accessibleDirectories, sessionId, toolCallId: tc.id });
+							const result = await tool.execute(args, {
+								projectRoot,
+								accessibleDirectories,
+								sessionId,
+								toolCallId: tc.id,
+								provider,
+							});
 							llmOutput = result.llmOutput;
 							uiOutput = result.uiOutput;
 							mergeable = result.mergeable;

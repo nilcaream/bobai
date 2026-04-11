@@ -284,6 +284,7 @@ export function createCopilotProvider(
 							options.onMetrics({
 								model: options.model,
 								promptTokens: event.tokenCount,
+								promptChars: callChars,
 								totalTokens: event.tokenCount,
 								initiator: effectiveInitiator,
 							});
@@ -580,7 +581,13 @@ export function createCopilotProvider(
 							// Accumulate per-turn stats — route to external callback if provided,
 							// otherwise update the provider's own closure-scoped variables.
 							if (options.onMetrics) {
-								options.onMetrics({ model: options.model, promptTokens, totalTokens, initiator: effectiveInitiator });
+								options.onMetrics({
+									model: options.model,
+									promptTokens,
+									promptChars: callChars,
+									totalTokens,
+									initiator: effectiveInitiator,
+								});
 							} else {
 								turnModel = options.model;
 								turnTokens += totalTokens;

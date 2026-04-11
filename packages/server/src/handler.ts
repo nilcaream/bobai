@@ -14,6 +14,7 @@ import { repairMessageOrdering } from "./message-repair";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
+import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { AuthError, ProviderError } from "./provider/provider";
 import {
@@ -90,6 +91,7 @@ export async function handlePrompt(req: PromptRequest) {
 	let sessionObj: { model: string | null; title: string | null } | null = null;
 	let effectiveModel = model;
 	let lastAssistantMessageId: string | null = null;
+	let turnProvider: ReturnType<typeof createIsolatedTurnProvider> | undefined;
 
 	try {
 		// Resolve or create session
@@ -276,8 +278,9 @@ export async function handlePrompt(req: PromptRequest) {
 			});
 		}
 
-		// Signal the provider to start tracking turn stats
-		provider.beginTurn?.(sessionPromptTokens);
+		// Create an isolated turn provider so concurrent sessions don't corrupt each other's metrics
+		turnProvider = createIsolatedTurnProvider(provider);
+		turnProvider.beginTurn?.(sessionPromptTokens);
 
 		// Run the agent loop
 		// Capture tool metadata from onEvent (fires before onMessage for the same tool call)
@@ -293,7 +296,7 @@ export async function handlePrompt(req: PromptRequest) {
 		>();
 		await runWithScope(sessionScope(currentSessionId as string), () =>
 			runAgentLoop({
-				provider,
+				provider: turnProvider as Provider,
 				model: effectiveModel,
 				messages,
 				tools,
@@ -349,9 +352,9 @@ export async function handlePrompt(req: PromptRequest) {
 			}),
 		);
 
-		const summary = provider.getTurnSummary?.();
-		const promptTokens = provider.getTurnPromptTokens?.() ?? 0;
-		const promptChars = provider.getTurnPromptChars?.() ?? 0;
+		const summary = turnProvider?.getTurnSummary?.();
+		const promptTokens = turnProvider?.getTurnPromptTokens?.() ?? 0;
+		const promptChars = turnProvider?.getTurnPromptChars?.() ?? 0;
 		if (currentSessionId && promptTokens > 0) {
 			updateSessionPromptTokens(db, currentSessionId, promptTokens, promptChars);
 		}
@@ -399,9 +402,9 @@ export async function handlePrompt(req: PromptRequest) {
 
 		// Send done so UI gets sessionId (even on abort — needed for session continuity)
 		if (currentSessionId) {
-			const errSummary = provider.getTurnSummary?.();
-			const errPromptTokens = provider.getTurnPromptTokens?.() ?? 0;
-			const errPromptChars = provider.getTurnPromptChars?.() ?? 0;
+			const errSummary = turnProvider?.getTurnSummary?.();
+			const errPromptTokens = turnProvider?.getTurnPromptTokens?.() ?? 0;
+			const errPromptChars = turnProvider?.getTurnPromptChars?.() ?? 0;
 			if (errPromptTokens > 0) {
 				updateSessionPromptTokens(db, currentSessionId, errPromptTokens, errPromptChars);
 			}

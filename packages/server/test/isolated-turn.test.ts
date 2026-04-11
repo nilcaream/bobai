@@ -14,7 +14,7 @@ function mockProvider(): Provider {
 			// Route metrics via onMetrics if provided, otherwise accumulate locally
 			const initiator = opts.initiator ?? "agent";
 			if (opts.onMetrics) {
-				opts.onMetrics({ model: opts.model, promptTokens: 500, totalTokens: 750, initiator });
+				opts.onMetrics({ model: opts.model, promptTokens: 500, promptChars: 1200, totalTokens: 750, initiator });
 			} else {
 				turnModel = opts.model;
 				turnCalls++;
@@ -135,11 +135,13 @@ describe("createIsolatedTurnProvider", () => {
 			turnPremiumCost: 3.5,
 			turnTokens: 12000,
 			turnLastCallTokens: 8000,
+			turnLastCallChars: 25000,
 			baselineTokens: 6000,
 		};
 		isolated.restoreTurnState?.(customState);
 
 		expect(isolated.getTurnPromptTokens?.()).toBe(8000);
+		expect(isolated.getTurnPromptChars?.()).toBe(25000);
 		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("gpt-4o");
 		expect(summary).toContain("agent: 5");
@@ -194,5 +196,14 @@ describe("createIsolatedTurnProvider", () => {
 		expect(aSummary).toContain("agent: 1");
 		expect(bSummary).toContain("model-b");
 		expect(bSummary).toContain("agent: 1");
+	});
+
+	test("getTurnPromptChars returns chars from onMetrics", async () => {
+		const original = mockProvider();
+		const isolated = createIsolatedTurnProvider(original);
+		isolated.beginTurn?.(0);
+		for await (const _e of isolated.stream({ model: "m", messages: [], initiator: "agent" })) {
+		}
+		expect(isolated.getTurnPromptChars?.()).toBe(1200);
 	});
 });
