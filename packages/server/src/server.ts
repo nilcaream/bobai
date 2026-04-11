@@ -7,11 +7,11 @@ import { createCompactionRegistry } from "./compaction/registry";
 import {
 	AGE_INFLECTION,
 	AGE_STEEPNESS,
-	computeContextPressure,
 	computeMinimumDistance,
 	DEFAULT_THRESHOLD,
 	MAX_AGE_DISTANCE,
 	PRE_PROMPT_TARGET,
+	pressureFromUsage,
 } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
@@ -249,7 +249,7 @@ export function createServer(options: ServerOptions) {
 				}
 
 				// Compute compaction reach for each tool at current usage
-				const pressure = computeContextPressure(compactionResult.usage);
+				const pressure = pressureFromUsage(compactionResult.usage);
 				const toolReach: Array<{
 					name: string;
 					type: "output" | "arguments";

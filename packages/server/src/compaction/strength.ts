@@ -19,8 +19,12 @@ export const DEFAULT_THRESHOLD = 0.2;
  */
 export function computeContextPressure(ctx: StrengthContext): number {
 	if (ctx.contextWindow <= 0) return 0;
-	const threshold = ctx.threshold ?? DEFAULT_THRESHOLD;
 	const usage = ctx.promptTokens / ctx.contextWindow;
+	return pressureFromUsage(usage, ctx.threshold);
+}
+
+/** Compute context pressure directly from a usage value (0..1). */
+export function pressureFromUsage(usage: number, threshold: number = DEFAULT_THRESHOLD): number {
 	if (usage <= threshold) return 0;
 	return Math.min(1, (usage - threshold) / (1 - threshold));
 }
