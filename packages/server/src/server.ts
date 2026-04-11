@@ -316,9 +316,9 @@ export function createServer(options: ServerOptions) {
 						elapsedMs: compactionResult.elapsedMs,
 						messagesBefore: countByRole(messages),
 						messagesAfter: countByRole(compactionResult.messages),
+						toolReach,
 					},
 					details: Object.fromEntries(compactionResult.details),
-					toolReach,
 				});
 			}
 
