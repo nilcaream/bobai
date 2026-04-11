@@ -39,6 +39,15 @@ export interface CompactionStats {
 	elapsedMs: number;
 	messagesBefore: Record<string, number>;
 	messagesAfter: Record<string, number>;
+	toolReach?: ToolReachEntry[];
+}
+
+export interface ToolReachEntry {
+	name: string;
+	type: "output" | "arguments";
+	threshold: number;
+	minimumDistance: number;
+	compactedFrom: number | null;
 }
 
 export interface CompactionDetail {
@@ -258,6 +267,27 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 		const before = stats.messagesBefore[role] ?? 0;
 		const after = stats.messagesAfter[role] ?? 0;
 		sections.push(`| ${role} | ${before} | ${after} |`);
+	}
+
+	// Section 5: Compaction reach at current usage
+	if (stats.toolReach && stats.toolReach.length > 0) {
+		sections.push("");
+		sections.push(`# Compaction reach at current usage (${(stats.usage * 100).toFixed(0)}%)`);
+		sections.push("");
+		sections.push("| role / tool | type | threshold | minimum distance | compacted from |");
+		sections.push("|---|---|---|---|---|");
+		for (const entry of stats.toolReach) {
+			if (entry.threshold === -1) {
+				// Excluded role (user, assistant, system)
+				sections.push(`| ${entry.name} | — | — | — | excluded |`);
+			} else if (entry.minimumDistance === -1) {
+				sections.push(`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | — | never at current usage |`);
+			} else {
+				sections.push(
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.minimumDistance} | #${entry.compactedFrom} |`,
+				);
+			}
+		}
 	}
 
 	return sections.join("\n");

@@ -4,7 +4,15 @@ import { type CommandRequest, handleCommand } from "./command";
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { EVICTION_DISTANCE } from "./compaction/eviction";
 import { createCompactionRegistry } from "./compaction/registry";
-import { AGE_INFLECTION, AGE_STEEPNESS, DEFAULT_THRESHOLD, MAX_AGE_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
+import {
+	AGE_INFLECTION,
+	AGE_STEEPNESS,
+	computeContextPressure,
+	computeMinimumDistance,
+	DEFAULT_THRESHOLD,
+	MAX_AGE_DISTANCE,
+	PRE_PROMPT_TARGET,
+} from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
@@ -240,6 +248,52 @@ export function createServer(options: ServerOptions) {
 					return counts;
 				}
 
+				// Compute compaction reach for each tool at current usage
+				const pressure = computeContextPressure(compactionResult.usage);
+				const toolReach: Array<{
+					name: string;
+					type: "output" | "arguments";
+					threshold: number;
+					minimumDistance: number;
+					compactedFrom: number | null;
+				}> = [];
+				for (const def of tools.definitions) {
+					const toolName = def.function.name;
+					const tool = tools.get(toolName);
+					if (!tool) continue;
+					if (tool.outputThreshold !== undefined) {
+						const dist = computeMinimumDistance(pressure, tool.outputThreshold, messages.length);
+						toolReach.push({
+							name: toolName,
+							type: "output",
+							threshold: tool.outputThreshold,
+							minimumDistance: dist,
+							compactedFrom: dist > 0 ? messages.length - dist : null,
+						});
+					}
+					if (tool.argsThreshold !== undefined) {
+						const dist = computeMinimumDistance(pressure, tool.argsThreshold, messages.length);
+						toolReach.push({
+							name: toolName,
+							type: "arguments",
+							threshold: tool.argsThreshold,
+							minimumDistance: dist,
+							compactedFrom: dist > 0 ? messages.length - dist : null,
+						});
+					}
+				}
+				// Add excluded roles
+				for (const role of ["user", "assistant", "system"]) {
+					toolReach.push({ name: role, type: "output", threshold: -1, minimumDistance: -1, compactedFrom: null });
+				}
+				// Sort by compaction resistance: smallest minimum distance first, excluded/never last
+				toolReach.sort((a, b) => {
+					if (a.minimumDistance === -1 && b.minimumDistance === -1) return 0;
+					if (a.minimumDistance === -1) return 1;
+					if (b.minimumDistance === -1) return -1;
+					return a.minimumDistance - b.minimumDistance;
+				});
+
 				return Response.json({
 					messages: compactedStored.map((m) => ({ ...m, messageIndex: m.originalIndex })),
 					stats: {
@@ -264,6 +318,7 @@ export function createServer(options: ServerOptions) {
 						messagesAfter: countByRole(compactionResult.messages),
 					},
 					details: Object.fromEntries(compactionResult.details),
+					toolReach,
 				});
 			}
 

@@ -384,4 +384,43 @@ describe("formatCompactionSummary", () => {
 		expect(result).toContain("| assistant | 40 | 30 |");
 		expect(result).toContain("| tool | 39 | 34 |");
 	});
+
+	test("includes compaction reach section when toolReach is provided", () => {
+		const stats: CompactionStats = {
+			usage: 0.8,
+			iterations: 7,
+			charsBefore: 50000,
+			charsAfter: 30000,
+			charBudget: 35000,
+			charsPerToken: 3.5,
+			type: "pre-prompt",
+			parameters: {
+				threshold: 0.2,
+				inflection: 0.7,
+				steepness: 5,
+				maxAgeDistance: 100,
+				evictionDistance: 200,
+			},
+			estimatedContextNeeded: 0.65,
+			target: 0.8,
+			elapsedMs: 12.5,
+			messagesBefore: { total: 100 },
+			messagesAfter: { total: 80 },
+			toolReach: [
+				{ name: "grep_search", type: "output", threshold: 0.2, minimumDistance: 8, compactedFrom: 92 },
+				{ name: "read_file", type: "output", threshold: 0.3, minimumDistance: 12, compactedFrom: 88 },
+				{ name: "task", type: "output", threshold: 0.8, minimumDistance: -1, compactedFrom: null },
+				{ name: "user", type: "output", threshold: -1, minimumDistance: -1, compactedFrom: null },
+			],
+		};
+		const result = formatCompactionSummary(stats);
+
+		// Section 5: Compaction reach
+		expect(result).toContain("# Compaction reach at current usage (80%)");
+		expect(result).toContain("| role / tool | type | threshold | minimum distance | compacted from |");
+		expect(result).toContain("| grep_search | output | 0.20 | 8 | #92 |");
+		expect(result).toContain("| read_file | output | 0.30 | 12 | #88 |");
+		expect(result).toContain("| task | output | 0.80 | — | never at current usage |");
+		expect(result).toContain("| user | — | — | — | excluded |");
+	});
 });

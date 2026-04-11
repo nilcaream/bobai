@@ -279,3 +279,39 @@ describe("compaction constants", () => {
 		expect(USAGE_STEP).toBe(0.05);
 	});
 });
+
+describe("computeMinimumDistance", () => {
+	const { computeMinimumDistance } = require("../src/compaction/strength");
+
+	test("returns -1 when pressure is zero", () => {
+		expect(computeMinimumDistance(0, 0.3, 200)).toBe(-1);
+	});
+
+	test("returns -1 when threshold is unreachable at max age", () => {
+		// pressure=0.5, threshold=0.8 → max factor ≈ 0.5 < 0.8
+		expect(computeMinimumDistance(0.5, 0.8, 200)).toBe(-1);
+	});
+
+	test("returns a positive distance when threshold is reachable", () => {
+		// pressure=0.75 (usage=0.8), threshold=0.3
+		const dist = computeMinimumDistance(0.75, 0.3, 200);
+		expect(dist).toBeGreaterThan(0);
+		expect(dist).toBeLessThanOrEqual(100); // MAX_AGE_DISTANCE
+	});
+
+	test("lower threshold requires smaller distance", () => {
+		const distLow = computeMinimumDistance(0.75, 0.2, 200);
+		const distHigh = computeMinimumDistance(0.75, 0.5, 200);
+		expect(distLow).toBeGreaterThan(0);
+		expect(distHigh).toBeGreaterThan(0);
+		expect(distLow).toBeLessThan(distHigh);
+	});
+
+	test("higher pressure reaches threshold at smaller distance", () => {
+		const distLowPressure = computeMinimumDistance(0.5, 0.3, 200);
+		const distHighPressure = computeMinimumDistance(0.75, 0.3, 200);
+		expect(distLowPressure).toBeGreaterThan(0);
+		expect(distHighPressure).toBeGreaterThan(0);
+		expect(distHighPressure).toBeLessThan(distLowPressure);
+	});
+});

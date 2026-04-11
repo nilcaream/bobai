@@ -132,3 +132,26 @@ export function totalContentChars(
 	}
 	return total;
 }
+
+/**
+ * Compute the minimum distance-from-end at which a message gets compacted,
+ * given a context pressure and the tool's compaction threshold.
+ *
+ * Searches distances from 1 to totalMessages, returning the first distance
+ * where pressure × age(distance) > threshold.
+ *
+ * @returns The minimum distance, or -1 if the threshold is unreachable at current pressure.
+ */
+export function computeMinimumDistance(pressure: number, threshold: number, totalMessages: number): number {
+	if (pressure <= 0 || threshold < 0) return -1;
+	// Max possible factor is pressure × age(at MAX_AGE_DISTANCE) ≈ pressure × 1.0
+	// Quick check: if pressure × 1.0 <= threshold, it's unreachable
+	const maxAge = computeAge(0, MAX_AGE_DISTANCE + 2); // index 0 in a large array → max distance
+	if (pressure * maxAge <= threshold) return -1;
+	for (let dist = 1; dist <= Math.min(totalMessages, MAX_AGE_DISTANCE); dist++) {
+		// Simulate: messageIndex = totalMessages - 1 - dist means distanceFromEnd = dist
+		const age = computeAge(totalMessages - 1 - dist, totalMessages);
+		if (pressure * age > threshold) return dist;
+	}
+	return -1;
+}
