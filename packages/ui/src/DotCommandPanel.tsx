@@ -86,62 +86,82 @@ function renderSessionPanel(
 	if (!sessionList) return "Loading sessions...";
 	if (sessionList.length === 0) return "No sessions";
 
-	const SESSION_DISPLAY_LIMIT = 32;
+	const SESSION_DISPLAY_LIMIT = 20;
 	const argText = (args ?? "").trim();
-	const argParts = argText.split(/\s+/);
-	const indexPart = argParts[0] ?? "";
-	const subcommand = argParts[1];
-	const filtered = indexPart ? sessionList.filter((s) => String(s.index).includes(indexPart)) : sessionList;
+	const isNumeric = !argText || /^\d+$/.test(argText.split(/\s+/)[0] ?? "");
 
-	// If user typed "N delete", show a delete preview instead of the session list
-	if (subcommand === "delete") {
-		const idx = Number.parseInt(indexPart, 10);
-		const target = !Number.isNaN(idx) ? sessionList.find((s) => s.index === idx) : undefined;
-		if (target) {
-			const label = target.title ? `"${target.title}"` : `#${target.index}`;
-			return `Delete session ${label}`;
+	// Numeric mode: filter by index, support "N delete" subcommand
+	if (isNumeric) {
+		const argParts = argText.split(/\s+/);
+		const indexPart = argParts[0] ?? "";
+		const subcommand = argParts[1];
+
+		// If user typed "N delete", show a delete preview instead of the session list
+		if (subcommand === "delete") {
+			const idx = Number.parseInt(indexPart, 10);
+			const target = !Number.isNaN(idx) ? sessionList.find((s) => s.index === idx) : undefined;
+			if (target) {
+				const label = target.title ? `"${target.title}"` : `#${target.index}`;
+				return `Delete session ${label}`;
+			}
+			return `Invalid session index: ${indexPart}`;
 		}
-		return `Invalid session index: ${indexPart}`;
+
+		const filtered = indexPart ? sessionList.filter((s) => String(s.index).includes(indexPart)) : sessionList;
+		return renderSessionList(filtered, SESSION_DISPLAY_LIMIT, getSessionId, sessionLocked);
 	}
 
-	const display = filtered.slice(0, SESSION_DISPLAY_LIMIT);
+	// Text mode: filter by title words
+	const words = argText.toLowerCase().split(/\s+/).filter(Boolean);
+	const filtered = sessionList.filter((s) => {
+		if (!s.title) return false;
+		const lower = s.title.toLowerCase();
+		return words.every((w) => lower.includes(w));
+	});
+	return renderSessionList(filtered, SESSION_DISPLAY_LIMIT, getSessionId, sessionLocked);
+}
+
+function renderSessionList(
+	filtered: { index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[],
+	limit: number,
+	getSessionId: () => string | null,
+	sessionLocked: boolean,
+) {
+	const display = filtered.slice(0, limit);
+	if (display.length === 0) return <div>No matching sessions</div>;
 	const maxIndex = Math.max(...display.map((s) => s.index));
 	const padWidth = String(maxIndex).length;
-	return display.length > 0 ? (
-		display.map((s) => {
-			const isCurrentSession = s.id === getSessionId();
-			const isOwnedBySelf = isCurrentSession && !sessionLocked;
-			const isOwnedByOther = s.owned && !isOwnedBySelf;
-			const localTime = new Date(s.updatedAt)
-				.toLocaleString("sv-SE", {
-					year: "numeric",
-					month: "2-digit",
-					day: "2-digit",
-					hour: "2-digit",
-					minute: "2-digit",
-					second: "2-digit",
-					hour12: false,
-				})
-				.replace(",", "");
-			const paddedIndex = String(s.index).padStart(padWidth, " ");
-			return (
-				<div key={s.id}>
-					{paddedIndex}: {localTime} {s.title ?? ""}
-					{isOwnedByOther ? " (active in another tab)" : ""}
-					{isOwnedBySelf ? " (this session)" : ""}
-				</div>
-			);
-		})
-	) : (
-		<div>No matching sessions</div>
-	);
+	return display.map((s) => {
+		const isCurrentSession = s.id === getSessionId();
+		const isOwnedBySelf = isCurrentSession && !sessionLocked;
+		const isOwnedByOther = s.owned && !isOwnedBySelf;
+		const localTime = new Date(s.updatedAt)
+			.toLocaleString("sv-SE", {
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+				hour: "2-digit",
+				minute: "2-digit",
+				second: "2-digit",
+				hour12: false,
+			})
+			.replace(",", "");
+		const paddedIndex = String(s.index).padStart(padWidth, " ");
+		return (
+			<div key={s.id}>
+				{paddedIndex}: {localTime} {s.title ?? ""}
+				{isOwnedByOther ? " (active in another tab)" : ""}
+				{isOwnedBySelf ? " (this session)" : ""}
+			</div>
+		);
+	});
 }
 
 function renderSubagentPanel(args: string, subagentList: { index: number; title: string; sessionId: string }[] | null) {
 	if (!subagentList) return "Loading subagents...";
 	if (subagentList.length === 0) return "No subagent sessions";
 
-	const SUBAGENT_DISPLAY_LIMIT = 32;
+	const SUBAGENT_DISPLAY_LIMIT = 20;
 	const indexPart = (args ?? "").trim();
 	const filtered = indexPart ? subagentList.filter((s) => String(s.index).includes(indexPart)) : subagentList;
 	const display = filtered.slice(0, SUBAGENT_DISPLAY_LIMIT);

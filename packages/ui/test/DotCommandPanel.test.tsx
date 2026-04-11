@@ -162,6 +162,81 @@ describe("DotCommandPanel", () => {
 		expect(screen.queryByText(/Delete session "My Chat"/)).not.toBeNull();
 	});
 
+	test("session panel: filters by title words when arg is non-numeric", () => {
+		const parsed = dot({ command: "session", args: "im tes" });
+		const sessions = [
+			{ index: 1, id: "s1", title: "implement tests", updatedAt: "2025-01-15T10:30:00Z", owned: false },
+			{ index: 2, id: "s2", title: "fix UI issues", updatedAt: "2025-01-15T11:00:00Z", owned: false },
+			{ index: 3, id: "s3", title: "some other tests", updatedAt: "2025-01-15T12:00:00Z", owned: false },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("implement tests");
+		expect(text).not.toContain("fix UI issues");
+		// "some other tests" does NOT contain "im", so it's excluded
+		expect(text).not.toContain("some other tests");
+	});
+
+	test("session panel: title search is case-insensitive", () => {
+		const parsed = dot({ command: "session", args: "IMPL" });
+		const sessions = [
+			{ index: 1, id: "s1", title: "Implement Feature", updatedAt: "2025-01-15T10:30:00Z", owned: false },
+			{ index: 2, id: "s2", title: "fix bugs", updatedAt: "2025-01-15T11:00:00Z", owned: false },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("Implement Feature");
+		expect(text).not.toContain("fix bugs");
+	});
+
+	test("session panel: title search with no matches shows message", () => {
+		const parsed = dot({ command: "session", args: "nonexistent" });
+		const sessions = [{ index: 1, id: "s1", title: "implement tests", updatedAt: "2025-01-15T10:30:00Z", owned: false }];
+		render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		expect(screen.queryByText("No matching sessions")).not.toBeNull();
+	});
+
+	test("session panel: sessions with null title are excluded from title search", () => {
+		const parsed = dot({ command: "session", args: "test" });
+		const sessions = [
+			{ index: 1, id: "s1", title: null, updatedAt: "2025-01-15T10:30:00Z", owned: false },
+			{ index: 2, id: "s2", title: "run tests", updatedAt: "2025-01-15T11:00:00Z", owned: false },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("run tests");
+		// Session 1 has null title, should not appear
+		const lines = container.querySelectorAll(".panel--dot > div");
+		const lineTexts = Array.from(lines).map((l) => l.textContent ?? "");
+		expect(lineTexts.every((t) => !t.startsWith("1:"))).toBe(true);
+	});
+
+	test("session panel: numeric arg still filters by index, not title", () => {
+		const parsed = dot({ command: "session", args: "2" });
+		const sessions = [
+			{ index: 1, id: "s1", title: "Session One", updatedAt: "2025-01-15T10:30:00Z", owned: false },
+			{ index: 2, id: "s2", title: "Session Two", updatedAt: "2025-01-15T11:00:00Z", owned: false },
+			{ index: 12, id: "s12", title: "Session Twelve", updatedAt: "2025-01-15T12:00:00Z", owned: false },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("Session Two");
+		expect(text).toContain("Session Twelve");
+		expect(text).not.toContain("Session One");
+	});
+
+	test("session panel: arg starting with digit but containing letters uses text search", () => {
+		const parsed = dot({ command: "session", args: "2test" });
+		const sessions = [
+			{ index: 2, id: "s2", title: "Session Two", updatedAt: "2025-01-15T10:30:00Z", owned: false },
+			{ index: 3, id: "s3", title: "2test session", updatedAt: "2025-01-15T11:00:00Z", owned: false },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("2test session");
+		expect(text).not.toContain("Session Two");
+	});
+
 	// --- Subagent panel ---
 
 	test("subagent panel: shows subagent list", () => {

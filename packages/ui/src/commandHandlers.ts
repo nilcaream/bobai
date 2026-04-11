@@ -89,22 +89,59 @@ export function handleSessionCommand(params: {
 		// .session with space but no number — no-op (list is in dot panel)
 		return;
 	}
-	const parts = params.arg.split(/\s+/);
-	const indexStr = parts[0] ?? "";
-	const subcommand = parts[1];
 	if (!params.sessionList) {
 		params.setVolatileMessage({ text: "Session list not loaded", kind: "error" });
 		return;
 	}
-	const index = Number.parseInt(indexStr, 10);
-	const targetSession = !Number.isNaN(index) ? params.sessionList.find((s) => s.index === index) : undefined;
-	if (!targetSession) {
-		params.setVolatileMessage({ text: `Invalid session index: ${indexStr}`, kind: "error" });
+
+	const parts = params.arg.split(/\s+/);
+	const firstWord = parts[0] ?? "";
+	const isNumeric = /^\d+$/.test(firstWord);
+
+	if (!isNumeric) {
+		// Text search: find sessions whose title contains all words
+		const words = params.arg.toLowerCase().split(/\s+/).filter(Boolean);
+		const matches = params.sessionList.filter((s) => {
+			if (!s.title) return false;
+			const lower = s.title.toLowerCase();
+			return words.every((w) => lower.includes(w));
+		});
+		if (matches.length === 0) {
+			params.setVolatileMessage({ text: `No session matching "${params.arg}"`, kind: "error" });
+			return;
+		}
+		// Pick the first match, applying self/owned rules
+		const currentId = params.getSessionId();
+		const first = matches[0]!;
+		if (first.id === currentId) {
+			// Self — silently no-op (idempotent)
+			return;
+		}
+		if (first.owned) {
+			params.setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
+			return;
+		}
+		params.loadSession(first.id);
+		params.setStagedSkills([]);
+		params.setView((prev) => ({ ...prev, mode: "chat" }));
 		return;
 	}
 
-	// Delete subcommand: .session N delete
-	if (subcommand === "delete") {
+	// Numeric mode: index-based selection
+	const index = Number.parseInt(firstWord, 10);
+	const subcommand = parts[1];
+	const targetSession = params.sessionList.find((s) => s.index === index);
+	if (!targetSession) {
+		params.setVolatileMessage({ text: `Invalid session index: ${firstWord}`, kind: "error" });
+		return;
+	}
+
+	// Delete subcommand: .session N delete (only recognized subcommand)
+	if (subcommand) {
+		if (subcommand !== "delete") {
+			params.setVolatileMessage({ text: `Unknown subcommand: ${subcommand}`, kind: "error" });
+			return;
+		}
 		const isTargetSelf = targetSession.id === params.getSessionId();
 		const isOwnedByOther = targetSession.owned && !isTargetSelf;
 		if (isOwnedByOther) {

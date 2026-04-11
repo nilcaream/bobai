@@ -277,11 +277,11 @@ describe("handleSessionCommand", () => {
 		});
 	});
 
-	test("non-numeric index sets volatile error", () => {
+	test("non-numeric arg triggers text search (no longer treated as invalid index)", () => {
 		const params = makeParams({ arg: "xyz" });
 		handleSessionCommand(params);
 		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Invalid session index: xyz",
+			text: 'No session matching "xyz"',
 			kind: "error",
 		});
 	});
@@ -416,6 +416,111 @@ describe("handleSessionCommand", () => {
 		expect(params.loadSession).toHaveBeenCalledWith("ccc");
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
 		expect(params.setView).toHaveBeenCalledTimes(1);
+	});
+
+	// -- Unknown subcommand --
+
+	test("unknown subcommand sets volatile error", () => {
+		const params = makeParams({ arg: "1 fix" });
+		handleSessionCommand(params);
+		expect(params.setVolatileMessage).toHaveBeenCalledWith({
+			text: "Unknown subcommand: fix",
+			kind: "error",
+		});
+		expect(params.loadSession).not.toHaveBeenCalled();
+	});
+
+	// -- Text search --
+
+	test("text search: loads first session matching all words in title", () => {
+		const params = makeParams({
+			arg: "im tes",
+			sessionList: [
+				{ index: 1, id: "s1", title: "implement tests", updatedAt: "2024-01-01", owned: false },
+				{ index: 2, id: "s2", title: "fix UI issues", updatedAt: "2024-01-02", owned: false },
+				{ index: 3, id: "s3", title: "some other tests", updatedAt: "2024-01-03", owned: false },
+			],
+		});
+		handleSessionCommand(params);
+		expect(params.loadSession).toHaveBeenCalledWith("s1");
+	});
+
+	test("text search: case-insensitive matching", () => {
+		const params = makeParams({
+			arg: "IMPL",
+			sessionList: [
+				{ index: 1, id: "s1", title: "Implement Feature", updatedAt: "2024-01-01", owned: false },
+				{ index: 2, id: "s2", title: "fix bugs", updatedAt: "2024-01-02", owned: false },
+			],
+		});
+		handleSessionCommand(params);
+		expect(params.loadSession).toHaveBeenCalledWith("s1");
+	});
+
+	test("text search: no match sets volatile error", () => {
+		const params = makeParams({
+			arg: "nonexistent",
+			sessionList: [{ index: 1, id: "s1", title: "implement tests", updatedAt: "2024-01-01", owned: false }],
+		});
+		handleSessionCommand(params);
+		expect(params.setVolatileMessage).toHaveBeenCalledWith({
+			text: 'No session matching "nonexistent"',
+			kind: "error",
+		});
+	});
+
+	test("text search: first match is self — silently no-op", () => {
+		const params = makeParams({
+			arg: "test",
+			sessionList: [
+				{ index: 1, id: "current-id", title: "test alpha", updatedAt: "2024-01-01", owned: false },
+				{ index: 2, id: "s2", title: "test beta", updatedAt: "2024-01-02", owned: false },
+			],
+			getSessionId: mock(() => "current-id"),
+		});
+		handleSessionCommand(params);
+		expect(params.loadSession).not.toHaveBeenCalled();
+		expect(params.setVolatileMessage).not.toHaveBeenCalled();
+	});
+
+	test("text search: first match is owned by another tab — shows error", () => {
+		const params = makeParams({
+			arg: "test",
+			sessionList: [
+				{ index: 1, id: "s1", title: "test alpha", updatedAt: "2024-01-01", owned: true },
+				{ index: 2, id: "s2", title: "test beta", updatedAt: "2024-01-02", owned: false },
+			],
+		});
+		handleSessionCommand(params);
+		expect(params.setVolatileMessage).toHaveBeenCalledWith({
+			text: "Session is active in another tab",
+			kind: "error",
+		});
+		expect(params.loadSession).not.toHaveBeenCalled();
+	});
+
+	test("text search: arg starting with digit but containing letters uses text search", () => {
+		const params = makeParams({
+			arg: "2test",
+			sessionList: [
+				{ index: 2, id: "s2", title: "Session Two", updatedAt: "2024-01-01", owned: false },
+				{ index: 3, id: "s3", title: "2test session", updatedAt: "2024-01-02", owned: false },
+			],
+		});
+		handleSessionCommand(params);
+		expect(params.loadSession).toHaveBeenCalledWith("s3");
+	});
+
+	test("text search: sessions with null title are excluded", () => {
+		const params = makeParams({
+			arg: "test",
+			sessionList: [{ index: 1, id: "s1", title: null, updatedAt: "2024-01-01", owned: false }],
+		});
+		handleSessionCommand(params);
+		expect(params.setVolatileMessage).toHaveBeenCalledWith({
+			text: 'No session matching "test"',
+			kind: "error",
+		});
 	});
 });
 
