@@ -25,6 +25,7 @@ export function useWebSocket() {
 	const sessionId = useRef<string | null>(null);
 	const eventRouter = useRef(createEventRouter());
 	const messagesRef = useRef<Message[]>([]);
+	const autoScrollRef = useRef(true);
 
 	// Keep refs in sync with state
 	useEffect(() => {
@@ -328,6 +329,7 @@ export function useWebSocket() {
 		setViewingSubagentTitle,
 		parentMessagesRef,
 		eventRouter,
+		autoScrollRef,
 	});
 
 	return {
@@ -361,6 +363,7 @@ export function useWebSocket() {
 		viewingSubagentTitle,
 		welcomeMarkdown,
 		setWelcomeMarkdown,
+		autoScrollRef,
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,

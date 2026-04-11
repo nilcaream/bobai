@@ -57,6 +57,7 @@ export function App() {
 		viewingSubagentTitle,
 		welcomeMarkdown,
 		setWelcomeMarkdown,
+		autoScrollRef,
 		peekSubagent,
 		peekSubagentFromDb,
 		exitSubagentPeek,
@@ -79,8 +80,8 @@ export function App() {
 	} | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-	const { messagesRef, autoScrollRef, peekSubagentWithScroll, peekSubagentFromDbWithScroll, exitSubagentPeekWithScroll } =
-		useAutoScroll(messages, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
+	const { messagesRef, scrollToBottom, peekSubagentWithScroll, peekSubagentFromDbWithScroll, exitSubagentPeekWithScroll } =
+		useAutoScroll(messages, autoScrollRef, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
 
 	const { pendingNewTitle } = useSessionRouting(
 		loadSession,
@@ -256,6 +257,7 @@ export function App() {
 					setView,
 					fetchContext,
 					fetchCompactedContext,
+					scrollToBottom,
 				});
 			} else if (parsed.command === "session") {
 				handleSessionCommand({
@@ -301,7 +303,7 @@ export function App() {
 		if (parsed?.mode === "select" && parsed.matches.length === 1) {
 			const name = parsed.matches[0]?.name;
 			if (name === "view") {
-				handleViewCommand({ arg: "", setView, fetchContext, fetchCompactedContext });
+				handleViewCommand({ arg: "", setView, fetchContext, fetchCompactedContext, scrollToBottom });
 			} else if (name === "session") {
 				handleSessionShortcut({
 					viewingSubagentId,

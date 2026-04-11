@@ -58,6 +58,7 @@ export function handleViewCommand(params: {
 	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
 	fetchContext: () => void;
 	fetchCompactedContext: () => void;
+	scrollToBottom: () => void;
 }): void {
 	const viewMap: Record<string, ViewMode> = { "1": "chat", "2": "context", "3": "compaction" };
 	params.setView((prev) => {
@@ -67,6 +68,10 @@ export function handleViewCommand(params: {
 		if (next === "compaction") params.fetchCompactedContext();
 		return { ...prev, mode: next };
 	});
+	// After switching view mode, scroll to the bottom so the user sees the
+	// latest content. Uses requestAnimationFrame to wait for React to render
+	// the new view content before scrolling.
+	requestAnimationFrame(() => params.scrollToBottom());
 }
 
 // ---------------------------------------------------------------------------

@@ -153,6 +153,7 @@ describe("handleViewCommand", () => {
 			setView: mock(() => {}),
 			fetchContext: mock(() => {}),
 			fetchCompactedContext: mock(() => {}),
+			scrollToBottom: mock(() => {}),
 			...overrides,
 		};
 	}
@@ -222,6 +223,14 @@ describe("handleViewCommand", () => {
 		const updater = extractUpdater<ViewUpdater>(params.setView);
 		const result = updater({ mode: "chat", lineLimit: 100 });
 		expect(result.lineLimit).toBe(100);
+	});
+
+	test("scrolls to bottom after switching view via requestAnimationFrame", async () => {
+		const params = makeParams({ arg: "1" });
+		handleViewCommand(params);
+		// scrollToBottom is called inside requestAnimationFrame, so flush it
+		await new Promise((r) => setTimeout(r, 0));
+		expect(params.scrollToBottom).toHaveBeenCalledTimes(1);
 	});
 });
 

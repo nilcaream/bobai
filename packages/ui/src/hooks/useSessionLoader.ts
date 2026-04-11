@@ -22,6 +22,7 @@ interface UseSessionLoaderOptions {
 	setViewingSubagentTitle: React.Dispatch<React.SetStateAction<string | null>>;
 	parentMessagesRef: React.MutableRefObject<Message[]>;
 	eventRouter: React.MutableRefObject<ReturnType<typeof createEventRouter>>;
+	autoScrollRef: React.MutableRefObject<boolean>;
 }
 
 export function useSessionLoader({
@@ -42,6 +43,7 @@ export function useSessionLoader({
 	setViewingSubagentTitle,
 	parentMessagesRef,
 	eventRouter,
+	autoScrollRef,
 }: UseSessionLoaderOptions) {
 	const loadSession = useCallback(
 		async (targetId: string, options?: { skipUrlUpdate?: boolean }): Promise<boolean> => {
@@ -91,6 +93,9 @@ export function useSessionLoader({
 				setParentId(data.session.parentId);
 				setSubagents([]);
 				setStatus(data.status ?? "");
+				// Reset autoscroll so the loaded session starts at the bottom,
+				// even if the user was scrolled up in the previous session.
+				autoScrollRef.current = true;
 				setMessages(reconstructMessages(data.messages));
 				setVolatileMessage(null);
 
@@ -134,6 +139,7 @@ export function useSessionLoader({
 			setViewingSubagentTitle,
 			parentMessagesRef,
 			eventRouter,
+			autoScrollRef,
 		],
 	);
 
