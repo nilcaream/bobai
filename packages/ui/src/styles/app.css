@@ -248,7 +248,8 @@ body,
 
 .md pre {
 	background: inherit;
-	overflow-x: hidden;
+	white-space: pre-wrap;
+	word-wrap: break-word;
 }
 
 .md pre code {
@@ -303,9 +304,7 @@ body,
 .md table {
 	border-collapse: collapse;
 	margin: 1em 0;
-	width: 100%;
-	overflow-x: hidden;
-	display: block;
+	max-width: 100%;
 }
 
 .md thead {
@@ -317,6 +316,8 @@ body,
 	padding: 0.4em 0.8em;
 	text-align: left;
 	border: 1px solid var(--text-muted);
+	word-wrap: break-word;
+	overflow-wrap: break-word;
 }
 
 .md th {

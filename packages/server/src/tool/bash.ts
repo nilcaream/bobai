@@ -10,13 +10,13 @@ export const bashTool: Tool = {
 		function: {
 			name: "bash",
 			description:
-				"Execute a bash command in the project directory. Returns stdout, stderr, and exit code. Use for running tests, builds, linters, git commands, and other shell operations.",
+				"Execute a bash script in the project directory. Returns stdout, stderr, and exit code. The command is executed as a script — use multiple lines freely instead of long && chains. For readability, split long commands with line continuations (\\) or separate lines.",
 			parameters: {
 				type: "object",
 				properties: {
 					command: {
 						type: "string",
-						description: "The bash command to execute",
+						description: "The bash script to execute. Can be multiline — prefer separate lines over long && chains.",
 					},
 					timeout: {
 						type: "number",

@@ -18,6 +18,9 @@ const codeStyle: React.CSSProperties = {
 	fontFamily: "inherit",
 	fontSize: "inherit",
 	lineHeight: "inherit",
+	overflowX: "hidden",
+	whiteSpace: "pre-wrap",
+	wordWrap: "break-word",
 };
 
 const components: Components = {
@@ -30,6 +33,7 @@ const components: Components = {
 					language={match[1]}
 					style={theme as Record<string, CSSProperties>}
 					customStyle={codeStyle}
+					wrapLongLines
 					PreTag="div"
 					{...rest}
 				>
