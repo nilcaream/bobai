@@ -9,9 +9,27 @@ const MAX_OUTPUT_BYTES = 32_000;
 /** SQL keywords that indicate a read-only query returning rows. */
 const READ_PREFIXES = ["SELECT", "PRAGMA", "EXPLAIN", "WITH"];
 
+/** Strip leading SQL comments (single-line and block) and whitespace. */
+function stripLeadingComments(sql: string): string {
+	let s = sql;
+	while (true) {
+		s = s.trimStart();
+		if (s.startsWith("--")) {
+			const eol = s.indexOf("\n");
+			s = eol === -1 ? "" : s.slice(eol + 1);
+		} else if (s.startsWith("/*")) {
+			const end = s.indexOf("*/");
+			s = end === -1 ? "" : s.slice(end + 2);
+		} else {
+			break;
+		}
+	}
+	return s;
+}
+
 function isReadQuery(sql: string): boolean {
-	const trimmed = sql.trimStart().toUpperCase();
-	return READ_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
+	const stripped = stripLeadingComments(sql).toUpperCase();
+	return READ_PREFIXES.some((prefix) => stripped.startsWith(prefix));
 }
 
 /**

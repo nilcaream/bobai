@@ -228,6 +228,44 @@ describe("sqlite3Tool", () => {
 		expect(result.llmOutput).toContain("a\\|b\\|c");
 	});
 
+	test("handles SELECT with leading single-line comment", async () => {
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "-- Get all users\nSELECT * FROM users" }, ctx);
+		expect(result.llmOutput).toContain("| id | name | email |");
+		expect(result.llmOutput).toContain("Alice");
+		expect(result.summary).toContain("rows: 3");
+	});
+
+	test("handles SELECT with leading block comment", async () => {
+		const result = await sqlite3Tool.execute({ database: "test.db", query: "/* fetch users */\nSELECT * FROM users" }, ctx);
+		expect(result.llmOutput).toContain("| id | name | email |");
+		expect(result.llmOutput).toContain("Alice");
+		expect(result.summary).toContain("rows: 3");
+	});
+
+	test("handles SELECT with multiple leading comments", async () => {
+		const result = await sqlite3Tool.execute(
+			{
+				database: "test.db",
+				query: "-- first comment\n-- second comment\n/* block */\nSELECT * FROM users WHERE id = 1",
+			},
+			ctx,
+		);
+		expect(result.llmOutput).toContain("Alice");
+		expect(result.summary).toContain("rows: 1");
+	});
+
+	test("handles write query with leading comment as write", async () => {
+		const result = await sqlite3Tool.execute(
+			{
+				database: "write-test.db",
+				query: "-- add an item\nINSERT INTO items (label) VALUES ('commented-insert')",
+			},
+			ctx,
+		);
+		expect(result.llmOutput).toContain("Rows affected: 1");
+		expect(result.summary).toContain("rows affected: 1");
+	});
+
 	test("escapes markdown formatting characters in cell values", async () => {
 		await sqlite3Tool.execute(
 			{ database: "test.db", query: "CREATE TABLE IF NOT EXISTS md (id INTEGER PRIMARY KEY, val TEXT)" },
