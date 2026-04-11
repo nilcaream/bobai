@@ -146,6 +146,7 @@ export function handleSessionCommand(params: {
 	}
 	params.loadSession(targetSession.id);
 	params.setStagedSkills([]);
+	params.setView((prev) => ({ ...prev, mode: "chat" }));
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +243,7 @@ export function handleSessionShortcut(params: {
 	parentId: string | null;
 	loadSession: (id: string) => void;
 	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
+	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
 }): void {
 	if (params.viewingSubagentId) {
 		params.exitSubagentPeekWithScroll();
@@ -249,6 +251,7 @@ export function handleSessionShortcut(params: {
 	} else if (params.parentId) {
 		params.loadSession(params.parentId);
 		params.setStagedSkills([]);
+		params.setView((prev) => ({ ...prev, mode: "chat" }));
 	}
 }
 

@@ -402,11 +402,12 @@ describe("handleSessionCommand", () => {
 		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
-	test("switching to available session calls loadSession and clears staged skills", () => {
+	test("switching to available session calls loadSession, clears staged skills, and resets view", () => {
 		const params = makeParams({ arg: "1" }); // aaa, not owned, not self
 		handleSessionCommand(params);
 		expect(params.loadSession).toHaveBeenCalledWith("aaa");
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
+		expect(params.setView).toHaveBeenCalledTimes(1);
 	});
 
 	test("switching to session with null title works", () => {
@@ -414,6 +415,7 @@ describe("handleSessionCommand", () => {
 		handleSessionCommand(params);
 		expect(params.loadSession).toHaveBeenCalledWith("ccc");
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
+		expect(params.setView).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -689,6 +691,7 @@ describe("handleSessionShortcut", () => {
 			parentId: null as string | null,
 			loadSession: mock(() => {}),
 			setStagedSkills: mock(() => {}),
+			setView: mock(() => {}),
 			...overrides,
 		};
 	}
@@ -708,6 +711,7 @@ describe("handleSessionShortcut", () => {
 
 		expect(params.loadSession).toHaveBeenCalledWith("parent-456");
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
+		expect(params.setView).toHaveBeenCalledTimes(1);
 		expect(params.exitSubagentPeekWithScroll).not.toHaveBeenCalled();
 	});
 

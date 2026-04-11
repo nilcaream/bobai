@@ -309,6 +309,7 @@ export function App() {
 					parentId,
 					loadSession,
 					setStagedSkills,
+					setView,
 				});
 			} else if (name === "new") {
 				handleNewCommand({
