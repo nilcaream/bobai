@@ -205,7 +205,7 @@ Commands prefixed with `.` that control the application. Never sent to the LLM.
 |---------|--------|-------------|
 | `.model` | `.model <N>` | Switch LLM model. `N` is a 1-based index from the model list. |
 | `.new` | `.new [title]` | Start a new session with an optional title. |
-| `.session` | `.session [N] [delete]` | Switch to session `N` (1-based index) or delete it. Without args: exit subagent peek / return to parent. |
+| `.session` | `.session [N\|text] [delete]` | Switch to session `N` (1-based index), search by title words, or delete with `N delete`. Without args: exit subagent peek / return to parent. |
 | `.stop` | `.stop` | Cancel the running agent loop. |
 | `.subagent` | `.subagent [N]` | Peek at subagent `N` (1-based index). Without args: show subagent list. |
 | `.title` | `.title <text>` | Rename the current session. |

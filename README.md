@@ -67,12 +67,22 @@ Type `.` in the prompt to access dot commands. These local commands control the 
 |---------|-------------|
 | `.model <n>` | Switch the LLM model (shows a numbered list) |
 | `.new [title]` | Start a new session |
-| `.session [n]` | Switch between sessions |
-| `.subagent [n]` | Switch to a subagent session |
+| `.session [n\|text]` | Switch sessions by index or title search |
+| `.session <n> delete` | Delete a session |
+| `.subagent [n]` | Peek into a subagent session |
 | `.title <text>` | Set the current session title |
 | `.view [1\|2\|3]` | Cycle between Chat, Context, and Compaction views |
 
-Commands accept abbreviations -- `.m` matches `.model`, `.v` matches `.view`. Press Tab or Enter to confirm.
+Commands accept abbreviations -- `.m` matches `.model`, `.v` matches `.view`.
+
+### Session Selection
+
+`.session` supports two selection modes:
+
+- **By index:** `.session 3` loads session #3 from the list.
+- **By title:** `.session im tes` filters sessions whose title contains both "im" and "tes" (case-insensitive, any order). On submit, the first match is loaded.
+
+Without arguments, `.session` shows the session list. When viewing a subagent, it returns to the parent session.
 
 ## Skills
 
