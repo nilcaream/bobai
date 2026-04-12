@@ -94,9 +94,6 @@ export const PRE_PROMPT_TARGET = 0.8;
 /** Emergency (mid-turn) compaction targets this fraction of the context window. */
 export const EMERGENCY_TARGET = 0.9;
 
-/** Usage increment per iteration of the compaction loop (0.0-1.0). */
-export const USAGE_STEP = 0.05;
-
 /**
  * Compute the character budget for a given context window and target fraction.
  *

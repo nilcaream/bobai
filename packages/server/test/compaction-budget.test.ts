@@ -183,6 +183,6 @@ describe("compactToBudget", () => {
 		expect(result.charBudget).toBe(280);
 		expect(result.charsAfter).toBe(result.charsBefore); // nothing was compacted
 		expect(result.usage).toBe(1.0);
-		expect(result.iterations).toBe(20); // 1/0.05 = 20 steps
+		expect(result.iterations).toBe(7); // ceil(log2(100)) binary search probes
 	});
 });

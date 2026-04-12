@@ -11,7 +11,6 @@ import {
 	MAX_AGE_DISTANCE,
 	PRE_PROMPT_TARGET,
 	totalContentChars,
-	USAGE_STEP,
 } from "../src/compaction/strength";
 
 describe("computeContextPressure", () => {
@@ -273,10 +272,6 @@ describe("compaction constants", () => {
 
 	test("EMERGENCY_TARGET is 0.90", () => {
 		expect(EMERGENCY_TARGET).toBe(0.9);
-	});
-
-	test("USAGE_STEP is 0.05", () => {
-		expect(USAGE_STEP).toBe(0.05);
 	});
 });
 
