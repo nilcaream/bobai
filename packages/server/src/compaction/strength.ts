@@ -1,3 +1,5 @@
+import { EVICTION_DISTANCE } from "./eviction";
+
 /**
  * Context about the current session needed for strength calculation.
  */
@@ -44,22 +46,14 @@ export const AGE_INFLECTION = 0.7;
 export const AGE_STEEPNESS = 5;
 
 /**
- * Maximum distance (in messages) from the end of the conversation that
- * contributes to age calculation. Messages further away than this all
- * receive normalizedPosition ≈ 0 → age ≈ 1.0 (fully compactable).
- *
- * This prevents the age window from stretching with conversation length:
- * in a 500-message conversation, the newest 100 messages get a graduated
- * protection curve while everything older is equally compactable.
- */
-export const MAX_AGE_DISTANCE = 100;
-
-/**
  * Compute the age factor for a tool message (0.0-1.0).
- * Uses distance-from-end (capped at {@link MAX_AGE_DISTANCE}) and an arctan
+ * Uses distance-from-end (capped at {@link EVICTION_DISTANCE}) and an arctan
  * S-curve centered at {@link AGE_INFLECTION} so that messages beyond the
  * inflection (older) are aggressively compactable while messages before it
  * (newer) are strongly protected.
+ *
+ * The S-curve spans the full range from 0 to EVICTION_DISTANCE — beyond that
+ * distance, messages are evicted entirely so there is no separate age cap.
  *
  * @param messageIndex - Zero-based index in the full message array
  * @param totalMessages - Total number of messages in the conversation
@@ -67,8 +61,8 @@ export const MAX_AGE_DISTANCE = 100;
 export function computeAge(messageIndex: number, totalMessages: number): number {
 	if (totalMessages <= 1) return 0;
 	const distanceFromEnd = totalMessages - 1 - messageIndex; // 0 = newest
-	const normalizedPosition = 1 - Math.min(distanceFromEnd, MAX_AGE_DISTANCE) / MAX_AGE_DISTANCE;
-	// normalizedPosition: 0 = oldest (or >= MAX_AGE_DISTANCE away), 1 = newest
+	const normalizedPosition = 1 - Math.min(distanceFromEnd, EVICTION_DISTANCE) / EVICTION_DISTANCE;
+	// normalizedPosition: 0 = oldest (or >= EVICTION_DISTANCE away), 1 = newest
 	const raw = Math.atan(AGE_STEEPNESS * (AGE_INFLECTION - normalizedPosition));
 	const rawMin = Math.atan(AGE_STEEPNESS * (AGE_INFLECTION - 1));
 	const rawMax = Math.atan(AGE_STEEPNESS * AGE_INFLECTION);
@@ -145,11 +139,11 @@ export function totalContentChars(
  */
 export function computeMinimumDistance(pressure: number, threshold: number, totalMessages: number): number {
 	if (pressure <= 0 || threshold < 0) return -1;
-	// Max possible factor is pressure × age(at MAX_AGE_DISTANCE) ≈ pressure × 1.0
+	// Max possible factor is pressure × age(at EVICTION_DISTANCE) ≈ pressure × 1.0
 	// Quick check: if pressure × 1.0 <= threshold, it's unreachable
-	const maxAge = computeAge(0, MAX_AGE_DISTANCE + 2); // index 0 in a large array → max distance
+	const maxAge = computeAge(0, EVICTION_DISTANCE + 2); // index 0 in a large array → max distance
 	if (pressure * maxAge <= threshold) return -1;
-	for (let dist = 1; dist <= Math.min(totalMessages, MAX_AGE_DISTANCE); dist++) {
+	for (let dist = 1; dist <= Math.min(totalMessages, EVICTION_DISTANCE); dist++) {
 		// Simulate: messageIndex = totalMessages - 1 - dist means distanceFromEnd = dist
 		const age = computeAge(totalMessages - 1 - dist, totalMessages);
 		if (pressure * age > threshold) return dist;

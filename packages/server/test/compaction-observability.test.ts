@@ -72,10 +72,10 @@ function toolMessage(toolCallId: string, content: string): Message {
 
 /**
  * Trailing messages to push tool results into the compactable age zone.
- * With MAX_AGE_DISTANCE=100, we need 100+ messages after the tool result
- * so that distanceFromEnd >= 100 and age ≈ 1.0.
+ * With EVICTION_DISTANCE=200, we need 200+ messages after the tool result
+ * so that distanceFromEnd >= 200 and age ≈ 1.0.
  */
-const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
+const TRAILING_CONTEXT: Message[] = Array.from({ length: 200 }, (_, i) =>
 	i % 2 === 0 ? ({ role: "user", content: "continue" } as Message) : ({ role: "assistant", content: "ok" } as Message),
 );
 

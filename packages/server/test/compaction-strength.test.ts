@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { EVICTION_DISTANCE } from "../src/compaction/eviction";
 import {
 	AGE_INFLECTION,
 	AGE_STEEPNESS,
@@ -8,7 +9,6 @@ import {
 	computeContextPressure,
 	DEFAULT_THRESHOLD,
 	EMERGENCY_TARGET,
-	MAX_AGE_DISTANCE,
 	PRE_PROMPT_TARGET,
 	totalContentChars,
 } from "../src/compaction/strength";
@@ -82,8 +82,8 @@ describe("computeAge", () => {
 		expect(computeAge(0, 1)).toBe(0);
 	});
 
-	test("MAX_AGE_DISTANCE is 100", () => {
-		expect(MAX_AGE_DISTANCE).toBe(100);
+	test("EVICTION_DISTANCE is 200", () => {
+		expect(EVICTION_DISTANCE).toBe(200);
 	});
 
 	test("AGE_INFLECTION is 0.7", () => {
@@ -100,70 +100,70 @@ describe("computeAge", () => {
 		expect(computeAge(4, 5)).toBe(0);
 	});
 
-	test("messages at MAX_AGE_DISTANCE or further have age 1.0", () => {
-		// In a 200-message conversation, idx 99 has distFromEnd=100, normPos=0.0
-		expect(computeAge(99, 200)).toBe(1);
-		// idx 0 has distFromEnd=199 > 100, capped to normPos=0.0
-		expect(computeAge(0, 200)).toBe(1);
+	test("messages at EVICTION_DISTANCE or further have age 1.0", () => {
+		// In a 400-message conversation, idx 199 has distFromEnd=200, normPos=0.0
+		expect(computeAge(199, 400)).toBe(1);
+		// idx 0 has distFromEnd=399 > 200, capped to normPos=0.0
+		expect(computeAge(0, 400)).toBe(1);
 	});
 
-	test("MAX_AGE_DISTANCE capping: messages far from end are equally compactable", () => {
-		// In a 300-message conversation, message 0 and message 199 both have
-		// distanceFromEnd >= 100, so they should have the same age.
-		const age0 = computeAge(0, 300);
-		const age199 = computeAge(199, 300);
-		expect(age0).toBe(age199);
+	test("EVICTION_DISTANCE capping: messages far from end are equally compactable", () => {
+		// In a 500-message conversation, message 0 and message 299 both have
+		// distanceFromEnd >= 200, so they should have the same age.
+		const age0 = computeAge(0, 500);
+		const age299 = computeAge(299, 500);
+		expect(age0).toBe(age299);
 		expect(age0).toBe(1); // both fully compactable
 	});
 
-	test("age follows arctan S-curve within MAX_AGE_DISTANCE window", () => {
-		// 200-message conversation where the capping window maps cleanly.
-		// Messages within the last 100 get graduated protection.
-		const total = 200;
-		// idx=100: distFromEnd=99, normPos=0.01 → near oldest in window → age ≈ 0.998
-		expect(computeAge(100, total)).toBeCloseTo(0.998, 2);
-		// idx=140: distFromEnd=59, normPos=0.41 → moderate age
-		expect(computeAge(140, total)).toBeCloseTo(0.857, 2);
-		// idx=150: distFromEnd=49, normPos=0.51 → above inflection
-		expect(computeAge(150, total)).toBeCloseTo(0.766, 2);
-		// idx=180: distFromEnd=19, normPos=0.81 → well past inflection → low age
-		expect(computeAge(180, total)).toBeCloseTo(0.211, 2);
-		// idx=190: distFromEnd=9, normPos=0.91 → very protected
-		expect(computeAge(190, total)).toBeCloseTo(0.076, 2);
-		// idx=199: newest → 0
-		expect(computeAge(199, total)).toBe(0);
+	test("age follows arctan S-curve within EVICTION_DISTANCE window", () => {
+		// 400-message conversation where the capping window maps cleanly.
+		// Messages within the last 200 get graduated protection.
+		const total = 400;
+		// idx=200: distFromEnd=199, normPos=0.005 → near oldest in window → age ≈ 0.999
+		expect(computeAge(200, total)).toBeCloseTo(0.999, 2);
+		// idx=260: distFromEnd=139, normPos=0.305 → moderate age
+		expect(computeAge(260, total)).toBeCloseTo(0.916, 2);
+		// idx=300: distFromEnd=99, normPos=0.505 → above inflection
+		expect(computeAge(300, total)).toBeCloseTo(0.772, 2);
+		// idx=340: distFromEnd=59, normPos=0.705 → near inflection → around 0.42
+		expect(computeAge(340, total)).toBeCloseTo(0.421, 2);
+		// idx=370: distFromEnd=29, normPos=0.855 → well past inflection → low age
+		expect(computeAge(370, total)).toBeCloseTo(0.142, 2);
+		// idx=390: distFromEnd=9, normPos=0.955 → very protected
+		expect(computeAge(390, total)).toBeCloseTo(0.034, 2);
+		// idx=399: newest → 0
+		expect(computeAge(399, total)).toBe(0);
 	});
 
 	test("messages near inflection point have age around 0.43", () => {
-		// In a 101-message conversation, index 70 has distFromEnd=30,
-		// normalizedPosition = 1 - 30/100 = 0.7 = AGE_INFLECTION.
-		const age = computeAge(70, 101);
+		// In a 201-message conversation, index 140 has distFromEnd=60,
+		// normalizedPosition = 1 - 60/200 = 0.7 = AGE_INFLECTION.
+		const age = computeAge(140, 201);
 		expect(age).toBeCloseTo(0.43, 1);
 	});
 
-	test("short conversations: all messages are near-newest due to MAX_AGE_DISTANCE", () => {
+	test("short conversations: all messages are near-newest due to EVICTION_DISTANCE", () => {
 		// In a 5-message conversation, the oldest message has distFromEnd=4,
-		// normalizedPosition = 1 - 4/100 = 0.96 — nearly newest in the window.
+		// normalizedPosition = 1 - 4/200 = 0.98 — nearly newest in the window.
 		// So all messages get very low age (near 0).
 		const ages = Array.from({ length: 5 }, (_, i) => computeAge(i, 5));
 		// All ages should be very close to 0
 		for (const age of ages) {
-			expect(age).toBeLessThan(0.04);
+			expect(age).toBeLessThan(0.02);
 		}
 		// Oldest still has higher age than newest
 		const ageNewest = ages[4] ?? 0;
 		expect(ages[0]).toBeGreaterThan(ageNewest);
 		// Exact values
-		expect(ages[0]).toBeCloseTo(0.03, 2);
+		expect(ages[0]).toBeCloseTo(0.015, 2);
 		expect(ages[4]).toBe(0);
 	});
 
 	test("arctan curve with distance-based age: old messages are fully compactable", () => {
-		// In a 200-message conversation, idx=20 has distFromEnd=179 (>100),
+		// In a 400-message conversation, idx=20 has distFromEnd=379 (>200),
 		// so normalizedPosition=0 → age=1.0.
-		// This is much higher than what a quadratic function would give at
-		// the same position (position=20/199≈0.10, quadratic ≈ 0.81).
-		const age = computeAge(20, 200);
+		const age = computeAge(20, 400);
 		expect(age).toBe(1);
 	});
 });
@@ -291,7 +291,7 @@ describe("computeMinimumDistance", () => {
 		// pressure=0.75 (usage=0.8), threshold=0.3
 		const dist = computeMinimumDistance(0.75, 0.3, 200);
 		expect(dist).toBeGreaterThan(0);
-		expect(dist).toBeLessThanOrEqual(100); // MAX_AGE_DISTANCE
+		expect(dist).toBeLessThanOrEqual(200); // EVICTION_DISTANCE
 	});
 
 	test("lower threshold requires smaller distance", () => {

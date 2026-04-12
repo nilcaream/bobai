@@ -43,7 +43,7 @@ describe("FileTime compaction invalidation", () => {
 		// We need enough messages after the tool output so it appears "old"
 		// — the age factor must be high for the strength formula to kick in.
 		const filler: Message[] = [];
-		for (let i = 0; i < 20; i++) {
+		for (let i = 0; i < 100; i++) {
 			filler.push({ role: "user", content: `Follow-up ${i}` });
 			filler.push({ role: "assistant", content: `Response ${i}` });
 		}

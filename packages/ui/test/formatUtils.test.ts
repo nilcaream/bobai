@@ -338,7 +338,6 @@ describe("formatCompactionSummary", () => {
 				threshold: 0.2,
 				inflection: 0.7,
 				steepness: 5,
-				maxAgeDistance: 100,
 				evictionDistance: 200,
 			},
 			estimatedContextNeeded: 0.65,
@@ -354,7 +353,6 @@ describe("formatCompactionSummary", () => {
 		expect(result).toContain("- threshold: 0.2");
 		expect(result).toContain("- inflection: 0.7");
 		expect(result).toContain("- steepness: 5");
-		expect(result).toContain("- max age distance: 100");
 		expect(result).toContain("- eviction distance: 200");
 
 		// Section 2: Factors table
@@ -398,7 +396,6 @@ describe("formatCompactionSummary", () => {
 				threshold: 0.2,
 				inflection: 0.7,
 				steepness: 5,
-				maxAgeDistance: 100,
 				evictionDistance: 200,
 			},
 			estimatedContextNeeded: 0.65,

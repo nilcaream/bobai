@@ -31,7 +31,6 @@ export interface CompactionStats {
 		threshold: number;
 		inflection: number;
 		steepness: number;
-		maxAgeDistance: number;
 		evictionDistance: number;
 	};
 	estimatedContextNeeded: number;
@@ -211,7 +210,6 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 	sections.push(`- threshold: ${stats.parameters.threshold}`);
 	sections.push(`- inflection: ${stats.parameters.inflection}`);
 	sections.push(`- steepness: ${stats.parameters.steepness}`);
-	sections.push(`- max age distance: ${stats.parameters.maxAgeDistance}`);
 	sections.push(`- eviction distance: ${stats.parameters.evictionDistance}`);
 	sections.push("");
 

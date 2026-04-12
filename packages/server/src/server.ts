@@ -9,7 +9,6 @@ import {
 	AGE_STEEPNESS,
 	computeMinimumDistance,
 	DEFAULT_THRESHOLD,
-	MAX_AGE_DISTANCE,
 	PRE_PROMPT_TARGET,
 	pressureFromUsage,
 } from "./compaction/strength";
@@ -308,7 +307,6 @@ export function createServer(options: ServerOptions) {
 							threshold: DEFAULT_THRESHOLD,
 							inflection: AGE_INFLECTION,
 							steepness: AGE_STEEPNESS,
-							maxAgeDistance: MAX_AGE_DISTANCE,
 							evictionDistance: EVICTION_DISTANCE,
 						},
 						estimatedContextNeeded,

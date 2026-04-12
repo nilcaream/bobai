@@ -1,12 +1,7 @@
 import type { AssistantMessage, Message } from "../provider/provider";
 import type { Tool, ToolRegistry } from "../tool/tool";
-import {
-	computeAge,
-	computeCompactionFactor,
-	computeContextPressure,
-	MAX_AGE_DISTANCE,
-	type StrengthContext,
-} from "./strength";
+import { EVICTION_DISTANCE } from "./eviction";
+import { computeAge, computeCompactionFactor, computeContextPressure, type StrengthContext } from "./strength";
 
 /** Minimum character savings required for compaction to be applied.
  * If compacting saves fewer than this many characters, the original
@@ -47,7 +42,7 @@ export interface CompactionDetail {
 	compactionFactor: number;
 	/** Relative position in conversation (0.0 = oldest, 1.0 = newest). */
 	position: number;
-	/** Normalized position after MAX_AGE_DISTANCE capping (0.0 = oldest/capped, 1.0 = newest). */
+	/** Normalized position after EVICTION_DISTANCE capping (0.0 = oldest/capped, 1.0 = newest). */
 	normalizedPosition: number;
 	/** Distance from end of conversation in messages. */
 	distance: number;
@@ -171,7 +166,7 @@ function compactMessagesInternal(options: CompactionOptions): {
 	function positionFields(idx: number): { position: number; normalizedPosition: number; distance: number } {
 		const position = messages.length <= 1 ? 0 : idx / (messages.length - 1);
 		const distanceFromEnd = messages.length - 1 - idx;
-		const normalizedPosition = 1 - Math.min(distanceFromEnd, MAX_AGE_DISTANCE) / MAX_AGE_DISTANCE;
+		const normalizedPosition = 1 - Math.min(distanceFromEnd, EVICTION_DISTANCE) / EVICTION_DISTANCE;
 		return { position, normalizedPosition, distance: distanceFromEnd };
 	}
 
