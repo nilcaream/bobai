@@ -244,7 +244,6 @@ export function createServer(options: ServerOptions) {
 				// factor >= threshold is `threshold * multiplier * baseDistance`.
 				// The eviction distance (factor >= 1.0) is `multiplier * baseDistance`.
 				const multiplier = compactionResult.multiplier;
-				const totalMessages = messages.length;
 				const toolReach: Array<{
 					name: string;
 					type: "output" | "arguments";
@@ -252,7 +251,6 @@ export function createServer(options: ServerOptions) {
 					baseDistance: number;
 					minimumDistance: number;
 					evictionDistance: number;
-					compactedFrom: number | null;
 				}> = [];
 				for (const def of tools.definitions) {
 					const toolName = def.function.name;
@@ -269,7 +267,6 @@ export function createServer(options: ServerOptions) {
 							baseDistance,
 							minimumDistance: minDist,
 							evictionDistance: evictDist,
-							compactedFrom: minDist > 0 && minDist <= totalMessages ? totalMessages - minDist : null,
 						});
 					}
 					if (tool.argsThreshold !== undefined) {
@@ -281,7 +278,6 @@ export function createServer(options: ServerOptions) {
 							baseDistance,
 							minimumDistance: minDist,
 							evictionDistance: evictDist,
-							compactedFrom: minDist > 0 && minDist <= totalMessages ? totalMessages - minDist : null,
 						});
 					}
 				}
@@ -294,7 +290,6 @@ export function createServer(options: ServerOptions) {
 						baseDistance: -1,
 						minimumDistance: -1,
 						evictionDistance: -1,
-						compactedFrom: null,
 					});
 				}
 				// Sort by compaction resistance: smallest minimum distance first, excluded/never last

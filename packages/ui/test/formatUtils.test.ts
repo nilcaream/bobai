@@ -388,7 +388,6 @@ describe("formatCompactionSummary", () => {
 					baseDistance: 100,
 					minimumDistance: 30,
 					evictionDistance: 150,
-					compactedFrom: 70,
 				},
 				{
 					name: "read_file",
@@ -397,7 +396,6 @@ describe("formatCompactionSummary", () => {
 					baseDistance: 100,
 					minimumDistance: 45,
 					evictionDistance: 150,
-					compactedFrom: 55,
 				},
 				{
 					name: "task",
@@ -406,7 +404,6 @@ describe("formatCompactionSummary", () => {
 					baseDistance: 100,
 					minimumDistance: 0,
 					evictionDistance: 0,
-					compactedFrom: null,
 				},
 				{
 					name: "user",
@@ -415,7 +412,6 @@ describe("formatCompactionSummary", () => {
 					baseDistance: -1,
 					minimumDistance: -1,
 					evictionDistance: -1,
-					compactedFrom: null,
 				},
 			],
 		};
@@ -424,11 +420,43 @@ describe("formatCompactionSummary", () => {
 		// Section 4: Compaction reach
 		expect(result).toContain("# Compaction reach at current multiplier (1.50)");
 		expect(result).toContain(
-			"| role / tool | type | threshold | max distance | minimum distance | eviction distance | compacted from |",
+			"| role / tool | type | threshold | base distance | calculated distance | untouched | compacted | evicted |",
 		);
-		expect(result).toContain("| grep_search | output | 0.20 | 100 | 30 | 150 | #70 |");
-		expect(result).toContain("| read_file | output | 0.30 | 100 | 45 | 150 | #55 |");
-		expect(result).toContain("| task | output | 0.80 | 100 | — | — | never |");
-		expect(result).toContain("| user | — | — | — | — | — | excluded |");
+		expect(result).toContain("| grep_search | output | 0.20 | 100 | 150 | 0-29 | 30-149 | 150+ |");
+		expect(result).toContain("| read_file | output | 0.30 | 100 | 150 | 0-44 | 45-149 | 150+ |");
+		expect(result).toContain("| task | output | 0.80 | 100 | 0 | always | never | never |");
+		expect(result).toContain("| user | — | — | — | — | always | never | never |");
+	});
+
+	test("compaction reach with minimumDistance=0 but positive evictionDistance", () => {
+		const stats: CompactionStats = {
+			multiplier: 1.5,
+			iterations: 1,
+			charsBefore: 10000,
+			charsAfter: 8000,
+			charBudget: 9000,
+			charsPerToken: 3.5,
+			type: "pre-prompt",
+			parameters: { defaultMaxDistance: 100 },
+			estimatedContextNeeded: 0.65,
+			target: 0.8,
+			elapsedMs: 5.0,
+			messagesBefore: { total: 50 },
+			messagesAfter: { total: 40 },
+			toolReach: [
+				{
+					name: "skill",
+					type: "output",
+					threshold: 0.0,
+					baseDistance: 200,
+					minimumDistance: 0,
+					evictionDistance: 300,
+				},
+			],
+		};
+		const result = formatCompactionSummary(stats);
+
+		// minimumDistance=0 but evictionDistance>0: untouched=always, compacted=never, evicted=300+
+		expect(result).toContain("| skill | output | 0.00 | 200 | 300 | always | never | 300+ |");
 	});
 });

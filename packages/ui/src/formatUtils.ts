@@ -45,7 +45,6 @@ export interface ToolReachEntry {
 	baseDistance: number;
 	minimumDistance: number;
 	evictionDistance: number;
-	compactedFrom: number | null;
 }
 
 export interface CompactionDetail {
@@ -231,19 +230,26 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 		sections.push("");
 		sections.push(`# Compaction reach at current multiplier (${stats.multiplier.toFixed(2)})`);
 		sections.push("");
-		sections.push("| role / tool | type | threshold | max distance | minimum distance | eviction distance | compacted from |");
-		sections.push("|---|---|---|---|---|---|---|");
+		sections.push(
+			"| role / tool | type | threshold | base distance | calculated distance | untouched | compacted | evicted |",
+		);
+		sections.push("|---|---|---|---|---|---|---|---|");
 		for (const entry of stats.toolReach) {
 			if (entry.threshold === -1) {
 				// Excluded role (user, assistant, system)
-				sections.push(`| ${entry.name} | — | — | — | — | — | excluded |`);
+				sections.push(`| ${entry.name} | — | — | — | — | always | never | never |`);
 			} else if (entry.minimumDistance === 0) {
+				// No compaction zone — either never evicted or eviction only
+				const evicted = entry.evictionDistance > 0 ? `${entry.evictionDistance}+` : "never";
 				sections.push(
-					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | — | — | never |`,
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | ${entry.evictionDistance} | always | never | ${evicted} |`,
 				);
 			} else {
+				const untouched = `0-${entry.minimumDistance - 1}`;
+				const compacted = `${entry.minimumDistance}-${entry.evictionDistance - 1}`;
+				const evicted = `${entry.evictionDistance}+`;
 				sections.push(
-					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | ${entry.minimumDistance} | ${entry.evictionDistance} | #${entry.compactedFrom} |`,
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | ${entry.evictionDistance} | ${untouched} | ${compacted} | ${evicted} |`,
 				);
 			}
 		}
