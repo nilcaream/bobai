@@ -86,12 +86,12 @@ describe("computeAge", () => {
 		expect(EVICTION_DISTANCE).toBe(200);
 	});
 
-	test("AGE_INFLECTION is 0.7", () => {
-		expect(AGE_INFLECTION).toBe(0.7);
+	test("AGE_INFLECTION is 2.0", () => {
+		expect(AGE_INFLECTION).toBe(2.0);
 	});
 
-	test("AGE_STEEPNESS is 5", () => {
-		expect(AGE_STEEPNESS).toBe(5);
+	test("AGE_STEEPNESS is 3", () => {
+		expect(AGE_STEEPNESS).toBe(3);
 	});
 
 	test("last message always has age 0.0", () => {
@@ -120,27 +120,27 @@ describe("computeAge", () => {
 		// 400-message conversation where the capping window maps cleanly.
 		// Messages within the last 200 get graduated protection.
 		const total = 400;
-		// idx=200: distFromEnd=199, normPos=0.005 → near oldest in window → age ≈ 0.999
-		expect(computeAge(200, total)).toBeCloseTo(0.999, 2);
+		// idx=200: distFromEnd=199, normPos=0.005 → near oldest in window → age ≈ 0.997
+		expect(computeAge(200, total)).toBeCloseTo(0.997, 2);
 		// idx=260: distFromEnd=139, normPos=0.305 → moderate age
-		expect(computeAge(260, total)).toBeCloseTo(0.916, 2);
-		// idx=300: distFromEnd=99, normPos=0.505 → above inflection
-		expect(computeAge(300, total)).toBeCloseTo(0.772, 2);
-		// idx=340: distFromEnd=59, normPos=0.705 → near inflection → around 0.42
-		expect(computeAge(340, total)).toBeCloseTo(0.421, 2);
-		// idx=370: distFromEnd=29, normPos=0.855 → well past inflection → low age
-		expect(computeAge(370, total)).toBeCloseTo(0.142, 2);
+		expect(computeAge(260, total)).toBeCloseTo(0.815, 2);
+		// idx=300: distFromEnd=99, normPos=0.505 → mid-range
+		expect(computeAge(300, total)).toBeCloseTo(0.654, 2);
+		// idx=340: distFromEnd=59, normPos=0.705 → moderately protected
+		expect(computeAge(340, total)).toBeCloseTo(0.446, 2);
+		// idx=370: distFromEnd=29, normPos=0.855 → well protected
+		expect(computeAge(370, total)).toBeCloseTo(0.246, 2);
 		// idx=390: distFromEnd=9, normPos=0.955 → very protected
-		expect(computeAge(390, total)).toBeCloseTo(0.034, 2);
+		expect(computeAge(390, total)).toBeCloseTo(0.083, 2);
 		// idx=399: newest → 0
 		expect(computeAge(399, total)).toBe(0);
 	});
 
-	test("messages near inflection point have age around 0.43", () => {
+	test("messages near normPos=0.7 have age around 0.45", () => {
 		// In a 201-message conversation, index 140 has distFromEnd=60,
-		// normalizedPosition = 1 - 60/200 = 0.7 = AGE_INFLECTION.
+		// normalizedPosition = 1 - 60/200 = 0.7.
 		const age = computeAge(140, 201);
-		expect(age).toBeCloseTo(0.43, 1);
+		expect(age).toBeCloseTo(0.45, 1);
 	});
 
 	test("short conversations: all messages are near-newest due to EVICTION_DISTANCE", () => {
@@ -150,13 +150,13 @@ describe("computeAge", () => {
 		const ages = Array.from({ length: 5 }, (_, i) => computeAge(i, 5));
 		// All ages should be very close to 0
 		for (const age of ages) {
-			expect(age).toBeLessThan(0.02);
+			expect(age).toBeLessThan(0.04);
 		}
 		// Oldest still has higher age than newest
 		const ageNewest = ages[4] ?? 0;
 		expect(ages[0]).toBeGreaterThan(ageNewest);
 		// Exact values
-		expect(ages[0]).toBeCloseTo(0.015, 2);
+		expect(ages[0]).toBeCloseTo(0.038, 2);
 		expect(ages[4]).toBe(0);
 	});
 

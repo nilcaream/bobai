@@ -32,7 +32,7 @@ const skillCompactionStub: Tool = {
 		function: { name: "skill", description: "", parameters: { type: "object", properties: {} } },
 	},
 	mergeable: true,
-	outputThreshold: 0.4,
+	outputThreshold: 0.46,
 	compact(_output: string, callArgs: Record<string, unknown>): string {
 		const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";
 		return `${COMPACTION_MARKER} skill(${JSON.stringify({ name })}) was loaded and applied. Re-invoke if needed.`;
@@ -49,8 +49,8 @@ const skillCompactionStub: Tool = {
 const taskCompactionStub: Tool = {
 	definition: { type: "function", function: { name: "task", description: "", parameters: { type: "object", properties: {} } } },
 	mergeable: false,
-	outputThreshold: 0.8,
-	argsThreshold: 0.8,
+	outputThreshold: 0.7,
+	argsThreshold: 0.62,
 	compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
 		if (context) {
 			const dir = path.join(".bobai", "compaction", context.sessionId);

@@ -110,8 +110,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			},
 		},
 		mergeable: false,
-		outputThreshold: 0.8,
-		argsThreshold: 0.8,
+		outputThreshold: 0.7,
+		argsThreshold: 0.62,
 		compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
 			if (context) {
 				const dir = path.join(".bobai", "compaction", context.sessionId);

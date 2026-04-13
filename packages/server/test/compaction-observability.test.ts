@@ -297,15 +297,15 @@ describe("createCompactionRegistry", () => {
 
 	test("has correct outputThreshold values", () => {
 		const expected: Record<string, number> = {
-			list_directory: 0.2,
-			file_search: 0.2,
-			grep_search: 0.2,
+			list_directory: 0.25,
+			file_search: 0.27,
+			grep_search: 0.29,
 			read_file: 0.3,
-			skill: 0.4,
 			bash: 0.4,
-			sqlite3: 0.4,
-			edit_file: 0.7,
-			task: 0.8,
+			sqlite3: 0.43,
+			skill: 0.46,
+			edit_file: 0.55,
+			task: 0.7,
 		};
 		for (const [name, threshold] of Object.entries(expected)) {
 			const tool = registry.get(name);
@@ -320,9 +320,9 @@ describe("createCompactionRegistry", () => {
 
 	test("has correct argsThreshold values", () => {
 		const expected: Record<string, number> = {
-			write_file: 0.6,
-			edit_file: 0.3,
-			task: 0.8,
+			edit_file: 0.35,
+			write_file: 0.5,
+			task: 0.62,
 		};
 		for (const [name, threshold] of Object.entries(expected)) {
 			const tool = registry.get(name);

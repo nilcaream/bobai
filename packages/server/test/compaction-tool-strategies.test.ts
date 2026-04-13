@@ -76,45 +76,45 @@ describe("threshold values", () => {
 		expect(readFileTool.argsThreshold).toBeUndefined();
 	});
 
-	test("grep_search: outputThreshold = 0.2", () => {
-		expect(grepSearchTool.outputThreshold).toBe(0.2);
+	test("grep_search: outputThreshold = 0.29", () => {
+		expect(grepSearchTool.outputThreshold).toBe(0.29);
 		expect(grepSearchTool.argsThreshold).toBeUndefined();
 	});
 
-	test("file_search: outputThreshold = 0.2", () => {
-		expect(fileSearchTool.outputThreshold).toBe(0.2);
+	test("file_search: outputThreshold = 0.27", () => {
+		expect(fileSearchTool.outputThreshold).toBe(0.27);
 		expect(fileSearchTool.argsThreshold).toBeUndefined();
 	});
 
-	test("list_directory: outputThreshold = 0.2", () => {
-		expect(listDirectoryTool.outputThreshold).toBe(0.2);
+	test("list_directory: outputThreshold = 0.25", () => {
+		expect(listDirectoryTool.outputThreshold).toBe(0.25);
 		expect(listDirectoryTool.argsThreshold).toBeUndefined();
 	});
 
-	test("skill: outputThreshold = 0.4", () => {
-		expect(makeSkillTool().outputThreshold).toBe(0.4);
+	test("skill: outputThreshold = 0.46", () => {
+		expect(makeSkillTool().outputThreshold).toBe(0.46);
 		expect(makeSkillTool().argsThreshold).toBeUndefined();
 	});
 
-	test("sqlite3: outputThreshold = 0.4", () => {
-		expect(sqlite3Tool.outputThreshold).toBe(0.4);
+	test("sqlite3: outputThreshold = 0.43", () => {
+		expect(sqlite3Tool.outputThreshold).toBe(0.43);
 		expect(sqlite3Tool.argsThreshold).toBeUndefined();
 	});
 
-	test("write_file: argsThreshold = 0.6, no outputThreshold", () => {
-		expect(writeFileTool.argsThreshold).toBe(0.6);
+	test("write_file: argsThreshold = 0.50, no outputThreshold", () => {
+		expect(writeFileTool.argsThreshold).toBe(0.5);
 		expect(writeFileTool.outputThreshold).toBeUndefined();
 	});
 
-	test("edit_file: outputThreshold = 0.7, argsThreshold = 0.3", () => {
-		expect(editFileTool.outputThreshold).toBe(0.7);
-		expect(editFileTool.argsThreshold).toBe(0.3);
+	test("edit_file: outputThreshold = 0.55, argsThreshold = 0.35", () => {
+		expect(editFileTool.outputThreshold).toBe(0.55);
+		expect(editFileTool.argsThreshold).toBe(0.35);
 	});
 
-	test("task: outputThreshold = 0.8, argsThreshold = 0.8", () => {
+	test("task: outputThreshold = 0.70, argsThreshold = 0.62", () => {
 		const tool = makeTaskTool();
-		expect(tool.outputThreshold).toBe(0.8);
-		expect(tool.argsThreshold).toBe(0.8);
+		expect(tool.outputThreshold).toBe(0.7);
+		expect(tool.argsThreshold).toBe(0.62);
 	});
 });
 

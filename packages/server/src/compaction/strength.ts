@@ -34,16 +34,17 @@ export function pressureFromUsage(usage: number, threshold: number = DEFAULT_THR
 /**
  * Position in the conversation (0.0-1.0, from oldest to newest) where the
  * age curve transitions from "mostly compactable" to "mostly protected".
- * At 0.7 the newest 30% of messages are strongly protected.
+ * At 2.0 (beyond the 0..1 range) the curve produces a gentle, near-linear
+ * gradient across all positions — no sharp transition zone.
  */
-export const AGE_INFLECTION = 0.7;
+export const AGE_INFLECTION = 2.0;
 
 /**
  * Controls steepness of the S-curve around the inflection point.
- * Higher values produce a sharper transition; 5 gives a moderate gradient
- * spanning roughly 20% of the conversation on each side of the inflection.
+ * With inflection at 2.0, a steepness of 3 produces a smooth gradient
+ * from age ≈ 1.0 (oldest) to age = 0.0 (newest).
  */
-export const AGE_STEEPNESS = 5;
+export const AGE_STEEPNESS = 3;
 
 /**
  * Compute the age factor for a tool message (0.0-1.0).

@@ -31,7 +31,7 @@ export const writeFileTool: Tool = {
 
 	mergeable: true,
 
-	argsThreshold: 0.6,
+	argsThreshold: 0.5,
 
 	compactArgs(args: Record<string, unknown>): Record<string, unknown> {
 		const result = { ...args };

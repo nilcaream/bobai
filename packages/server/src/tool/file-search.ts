@@ -35,7 +35,7 @@ export const fileSearchTool: Tool = {
 
 	mergeable: true,
 
-	outputThreshold: 0.2,
+	outputThreshold: 0.27,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {
 		if (output.startsWith("Error:") || output.startsWith("No files found")) return output;

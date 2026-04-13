@@ -36,9 +36,9 @@ export const editFileTool: Tool = {
 
 	mergeable: false,
 
-	outputThreshold: 0.7,
+	outputThreshold: 0.55,
 
-	argsThreshold: 0.3,
+	argsThreshold: 0.35,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {
 		if (output.startsWith("Error")) return output;

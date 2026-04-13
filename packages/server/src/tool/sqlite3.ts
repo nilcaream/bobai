@@ -90,7 +90,7 @@ export const sqlite3Tool: Tool = {
 
 	mergeable: false,
 
-	outputThreshold: 0.4,
+	outputThreshold: 0.43,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {
 		const database = typeof callArgs.database === "string" ? callArgs.database : "?";

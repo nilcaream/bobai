@@ -31,7 +31,7 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 			},
 		},
 		mergeable: true,
-		outputThreshold: 0.4,
+		outputThreshold: 0.46,
 
 		compact(_output: string, callArgs: Record<string, unknown>): string {
 			const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";

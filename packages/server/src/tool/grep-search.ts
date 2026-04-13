@@ -38,7 +38,7 @@ export const grepSearchTool: Tool = {
 
 	mergeable: true,
 
-	outputThreshold: 0.2,
+	outputThreshold: 0.29,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {
 		if (output === "No matches found." || output.startsWith("Error")) return output;
