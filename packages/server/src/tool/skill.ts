@@ -6,8 +6,8 @@ import type { Tool, ToolContext, ToolResult } from "./tool";
 /** Compaction threshold for the skill tool's output. */
 export const SKILL_OUTPUT_THRESHOLD = 0.46;
 
-/** Distance from end of conversation at which skill tool compaction factor reaches 1.0. */
-export const SKILL_MAX_DISTANCE = 200;
+/** Base distance for skill tool compaction factor calculation. */
+export const SKILL_BASE_DISTANCE = 200;
 
 export function createSkillTool(skills: SkillRegistry): Tool {
 	const skillList = skills.list();
@@ -37,7 +37,7 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 			},
 		},
 		mergeable: true,
-		maxDistance: SKILL_MAX_DISTANCE,
+		baseDistance: SKILL_BASE_DISTANCE,
 		outputThreshold: SKILL_OUTPUT_THRESHOLD,
 
 		compact(_output: string, callArgs: Record<string, unknown>): string {

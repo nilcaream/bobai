@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
 	computeCharBudget,
 	computeCompactionFactor,
-	DEFAULT_MAX_DISTANCE,
 	EMERGENCY_TARGET,
+	NON_TOOL_DISTANCE,
 	PRE_PROMPT_TARGET,
 	totalContentChars,
 } from "../src/compaction/strength";
@@ -13,11 +13,11 @@ describe("computeCompactionFactor", () => {
 		expect(computeCompactionFactor(0, 1.0, 300)).toBe(0);
 	});
 
-	test("exactly at maxDistance gives factor 1.0", () => {
+	test("exactly at baseDistance gives factor 1.0", () => {
 		expect(computeCompactionFactor(300, 1.0, 300)).toBe(1.0);
 	});
 
-	test("beyond maxDistance is clamped to 1.0", () => {
+	test("beyond baseDistance is clamped to 1.0", () => {
 		expect(computeCompactionFactor(600, 1.0, 300)).toBe(1.0);
 	});
 
@@ -39,14 +39,14 @@ describe("computeCompactionFactor", () => {
 		expect(computeCompactionFactor(100, 0, 300)).toBe(1.0);
 	});
 
-	test("zero maxDistance returns 1.0", () => {
+	test("zero baseDistance returns 1.0", () => {
 		expect(computeCompactionFactor(100, 1.0, 0)).toBe(1.0);
 	});
 });
 
-describe("DEFAULT_MAX_DISTANCE", () => {
-	test("equals 10_000", () => {
-		expect(DEFAULT_MAX_DISTANCE).toBe(10_000);
+describe("NON_TOOL_DISTANCE", () => {
+	test("equals 9_999_999", () => {
+		expect(NON_TOOL_DISTANCE).toBe(9_999_999);
 	});
 });
 

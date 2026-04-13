@@ -22,6 +22,7 @@ function createReadFileRegistry(): ToolRegistry {
 			function: { name: "read_file", description: "", parameters: { type: "object", properties: {} } },
 		},
 		mergeable: true,
+		baseDistance: 120,
 		outputThreshold: 0.3,
 		compact(_output: string, callArgs: Record<string, unknown>): string {
 			const p = typeof callArgs.path === "string" ? callArgs.path : "?";

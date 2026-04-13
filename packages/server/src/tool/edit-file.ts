@@ -36,7 +36,7 @@ export const editFileTool: Tool = {
 
 	mergeable: false,
 
-	maxDistance: 150,
+	baseDistance: 150,
 
 	outputThreshold: 0.55,
 

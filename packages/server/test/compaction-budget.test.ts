@@ -7,13 +7,14 @@ import type { Tool } from "../src/tool/tool";
 import { createToolRegistry } from "../src/tool/tool";
 
 // Helper: create a minimal tool with compaction support
-function createCompactableTool(name: string, outputThreshold = 0.3): Tool {
+function createCompactableTool(name: string, outputThreshold = 0.3, baseDistance = 120): Tool {
 	return {
 		definition: {
 			type: "function",
 			function: { name, description: "", parameters: { type: "object", properties: {} } },
 		},
 		mergeable: false,
+		baseDistance,
 		outputThreshold,
 		compact(_output: string) {
 			return `${COMPACTION_MARKER} ${name} output was compacted.`;
@@ -33,7 +34,7 @@ function createCompactableTool(name: string, outputThreshold = 0.3): Tool {
  * the multiplier-based model, tool messages need to be far enough from
  * the end of the conversation to have meaningful compaction factor.
  * 100 trailing pairs push the tool message's distance well past typical
- * maxDistance values, giving factor≈1.0 at low multipliers.
+ * baseDistance values, giving factor≈1.0 at low multipliers.
  */
 const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
 	i % 2 === 0 ? { role: "user" as const, content: "continue" } : { role: "assistant" as const, content: "ok" },

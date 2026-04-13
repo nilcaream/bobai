@@ -31,7 +31,7 @@ export const writeFileTool: Tool = {
 
 	mergeable: true,
 
-	maxDistance: 150,
+	baseDistance: 150,
 
 	argsThreshold: 0.5,
 

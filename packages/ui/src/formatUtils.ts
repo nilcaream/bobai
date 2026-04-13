@@ -42,7 +42,7 @@ export interface ToolReachEntry {
 	name: string;
 	type: "output" | "arguments";
 	threshold: number;
-	maxDistance: number;
+	baseDistance: number;
 	minimumDistance: number;
 	evictionDistance: number;
 	compactedFrom: number | null;
@@ -51,7 +51,7 @@ export interface ToolReachEntry {
 export interface CompactionDetail {
 	distance: number;
 	compactionFactor: number;
-	maxDistance: number;
+	baseDistance: number;
 	outputThreshold?: number;
 	argsThreshold?: number;
 	wasCompacted: boolean;
@@ -239,11 +239,11 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 				sections.push(`| ${entry.name} | — | — | — | — | — | excluded |`);
 			} else if (entry.minimumDistance === 0) {
 				sections.push(
-					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.maxDistance} | — | — | never |`,
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | — | — | never |`,
 				);
 			} else {
 				sections.push(
-					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.maxDistance} | ${entry.minimumDistance} | ${entry.evictionDistance} | #${entry.compactedFrom} |`,
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | ${entry.minimumDistance} | ${entry.evictionDistance} | #${entry.compactedFrom} |`,
 				);
 			}
 		}

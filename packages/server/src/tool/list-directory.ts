@@ -26,7 +26,7 @@ export const listDirectoryTool: Tool = {
 
 	mergeable: true,
 
-	maxDistance: 100,
+	baseDistance: 100,
 
 	outputThreshold: 0.25,
 

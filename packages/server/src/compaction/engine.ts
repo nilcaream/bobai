@@ -1,6 +1,6 @@
 import type { AssistantMessage, Message } from "../provider/provider";
 import type { Tool, ToolRegistry } from "../tool/tool";
-import { computeCompactionFactor, DEFAULT_MAX_DISTANCE } from "./strength";
+import { computeCompactionFactor, NON_TOOL_DISTANCE } from "./strength";
 
 /** Minimum character savings required for compaction to be applied.
  * If compacting saves fewer than this many characters, the original
@@ -37,10 +37,10 @@ export interface CompactionStats {
 export interface CompactionDetail {
 	/** Distance from end of conversation in messages. */
 	distance: number;
-	/** Compaction factor = distance / (multiplier × maxDistance), clamped to [0,1]. */
+	/** Compaction factor = distance / (multiplier × baseDistance), clamped to [0,1]. */
 	compactionFactor: number;
-	/** The maxDistance used for this message's factor computation. */
-	maxDistance: number;
+	/** The baseDistance used for this message's factor computation. */
+	baseDistance: number;
 	/** Tool's outputThreshold (undefined if tool has none). */
 	outputThreshold?: number;
 	/** Tool's argsThreshold (undefined if tool has none). */
@@ -111,7 +111,7 @@ function buildToolCallMap(
  * Run the compaction engine over a message array.
  *
  * Returns a new message array with tool outputs compacted and old messages
- * evicted according to each tool's maxDistance and the given multiplier.
+ * evicted according to each tool's baseDistance and the given multiplier.
  *
  * System messages are never compacted or evicted.
  *
@@ -149,7 +149,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 		const toolMsg = msg as { role: "tool"; tool_call_id: string };
 		const info = toolCallMap.get(toolMsg.tool_call_id);
 		const tool = info?.tool;
-		const maxDist = tool?.maxDistance ?? DEFAULT_MAX_DISTANCE;
+		const maxDist = tool?.baseDistance ?? NON_TOOL_DISTANCE;
 		const distance = totalMessages - 1 - i;
 		const factor = computeCompactionFactor(distance, multiplier, maxDist);
 		toolFactors.set(toolMsg.tool_call_id, { factor, maxDist });
@@ -177,7 +177,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 
 		// --- User messages ---
 		if (msg.role === "user") {
-			const factor = computeCompactionFactor(distance, multiplier, DEFAULT_MAX_DISTANCE);
+			const factor = computeCompactionFactor(distance, multiplier, NON_TOOL_DISTANCE);
 			if (factor >= 1.0) {
 				evictedIndices.add(i);
 				evictedCount++;
@@ -191,7 +191,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 		// --- Assistant messages ---
 		if (msg.role === "assistant") {
 			const assistantMsg = msg as AssistantMessage;
-			const factor = computeCompactionFactor(distance, multiplier, DEFAULT_MAX_DISTANCE);
+			const factor = computeCompactionFactor(distance, multiplier, NON_TOOL_DISTANCE);
 
 			if (factor >= 1.0) {
 				evictedIndices.add(i);
@@ -245,7 +245,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 						details.set(tc.id, {
 							distance: totalMessages - 1 - (toolInfo ? i : i),
 							compactionFactor: toolInfo?.factor ?? 0,
-							maxDistance: toolInfo?.maxDist ?? DEFAULT_MAX_DISTANCE,
+							baseDistance: toolInfo?.maxDist ?? NON_TOOL_DISTANCE,
 							outputThreshold: tool.outputThreshold,
 							argsThreshold: tool.argsThreshold,
 							wasCompacted: false,
@@ -279,7 +279,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 			const toolName = info?.toolName ?? "unknown";
 			const tool = info?.tool;
 			const callArgs = info?.callArgs ?? {};
-			const maxDist = tool?.maxDistance ?? DEFAULT_MAX_DISTANCE;
+			const maxDist = tool?.baseDistance ?? NON_TOOL_DISTANCE;
 			const factor = toolFactors.get(toolMsg.tool_call_id)?.factor ?? computeCompactionFactor(distance, multiplier, maxDist);
 
 			// Preserve savedArgsChars from assistant argument compaction if already recorded.
@@ -295,7 +295,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 				details.set(toolMsg.tool_call_id, {
 					distance,
 					compactionFactor: factor,
-					maxDistance: maxDist,
+					baseDistance: maxDist,
 					outputThreshold: tool?.outputThreshold,
 					argsThreshold: tool?.argsThreshold,
 					wasCompacted: false,
@@ -312,7 +312,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 				details.set(toolMsg.tool_call_id, {
 					distance,
 					compactionFactor: factor,
-					maxDistance: maxDist,
+					baseDistance: maxDist,
 					outputThreshold: tool?.outputThreshold,
 					argsThreshold: tool?.argsThreshold,
 					wasCompacted: false,
@@ -329,7 +329,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 				details.set(toolMsg.tool_call_id, {
 					distance,
 					compactionFactor: factor,
-					maxDistance: maxDist,
+					baseDistance: maxDist,
 					outputThreshold: tool.outputThreshold,
 					argsThreshold: tool.argsThreshold,
 					wasCompacted: false,
@@ -349,7 +349,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 				details.set(toolMsg.tool_call_id, {
 					distance,
 					compactionFactor: factor,
-					maxDistance: maxDist,
+					baseDistance: maxDist,
 					outputThreshold: tool.outputThreshold,
 					argsThreshold: tool.argsThreshold,
 					wasCompacted: false,
@@ -381,7 +381,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 				details.set(toolMsg.tool_call_id, {
 					distance,
 					compactionFactor: factor,
-					maxDistance: maxDist,
+					baseDistance: maxDist,
 					outputThreshold: tool.outputThreshold,
 					argsThreshold: tool.argsThreshold,
 					wasCompacted: true,
@@ -394,7 +394,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 				details.set(toolMsg.tool_call_id, {
 					distance,
 					compactionFactor: factor,
-					maxDistance: maxDist,
+					baseDistance: maxDist,
 					outputThreshold: tool.outputThreshold,
 					argsThreshold: tool.argsThreshold,
 					wasCompacted: false,

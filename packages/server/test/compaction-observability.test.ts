@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
 import { compactMessages, compactMessagesWithStats } from "../src/compaction/engine";
 import { createCompactionRegistry } from "../src/compaction/registry";
-import { DEFAULT_MAX_DISTANCE } from "../src/compaction/strength";
+import { NON_TOOL_DISTANCE } from "../src/compaction/strength";
 import type { Message } from "../src/provider/provider";
 import { bashTool } from "../src/tool/bash";
 import { editFileTool } from "../src/tool/edit-file";
@@ -26,7 +26,7 @@ function createMockRegistry(
 		{
 			outputThreshold?: number;
 			argsThreshold?: number;
-			maxDistance?: number;
+			baseDistance?: number;
 			compact?: (output: string, args: Record<string, unknown>) => string;
 			compactArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
 		}
@@ -49,7 +49,7 @@ function createMockRegistry(
 					function: { name, description: "", parameters: { type: "object", properties: {}, required: [] } },
 				},
 				mergeable: true,
-				maxDistance: t.maxDistance ?? DEFAULT_MAX_DISTANCE,
+				baseDistance: t.baseDistance ?? NON_TOOL_DISTANCE,
 				outputThreshold: t.outputThreshold,
 				argsThreshold: t.argsThreshold,
 				compact,
@@ -77,8 +77,8 @@ function toolMessage(toolCallId: string, content: string): Message {
 
 /**
  * Trailing messages to push tool results into the compactable distance zone.
- * With maxDistance=120, we need 120+ messages after the tool result
- * so that distance >= maxDistance and factor ≈ 1.0 at multiplier=1.
+ * With baseDistance=120, we need 120+ messages after the tool result
+ * so that distance >= baseDistance and factor ≈ 1.0 at multiplier=1.
  */
 const TRAILING_CONTEXT: Message[] = Array.from({ length: 200 }, (_, i) =>
 	i % 2 === 0 ? ({ role: "user", content: "continue" } as Message) : ({ role: "assistant", content: "ok" } as Message),
@@ -122,9 +122,9 @@ describe("compactMessagesWithStats", () => {
 			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
-			file_search: { outputThreshold: 0.2, maxDistance: 120 },
-			bash: { outputThreshold: 0.4, maxDistance: 150 },
-			edit_file: { outputThreshold: 0.7, maxDistance: 150 },
+			file_search: { outputThreshold: 0.2, baseDistance: 120 },
+			bash: { outputThreshold: 0.4, baseDistance: 150 },
+			edit_file: { outputThreshold: 0.7, baseDistance: 150 },
 		});
 		const { stats } = compactMessagesWithStats({
 			messages,
@@ -132,7 +132,7 @@ describe("compactMessagesWithStats", () => {
 			tools: registry,
 		});
 		expect(stats.totalToolMessages).toBe(3);
-		// At multiplier=1 with distance >> maxDistance, older tool messages should be compacted or evicted.
+		// At multiplier=1 with distance >> baseDistance, older tool messages should be compacted or evicted.
 		// evicted count includes user/assistant messages too, so total can exceed tool count.
 		expect(stats.compacted + stats.evicted).toBeGreaterThan(0);
 	});
@@ -144,13 +144,13 @@ describe("compactMessagesWithStats", () => {
 			assistantWithToolCall("tc1", "bash"),
 			toolMessage("tc1", longOutput),
 		];
-		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, maxDistance: 150 } });
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, baseDistance: 150 } });
 
 		// With a very high multiplier, factor → 0 → no compaction
 		const highMult = compactMessagesWithStats({ messages, multiplier: 100, tools: registry });
 		expect(highMult.stats.compacted).toBe(0);
 
-		// With multiplier=1, distance=2, maxDistance=150 → factor = 2/150 ≈ 0.013 → still below threshold
+		// With multiplier=1, distance=2, baseDistance=150 → factor = 2/150 ≈ 0.013 → still below threshold
 		// Need more distance to trigger compaction
 		const withTrailing: Message[] = [...messages, ...TRAILING_CONTEXT];
 		const lowMult = compactMessagesWithStats({ messages: withTrailing, multiplier: 1, tools: registry });
@@ -171,9 +171,9 @@ describe("compactMessagesWithStats", () => {
 			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
-			file_search: { outputThreshold: 0.2, maxDistance: 120 },
-			bash: { outputThreshold: 0.4, maxDistance: 150 },
-			edit_file: { outputThreshold: 0.7, maxDistance: 150 },
+			file_search: { outputThreshold: 0.2, baseDistance: 120 },
+			bash: { outputThreshold: 0.4, baseDistance: 150 },
+			edit_file: { outputThreshold: 0.7, baseDistance: 150 },
 		});
 		const { details } = compactMessagesWithStats({
 			messages,
@@ -190,8 +190,8 @@ describe("compactMessagesWithStats", () => {
 			if (!detail) throw new Error(`Missing detail for ${id}`);
 			expect(typeof detail.distance).toBe("number");
 			expect(detail.distance).toBeGreaterThan(0);
-			expect(typeof detail.maxDistance).toBe("number");
-			expect(detail.maxDistance).toBeGreaterThan(0);
+			expect(typeof detail.baseDistance).toBe("number");
+			expect(detail.baseDistance).toBeGreaterThan(0);
 			expect(typeof detail.compactionFactor).toBe("number");
 			expect(typeof detail.wasCompacted).toBe("boolean");
 			expect(typeof detail.wasEvicted).toBe("boolean");
@@ -236,8 +236,8 @@ describe("compactMessagesWithStats", () => {
 			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
-			file_search: { outputThreshold: 0.2, maxDistance: 120 },
-			bash: { outputThreshold: 0.4, maxDistance: 150 },
+			file_search: { outputThreshold: 0.2, baseDistance: 120 },
+			bash: { outputThreshold: 0.4, baseDistance: 150 },
 		});
 		const { details } = compactMessagesWithStats({
 			messages,
@@ -263,7 +263,7 @@ describe("compactMessagesWithStats", () => {
 			assistantWithToolCall("tc1", "bash"),
 			toolMessage("tc1", "output line 1\nline 2\nline 3"),
 		];
-		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, maxDistance: 150 } });
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, baseDistance: 150 } });
 
 		const plain = compactMessages({ messages, multiplier: 1, tools: registry });
 		const { messages: withStats } = compactMessagesWithStats({ messages, multiplier: 1, tools: registry });
@@ -286,7 +286,7 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc1", longOutput),
 			...TRAILING_CONTEXT,
 		];
-		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, maxDistance: 150 } });
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, baseDistance: 150 } });
 		const result = compactMessagesWithStats({ messages, multiplier: 1, tools: registry });
 
 		// preEviction should have same length as original (includes evicted messages)
@@ -343,11 +343,11 @@ describe("createCompactionRegistry", () => {
 		expect(tool?.outputThreshold).toBeUndefined();
 	});
 
-	test("has correct maxDistance values", () => {
-		expect(registry.get("read_file")?.maxDistance).toBe(readFileTool.maxDistance);
-		expect(registry.get("grep_search")?.maxDistance).toBe(grepSearchTool.maxDistance);
-		expect(registry.get("bash")?.maxDistance).toBe(bashTool.maxDistance);
-		expect(registry.get("edit_file")?.maxDistance).toBe(editFileTool.maxDistance);
+	test("has correct baseDistance values", () => {
+		expect(registry.get("read_file")?.baseDistance).toBe(readFileTool.baseDistance);
+		expect(registry.get("grep_search")?.baseDistance).toBe(grepSearchTool.baseDistance);
+		expect(registry.get("bash")?.baseDistance).toBe(bashTool.baseDistance);
+		expect(registry.get("edit_file")?.baseDistance).toBe(editFileTool.baseDistance);
 	});
 
 	test("has correct argsThreshold values", () => {

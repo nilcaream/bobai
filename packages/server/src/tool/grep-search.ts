@@ -38,7 +38,7 @@ export const grepSearchTool: Tool = {
 
 	mergeable: true,
 
-	maxDistance: 120,
+	baseDistance: 120,
 
 	outputThreshold: 0.29,
 

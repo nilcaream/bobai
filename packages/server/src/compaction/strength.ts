@@ -1,21 +1,21 @@
 /**
- * Default maxDistance for message roles that are not tools (user, assistant).
- * High value so they survive nearly the entire conversation before eviction.
+ * Distance value for non-tool messages (user, assistant, system).
+ * Large enough to ensure these messages are never evicted in practice.
  */
-export const DEFAULT_MAX_DISTANCE = 10_000;
+export const NON_TOOL_DISTANCE = 9_999_999;
 
 /**
  * Compute the compaction factor for a message using the linear per-tool model.
  *
- * factor = distance / (multiplier × maxDistance), clamped to [0, 1].
+ * factor = distance / (multiplier × baseDistance), clamped to [0, 1].
  *
  * @param distance - number of messages from the end (last message = 0)
  * @param multiplier - scaling factor from the outer loop (higher = less aggressive)
- * @param maxDistance - per-tool constant: distance at which factor reaches 1.0 when multiplier=1.0
+ * @param baseDistance - per-tool constant: distance at which factor reaches 1.0 when multiplier=1.0
  */
-export function computeCompactionFactor(distance: number, multiplier: number, maxDistance: number): number {
-	if (multiplier <= 0 || maxDistance <= 0) return 1.0;
-	return Math.min(1.0, distance / (multiplier * maxDistance));
+export function computeCompactionFactor(distance: number, multiplier: number, baseDistance: number): number {
+	if (multiplier <= 0 || baseDistance <= 0) return 1.0;
+	return Math.min(1.0, distance / (multiplier * baseDistance));
 }
 
 /** Pre-prompt compaction targets this fraction of the context window. */

@@ -40,7 +40,7 @@ describe("FileTime compaction invalidation", () => {
 
 		// Build a message array where the read_file output will get compacted
 		// (multiplier chosen so factor > outputThreshold but < 1.0).
-		// read_file: maxDistance=120, outputThreshold=0.3
+		// read_file: baseDistance=120, outputThreshold=0.3
 		// 100 filler pairs = 200 messages after the tool output → distance ≈ 201
 		// multiplier=2.0 → factor = 201/(2×120) ≈ 0.84 → above 0.3 threshold, below 1.0
 		const filler: Message[] = [];
@@ -166,7 +166,7 @@ describe("FileTime compaction invalidation", () => {
 				function: { name: "bash", description: "bash", parameters: { type: "object" as const, properties: {} } },
 			},
 			mergeable: false,
-			maxDistance: 100,
+			baseDistance: 100,
 			outputThreshold: 0.4,
 			compact(output: string, _callArgs: Record<string, unknown>): string {
 				return `# COMPACTED\n${output.slice(0, 50)}`;

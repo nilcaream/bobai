@@ -40,8 +40,8 @@ import { writeFileTool } from "./write-file";
 export const TASK_OUTPUT_THRESHOLD = 0.7;
 /** Compaction threshold for the task tool's arguments. */
 export const TASK_ARGS_THRESHOLD = 0.62;
-/** Distance from end of conversation at which task tool compaction factor reaches 1.0. */
-export const TASK_MAX_DISTANCE = 300;
+/** Base distance for task tool compaction factor calculation. */
+export const TASK_BASE_DISTANCE = 300;
 
 function formatTimestamp(): string {
 	const d = new Date();
@@ -117,7 +117,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			},
 		},
 		mergeable: false,
-		maxDistance: TASK_MAX_DISTANCE,
+		baseDistance: TASK_BASE_DISTANCE,
 		outputThreshold: TASK_OUTPUT_THRESHOLD,
 		argsThreshold: TASK_ARGS_THRESHOLD,
 		compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {

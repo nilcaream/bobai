@@ -30,7 +30,7 @@ export const bashTool: Tool = {
 
 	mergeable: false,
 
-	maxDistance: 150,
+	baseDistance: 150,
 
 	outputThreshold: 0.4,
 

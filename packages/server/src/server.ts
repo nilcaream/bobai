@@ -3,7 +3,7 @@ import path from "node:path";
 import { type CommandRequest, handleCommand } from "./command";
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { createCompactionRegistry } from "./compaction/registry";
-import { DEFAULT_MAX_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
+import { NON_TOOL_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
@@ -241,15 +241,15 @@ export function createServer(options: ServerOptions) {
 
 				// Compute compaction reach for each tool at current multiplier.
 				// For a tool with a given threshold: the minimum distance where
-				// factor >= threshold is `threshold * multiplier * maxDistance`.
-				// The eviction distance (factor >= 1.0) is `multiplier * maxDistance`.
+				// factor >= threshold is `threshold * multiplier * baseDistance`.
+				// The eviction distance (factor >= 1.0) is `multiplier * baseDistance`.
 				const multiplier = compactionResult.multiplier;
 				const totalMessages = messages.length;
 				const toolReach: Array<{
 					name: string;
 					type: "output" | "arguments";
 					threshold: number;
-					maxDistance: number;
+					baseDistance: number;
 					minimumDistance: number;
 					evictionDistance: number;
 					compactedFrom: number | null;
@@ -258,27 +258,27 @@ export function createServer(options: ServerOptions) {
 					const toolName = def.function.name;
 					const tool = tools.get(toolName);
 					if (!tool) continue;
-					const maxDistance = tool.maxDistance;
-					const evictDist = multiplier > 0 ? Math.ceil(multiplier * maxDistance) : 0;
+					const baseDistance = tool.baseDistance;
+					const evictDist = multiplier > 0 ? Math.ceil(multiplier * baseDistance) : 0;
 					if (tool.outputThreshold !== undefined) {
-						const minDist = multiplier > 0 ? Math.ceil(tool.outputThreshold * multiplier * maxDistance) : 0;
+						const minDist = multiplier > 0 ? Math.ceil(tool.outputThreshold * multiplier * baseDistance) : 0;
 						toolReach.push({
 							name: toolName,
 							type: "output",
 							threshold: tool.outputThreshold,
-							maxDistance,
+							baseDistance,
 							minimumDistance: minDist,
 							evictionDistance: evictDist,
 							compactedFrom: minDist > 0 && minDist <= totalMessages ? totalMessages - minDist : null,
 						});
 					}
 					if (tool.argsThreshold !== undefined) {
-						const minDist = multiplier > 0 ? Math.ceil(tool.argsThreshold * multiplier * maxDistance) : 0;
+						const minDist = multiplier > 0 ? Math.ceil(tool.argsThreshold * multiplier * baseDistance) : 0;
 						toolReach.push({
 							name: toolName,
 							type: "arguments",
 							threshold: tool.argsThreshold,
-							maxDistance,
+							baseDistance,
 							minimumDistance: minDist,
 							evictionDistance: evictDist,
 							compactedFrom: minDist > 0 && minDist <= totalMessages ? totalMessages - minDist : null,
@@ -291,7 +291,7 @@ export function createServer(options: ServerOptions) {
 						name: role,
 						type: "output",
 						threshold: -1,
-						maxDistance: -1,
+						baseDistance: -1,
 						minimumDistance: -1,
 						evictionDistance: -1,
 						compactedFrom: null,
@@ -316,7 +316,7 @@ export function createServer(options: ServerOptions) {
 						charsPerToken: compactionResult.charsPerToken,
 						type: "pre-prompt",
 						parameters: {
-							defaultMaxDistance: DEFAULT_MAX_DISTANCE,
+							nonToolDistance: NON_TOOL_DISTANCE,
 						},
 						estimatedContextNeeded,
 						target: PRE_PROMPT_TARGET,

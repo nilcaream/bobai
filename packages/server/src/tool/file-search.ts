@@ -35,7 +35,7 @@ export const fileSearchTool: Tool = {
 
 	mergeable: true,
 
-	maxDistance: 100,
+	baseDistance: 100,
 
 	outputThreshold: 0.27,
 

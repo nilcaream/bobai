@@ -6,7 +6,6 @@ import {
 	compactMessagesWithStats,
 	MIN_COMPACTION_SAVINGS,
 } from "../src/compaction/engine";
-import { DEFAULT_MAX_DISTANCE } from "../src/compaction/strength";
 import type { Message, ToolMessage } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
 
@@ -14,11 +13,16 @@ import type { ToolRegistry } from "../src/tool/tool";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Default baseDistance used in mock registries when not explicitly set.
+ *  With 200 trailing messages (distance ≈ 200), multiplier=1.5 gives
+ *  factor ≈ 0.89 — safely between thresholds for compaction testing. */
+const MOCK_BASE_DISTANCE = 150;
+
 function createMockRegistry(
 	tools: Record<
 		string,
 		{
-			maxDistance?: number;
+			baseDistance?: number;
 			outputThreshold?: number;
 			argsThreshold?: number;
 			compact?: (
@@ -41,7 +45,7 @@ function createMockRegistry(
 					function: { name, description: "", parameters: { type: "object", properties: {}, required: [] } },
 				},
 				mergeable: true,
-				maxDistance: t.maxDistance ?? DEFAULT_MAX_DISTANCE,
+				baseDistance: t.baseDistance ?? MOCK_BASE_DISTANCE,
 				outputThreshold: t.outputThreshold,
 				argsThreshold: t.argsThreshold,
 				compact: t.compact,
@@ -77,7 +81,7 @@ function multilineOutput(lineCount: number): string {
 /**
  * Trailing messages appended after tool results so that tool messages
  * are far from the end of the conversation. With the distance-based model
- * (factor = distance / (multiplier × maxDistance)), a large distance
+ * (factor = distance / (multiplier × baseDistance)), a large distance
  * pushes the factor up. 100 trailing pairs = 200 messages of distance.
  */
 const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
@@ -153,11 +157,11 @@ describe("compactMessages", () => {
 				toolResult("tc1", originalContent),
 				...TRAILING_CONTEXT,
 			];
-			// distance ≈ 200, maxDist = 10000, multiplier = 0.05
-			// factor = 200 / (0.05 * 10000) = 0.4, > threshold 0.2 → compact
+			// distance ≈ 200, baseDistance = 150, multiplier = 1.5
+			// factor = 200 / (1.5 × 150) ≈ 0.89, > threshold 0.2 → compact
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -182,7 +186,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					nothreshold: {
 						// no outputThreshold → never compacted
@@ -203,7 +207,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: emptyRegistry, // ghost_tool not registered
 			});
 			const toolMsg = result.find((m) => m.role === "tool") as ToolMessage;
@@ -218,11 +222,11 @@ describe("compactMessages", () => {
 				toolResult("tc1", originalContent),
 				...TRAILING_CONTEXT,
 			];
-			// distance ≈ 200, maxDist = 10000, multiplier = 0.05
-			// factor = 200 / (0.05 * 10000) = 0.4 < threshold 0.9 → no compaction
+			// distance ≈ 200, baseDistance = 150, multiplier = 1.5
+			// factor = 200 / (1.5 × 150) ≈ 0.89 < threshold 0.9 → no compaction
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					resistant: {
 						outputThreshold: 0.9,
@@ -244,7 +248,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					small: {
 						outputThreshold: 0.2,
@@ -266,7 +270,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -289,7 +293,7 @@ describe("compactMessages", () => {
 			const messagesCopy = [...messages];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -314,7 +318,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -336,7 +340,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					broken: {
 						outputThreshold: 0.2,
@@ -360,7 +364,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					read_file: {
 						outputThreshold: 0.2,
@@ -428,7 +432,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					edit_file: {
 						argsThreshold: 0.3,
@@ -455,7 +459,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					write_file: {
 						// no argsThreshold → never arg-compacted
@@ -478,7 +482,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					edit_file: {
 						argsThreshold: 0.3,
@@ -505,7 +509,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					write_file: {
 						argsThreshold: 0.3,
@@ -542,7 +546,7 @@ describe("compactMessages", () => {
 			];
 			const { details } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					tool_a: {
 						outputThreshold: 0.2,
@@ -568,10 +572,10 @@ describe("compactMessages", () => {
 	describe("separate thresholds", () => {
 		test("edit_file with outputThreshold=0.9 and argsThreshold=0.3: args compacted, output not", () => {
 			const largeContent = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
-			// distance ≈ 200, maxDist = 10000, multiplier = 0.05
-			// factor = 200 / (0.05 * 10000) = 0.4
-			// With outputThreshold=0.9, factor 0.4 < 0.9 → no output compaction
-			// With argsThreshold=0.3, factor 0.4 > 0.3 → args compacted
+			// distance ≈ 200, baseDistance = 150, multiplier = 1.5
+			// factor = 200 / (1.5 × 150) ≈ 0.89
+			// With outputThreshold=0.9, factor 0.89 < 0.9 → no output compaction
+			// With argsThreshold=0.3, factor 0.89 > 0.3 → args compacted
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				{
@@ -593,7 +597,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					edit_file: {
 						outputThreshold: 0.9, // too high → no output compaction
@@ -647,7 +651,7 @@ describe("compactMessages", () => {
 
 			const { stats } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: registry,
 			});
 
@@ -657,7 +661,7 @@ describe("compactMessages", () => {
 			expect(stats.evicted).toBe(0);
 		});
 
-		test("returns per-tool-call-id details with distance and maxDistance", () => {
+		test("returns per-tool-call-id details with distance and baseDistance", () => {
 			const longContent = `${"x".repeat(50)}\n`.repeat(200);
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
@@ -682,7 +686,7 @@ describe("compactMessages", () => {
 
 			const { details } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: registry,
 			});
 
@@ -691,7 +695,7 @@ describe("compactMessages", () => {
 			const d1 = details.get("tc1") as CompactionDetail;
 			expect(d1).toBeDefined();
 			expect(d1.distance).toBeGreaterThan(0);
-			expect(d1.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
+			expect(d1.baseDistance).toBe(MOCK_BASE_DISTANCE);
 			expect(d1.compactionFactor).toBeGreaterThan(0);
 			expect(d1.compactionFactor).toBeLessThanOrEqual(1);
 			expect(d1.outputThreshold).toBe(0.2);
@@ -703,7 +707,7 @@ describe("compactMessages", () => {
 			expect(d2).toBeDefined();
 			expect(d2.outputThreshold).toBe(0.4);
 			expect(d2.distance).toBeGreaterThan(0);
-			expect(d2.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
+			expect(d2.baseDistance).toBe(MOCK_BASE_DISTANCE);
 			expect(d2.wasEvicted).toBe(false);
 		});
 
@@ -725,7 +729,7 @@ describe("compactMessages", () => {
 
 			const { details } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: registry,
 			});
 
@@ -734,7 +738,7 @@ describe("compactMessages", () => {
 			expect(d1.wasCompacted).toBe(false);
 			expect(d1.belowMinSavings).toBe(true);
 			expect(d1.distance).toBeGreaterThan(0);
-			expect(d1.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
+			expect(d1.baseDistance).toBe(MOCK_BASE_DISTANCE);
 		});
 
 		test("returns empty details when multiplier is huge (no compaction)", () => {
@@ -750,7 +754,7 @@ describe("compactMessages", () => {
 				tools: createMockRegistry({ bash: { outputThreshold: 0.2 } }),
 			});
 
-			// With multiplier=100, factor = distance / (100 * 10000) ≈ 0 → nothing compacted.
+			// With multiplier=100, factor = distance / (100 × 150) ≈ 0 → nothing compacted.
 			// Details are still populated for tool messages that were evaluated,
 			// but wasCompacted should be false.
 			// Actually, when anyChanged is false, engine returns same reference.
@@ -776,7 +780,7 @@ describe("compactMessages", () => {
 			});
 			const { details, messages: result } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: registry,
 			});
 			const d1 = details.get("tc1");
@@ -784,7 +788,7 @@ describe("compactMessages", () => {
 			expect(d1?.savedChars).toBeDefined();
 			expect(d1?.savedChars).toBeGreaterThan(0);
 			expect(d1?.distance).toBeGreaterThan(0);
-			expect(d1?.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
+			expect(d1?.baseDistance).toBe(MOCK_BASE_DISTANCE);
 			const resultContent = (result.find((m) => m.role === "tool") as ToolMessage).content;
 			expect(d1?.savedChars).toBe(longContent.length - resultContent.length);
 		});
@@ -820,7 +824,7 @@ describe("compactMessages", () => {
 			});
 			const { details } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: registry,
 			});
 
@@ -829,7 +833,7 @@ describe("compactMessages", () => {
 			expect(d?.savedArgsChars).toBeDefined();
 			expect(d?.savedArgsChars ?? 0).toBeGreaterThan(0);
 			expect(d?.distance).toBeGreaterThan(0);
-			expect(d?.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
+			expect(d?.baseDistance).toBe(MOCK_BASE_DISTANCE);
 		});
 
 		test("stats include assistantArgsCompacted count", () => {
@@ -878,7 +882,7 @@ describe("compactMessages", () => {
 			});
 			const { stats } = compactMessagesWithStats({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: registry,
 			});
 
@@ -900,7 +904,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				sessionId: "sess-123",
 				tools: createMockRegistry({
 					task: {
@@ -934,7 +938,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					read_file: {
 						outputThreshold: 0.2,
@@ -960,7 +964,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					read_file: {
 						outputThreshold: 0.2,
@@ -990,7 +994,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					broken: {
 						outputThreshold: 0.2,
@@ -1008,7 +1012,7 @@ describe("compactMessages", () => {
 			const messages: Message[] = [];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: emptyRegistry,
 			});
 			expect(result).toBe(messages);
@@ -1029,7 +1033,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -1061,7 +1065,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				multiplier: 0.03,
+				multiplier: 1.5,
 				tools: createMockRegistry({ bash: {} }), // no outputThreshold
 			});
 			expect(result).toBe(messages);
@@ -1073,8 +1077,8 @@ describe("compactMessages", () => {
 	// =======================================================================
 	describe("eviction", () => {
 		test("tool result is evicted when factor >= 1.0", () => {
-			// Use a tool with small maxDistance so factor easily reaches 1.0.
-			// maxDistance=10, distance≈200, multiplier=1 → factor = 200/(1*10) = 20 → clamped to 1.0
+			// Use a tool with small baseDistance so factor easily reaches 1.0.
+			// baseDistance=10, distance≈200, multiplier=1 → factor = 200/(1*10) = 20 → clamped to 1.0
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "short_lived"),
@@ -1090,7 +1094,7 @@ describe("compactMessages", () => {
 				multiplier: 1,
 				tools: createMockRegistry({
 					short_lived: {
-						maxDistance: 10,
+						baseDistance: 10,
 						outputThreshold: 0.3,
 						compact: () => `${COMPACTION_MARKER} compacted`,
 					},
@@ -1121,7 +1125,7 @@ describe("compactMessages", () => {
 				multiplier: 1,
 				tools: createMockRegistry({
 					short_lived: {
-						maxDistance: 10,
+						baseDistance: 10,
 						outputThreshold: 0.3,
 						compact: () => `${COMPACTION_MARKER} compacted`,
 					},
@@ -1156,7 +1160,7 @@ describe("compactMessages", () => {
 				multiplier: 1,
 				tools: createMockRegistry({
 					short_lived: {
-						maxDistance: 10,
+						baseDistance: 10,
 						outputThreshold: 0.3,
 						compact: () => `${COMPACTION_MARKER} compacted`,
 					},
@@ -1182,7 +1186,7 @@ describe("compactMessages", () => {
 				multiplier: 1,
 				tools: createMockRegistry({
 					short_lived: {
-						maxDistance: 10,
+						baseDistance: 10,
 						outputThreshold: 0.3,
 						compact: () => `${COMPACTION_MARKER} compacted`,
 					},
@@ -1210,7 +1214,7 @@ describe("compactMessages", () => {
 				multiplier: 1,
 				tools: createMockRegistry({
 					short_lived: {
-						maxDistance: 10,
+						baseDistance: 10,
 						outputThreshold: 0.3,
 						compact: () => `${COMPACTION_MARKER} compacted`,
 					},
@@ -1235,7 +1239,7 @@ describe("compactMessages", () => {
 				multiplier: 0.001,
 				tools: createMockRegistry({
 					short_lived: {
-						maxDistance: 10,
+						baseDistance: 10,
 						outputThreshold: 0.3,
 						compact: () => `${COMPACTION_MARKER} compacted`,
 					},
