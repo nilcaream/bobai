@@ -3,7 +3,17 @@ import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
 import { compactMessages, compactMessagesWithStats } from "../src/compaction/engine";
 import { createCompactionRegistry } from "../src/compaction/registry";
 import type { Message } from "../src/provider/provider";
+import { bashTool } from "../src/tool/bash";
+import { editFileTool } from "../src/tool/edit-file";
+import { fileSearchTool } from "../src/tool/file-search";
+import { grepSearchTool } from "../src/tool/grep-search";
+import { listDirectoryTool } from "../src/tool/list-directory";
+import { readFileTool } from "../src/tool/read-file";
+import { SKILL_OUTPUT_THRESHOLD } from "../src/tool/skill";
+import { sqlite3Tool } from "../src/tool/sqlite3";
+import { TASK_ARGS_THRESHOLD, TASK_OUTPUT_THRESHOLD } from "../src/tool/task";
 import type { ToolRegistry } from "../src/tool/tool";
+import { writeFileTool } from "../src/tool/write-file";
 
 // ---------------------------------------------------------------------------
 // Helpers (same pattern as compaction-engine.test.ts)
@@ -296,21 +306,16 @@ describe("createCompactionRegistry", () => {
 	});
 
 	test("has correct outputThreshold values", () => {
-		const expected: Record<string, number> = {
-			list_directory: 0.25,
-			file_search: 0.27,
-			grep_search: 0.29,
-			read_file: 0.3,
-			bash: 0.4,
-			sqlite3: 0.43,
-			skill: 0.46,
-			edit_file: 0.55,
-			task: 0.7,
-		};
-		for (const [name, threshold] of Object.entries(expected)) {
-			const tool = registry.get(name);
-			expect(tool?.outputThreshold).toBe(threshold);
-		}
+		// Verify registry thresholds match the tool definitions (source of truth)
+		expect(registry.get("list_directory")?.outputThreshold).toBe(listDirectoryTool.outputThreshold);
+		expect(registry.get("file_search")?.outputThreshold).toBe(fileSearchTool.outputThreshold);
+		expect(registry.get("grep_search")?.outputThreshold).toBe(grepSearchTool.outputThreshold);
+		expect(registry.get("read_file")?.outputThreshold).toBe(readFileTool.outputThreshold);
+		expect(registry.get("bash")?.outputThreshold).toBe(bashTool.outputThreshold);
+		expect(registry.get("sqlite3")?.outputThreshold).toBe(sqlite3Tool.outputThreshold);
+		expect(registry.get("skill")?.outputThreshold).toBe(SKILL_OUTPUT_THRESHOLD);
+		expect(registry.get("edit_file")?.outputThreshold).toBe(editFileTool.outputThreshold);
+		expect(registry.get("task")?.outputThreshold).toBe(TASK_OUTPUT_THRESHOLD);
 	});
 
 	test("write_file has no outputThreshold", () => {
@@ -319,15 +324,10 @@ describe("createCompactionRegistry", () => {
 	});
 
 	test("has correct argsThreshold values", () => {
-		const expected: Record<string, number> = {
-			edit_file: 0.35,
-			write_file: 0.5,
-			task: 0.62,
-		};
-		for (const [name, threshold] of Object.entries(expected)) {
-			const tool = registry.get(name);
-			expect(tool?.argsThreshold).toBe(threshold);
-		}
+		// Verify registry thresholds match the tool definitions (source of truth)
+		expect(registry.get("edit_file")?.argsThreshold).toBe(editFileTool.argsThreshold);
+		expect(registry.get("write_file")?.argsThreshold).toBe(writeFileTool.argsThreshold);
+		expect(registry.get("task")?.argsThreshold).toBe(TASK_ARGS_THRESHOLD);
 	});
 
 	test("tools without argsThreshold have it undefined", () => {

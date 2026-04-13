@@ -36,6 +36,11 @@ import type { Tool, ToolContext, ToolResult } from "./tool";
 import { createToolRegistry } from "./tool";
 import { writeFileTool } from "./write-file";
 
+/** Compaction threshold for the task tool's output. */
+export const TASK_OUTPUT_THRESHOLD = 0.7;
+/** Compaction threshold for the task tool's arguments. */
+export const TASK_ARGS_THRESHOLD = 0.62;
+
 function formatTimestamp(): string {
 	const d = new Date();
 	const pad = (n: number) => String(n).padStart(2, "0");
@@ -110,8 +115,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			},
 		},
 		mergeable: false,
-		outputThreshold: 0.7,
-		argsThreshold: 0.62,
+		outputThreshold: TASK_OUTPUT_THRESHOLD,
+		argsThreshold: TASK_ARGS_THRESHOLD,
 		compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
 			if (context) {
 				const dir = path.join(".bobai", "compaction", context.sessionId);

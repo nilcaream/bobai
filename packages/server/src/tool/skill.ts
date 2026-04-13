@@ -3,6 +3,9 @@ import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { SkillRegistry } from "../skill/skill";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 
+/** Compaction threshold for the skill tool's output. */
+export const SKILL_OUTPUT_THRESHOLD = 0.46;
+
 export function createSkillTool(skills: SkillRegistry): Tool {
 	const skillList = skills.list();
 	const namesList = skillList.map((s) => s.name).join(", ");
@@ -31,7 +34,7 @@ export function createSkillTool(skills: SkillRegistry): Tool {
 			},
 		},
 		mergeable: true,
-		outputThreshold: 0.46,
+		outputThreshold: SKILL_OUTPUT_THRESHOLD,
 
 		compact(_output: string, callArgs: Record<string, unknown>): string {
 			const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";

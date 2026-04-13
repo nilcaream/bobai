@@ -19,7 +19,9 @@ import { fileSearchTool } from "../tool/file-search";
 import { grepSearchTool } from "../tool/grep-search";
 import { listDirectoryTool } from "../tool/list-directory";
 import { readFileTool } from "../tool/read-file";
+import { SKILL_OUTPUT_THRESHOLD } from "../tool/skill";
 import { sqlite3Tool } from "../tool/sqlite3";
+import { TASK_ARGS_THRESHOLD, TASK_OUTPUT_THRESHOLD } from "../tool/task";
 import type { Tool, ToolRegistry } from "../tool/tool";
 import { createToolRegistry } from "../tool/tool";
 import { writeFileTool } from "../tool/write-file";
@@ -32,7 +34,7 @@ const skillCompactionStub: Tool = {
 		function: { name: "skill", description: "", parameters: { type: "object", properties: {} } },
 	},
 	mergeable: true,
-	outputThreshold: 0.46,
+	outputThreshold: SKILL_OUTPUT_THRESHOLD,
 	compact(_output: string, callArgs: Record<string, unknown>): string {
 		const name = typeof callArgs.name === "string" ? callArgs.name : "unknown";
 		return `${COMPACTION_MARKER} skill(${JSON.stringify({ name })}) was loaded and applied. Re-invoke if needed.`;
@@ -49,8 +51,8 @@ const skillCompactionStub: Tool = {
 const taskCompactionStub: Tool = {
 	definition: { type: "function", function: { name: "task", description: "", parameters: { type: "object", properties: {} } } },
 	mergeable: false,
-	outputThreshold: 0.7,
-	argsThreshold: 0.62,
+	outputThreshold: TASK_OUTPUT_THRESHOLD,
+	argsThreshold: TASK_ARGS_THRESHOLD,
 	compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
 		if (context) {
 			const dir = path.join(".bobai", "compaction", context.sessionId);
