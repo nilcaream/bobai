@@ -18,7 +18,7 @@ export interface CompactionOptions {
 	/** Session identifier passed to tool compact() context (e.g. for task tool). */
 	sessionId?: string;
 	/** Called when a read_file tool output is compacted, so callers can invalidate FileTime stamps. */
-	onReadFileCompacted?(toolCallId: string): void;
+	onReadFileCompacted?(toolCallId: string, callArgs: Record<string, unknown>): void;
 }
 
 /** Statistics about what the compaction engine did on a given run. */
@@ -376,7 +376,7 @@ function compactMessagesInternal(options: CompactionOptions): CompactionResult {
 					tool_call_id: toolMsg.tool_call_id,
 				});
 				if (toolName === "read_file" && options.onReadFileCompacted) {
-					options.onReadFileCompacted(toolMsg.tool_call_id);
+					options.onReadFileCompacted(toolMsg.tool_call_id, callArgs);
 				}
 				details.set(toolMsg.tool_call_id, {
 					distance,

@@ -367,8 +367,9 @@ describe("compactMessages", () => {
 						compact: () => `${COMPACTION_MARKER} read_file compacted`,
 					},
 				}),
-				onReadFileCompacted(toolCallId) {
+				onReadFileCompacted(toolCallId, callArgs) {
 					callbackToolCallId = toolCallId;
+					expect(callArgs).toBeDefined();
 				},
 			});
 			expect(callbackToolCallId).toBe("tc1");
@@ -940,7 +941,7 @@ describe("compactMessages", () => {
 						compact: () => `${COMPACTION_MARKER} read_file compacted`,
 					},
 				}),
-				onReadFileCompacted(toolCallId) {
+				onReadFileCompacted(toolCallId, _callArgs) {
 					fired = true;
 					firedToolCallId = toolCallId;
 				},

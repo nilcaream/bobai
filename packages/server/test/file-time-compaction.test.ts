@@ -77,10 +77,9 @@ describe("FileTime compaction invalidation", () => {
 			messages,
 			multiplier: 2.0,
 			tools,
-			onReadFileCompacted(_toolCallId) {
-				// The engine only provides toolCallId; resolve the path from
-				// the known test setup (single read_file call for compacted.ts).
-				const resolved = path.resolve(tmpDir, "compacted.ts");
+			onReadFileCompacted(_toolCallId, callArgs) {
+				const filePath = typeof callArgs.path === "string" ? callArgs.path : "compacted.ts";
+				const resolved = path.resolve(tmpDir, filePath);
 				FileTime.invalidate(SESSION, resolved);
 			},
 		});
