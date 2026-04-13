@@ -1,4 +1,4 @@
-import type { Message } from "../provider/provider";
+import type { AssistantMessage, Message } from "../provider/provider";
 import type { StoredMessage } from "../session/repository";
 
 /**
@@ -68,12 +68,23 @@ export function mapEvictedToStored(
 		// won't be in the map — use a synthetic fallback with the actual content.
 		const ref = refMap.get(m);
 		if (ref) {
+			// For assistant messages with tool_calls, use the compacted tool_calls
+			// from the evicted message (which has compacted arguments) rather than
+			// the original DB metadata (which has uncompacted arguments).
+			const assistantMsg = m.role === "assistant" ? (m as AssistantMessage) : null;
+			const metadata =
+				assistantMsg?.tool_calls && ref.stored.metadata
+					? { ...ref.stored.metadata, tool_calls: assistantMsg.tool_calls }
+					: ref.stored.metadata;
 			return {
 				...ref.stored,
 				content: (m as { content: string }).content ?? ref.stored.content,
+				metadata,
 				originalIndex: ref.originalIndex,
 			};
 		}
+		// Synthetic fallback for messages rebuilt by eviction (e.g. filtered tool_calls).
+		const assistantMsg = m.role === "assistant" ? (m as AssistantMessage) : null;
 		return {
 			id: `evicted-${i}`,
 			sessionId,
@@ -81,7 +92,7 @@ export function mapEvictedToStored(
 			content: (m as { content: string }).content ?? "",
 			createdAt: "",
 			sortOrder: i,
-			metadata: null,
+			metadata: assistantMsg?.tool_calls ? { tool_calls: assistantMsg.tool_calls } : null,
 			originalIndex: i,
 		};
 	});
