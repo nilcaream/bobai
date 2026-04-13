@@ -1,86 +1,21 @@
-import { EVICTION_DISTANCE } from "./eviction";
-
 /**
- * Context about the current session needed for strength calculation.
+ * Default maxDistance for message roles that are not tools (user, assistant).
+ * High value so they survive nearly the entire conversation before eviction.
  */
-export interface StrengthContext {
-	/** Current prompt token count from the last LLM response. */
-	promptTokens: number;
-	/** Maximum context window size for the current model. */
-	contextWindow: number;
-	/** Context pressure threshold below which no compaction occurs (0.0-1.0). */
-	threshold?: number;
-}
-
-/** Default threshold: compaction activates when context usage exceeds 20%. */
-export const DEFAULT_THRESHOLD = 0.2;
+export const DEFAULT_MAX_DISTANCE = 10_000;
 
 /**
- * Compute the effective context pressure (0.0-1.0).
- * Returns 0.0 when usage is below the threshold.
- */
-export function computeContextPressure(ctx: StrengthContext): number {
-	if (ctx.contextWindow <= 0) return 0;
-	const usage = ctx.promptTokens / ctx.contextWindow;
-	return pressureFromUsage(usage, ctx.threshold);
-}
-
-/** Compute context pressure directly from a usage value (0..1). */
-export function pressureFromUsage(usage: number, threshold: number = DEFAULT_THRESHOLD): number {
-	if (usage <= threshold) return 0;
-	return Math.min(1, (usage - threshold) / (1 - threshold));
-}
-
-/**
- * Position in the conversation (0.0-1.0, from oldest to newest) where the
- * age curve transitions from "mostly compactable" to "mostly protected".
- * At 2.0 (beyond the 0..1 range) the curve produces a gentle, near-linear
- * gradient across all positions — no sharp transition zone.
- */
-export const AGE_INFLECTION = 2.0;
-
-/**
- * Controls steepness of the S-curve around the inflection point.
- * With inflection at 2.0, a steepness of 3 produces a smooth gradient
- * from age ≈ 1.0 (oldest) to age = 0.0 (newest).
- */
-export const AGE_STEEPNESS = 3;
-
-/**
- * Compute the age factor for a tool message (0.0-1.0).
- * Uses distance-from-end (capped at {@link EVICTION_DISTANCE}) and an arctan
- * S-curve centered at {@link AGE_INFLECTION} so that messages beyond the
- * inflection (older) are aggressively compactable while messages before it
- * (newer) are strongly protected.
+ * Compute the compaction factor for a message using the linear per-tool model.
  *
- * The S-curve spans the full range from 0 to EVICTION_DISTANCE — beyond that
- * distance, messages are evicted entirely so there is no separate age cap.
+ * factor = distance / (multiplier × maxDistance), clamped to [0, 1].
  *
- * @param messageIndex - Zero-based index in the full message array
- * @param totalMessages - Total number of messages in the conversation
+ * @param distance - number of messages from the end (last message = 0)
+ * @param multiplier - scaling factor from the outer loop (higher = less aggressive)
+ * @param maxDistance - per-tool constant: distance at which factor reaches 1.0 when multiplier=1.0
  */
-export function computeAge(messageIndex: number, totalMessages: number): number {
-	if (totalMessages <= 1) return 0;
-	const distanceFromEnd = totalMessages - 1 - messageIndex; // 0 = newest
-	const normalizedPosition = 1 - Math.min(distanceFromEnd, EVICTION_DISTANCE) / EVICTION_DISTANCE;
-	// normalizedPosition: 0 = oldest (or >= EVICTION_DISTANCE away), 1 = newest
-	const raw = Math.atan(AGE_STEEPNESS * (AGE_INFLECTION - normalizedPosition));
-	const rawMin = Math.atan(AGE_STEEPNESS * (AGE_INFLECTION - 1));
-	const rawMax = Math.atan(AGE_STEEPNESS * AGE_INFLECTION);
-	return (raw - rawMin) / (rawMax - rawMin);
-}
-
-/**
- * Compute the compaction factor for a single tool message.
- *
- * compactionFactor = contextPressure × age
- *
- * @param contextPressure - Effective context pressure (0.0-1.0), from computeContextPressure()
- * @param age - Message age factor (0.0-1.0), from computeAge()
- * @returns Compaction factor from 0.0 (no compaction) to 1.0 (maximum compaction)
- */
-export function computeCompactionFactor(contextPressure: number, age: number): number {
-	return contextPressure * age;
+export function computeCompactionFactor(distance: number, multiplier: number, maxDistance: number): number {
+	if (multiplier <= 0 || maxDistance <= 0) return 1.0;
+	return Math.min(1.0, distance / (multiplier * maxDistance));
 }
 
 /** Pre-prompt compaction targets this fraction of the context window. */
@@ -127,27 +62,4 @@ export function totalContentChars(
 		}
 	}
 	return total;
-}
-
-/**
- * Compute the minimum distance-from-end at which a message gets compacted,
- * given a context pressure and the tool's compaction threshold.
- *
- * Searches distances from 1 to totalMessages, returning the first distance
- * where pressure × age(distance) > threshold.
- *
- * @returns The minimum distance, or -1 if the threshold is unreachable at current pressure.
- */
-export function computeMinimumDistance(pressure: number, threshold: number, totalMessages: number): number {
-	if (pressure <= 0 || threshold < 0) return -1;
-	// Max possible factor is pressure × age(at EVICTION_DISTANCE) ≈ pressure × 1.0
-	// Quick check: if pressure × 1.0 <= threshold, it's unreachable
-	const maxAge = computeAge(0, EVICTION_DISTANCE + 2); // index 0 in a large array → max distance
-	if (pressure * maxAge <= threshold) return -1;
-	for (let dist = 1; dist <= Math.min(totalMessages, EVICTION_DISTANCE); dist++) {
-		// Simulate: messageIndex = totalMessages - 1 - dist means distanceFromEnd = dist
-		const age = computeAge(totalMessages - 1 - dist, totalMessages);
-		if (pressure * age > threshold) return dist;
-	}
-	return -1;
 }

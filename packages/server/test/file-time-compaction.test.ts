@@ -39,9 +39,10 @@ describe("FileTime compaction invalidation", () => {
 		Date.now = () => origNow() + 61_000;
 
 		// Build a message array where the read_file output will get compacted
-		// (high context pressure forces compaction).
-		// We need enough messages after the tool output so it appears "old"
-		// — the age factor must be high for the strength formula to kick in.
+		// (multiplier chosen so factor > outputThreshold but < 1.0).
+		// read_file: maxDistance=120, outputThreshold=0.3
+		// 100 filler pairs = 200 messages after the tool output → distance ≈ 201
+		// multiplier=2.0 → factor = 201/(2×120) ≈ 0.84 → above 0.3 threshold, below 1.0
 		const filler: Message[] = [];
 		for (let i = 0; i < 100; i++) {
 			filler.push({ role: "user", content: `Follow-up ${i}` });
@@ -74,14 +75,13 @@ describe("FileTime compaction invalidation", () => {
 
 		const result = compactMessages({
 			messages,
-			context: { promptTokens: 95_000, contextWindow: 100_000 },
+			multiplier: 2.0,
 			tools,
-			onReadFileCompacted(_toolCallId, callArgs) {
-				const filePath = typeof callArgs.path === "string" ? callArgs.path : null;
-				if (filePath) {
-					const resolved = path.resolve(tmpDir, filePath);
-					FileTime.invalidate(SESSION, resolved);
-				}
+			onReadFileCompacted(_toolCallId) {
+				// The engine only provides toolCallId; resolve the path from
+				// the known test setup (single read_file call for compacted.ts).
+				const resolved = path.resolve(tmpDir, "compacted.ts");
+				FileTime.invalidate(SESSION, resolved);
 			},
 		});
 
@@ -123,9 +123,10 @@ describe("FileTime compaction invalidation", () => {
 		const tools = createToolRegistry([readFileTool]);
 		let callbackCalled = false;
 
+		// High multiplier → low factor → no compaction
 		compactMessages({
 			messages,
-			context: { promptTokens: 10_000, contextWindow: 100_000 }, // 10% - below 20% threshold
+			multiplier: 10.0,
 			tools,
 			onReadFileCompacted() {
 				callbackCalled = true;
@@ -166,6 +167,7 @@ describe("FileTime compaction invalidation", () => {
 				function: { name: "bash", description: "bash", parameters: { type: "object" as const, properties: {} } },
 			},
 			mergeable: false,
+			maxDistance: 100,
 			outputThreshold: 0.4,
 			compact(output: string, _callArgs: Record<string, unknown>): string {
 				return `# COMPACTED\n${output.slice(0, 50)}`;
@@ -176,9 +178,10 @@ describe("FileTime compaction invalidation", () => {
 		const tools = createToolRegistry([bashToolStub]);
 		let callbackCalled = false;
 
+		// Low multiplier to force compaction
 		compactMessages({
 			messages,
-			context: { promptTokens: 95_000, contextWindow: 100_000 },
+			multiplier: 0.01,
 			tools,
 			onReadFileCompacted() {
 				callbackCalled = true;

@@ -2,16 +2,8 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { type CommandRequest, handleCommand } from "./command";
 import { compactToBudget } from "./compaction/compact-to-budget";
-import { EVICTION_DISTANCE } from "./compaction/eviction";
 import { createCompactionRegistry } from "./compaction/registry";
-import {
-	AGE_INFLECTION,
-	AGE_STEEPNESS,
-	computeMinimumDistance,
-	DEFAULT_THRESHOLD,
-	PRE_PROMPT_TARGET,
-	pressureFromUsage,
-} from "./compaction/strength";
+import { DEFAULT_MAX_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
@@ -247,43 +239,63 @@ export function createServer(options: ServerOptions) {
 					return counts;
 				}
 
-				// Compute compaction reach for each tool at current usage
-				const pressure = pressureFromUsage(compactionResult.usage);
+				// Compute compaction reach for each tool at current multiplier.
+				// For a tool with a given threshold: the minimum distance where
+				// factor >= threshold is `threshold * multiplier * maxDistance`.
+				// The eviction distance (factor >= 1.0) is `multiplier * maxDistance`.
+				const multiplier = compactionResult.multiplier;
+				const totalMessages = messages.length;
 				const toolReach: Array<{
 					name: string;
 					type: "output" | "arguments";
 					threshold: number;
+					maxDistance: number;
 					minimumDistance: number;
+					evictionDistance: number;
 					compactedFrom: number | null;
 				}> = [];
 				for (const def of tools.definitions) {
 					const toolName = def.function.name;
 					const tool = tools.get(toolName);
 					if (!tool) continue;
+					const maxDistance = tool.maxDistance;
+					const evictDist = multiplier > 0 ? Math.ceil(multiplier * maxDistance) : 0;
 					if (tool.outputThreshold !== undefined) {
-						const dist = computeMinimumDistance(pressure, tool.outputThreshold, messages.length);
+						const minDist = multiplier > 0 ? Math.ceil(tool.outputThreshold * multiplier * maxDistance) : 0;
 						toolReach.push({
 							name: toolName,
 							type: "output",
 							threshold: tool.outputThreshold,
-							minimumDistance: dist,
-							compactedFrom: dist > 0 ? messages.length - dist : null,
+							maxDistance,
+							minimumDistance: minDist,
+							evictionDistance: evictDist,
+							compactedFrom: minDist > 0 && minDist <= totalMessages ? totalMessages - minDist : null,
 						});
 					}
 					if (tool.argsThreshold !== undefined) {
-						const dist = computeMinimumDistance(pressure, tool.argsThreshold, messages.length);
+						const minDist = multiplier > 0 ? Math.ceil(tool.argsThreshold * multiplier * maxDistance) : 0;
 						toolReach.push({
 							name: toolName,
 							type: "arguments",
 							threshold: tool.argsThreshold,
-							minimumDistance: dist,
-							compactedFrom: dist > 0 ? messages.length - dist : null,
+							maxDistance,
+							minimumDistance: minDist,
+							evictionDistance: evictDist,
+							compactedFrom: minDist > 0 && minDist <= totalMessages ? totalMessages - minDist : null,
 						});
 					}
 				}
 				// Add excluded roles
 				for (const role of ["user", "assistant", "system"]) {
-					toolReach.push({ name: role, type: "output", threshold: -1, minimumDistance: -1, compactedFrom: null });
+					toolReach.push({
+						name: role,
+						type: "output",
+						threshold: -1,
+						maxDistance: -1,
+						minimumDistance: -1,
+						evictionDistance: -1,
+						compactedFrom: null,
+					});
 				}
 				// Sort by compaction resistance: smallest minimum distance first, excluded/never last
 				toolReach.sort((a, b) => {
@@ -296,7 +308,7 @@ export function createServer(options: ServerOptions) {
 				return Response.json({
 					messages: compactedStored.map((m) => ({ ...m, messageIndex: m.originalIndex })),
 					stats: {
-						usage: compactionResult.usage,
+						multiplier: compactionResult.multiplier,
 						iterations: compactionResult.iterations,
 						charsBefore: compactionResult.charsBefore,
 						charsAfter: compactionResult.charsAfter,
@@ -304,10 +316,7 @@ export function createServer(options: ServerOptions) {
 						charsPerToken: compactionResult.charsPerToken,
 						type: "pre-prompt",
 						parameters: {
-							threshold: DEFAULT_THRESHOLD,
-							inflection: AGE_INFLECTION,
-							steepness: AGE_STEEPNESS,
-							evictionDistance: EVICTION_DISTANCE,
+							defaultMaxDistance: DEFAULT_MAX_DISTANCE,
 						},
 						estimatedContextNeeded,
 						target: PRE_PROMPT_TARGET,

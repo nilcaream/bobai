@@ -30,6 +30,8 @@ export const bashTool: Tool = {
 
 	mergeable: false,
 
+	maxDistance: 150,
+
 	outputThreshold: 0.4,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {

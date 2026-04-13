@@ -66,55 +66,65 @@ function makeTaskTool() {
 // ---------------------------------------------------------------------------
 
 describe("threshold values", () => {
-	test("bash: outputThreshold = 0.4", () => {
+	test("bash: outputThreshold = 0.4, maxDistance = 150", () => {
 		expect(bashTool.outputThreshold).toBe(0.4);
 		expect(bashTool.argsThreshold).toBeUndefined();
+		expect(bashTool.maxDistance).toBe(150);
 	});
 
-	test("read_file: outputThreshold = 0.3", () => {
+	test("read_file: outputThreshold = 0.3, maxDistance = 120", () => {
 		expect(readFileTool.outputThreshold).toBe(0.3);
 		expect(readFileTool.argsThreshold).toBeUndefined();
+		expect(readFileTool.maxDistance).toBe(120);
 	});
 
-	test("grep_search: outputThreshold = 0.29", () => {
+	test("grep_search: outputThreshold = 0.29, maxDistance = 120", () => {
 		expect(grepSearchTool.outputThreshold).toBe(0.29);
 		expect(grepSearchTool.argsThreshold).toBeUndefined();
+		expect(grepSearchTool.maxDistance).toBe(120);
 	});
 
-	test("file_search: outputThreshold = 0.27", () => {
+	test("file_search: outputThreshold = 0.27, maxDistance = 100", () => {
 		expect(fileSearchTool.outputThreshold).toBe(0.27);
 		expect(fileSearchTool.argsThreshold).toBeUndefined();
+		expect(fileSearchTool.maxDistance).toBe(100);
 	});
 
-	test("list_directory: outputThreshold = 0.25", () => {
+	test("list_directory: outputThreshold = 0.25, maxDistance = 100", () => {
 		expect(listDirectoryTool.outputThreshold).toBe(0.25);
 		expect(listDirectoryTool.argsThreshold).toBeUndefined();
+		expect(listDirectoryTool.maxDistance).toBe(100);
 	});
 
-	test("skill: outputThreshold = 0.46", () => {
+	test("skill: outputThreshold = 0.46, maxDistance = 200", () => {
 		expect(makeSkillTool().outputThreshold).toBe(0.46);
 		expect(makeSkillTool().argsThreshold).toBeUndefined();
+		expect(makeSkillTool().maxDistance).toBe(200);
 	});
 
-	test("sqlite3: outputThreshold = 0.43", () => {
+	test("sqlite3: outputThreshold = 0.43, maxDistance = 150", () => {
 		expect(sqlite3Tool.outputThreshold).toBe(0.43);
 		expect(sqlite3Tool.argsThreshold).toBeUndefined();
+		expect(sqlite3Tool.maxDistance).toBe(150);
 	});
 
-	test("write_file: argsThreshold = 0.50, no outputThreshold", () => {
+	test("write_file: argsThreshold = 0.50, no outputThreshold, maxDistance = 150", () => {
 		expect(writeFileTool.argsThreshold).toBe(0.5);
 		expect(writeFileTool.outputThreshold).toBeUndefined();
+		expect(writeFileTool.maxDistance).toBe(150);
 	});
 
-	test("edit_file: outputThreshold = 0.55, argsThreshold = 0.35", () => {
+	test("edit_file: outputThreshold = 0.55, argsThreshold = 0.35, maxDistance = 150", () => {
 		expect(editFileTool.outputThreshold).toBe(0.55);
 		expect(editFileTool.argsThreshold).toBe(0.35);
+		expect(editFileTool.maxDistance).toBe(150);
 	});
 
-	test("task: outputThreshold = 0.70, argsThreshold = 0.62", () => {
+	test("task: outputThreshold = 0.70, argsThreshold = 0.62, maxDistance = 300", () => {
 		const tool = makeTaskTool();
 		expect(tool.outputThreshold).toBe(0.7);
 		expect(tool.argsThreshold).toBe(0.62);
+		expect(tool.maxDistance).toBe(300);
 	});
 });
 

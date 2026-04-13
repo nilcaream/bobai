@@ -1,191 +1,52 @@
 import { describe, expect, test } from "bun:test";
-import { EVICTION_DISTANCE } from "../src/compaction/eviction";
 import {
-	AGE_INFLECTION,
-	AGE_STEEPNESS,
-	computeAge,
 	computeCharBudget,
 	computeCompactionFactor,
-	computeContextPressure,
-	DEFAULT_THRESHOLD,
+	DEFAULT_MAX_DISTANCE,
 	EMERGENCY_TARGET,
 	PRE_PROMPT_TARGET,
 	totalContentChars,
 } from "../src/compaction/strength";
 
-describe("computeContextPressure", () => {
-	test("returns 0 when contextWindow is 0", () => {
-		expect(computeContextPressure({ promptTokens: 100, contextWindow: 0 })).toBe(0);
-	});
-
-	test("returns 0 when contextWindow is negative", () => {
-		expect(computeContextPressure({ promptTokens: 100, contextWindow: -1000 })).toBe(0);
-	});
-
-	test("returns 0 when usage is below default threshold (20%)", () => {
-		expect(computeContextPressure({ promptTokens: 100, contextWindow: 1000 })).toBe(0);
-	});
-
-	test("returns 0 when usage is exactly at threshold", () => {
-		expect(computeContextPressure({ promptTokens: 200, contextWindow: 1000 })).toBe(0);
-	});
-
-	test("returns positive when usage is above threshold", () => {
-		const pressure = computeContextPressure({ promptTokens: 700, contextWindow: 1000 });
-		expect(pressure).toBeGreaterThan(0);
-	});
-
-	test("scales linearly from 0 to 1 between threshold and full", () => {
-		// At 80% usage with default 20% threshold: (0.8 - 0.2) / (1 - 0.2) = 0.75
-		const pressure = computeContextPressure({ promptTokens: 800, contextWindow: 1000 });
-		expect(pressure).toBeCloseTo(0.75, 10);
-	});
-
-	test("returns 1.0 when context is fully used", () => {
-		expect(computeContextPressure({ promptTokens: 1000, contextWindow: 1000 })).toBe(1);
-	});
-
-	test("clamps to 1.0 when usage exceeds context window", () => {
-		expect(computeContextPressure({ promptTokens: 2000, contextWindow: 1000 })).toBe(1);
-	});
-
-	test("custom threshold works correctly", () => {
-		// 50% usage with 60% threshold -> below threshold -> 0
-		expect(computeContextPressure({ promptTokens: 500, contextWindow: 1000, threshold: 0.6 })).toBe(0);
-
-		// 80% usage with 60% threshold -> (0.8 - 0.6) / (1 - 0.6) = 0.5
-		const pressure = computeContextPressure({
-			promptTokens: 800,
-			contextWindow: 1000,
-			threshold: 0.6,
-		});
-		expect(pressure).toBeCloseTo(0.5, 10);
-	});
-
-	test("usage at 50% with default threshold gives 0.375", () => {
-		// (0.5 - 0.2) / (1 - 0.2) = 0.3 / 0.8 = 0.375
-		const pressure = computeContextPressure({ promptTokens: 500, contextWindow: 1000 });
-		expect(pressure).toBeCloseTo(0.375, 10);
-	});
-
-	test("DEFAULT_THRESHOLD is 0.2", () => {
-		expect(DEFAULT_THRESHOLD).toBe(0.2);
-	});
-});
-
-describe("computeAge", () => {
-	test("returns 0 when totalMessages is 0", () => {
-		expect(computeAge(0, 0)).toBe(0);
-	});
-
-	test("returns 0 when totalMessages is 1", () => {
-		expect(computeAge(0, 1)).toBe(0);
-	});
-
-	test("EVICTION_DISTANCE is 200", () => {
-		expect(EVICTION_DISTANCE).toBe(200);
-	});
-
-	test("AGE_INFLECTION is 2.0", () => {
-		expect(AGE_INFLECTION).toBe(2.0);
-	});
-
-	test("AGE_STEEPNESS is 3", () => {
-		expect(AGE_STEEPNESS).toBe(3);
-	});
-
-	test("last message always has age 0.0", () => {
-		expect(computeAge(9, 10)).toBe(0);
-		expect(computeAge(199, 200)).toBe(0);
-		expect(computeAge(4, 5)).toBe(0);
-	});
-
-	test("messages at EVICTION_DISTANCE or further have age 1.0", () => {
-		// In a 400-message conversation, idx 199 has distFromEnd=200, normPos=0.0
-		expect(computeAge(199, 400)).toBe(1);
-		// idx 0 has distFromEnd=399 > 200, capped to normPos=0.0
-		expect(computeAge(0, 400)).toBe(1);
-	});
-
-	test("EVICTION_DISTANCE capping: messages far from end are equally compactable", () => {
-		// In a 500-message conversation, message 0 and message 299 both have
-		// distanceFromEnd >= 200, so they should have the same age.
-		const age0 = computeAge(0, 500);
-		const age299 = computeAge(299, 500);
-		expect(age0).toBe(age299);
-		expect(age0).toBe(1); // both fully compactable
-	});
-
-	test("age follows arctan S-curve within EVICTION_DISTANCE window", () => {
-		// 400-message conversation where the capping window maps cleanly.
-		// Messages within the last 200 get graduated protection.
-		const total = 400;
-		// idx=200: distFromEnd=199, normPos=0.005 → near oldest in window → age ≈ 0.997
-		expect(computeAge(200, total)).toBeCloseTo(0.997, 2);
-		// idx=260: distFromEnd=139, normPos=0.305 → moderate age
-		expect(computeAge(260, total)).toBeCloseTo(0.815, 2);
-		// idx=300: distFromEnd=99, normPos=0.505 → mid-range
-		expect(computeAge(300, total)).toBeCloseTo(0.654, 2);
-		// idx=340: distFromEnd=59, normPos=0.705 → moderately protected
-		expect(computeAge(340, total)).toBeCloseTo(0.446, 2);
-		// idx=370: distFromEnd=29, normPos=0.855 → well protected
-		expect(computeAge(370, total)).toBeCloseTo(0.246, 2);
-		// idx=390: distFromEnd=9, normPos=0.955 → very protected
-		expect(computeAge(390, total)).toBeCloseTo(0.083, 2);
-		// idx=399: newest → 0
-		expect(computeAge(399, total)).toBe(0);
-	});
-
-	test("messages near normPos=0.7 have age around 0.45", () => {
-		// In a 201-message conversation, index 140 has distFromEnd=60,
-		// normalizedPosition = 1 - 60/200 = 0.7.
-		const age = computeAge(140, 201);
-		expect(age).toBeCloseTo(0.45, 1);
-	});
-
-	test("short conversations: all messages are near-newest due to EVICTION_DISTANCE", () => {
-		// In a 5-message conversation, the oldest message has distFromEnd=4,
-		// normalizedPosition = 1 - 4/200 = 0.98 — nearly newest in the window.
-		// So all messages get very low age (near 0).
-		const ages = Array.from({ length: 5 }, (_, i) => computeAge(i, 5));
-		// All ages should be very close to 0
-		for (const age of ages) {
-			expect(age).toBeLessThan(0.04);
-		}
-		// Oldest still has higher age than newest
-		const ageNewest = ages[4] ?? 0;
-		expect(ages[0]).toBeGreaterThan(ageNewest);
-		// Exact values
-		expect(ages[0]).toBeCloseTo(0.038, 2);
-		expect(ages[4]).toBe(0);
-	});
-
-	test("arctan curve with distance-based age: old messages are fully compactable", () => {
-		// In a 400-message conversation, idx=20 has distFromEnd=379 (>200),
-		// so normalizedPosition=0 → age=1.0.
-		const age = computeAge(20, 400);
-		expect(age).toBe(1);
-	});
-});
-
 describe("computeCompactionFactor", () => {
-	test("returns 0 when contextPressure is 0", () => {
-		expect(computeCompactionFactor(0, 0.95)).toBe(0);
+	test("newest message (distance 0) has factor 0", () => {
+		expect(computeCompactionFactor(0, 1.0, 300)).toBe(0);
 	});
 
-	test("returns 0 when age is 0", () => {
-		expect(computeCompactionFactor(0.6, 0)).toBe(0);
+	test("exactly at maxDistance gives factor 1.0", () => {
+		expect(computeCompactionFactor(300, 1.0, 300)).toBe(1.0);
 	});
 
-	test("returns the product of contextPressure and age", () => {
-		expect(computeCompactionFactor(1, 1)).toBe(1);
-		expect(computeCompactionFactor(0.5, 1)).toBeCloseTo(0.5, 10);
-		expect(computeCompactionFactor(1, 0.5)).toBeCloseTo(0.5, 10);
-		expect(computeCompactionFactor(0.5, 0.5)).toBeCloseTo(0.25, 10);
+	test("beyond maxDistance is clamped to 1.0", () => {
+		expect(computeCompactionFactor(600, 1.0, 300)).toBe(1.0);
 	});
 
-	test("example: computeCompactionFactor(0.6, 0.95) ≈ 0.57", () => {
-		expect(computeCompactionFactor(0.6, 0.95)).toBeCloseTo(0.57, 2);
+	test("midpoint gives factor 0.5", () => {
+		expect(computeCompactionFactor(150, 1.0, 300)).toBe(0.5);
+	});
+
+	test("multiplier doubles effective range", () => {
+		// 150 / (2.0 * 300) = 150 / 600 = 0.25
+		expect(computeCompactionFactor(150, 2.0, 300)).toBe(0.25);
+	});
+
+	test("multiplier halves effective range, clamped at 1.0", () => {
+		// 150 / (0.5 * 300) = 150 / 150 = 1.0
+		expect(computeCompactionFactor(150, 0.5, 300)).toBe(1.0);
+	});
+
+	test("zero multiplier returns 1.0", () => {
+		expect(computeCompactionFactor(100, 0, 300)).toBe(1.0);
+	});
+
+	test("zero maxDistance returns 1.0", () => {
+		expect(computeCompactionFactor(100, 1.0, 0)).toBe(1.0);
+	});
+});
+
+describe("DEFAULT_MAX_DISTANCE", () => {
+	test("equals 10_000", () => {
+		expect(DEFAULT_MAX_DISTANCE).toBe(10_000);
 	});
 });
 
@@ -272,41 +133,5 @@ describe("compaction constants", () => {
 
 	test("EMERGENCY_TARGET is 0.90", () => {
 		expect(EMERGENCY_TARGET).toBe(0.9);
-	});
-});
-
-describe("computeMinimumDistance", () => {
-	const { computeMinimumDistance } = require("../src/compaction/strength");
-
-	test("returns -1 when pressure is zero", () => {
-		expect(computeMinimumDistance(0, 0.3, 200)).toBe(-1);
-	});
-
-	test("returns -1 when threshold is unreachable at max age", () => {
-		// pressure=0.5, threshold=0.8 → max factor ≈ 0.5 < 0.8
-		expect(computeMinimumDistance(0.5, 0.8, 200)).toBe(-1);
-	});
-
-	test("returns a positive distance when threshold is reachable", () => {
-		// pressure=0.75 (usage=0.8), threshold=0.3
-		const dist = computeMinimumDistance(0.75, 0.3, 200);
-		expect(dist).toBeGreaterThan(0);
-		expect(dist).toBeLessThanOrEqual(200); // EVICTION_DISTANCE
-	});
-
-	test("lower threshold requires smaller distance", () => {
-		const distLow = computeMinimumDistance(0.75, 0.2, 200);
-		const distHigh = computeMinimumDistance(0.75, 0.5, 200);
-		expect(distLow).toBeGreaterThan(0);
-		expect(distHigh).toBeGreaterThan(0);
-		expect(distLow).toBeLessThan(distHigh);
-	});
-
-	test("higher pressure reaches threshold at smaller distance", () => {
-		const distLowPressure = computeMinimumDistance(0.5, 0.3, 200);
-		const distHighPressure = computeMinimumDistance(0.75, 0.3, 200);
-		expect(distLowPressure).toBeGreaterThan(0);
-		expect(distHighPressure).toBeGreaterThan(0);
-		expect(distHighPressure).toBeLessThan(distLowPressure);
 	});
 });

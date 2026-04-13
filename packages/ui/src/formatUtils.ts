@@ -20,7 +20,7 @@ export interface ContextMessage {
 }
 
 export interface CompactionStats {
-	usage: number;
+	multiplier: number;
 	iterations: number;
 	charsBefore: number;
 	charsAfter: number;
@@ -28,10 +28,7 @@ export interface CompactionStats {
 	charsPerToken: number;
 	type: string;
 	parameters: {
-		threshold: number;
-		inflection: number;
-		steepness: number;
-		evictionDistance: number;
+		defaultMaxDistance: number;
 	};
 	estimatedContextNeeded: number;
 	target: number;
@@ -45,22 +42,23 @@ export interface ToolReachEntry {
 	name: string;
 	type: "output" | "arguments";
 	threshold: number;
+	maxDistance: number;
 	minimumDistance: number;
+	evictionDistance: number;
 	compactedFrom: number | null;
 }
 
 export interface CompactionDetail {
-	age: number;
-	compactionFactor: number;
-	position: number;
-	normalizedPosition: number;
 	distance: number;
+	compactionFactor: number;
+	maxDistance: number;
 	outputThreshold?: number;
 	argsThreshold?: number;
 	wasCompacted: boolean;
+	wasEvicted: boolean;
 	belowMinSavings?: boolean;
-	savedChars?: number;
-	savedArgsChars?: number;
+	savedChars: number;
+	savedArgsChars: number;
 }
 
 export function formatToolHeader(
@@ -80,7 +78,6 @@ export function formatToolHeader(
 
 	const detailParts: string[] = [];
 	detailParts.push(`distance=${detail.distance}`);
-	detailParts.push(`position=${detail.normalizedPosition.toFixed(2)}`);
 	detailParts.push(`factor=${detail.compactionFactor.toFixed(3)}`);
 
 	if (detail.outputThreshold !== undefined) {
@@ -91,7 +88,9 @@ export function formatToolHeader(
 	}
 
 	// Action
-	if (detail.wasCompacted || detail.savedArgsChars !== undefined) {
+	if (detail.wasEvicted) {
+		detailParts.push("evicted");
+	} else if (detail.wasCompacted || detail.savedArgsChars > 0) {
 		detailParts.push("compacted");
 	} else if (detail.belowMinSavings) {
 		detailParts.push("too small");
@@ -100,7 +99,7 @@ export function formatToolHeader(
 	}
 
 	// Token savings (only when something was saved)
-	const totalSavedChars = (detail.savedChars ?? 0) + (detail.savedArgsChars ?? 0);
+	const totalSavedChars = detail.savedChars + detail.savedArgsChars;
 	if (totalSavedChars > 0 && charsPerToken && charsPerToken > 0) {
 		const savedTokens = Math.round(totalSavedChars / charsPerToken);
 		detailParts.push(`tokens=-${savedTokens}`);
@@ -188,67 +187,27 @@ export function truncateChars(text: string, charLimit: number): string {
 	return `${text.slice(0, charLimit)}... (${text.length - charLimit} more chars)`;
 }
 
-export function generateFactorsTable(threshold: number, inflection: number, steepness: number): number[][] {
-	const steps = Array.from({ length: 21 }, (_, i) => i * 0.05);
-	return steps.map((usage) => {
-		const pressure = usage <= threshold ? 0 : Math.min(1, (usage - threshold) / (1 - threshold));
-		return steps.map((normPos) => {
-			const raw = Math.atan(steepness * (inflection - normPos));
-			const rawMin = Math.atan(steepness * (inflection - 1));
-			const rawMax = Math.atan(steepness * inflection);
-			const age = (raw - rawMin) / (rawMax - rawMin);
-			return pressure * age;
-		});
-	});
-}
-
 export function formatCompactionSummary(stats: CompactionStats): string {
 	const sections: string[] = [];
 
 	// Section 1: Compaction parameters
 	sections.push("# Compaction parameters");
-	sections.push(`- threshold: ${stats.parameters.threshold}`);
-	sections.push(`- inflection: ${stats.parameters.inflection}`);
-	sections.push(`- steepness: ${stats.parameters.steepness}`);
-	sections.push(`- eviction distance: ${stats.parameters.evictionDistance}`);
+	sections.push(`- default max distance: ${stats.parameters.defaultMaxDistance}`);
 	sections.push("");
 
-	// Section 2: Factors table
-	sections.push("# Usage vs. normalized position");
-	sections.push("");
-	const table = generateFactorsTable(stats.parameters.threshold, stats.parameters.inflection, stats.parameters.steepness);
-	const steps = Array.from({ length: 21 }, (_, i) => (i * 0.05).toFixed(2));
-	const pctSteps = Array.from({ length: 21 }, (_, i) => `${i * 5}%`);
-
-	// Header row
-	sections.push(`|  | ${steps.join(" | ")} |`);
-	sections.push(`|---|${steps.map(() => "---").join("|")}|`);
-
-	// Data rows
-	for (let r = 0; r < table.length; r++) {
-		const rowLabel = `**${pctSteps[r]}**`;
-		const cells = (table[r] as number[]).map((v) => v.toFixed(2));
-		sections.push(`| ${rowLabel} | ${cells.join(" | ")} |`);
-	}
-
-	sections.push("");
-	sections.push("- horizontal: normalized message position");
-	sections.push("- vertical: calculated compaction usage");
-	sections.push("");
-
-	// Section 3: Compaction details
+	// Section 2: Compaction details
 	sections.push("# Compaction details");
 	sections.push(`- target context usage: ${(stats.target * 100).toFixed(0)}%`);
 	sections.push(`- estimated context needed: ${(stats.estimatedContextNeeded * 100).toFixed(0)}%`);
 	sections.push(`- average characters per token: ${stats.charsPerToken.toFixed(2)}`);
 	sections.push(`- total content before compaction: ${stats.charsBefore} characters`);
 	sections.push(`- total content after compaction: ${stats.charsAfter} characters`);
-	sections.push(`- calculated compaction usage: ${(stats.usage * 100).toFixed(0)}%`);
+	sections.push(`- calculated multiplier: ${stats.multiplier.toFixed(2)}`);
 	sections.push(`- compaction iterations: ${stats.iterations}`);
 	sections.push(`- compaction time: ${stats.elapsedMs.toFixed(1)}ms`);
 	sections.push("");
 
-	// Section 4: Context details (message counts by role)
+	// Section 3: Context details (message counts by role)
 	sections.push("# Context details");
 	sections.push("");
 	const roles = ["total", "system", "user", "assistant", "tool"];
@@ -267,22 +226,24 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 		sections.push(`| ${role} | ${before} | ${after} |`);
 	}
 
-	// Section 5: Compaction reach at current usage
+	// Section 4: Compaction reach at current multiplier
 	if (stats.toolReach && stats.toolReach.length > 0) {
 		sections.push("");
-		sections.push(`# Compaction reach at current usage (${(stats.usage * 100).toFixed(0)}%)`);
+		sections.push(`# Compaction reach at current multiplier (${stats.multiplier.toFixed(2)})`);
 		sections.push("");
-		sections.push("| role / tool | type | threshold | minimum distance | compacted from |");
-		sections.push("|---|---|---|---|---|");
+		sections.push("| role / tool | type | threshold | max distance | minimum distance | eviction distance | compacted from |");
+		sections.push("|---|---|---|---|---|---|---|");
 		for (const entry of stats.toolReach) {
 			if (entry.threshold === -1) {
 				// Excluded role (user, assistant, system)
-				sections.push(`| ${entry.name} | — | — | — | excluded |`);
-			} else if (entry.minimumDistance === -1) {
-				sections.push(`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | — | never at current usage |`);
+				sections.push(`| ${entry.name} | — | — | — | — | — | excluded |`);
+			} else if (entry.minimumDistance === 0) {
+				sections.push(
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.maxDistance} | — | — | never |`,
+				);
 			} else {
 				sections.push(
-					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.minimumDistance} | #${entry.compactedFrom} |`,
+					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.maxDistance} | ${entry.minimumDistance} | ${entry.evictionDistance} | #${entry.compactedFrom} |`,
 				);
 			}
 		}

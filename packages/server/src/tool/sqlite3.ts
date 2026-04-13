@@ -90,6 +90,8 @@ export const sqlite3Tool: Tool = {
 
 	mergeable: false,
 
+	maxDistance: 150,
+
 	outputThreshold: 0.43,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {

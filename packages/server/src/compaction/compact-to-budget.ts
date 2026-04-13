@@ -3,7 +3,6 @@ import type { Message } from "../provider/provider";
 import type { ToolRegistry } from "../tool/tool";
 import type { CompactionDetail } from "./engine";
 import { compactMessages, compactMessagesWithStats } from "./engine";
-import { evictOldTurns } from "./eviction";
 import { computeCharBudget, totalContentChars } from "./strength";
 
 export interface CompactToBudgetOptions {
@@ -21,13 +20,12 @@ export interface CompactToBudgetOptions {
 }
 
 export interface CompactToBudgetResult {
-	/** Post-eviction messages — what gets sent to the LLM. */
+	/** Post-compaction + post-eviction messages — what gets sent to the LLM. */
 	messages: Message[];
-	/** Pre-eviction compacted messages (same length as input). Needed by
-	 *  mapEvictedToStored to map evicted messages back to original indices. */
+	/** Post-compaction, pre-eviction messages (for dump files). */
 	compacted: Message[];
-	/** The calculated compaction usage level (0.0-1.0). */
-	usage: number;
+	/** The multiplier used for compaction (higher = less aggressive). */
+	multiplier: number;
 	iterations: number;
 	charsBefore: number;
 	charsAfter: number;
@@ -44,7 +42,10 @@ export interface CompactToBudgetResult {
  *
  * Converts the model's context window (in tokens) to a character budget using
  * the session's measured charsPerToken ratio, then uses binary search to find
- * the lowest compaction usage level where the total message content fits.
+ * the highest multiplier where the total message content fits.
+ *
+ * Higher multiplier → less compaction → more chars.
+ * Lower multiplier → more compaction → fewer chars.
  *
  * Returns the original messages unchanged when:
  * - No valid charsPerToken ratio is available (first turn)
@@ -62,7 +63,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		return {
 			messages,
 			compacted: messages,
-			usage: 0,
+			multiplier: 0,
 			iterations: 0,
 			charsBefore,
 			charsAfter: charsBefore,
@@ -78,7 +79,7 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		return {
 			messages,
 			compacted: messages,
-			usage: 0,
+			multiplier: 0,
 			iterations: 0,
 			charsBefore,
 			charsAfter: charsBefore,
@@ -91,38 +92,31 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 
 	const startTime = performance.now();
 
-	// Binary search for the lowest usage (0.01 precision) where compacted
-	// content fits within the character budget.  Compaction is monotonically
-	// non-increasing: higher usage → equal or fewer chars.  This lets us use
-	// binary search safely — if a midpoint fits, search lower; if not, search
-	// higher.  Result: the tightest usage that satisfies the budget.
-	const syntheticContextWindow = 100_000;
+	// Binary search for the highest multiplier (0.01 precision) where compacted
+	// content fits within the character budget.  Higher multiplier → less
+	// compaction → more chars.  Lower multiplier → more compaction → fewer chars.
+	// Search: find the highest multiplier that satisfies the budget.
 	const MAX_ITERATIONS = 20;
 
-	// Search bounds in integer centiles: 1..100 → usage 0.01..1.00
+	// Search bounds in integer centiles: 1..500 → multiplier 0.01..5.00
 	let lo = 1;
-	let hi = 100;
+	let hi = 500;
 	let iterations = 0;
-	let finalUsage = 0;
+	let bestMultiplier = 0;
 
-	/** Run compaction + eviction at a given usage centile and return the char count. */
+	/** Run compaction at a given centile and return the char count. */
 	function probe(centile: number): number {
-		const usage = Math.min(centile / 100, 1.0);
-		const syntheticPromptTokens = Math.round(syntheticContextWindow * usage);
+		const multiplier = centile / 100;
 
 		const compacted = compactMessages({
 			messages,
-			context: {
-				promptTokens: syntheticPromptTokens,
-				contextWindow: syntheticContextWindow,
-			},
+			multiplier,
 			tools,
 			sessionId,
 			onReadFileCompacted: options.onReadFileCompacted,
 		});
 
-		const evicted = evictOldTurns(compacted);
-		return totalContentChars(evicted);
+		return totalContentChars(compacted);
 	}
 
 	while (lo <= hi && iterations < MAX_ITERATIONS) {
@@ -131,57 +125,60 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		const charsAfter = probe(mid);
 
 		if (charsAfter <= charBudget) {
-			// Fits — record this usage and try lower (less aggressive compaction)
-			finalUsage = mid / 100;
-			hi = mid - 1;
-		} else {
-			// Doesn't fit — need higher usage (more aggressive compaction)
+			// Fits! Record and try higher (less aggressive)
+			bestMultiplier = mid / 100;
 			lo = mid + 1;
+		} else {
+			// Doesn't fit — try lower (more aggressive)
+			hi = mid - 1;
 		}
 	}
 
 	if (iterations >= MAX_ITERATIONS) {
-		// Safety: binary search should converge in ceil(log2(100)) = 7 iterations.
+		// Safety: binary search should converge in ceil(log2(500)) = 9 iterations.
 		// If we hit this, something is wrong — log a warning.
 		logger?.warn(
 			"COMPACTION",
 			`binary search reached ${MAX_ITERATIONS} iterations without converging ` +
-				`(lo=${lo}, hi=${hi}), using usage=${finalUsage.toFixed(2)}`,
+				`(lo=${lo}, hi=${hi}), using multiplier=${bestMultiplier.toFixed(2)}`,
 		);
 	}
 
-	// If no probe fit the budget, use maximum compaction as best effort.
-	if (finalUsage === 0) {
-		finalUsage = 1.0;
+	// If no multiplier fit the budget (even 0.01), use minimum multiplier as best effort.
+	if (bestMultiplier === 0) {
+		bestMultiplier = 0.01;
+		logger?.warn(
+			"COMPACTION",
+			`no multiplier fits budget ${charBudget}, using minimum multiplier=${bestMultiplier.toFixed(2)}`,
+		);
 	}
 
-	// Re-run compaction at the converged usage to collect per-tool details
+	// Re-run compaction at the converged multiplier to collect per-tool details
 	// and produce the actual message arrays for the caller.
-	const finalSyntheticPromptTokens = Math.round(syntheticContextWindow * finalUsage);
-	const { messages: finalCompacted, details } = compactMessagesWithStats({
+	const {
+		messages: finalMessages,
+		preEviction,
+		details,
+	} = compactMessagesWithStats({
 		messages,
-		context: {
-			promptTokens: finalSyntheticPromptTokens,
-			contextWindow: syntheticContextWindow,
-		},
+		multiplier: bestMultiplier,
 		tools,
 		sessionId,
 	});
-	const finalEvicted = evictOldTurns(finalCompacted);
-	const finalCharsAfter = totalContentChars(finalEvicted);
+	const finalCharsAfter = totalContentChars(finalMessages);
 
 	const elapsed = performance.now() - startTime;
 	logger?.debug(
 		"COMPACTION",
-		`budget: ${charBudget}, usage: ${finalUsage.toFixed(2)}, iterations: ${iterations}, ` +
+		`budget: ${charBudget}, multiplier: ${bestMultiplier.toFixed(2)}, iterations: ${iterations}, ` +
 			`time: ${elapsed.toFixed(1)}ms, chars: ${charsPerToken.toFixed(2)}, ` +
 			`in: ${charsBefore}, out: ${finalCharsAfter}, type: ${options.type}`,
 	);
 
 	return {
-		messages: finalEvicted,
-		compacted: finalCompacted,
-		usage: finalUsage,
+		messages: finalMessages,
+		compacted: preEviction,
+		multiplier: bestMultiplier,
 		iterations,
 		charsBefore,
 		charsAfter: finalCharsAfter,

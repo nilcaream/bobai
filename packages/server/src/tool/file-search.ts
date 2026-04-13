@@ -35,6 +35,8 @@ export const fileSearchTool: Tool = {
 
 	mergeable: true,
 
+	maxDistance: 100,
+
 	outputThreshold: 0.27,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {

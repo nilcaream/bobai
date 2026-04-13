@@ -44,6 +44,9 @@ export interface ToolResult {
 export interface Tool {
 	definition: ToolDefinition;
 	mergeable: boolean;
+	/** Distance from end of conversation at which compaction factor reaches 1.0.
+	 *  Used to compute per-message factor: distance / (multiplier × maxDistance). */
+	maxDistance: number;
 	/**
 	 * Compaction factor threshold for output compaction (0.0-1.0).
 	 * When contextPressure × age exceeds this, compact() is called.

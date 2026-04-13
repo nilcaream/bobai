@@ -31,6 +31,8 @@ export const writeFileTool: Tool = {
 
 	mergeable: true,
 
+	maxDistance: 150,
+
 	argsThreshold: 0.5,
 
 	compactArgs(args: Record<string, unknown>): Record<string, unknown> {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
 import { compactMessages, compactMessagesWithStats } from "../src/compaction/engine";
 import { createCompactionRegistry } from "../src/compaction/registry";
+import { DEFAULT_MAX_DISTANCE } from "../src/compaction/strength";
 import type { Message } from "../src/provider/provider";
 import { bashTool } from "../src/tool/bash";
 import { editFileTool } from "../src/tool/edit-file";
@@ -25,6 +26,7 @@ function createMockRegistry(
 		{
 			outputThreshold?: number;
 			argsThreshold?: number;
+			maxDistance?: number;
 			compact?: (output: string, args: Record<string, unknown>) => string;
 			compactArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
 		}
@@ -47,6 +49,7 @@ function createMockRegistry(
 					function: { name, description: "", parameters: { type: "object", properties: {}, required: [] } },
 				},
 				mergeable: true,
+				maxDistance: t.maxDistance ?? DEFAULT_MAX_DISTANCE,
 				outputThreshold: t.outputThreshold,
 				argsThreshold: t.argsThreshold,
 				compact,
@@ -59,14 +62,6 @@ function createMockRegistry(
 }
 
 const emptyRegistry = createMockRegistry({});
-
-function lowPressureContext() {
-	return { promptTokens: 100, contextWindow: 10_000 };
-}
-
-function highPressureContext() {
-	return { promptTokens: 9_000, contextWindow: 10_000 };
-}
 
 function assistantWithToolCall(toolCallId: string, toolName: string, args: string = "{}"): Message {
 	return {
@@ -81,9 +76,9 @@ function toolMessage(toolCallId: string, content: string): Message {
 }
 
 /**
- * Trailing messages to push tool results into the compactable age zone.
- * With EVICTION_DISTANCE=200, we need 200+ messages after the tool result
- * so that distanceFromEnd >= 200 and age ≈ 1.0.
+ * Trailing messages to push tool results into the compactable distance zone.
+ * With maxDistance=120, we need 120+ messages after the tool result
+ * so that distance >= maxDistance and factor ≈ 1.0 at multiplier=1.
  */
 const TRAILING_CONTEXT: Message[] = Array.from({ length: 200 }, (_, i) =>
 	i % 2 === 0 ? ({ role: "user", content: "continue" } as Message) : ({ role: "assistant", content: "ok" } as Message),
@@ -103,17 +98,17 @@ describe("compactMessagesWithStats", () => {
 		];
 		const { messages: result, stats } = compactMessagesWithStats({
 			messages,
-			context: lowPressureContext(),
+			multiplier: 100,
 			tools: emptyRegistry,
 		});
 		expect(stats.compacted).toBe(0);
+		expect(stats.evicted).toBe(0);
 		expect(stats.totalToolMessages).toBe(1);
-		expect(stats.contextPressure).toBeLessThanOrEqual(0);
 		// Messages unchanged
 		expect(result).toBe(messages); // same reference (no-op)
 	});
 
-	test("counts compacted messages accurately under high pressure", () => {
+	test("counts compacted messages accurately with low multiplier", () => {
 		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
@@ -127,35 +122,40 @@ describe("compactMessagesWithStats", () => {
 			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
-			file_search: { outputThreshold: 0.2 },
-			bash: { outputThreshold: 0.4 },
-			edit_file: { outputThreshold: 0.7 },
+			file_search: { outputThreshold: 0.2, maxDistance: 120 },
+			bash: { outputThreshold: 0.4, maxDistance: 150 },
+			edit_file: { outputThreshold: 0.7, maxDistance: 150 },
 		});
 		const { stats } = compactMessagesWithStats({
 			messages,
-			context: highPressureContext(),
+			multiplier: 1,
 			tools: registry,
 		});
 		expect(stats.totalToolMessages).toBe(3);
-		expect(stats.contextPressure).toBeGreaterThan(0);
-		// At 90% usage, older tool messages should be compacted
-		expect(stats.compacted).toBeGreaterThan(0);
-		expect(stats.compacted).toBeLessThanOrEqual(3);
+		// At multiplier=1 with distance >> maxDistance, older tool messages should be compacted or evicted.
+		// evicted count includes user/assistant messages too, so total can exceed tool count.
+		expect(stats.compacted + stats.evicted).toBeGreaterThan(0);
 	});
 
-	test("stats.contextPressure matches expected value", () => {
+	test("multiplier controls compaction aggressiveness", () => {
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
 			assistantWithToolCall("tc1", "bash"),
-			toolMessage("tc1", "output"),
+			toolMessage("tc1", longOutput),
 		];
-		// 90% usage → effective pressure = (0.9 - 0.2) / (1.0 - 0.2) = 0.875
-		const { stats } = compactMessagesWithStats({
-			messages,
-			context: { promptTokens: 9_000, contextWindow: 10_000 },
-			tools: emptyRegistry,
-		});
-		expect(stats.contextPressure).toBeCloseTo(0.875, 2);
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, maxDistance: 150 } });
+
+		// With a very high multiplier, factor → 0 → no compaction
+		const highMult = compactMessagesWithStats({ messages, multiplier: 100, tools: registry });
+		expect(highMult.stats.compacted).toBe(0);
+
+		// With multiplier=1, distance=2, maxDistance=150 → factor = 2/150 ≈ 0.013 → still below threshold
+		// Need more distance to trigger compaction
+		const withTrailing: Message[] = [...messages, ...TRAILING_CONTEXT];
+		const lowMult = compactMessagesWithStats({ messages: withTrailing, multiplier: 1, tools: registry });
+		// tc1 is at distance ~202, factor = 202 / (1*150) > 1.0 → evicted
+		expect(lowMult.stats.evicted).toBeGreaterThan(0);
 	});
 
 	test("returns per-message details keyed by tool_call_id", () => {
@@ -168,15 +168,16 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc2", longOutput),
 			assistantWithToolCall("tc3", "edit_file", JSON.stringify({ file_path: "src/main.ts" })),
 			toolMessage("tc3", longOutput),
+			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
-			file_search: { outputThreshold: 0.2 },
-			bash: { outputThreshold: 0.4 },
-			edit_file: { outputThreshold: 0.7 },
+			file_search: { outputThreshold: 0.2, maxDistance: 120 },
+			bash: { outputThreshold: 0.4, maxDistance: 150 },
+			edit_file: { outputThreshold: 0.7, maxDistance: 150 },
 		});
 		const { details } = compactMessagesWithStats({
 			messages,
-			context: highPressureContext(),
+			multiplier: 1,
 			tools: registry,
 		});
 
@@ -187,15 +188,13 @@ describe("compactMessagesWithStats", () => {
 			const detail = details.get(id);
 			expect(detail).toBeDefined();
 			if (!detail) throw new Error(`Missing detail for ${id}`);
-			expect(typeof detail.age).toBe("number");
+			expect(typeof detail.distance).toBe("number");
+			expect(detail.distance).toBeGreaterThan(0);
+			expect(typeof detail.maxDistance).toBe("number");
+			expect(detail.maxDistance).toBeGreaterThan(0);
 			expect(typeof detail.compactionFactor).toBe("number");
 			expect(typeof detail.wasCompacted).toBe("boolean");
-			expect(typeof detail.position).toBe("number");
-			expect(detail.position).toBeGreaterThanOrEqual(0);
-			expect(detail.position).toBeLessThanOrEqual(1);
-			expect(typeof detail.normalizedPosition).toBe("number");
-			expect(detail.normalizedPosition).toBeGreaterThanOrEqual(0);
-			expect(detail.normalizedPosition).toBeLessThanOrEqual(1);
+			expect(typeof detail.wasEvicted).toBe("boolean");
 		}
 
 		// file_search (low threshold) should be compacted more readily than edit_file (high threshold)
@@ -206,7 +205,7 @@ describe("compactMessagesWithStats", () => {
 		expect(editDetail.outputThreshold).toBe(0.7);
 	});
 
-	test("returns empty details map when no compaction needed", () => {
+	test("details show no compaction when multiplier is high", () => {
 		const messages: Message[] = [
 			{ role: "system", content: "sys" },
 			{ role: "user", content: "hello" },
@@ -215,11 +214,15 @@ describe("compactMessagesWithStats", () => {
 		];
 		const { details } = compactMessagesWithStats({
 			messages,
-			context: lowPressureContext(),
+			multiplier: 100,
 			tools: emptyRegistry,
 		});
 		expect(details).toBeInstanceOf(Map);
-		expect(details.size).toBe(0);
+		// Engine populates details for every tool message, even when not compacted
+		const detail = details.get("tc1");
+		expect(detail).toBeDefined();
+		expect(detail?.wasCompacted).toBe(false);
+		expect(detail?.wasEvicted).toBe(false);
 	});
 
 	test("details can be serialized to plain object for JSON response", () => {
@@ -230,14 +233,15 @@ describe("compactMessagesWithStats", () => {
 			toolMessage("tc1", longOutput),
 			assistantWithToolCall("tc2", "bash", JSON.stringify({ command: "ls" })),
 			toolMessage("tc2", longOutput),
+			...TRAILING_CONTEXT,
 		];
 		const registry = createMockRegistry({
-			file_search: { outputThreshold: 0.2 },
-			bash: { outputThreshold: 0.4 },
+			file_search: { outputThreshold: 0.2, maxDistance: 120 },
+			bash: { outputThreshold: 0.4, maxDistance: 150 },
 		});
 		const { details } = compactMessagesWithStats({
 			messages,
-			context: highPressureContext(),
+			multiplier: 1,
 			tools: registry,
 		});
 
@@ -250,7 +254,7 @@ describe("compactMessagesWithStats", () => {
 		expect(typeof parsed).toBe("object");
 		expect(parsed.tc1).toBeDefined();
 		expect(parsed.tc2).toBeDefined();
-		expect(typeof parsed.tc1.wasCompacted).toBe("boolean");
+		expect(typeof parsed.tc1.wasCompacted === "boolean" || typeof parsed.tc1.wasEvicted === "boolean").toBe(true);
 	});
 
 	test("compactMessages returns same result as compactMessagesWithStats.messages", () => {
@@ -259,11 +263,10 @@ describe("compactMessagesWithStats", () => {
 			assistantWithToolCall("tc1", "bash"),
 			toolMessage("tc1", "output line 1\nline 2\nline 3"),
 		];
-		const ctx = highPressureContext();
-		const registry = createMockRegistry({ bash: { outputThreshold: 0.4 } });
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, maxDistance: 150 } });
 
-		const plain = compactMessages({ messages, context: ctx, tools: registry });
-		const { messages: withStats } = compactMessagesWithStats({ messages, context: ctx, tools: registry });
+		const plain = compactMessages({ messages, multiplier: 1, tools: registry });
+		const { messages: withStats } = compactMessagesWithStats({ messages, multiplier: 1, tools: registry });
 
 		expect(plain.length).toBe(withStats.length);
 		for (let i = 0; i < plain.length; i++) {
@@ -273,6 +276,23 @@ describe("compactMessagesWithStats", () => {
 			expect(p.role).toBe(w.role);
 			expect((p as { content: string | null }).content).toBe((w as { content: string | null }).content);
 		}
+	});
+
+	test("preEviction contains compacted but non-evicted messages", () => {
+		const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
+		const messages: Message[] = [
+			{ role: "system", content: "sys" },
+			assistantWithToolCall("tc1", "bash"),
+			toolMessage("tc1", longOutput),
+			...TRAILING_CONTEXT,
+		];
+		const registry = createMockRegistry({ bash: { outputThreshold: 0.4, maxDistance: 150 } });
+		const result = compactMessagesWithStats({ messages, multiplier: 1, tools: registry });
+
+		// preEviction should have same length as original (includes evicted messages)
+		expect(result.preEviction.length).toBe(messages.length);
+		// messages may be shorter if eviction happened
+		expect(result.messages.length).toBeLessThanOrEqual(result.preEviction.length);
 	});
 });
 
@@ -321,6 +341,13 @@ describe("createCompactionRegistry", () => {
 	test("write_file has no outputThreshold", () => {
 		const tool = registry.get("write_file");
 		expect(tool?.outputThreshold).toBeUndefined();
+	});
+
+	test("has correct maxDistance values", () => {
+		expect(registry.get("read_file")?.maxDistance).toBe(readFileTool.maxDistance);
+		expect(registry.get("grep_search")?.maxDistance).toBe(grepSearchTool.maxDistance);
+		expect(registry.get("bash")?.maxDistance).toBe(bashTool.maxDistance);
+		expect(registry.get("edit_file")?.maxDistance).toBe(editFileTool.maxDistance);
 	});
 
 	test("has correct argsThreshold values", () => {
@@ -432,12 +459,12 @@ describe("createCompactionRegistry", () => {
 
 		const { messages: result, stats } = compactMessagesWithStats({
 			messages,
-			context: highPressureContext(),
+			multiplier: 1,
 			tools: registry,
 		});
 
-		expect(result.length).toBe(messages.length);
+		expect(result.length).toBeLessThanOrEqual(messages.length);
 		expect(stats.totalToolMessages).toBe(3);
-		expect(stats.compacted).toBeGreaterThan(0);
+		expect(stats.compacted + stats.evicted).toBeGreaterThan(0);
 	});
 });

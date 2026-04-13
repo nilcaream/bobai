@@ -38,6 +38,8 @@ export const readFileTool: Tool = {
 
 	mergeable: true,
 
+	maxDistance: 120,
+
 	outputThreshold: 0.3,
 
 	compact(output: string, callArgs: Record<string, unknown>): string {

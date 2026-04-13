@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AgentEvent } from "../agent-loop";
 import { runAgentLoop } from "../agent-loop";
+import { compactToBudget } from "../compaction/compact-to-budget";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
-import { compactMessages } from "../compaction/engine";
-import { evictOldTurns } from "../compaction/eviction";
+import { PRE_PROMPT_TARGET } from "../compaction/strength";
 import { FileTime } from "../file/time";
 import type { InstructionFile } from "../instructions";
 import type { Logger } from "../log/logger";
@@ -40,6 +40,8 @@ import { writeFileTool } from "./write-file";
 export const TASK_OUTPUT_THRESHOLD = 0.7;
 /** Compaction threshold for the task tool's arguments. */
 export const TASK_ARGS_THRESHOLD = 0.62;
+/** Distance from end of conversation at which task tool compaction factor reaches 1.0. */
+export const TASK_MAX_DISTANCE = 300;
 
 function formatTimestamp(): string {
 	const d = new Date();
@@ -115,6 +117,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			},
 		},
 		mergeable: false,
+		maxDistance: TASK_MAX_DISTANCE,
 		outputThreshold: TASK_OUTPUT_THRESHOLD,
 		argsThreshold: TASK_ARGS_THRESHOLD,
 		compact(output: string, callArgs: Record<string, unknown>, context?: { sessionId: string; toolCallId: string }): string {
@@ -251,17 +254,22 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			}
 
 			const rawMessages = [...messages];
-			if (childContextWindow > 0 && childPromptTokens > 0) {
-				messages = compactMessages({
+			const childPromptChars = childSession?.promptChars ?? 0;
+			if (childContextWindow > 0 && (childPromptTokens > 0 || childPromptChars > 0)) {
+				const compactionResult = compactToBudget({
 					messages,
-					context: { promptTokens: childPromptTokens, contextWindow: childContextWindow },
+					contextWindow: childContextWindow,
+					promptTokens: childPromptTokens,
+					promptChars: childPromptChars,
+					target: PRE_PROMPT_TARGET,
+					type: "pre-prompt",
 					tools: childTools,
 					sessionId: childSessionId,
 					onReadFileCompacted: invalidateCompactedRead,
+					logger: childLogger,
 				});
+				messages = compactionResult.messages;
 			}
-
-			messages = evictOldTurns(messages);
 
 			// Run agent loop with provider turn state isolation
 			let newMessages: Message[];

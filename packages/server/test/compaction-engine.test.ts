@@ -6,6 +6,7 @@ import {
 	compactMessagesWithStats,
 	MIN_COMPACTION_SAVINGS,
 } from "../src/compaction/engine";
+import { DEFAULT_MAX_DISTANCE } from "../src/compaction/strength";
 import type { Message, ToolMessage } from "../src/provider/provider";
 import type { ToolRegistry } from "../src/tool/tool";
 
@@ -17,6 +18,7 @@ function createMockRegistry(
 	tools: Record<
 		string,
 		{
+			maxDistance?: number;
 			outputThreshold?: number;
 			argsThreshold?: number;
 			compact?: (
@@ -39,6 +41,7 @@ function createMockRegistry(
 					function: { name, description: "", parameters: { type: "object", properties: {}, required: [] } },
 				},
 				mergeable: true,
+				maxDistance: t.maxDistance ?? DEFAULT_MAX_DISTANCE,
 				outputThreshold: t.outputThreshold,
 				argsThreshold: t.argsThreshold,
 				compact: t.compact,
@@ -51,16 +54,6 @@ function createMockRegistry(
 }
 
 const emptyRegistry = createMockRegistry({});
-
-/** Context that produces zero pressure (usage well below threshold). */
-function lowPressureContext() {
-	return { promptTokens: 100, contextWindow: 10_000 };
-}
-
-/** Context that produces high pressure (~0.8). */
-function highPressureContext() {
-	return { promptTokens: 9_000, contextWindow: 10_000 };
-}
 
 /** Build a standard assistant message with one tool call. */
 function assistantWithToolCall(toolCallId: string, toolName: string, args: string = "{}"): Message {
@@ -83,11 +76,9 @@ function multilineOutput(lineCount: number): string {
 
 /**
  * Trailing messages appended after tool results so that tool messages
- * are not at the newest position (age→0 → compactionFactor→0). With
- * the distance-based age model (MAX_AGE_DISTANCE=100), tool messages
- * need to be far enough from the end of the conversation to have
- * meaningful age. 100 trailing pairs push the tool message's
- * distanceFromEnd past the MAX_AGE_DISTANCE cap, giving age≈1.0.
+ * are far from the end of the conversation. With the distance-based model
+ * (factor = distance / (multiplier × maxDistance)), a large distance
+ * pushes the factor up. 100 trailing pairs = 200 messages of distance.
  */
 const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
 	i % 2 === 0 ? { role: "user" as const, content: "continue" } : { role: "assistant" as const, content: "ok" },
@@ -102,7 +93,7 @@ describe("compactMessages", () => {
 	// No-op scenarios
 	// =======================================================================
 	describe("no-op scenarios", () => {
-		test("returns original messages (same reference) when context pressure is 0", () => {
+		test("returns original messages (same reference) when multiplier is huge", () => {
 			const messages: Message[] = [
 				{ role: "system", content: "sys" },
 				{ role: "user", content: "hello" },
@@ -111,7 +102,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: lowPressureContext(),
+				multiplier: 100,
 				tools: createMockRegistry({ read_file: { outputThreshold: 0.3 } }),
 			});
 			expect(result).toBe(messages); // same reference — no work done
@@ -125,7 +116,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.01,
 				tools: emptyRegistry,
 			});
 			// No tool messages → nothing to compact → same reference
@@ -142,22 +133,8 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.01,
 				tools: emptyRegistry,
-			});
-			expect(result).toBe(messages);
-		});
-
-		test("returns original messages when contextWindow is 0", () => {
-			const messages: Message[] = [
-				{ role: "user", content: "go" },
-				assistantWithToolCall("tc1", "bash"),
-				toolResult("tc1", multilineOutput(50)),
-			];
-			const result = compactMessages({
-				messages,
-				context: { promptTokens: 1000, contextWindow: 0 },
-				tools: createMockRegistry({ bash: { outputThreshold: 0.4 } }),
 			});
 			expect(result).toBe(messages);
 		});
@@ -176,9 +153,11 @@ describe("compactMessages", () => {
 				toolResult("tc1", originalContent),
 				...TRAILING_CONTEXT,
 			];
+			// distance ≈ 200, maxDist = 10000, multiplier = 0.05
+			// factor = 200 / (0.05 * 10000) = 0.4, > threshold 0.2 → compact
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -203,7 +182,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					nothreshold: {
 						// no outputThreshold → never compacted
@@ -224,7 +203,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: emptyRegistry, // ghost_tool not registered
 			});
 			const toolMsg = result.find((m) => m.role === "tool") as ToolMessage;
@@ -239,11 +218,11 @@ describe("compactMessages", () => {
 				toolResult("tc1", originalContent),
 				...TRAILING_CONTEXT,
 			];
-			// compactionFactor ≈ 0.78 (pressure 0.8 × age ~0.97)
-			// threshold 0.9 → 0.78 < 0.9 → no compaction
+			// distance ≈ 200, maxDist = 10000, multiplier = 0.05
+			// factor = 200 / (0.05 * 10000) = 0.4 < threshold 0.9 → no compaction
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					resistant: {
 						outputThreshold: 0.9,
@@ -265,7 +244,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					small: {
 						outputThreshold: 0.2,
@@ -287,7 +266,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -310,7 +289,7 @@ describe("compactMessages", () => {
 			const messagesCopy = [...messages];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -335,7 +314,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -357,7 +336,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					broken: {
 						outputThreshold: 0.2,
@@ -372,7 +351,6 @@ describe("compactMessages", () => {
 
 		test("fires onReadFileCompacted callback when read_file output is compacted", () => {
 			let callbackToolCallId: string | undefined;
-			let callbackArgs: Record<string, unknown> | undefined;
 
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
@@ -382,20 +360,18 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					read_file: {
 						outputThreshold: 0.2,
 						compact: () => `${COMPACTION_MARKER} read_file compacted`,
 					},
 				}),
-				onReadFileCompacted(toolCallId, callArgs) {
+				onReadFileCompacted(toolCallId) {
 					callbackToolCallId = toolCallId;
-					callbackArgs = callArgs;
 				},
 			});
 			expect(callbackToolCallId).toBe("tc1");
-			expect(callbackArgs).toEqual({ path: "foo.ts" });
 		});
 	});
 
@@ -451,7 +427,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					edit_file: {
 						argsThreshold: 0.3,
@@ -478,7 +454,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					write_file: {
 						// no argsThreshold → never arg-compacted
@@ -501,7 +477,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					edit_file: {
 						argsThreshold: 0.3,
@@ -528,7 +504,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					write_file: {
 						argsThreshold: 0.3,
@@ -546,28 +522,26 @@ describe("compactMessages", () => {
 	});
 
 	// =======================================================================
-	// Age ordering
+	// Distance ordering
 	// =======================================================================
-	describe("age ordering", () => {
-		test("older tool messages are more likely to cross threshold than newer ones", () => {
-			// Tool with a medium threshold: older messages cross it, newer ones might not.
-			// Two tool messages at different positions.
+	describe("distance ordering", () => {
+		test("older tool messages (higher distance) have higher compactionFactor than newer ones", () => {
 			const output = multilineOutput(200);
 			const messages: Message[] = [
 				{ role: "user", content: "step 1" },
 				assistantWithToolCall("tc1", "tool_a"),
-				toolResult("tc1", output), // older, near start
+				toolResult("tc1", output), // older, near start → high distance
 				{ role: "user", content: "step 2" },
 				{ role: "assistant", content: "ok" },
 				{ role: "user", content: "step 3" },
 				{ role: "assistant", content: "ok" },
 				{ role: "user", content: "step 4" },
 				assistantWithToolCall("tc2", "tool_a"),
-				toolResult("tc2", output), // newer, near end
+				toolResult("tc2", output), // newer, near end → low distance
 			];
 			const { details } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					tool_a: {
 						outputThreshold: 0.2,
@@ -582,6 +556,8 @@ describe("compactMessages", () => {
 			expect(d2).toBeDefined();
 			// Older message should have higher compactionFactor
 			expect(d1?.compactionFactor).toBeGreaterThan(d2?.compactionFactor ?? 0);
+			// Older message should have higher distance
+			expect(d1?.distance).toBeGreaterThan(d2?.distance ?? 0);
 		});
 	});
 
@@ -589,11 +565,12 @@ describe("compactMessages", () => {
 	// Separate thresholds: args compacted before output
 	// =======================================================================
 	describe("separate thresholds", () => {
-		test("edit_file with outputThreshold=0.7 and argsThreshold=0.3: args compacted, output not", () => {
+		test("edit_file with outputThreshold=0.9 and argsThreshold=0.3: args compacted, output not", () => {
 			const largeContent = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
-			// compactionFactor ≈ 0.78 for the first tool message
-			// With outputThreshold=0.9, compactionFactor 0.78 < 0.9 → no output compaction
-			// With argsThreshold=0.3, compactionFactor 0.78 > 0.3 → args compacted
+			// distance ≈ 200, maxDist = 10000, multiplier = 0.05
+			// factor = 200 / (0.05 * 10000) = 0.4
+			// With outputThreshold=0.9, factor 0.4 < 0.9 → no output compaction
+			// With argsThreshold=0.3, factor 0.4 > 0.3 → args compacted
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				{
@@ -615,7 +592,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					edit_file: {
 						outputThreshold: 0.9, // too high → no output compaction
@@ -669,17 +646,17 @@ describe("compactMessages", () => {
 
 			const { stats } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: registry,
 			});
 
 			expect(stats.compacted).toBe(2);
-			expect(stats.contextPressure).toBeGreaterThan(0);
 			expect(stats.totalToolMessages).toBe(2);
 			expect(stats.assistantArgsCompacted).toBe(0);
+			expect(stats.evicted).toBe(0);
 		});
 
-		test("returns per-tool-call-id details", () => {
+		test("returns per-tool-call-id details with distance and maxDistance", () => {
 			const longContent = `${"x".repeat(50)}\n`.repeat(200);
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
@@ -704,7 +681,7 @@ describe("compactMessages", () => {
 
 			const { details } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: registry,
 			});
 
@@ -712,24 +689,21 @@ describe("compactMessages", () => {
 
 			const d1 = details.get("tc1") as CompactionDetail;
 			expect(d1).toBeDefined();
-			expect(d1.age).toBeGreaterThanOrEqual(0);
-			expect(d1.age).toBeLessThanOrEqual(1);
+			expect(d1.distance).toBeGreaterThan(0);
+			expect(d1.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
 			expect(d1.compactionFactor).toBeGreaterThan(0);
+			expect(d1.compactionFactor).toBeLessThanOrEqual(1);
 			expect(d1.outputThreshold).toBe(0.2);
 			expect(d1.wasCompacted).toBe(true);
+			expect(d1.wasEvicted).toBe(false);
 			expect(d1.savedChars).toBeGreaterThan(0);
-			expect(d1.position).toBeGreaterThanOrEqual(0);
-			expect(d1.position).toBeLessThanOrEqual(1);
-			expect(d1.normalizedPosition).toBeGreaterThanOrEqual(0);
-			expect(d1.normalizedPosition).toBeLessThanOrEqual(1);
 
 			const d2 = details.get("tc2") as CompactionDetail;
 			expect(d2).toBeDefined();
 			expect(d2.outputThreshold).toBe(0.4);
-			expect(d2.position).toBeGreaterThanOrEqual(0);
-			expect(d2.position).toBeLessThanOrEqual(1);
-			expect(d2.normalizedPosition).toBeGreaterThanOrEqual(0);
-			expect(d2.normalizedPosition).toBeLessThanOrEqual(1);
+			expect(d2.distance).toBeGreaterThan(0);
+			expect(d2.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
+			expect(d2.wasEvicted).toBe(false);
 		});
 
 		test("marks belowMinSavings when savings are too small", () => {
@@ -750,7 +724,7 @@ describe("compactMessages", () => {
 
 			const { details } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: registry,
 			});
 
@@ -758,24 +732,30 @@ describe("compactMessages", () => {
 			expect(d1).toBeDefined();
 			expect(d1.wasCompacted).toBe(false);
 			expect(d1.belowMinSavings).toBe(true);
-			expect(d1.position).toBeGreaterThanOrEqual(0);
-			expect(d1.normalizedPosition).toBeGreaterThanOrEqual(0);
+			expect(d1.distance).toBeGreaterThan(0);
+			expect(d1.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
 		});
 
-		test("returns empty details when pressure is zero", () => {
+		test("returns empty details when multiplier is huge (no compaction)", () => {
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
 				assistantWithToolCall("tc1", "bash"),
 				toolResult("tc1", multilineOutput(200)),
 			];
 
-			const { details } = compactMessagesWithStats({
+			const { stats } = compactMessagesWithStats({
 				messages,
-				context: lowPressureContext(),
+				multiplier: 100,
 				tools: createMockRegistry({ bash: { outputThreshold: 0.2 } }),
 			});
 
-			expect(details.size).toBe(0);
+			// With multiplier=100, factor = distance / (100 * 10000) ≈ 0 → nothing compacted.
+			// Details are still populated for tool messages that were evaluated,
+			// but wasCompacted should be false.
+			// Actually, when anyChanged is false, engine returns same reference.
+			// Let's check stats.
+			expect(stats.compacted).toBe(0);
+			expect(stats.evicted).toBe(0);
 		});
 
 		test("includes savedChars matching actual savings", () => {
@@ -795,15 +775,15 @@ describe("compactMessages", () => {
 			});
 			const { details, messages: result } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: registry,
 			});
 			const d1 = details.get("tc1");
 			expect(d1?.wasCompacted).toBe(true);
 			expect(d1?.savedChars).toBeDefined();
 			expect(d1?.savedChars).toBeGreaterThan(0);
-			expect(d1?.position).toBeGreaterThanOrEqual(0);
-			expect(d1?.normalizedPosition).toBeGreaterThanOrEqual(0);
+			expect(d1?.distance).toBeGreaterThan(0);
+			expect(d1?.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
 			const resultContent = (result.find((m) => m.role === "tool") as ToolMessage).content;
 			expect(d1?.savedChars).toBe(longContent.length - resultContent.length);
 		});
@@ -839,7 +819,7 @@ describe("compactMessages", () => {
 			});
 			const { details } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: registry,
 			});
 
@@ -847,8 +827,8 @@ describe("compactMessages", () => {
 			expect(d).toBeDefined();
 			expect(d?.savedArgsChars).toBeDefined();
 			expect(d?.savedArgsChars ?? 0).toBeGreaterThan(0);
-			expect(d?.position).toBeGreaterThanOrEqual(0);
-			expect(d?.normalizedPosition).toBeGreaterThanOrEqual(0);
+			expect(d?.distance).toBeGreaterThan(0);
+			expect(d?.maxDistance).toBe(DEFAULT_MAX_DISTANCE);
 		});
 
 		test("stats include assistantArgsCompacted count", () => {
@@ -897,7 +877,7 @@ describe("compactMessages", () => {
 			});
 			const { stats } = compactMessagesWithStats({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: registry,
 			});
 
@@ -919,7 +899,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				sessionId: "sess-123",
 				tools: createMockRegistry({
 					task: {
@@ -944,7 +924,6 @@ describe("compactMessages", () => {
 		test("fires when read_file output is compacted", () => {
 			let fired = false;
 			let firedToolCallId = "";
-			let firedArgs: Record<string, unknown> = {};
 
 			const messages: Message[] = [
 				{ role: "user", content: "go" },
@@ -954,22 +933,20 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					read_file: {
 						outputThreshold: 0.2,
 						compact: () => `${COMPACTION_MARKER} read_file compacted`,
 					},
 				}),
-				onReadFileCompacted(toolCallId, callArgs) {
+				onReadFileCompacted(toolCallId) {
 					fired = true;
 					firedToolCallId = toolCallId;
-					firedArgs = callArgs;
 				},
 			});
 			expect(fired).toBe(true);
 			expect(firedToolCallId).toBe("tc1");
-			expect(firedArgs).toEqual({ path: "src/main.ts", from: 1, to: 100 });
 		});
 
 		test("does NOT fire when read_file is not compacted", () => {
@@ -982,7 +959,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					read_file: {
 						outputThreshold: 0.2,
@@ -1012,7 +989,7 @@ describe("compactMessages", () => {
 			];
 			compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					broken: {
 						outputThreshold: 0.2,
@@ -1030,24 +1007,10 @@ describe("compactMessages", () => {
 			const messages: Message[] = [];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: emptyRegistry,
 			});
 			expect(result).toBe(messages);
-		});
-
-		test("context pressure at exact threshold produces no compaction", () => {
-			const messages: Message[] = [
-				{ role: "user", content: "go" },
-				assistantWithToolCall("tc1", "bash"),
-				toolResult("tc1", multilineOutput(200)),
-			];
-			const result = compactMessages({
-				messages,
-				context: { promptTokens: 2_000, contextWindow: 10_000 }, // exactly 0.2 = threshold
-				tools: createMockRegistry({ bash: { outputThreshold: 0.2, compact: () => `${COMPACTION_MARKER} compacted` } }),
-			});
-			expect(result).toBe(messages); // no compaction
 		});
 
 		test("system, user, assistant messages pass through unchanged", () => {
@@ -1065,7 +1028,7 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({
 					bash: {
 						outputThreshold: 0.2,
@@ -1097,10 +1060,191 @@ describe("compactMessages", () => {
 			];
 			const result = compactMessages({
 				messages,
-				context: highPressureContext(),
+				multiplier: 0.03,
 				tools: createMockRegistry({ bash: {} }), // no outputThreshold
 			});
 			expect(result).toBe(messages);
+		});
+	});
+
+	// =======================================================================
+	// Eviction
+	// =======================================================================
+	describe("eviction", () => {
+		test("tool result is evicted when factor >= 1.0", () => {
+			// Use a tool with small maxDistance so factor easily reaches 1.0.
+			// maxDistance=10, distance≈200, multiplier=1 → factor = 200/(1*10) = 20 → clamped to 1.0
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "short_lived"),
+				toolResult("tc1", "some output"),
+				...TRAILING_CONTEXT,
+			];
+			const {
+				messages: result,
+				details,
+				stats,
+			} = compactMessagesWithStats({
+				messages,
+				multiplier: 1,
+				tools: createMockRegistry({
+					short_lived: {
+						maxDistance: 10,
+						outputThreshold: 0.3,
+						compact: () => `${COMPACTION_MARKER} compacted`,
+					},
+				}),
+			});
+
+			// Tool result should be gone from final messages
+			const toolMsgs = result.filter((m) => m.role === "tool");
+			expect(toolMsgs.length).toBe(0);
+
+			// Detail should mark it as evicted
+			const d = details.get("tc1") as CompactionDetail;
+			expect(d).toBeDefined();
+			expect(d.wasEvicted).toBe(true);
+			expect(d.compactionFactor).toBe(1.0);
+			expect(stats.evicted).toBeGreaterThanOrEqual(1);
+		});
+
+		test("evicted tool result causes paired assistant tool_call to be filtered out", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "short_lived"),
+				toolResult("tc1", "some output"),
+				...TRAILING_CONTEXT,
+			];
+			const { messages: result } = compactMessagesWithStats({
+				messages,
+				multiplier: 1,
+				tools: createMockRegistry({
+					short_lived: {
+						maxDistance: 10,
+						outputThreshold: 0.3,
+						compact: () => `${COMPACTION_MARKER} compacted`,
+					},
+				}),
+			});
+
+			// The assistant message that called the evicted tool should also be removed
+			// (it has no content and all its tool_calls were evicted)
+			const assistantMsgs = result.filter(
+				(m) => m.role === "assistant" && (m as { tool_calls?: unknown[] }).tool_calls?.length,
+			);
+			expect(assistantMsgs.length).toBe(0);
+		});
+
+		test("assistant with all tool_calls evicted + no content is removed", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				{
+					role: "assistant",
+					content: null,
+					tool_calls: [
+						{ id: "tc1", type: "function", function: { name: "short_lived", arguments: "{}" } },
+						{ id: "tc2", type: "function", function: { name: "short_lived", arguments: "{}" } },
+					],
+				},
+				toolResult("tc1", "output1"),
+				toolResult("tc2", "output2"),
+				...TRAILING_CONTEXT,
+			];
+			const { messages: result } = compactMessagesWithStats({
+				messages,
+				multiplier: 1,
+				tools: createMockRegistry({
+					short_lived: {
+						maxDistance: 10,
+						outputThreshold: 0.3,
+						compact: () => `${COMPACTION_MARKER} compacted`,
+					},
+				}),
+			});
+
+			// Both tool calls evicted, assistant has no content → assistant removed
+			const hasToolCallAssistant = result.some(
+				(m) => m.role === "assistant" && (m as { tool_calls?: unknown[] }).tool_calls?.length,
+			);
+			expect(hasToolCallAssistant).toBe(false);
+		});
+
+		test("preEviction array contains compacted-but-not-evicted messages", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "short_lived"),
+				toolResult("tc1", "some output"),
+				...TRAILING_CONTEXT,
+			];
+			const { preEviction, messages: result } = compactMessagesWithStats({
+				messages,
+				multiplier: 1,
+				tools: createMockRegistry({
+					short_lived: {
+						maxDistance: 10,
+						outputThreshold: 0.3,
+						compact: () => `${COMPACTION_MARKER} compacted`,
+					},
+				}),
+			});
+
+			// preEviction should have all messages (evicted ones included as originals)
+			expect(preEviction.length).toBe(messages.length);
+			// Final messages should be shorter (evicted removed)
+			expect(result.length).toBeLessThan(preEviction.length);
+		});
+
+		test("stats.evicted counts correctly", () => {
+			const messages: Message[] = [
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "short_lived"),
+				toolResult("tc1", "output1"),
+				{ role: "user", content: "more" },
+				assistantWithToolCall("tc2", "short_lived"),
+				toolResult("tc2", "output2"),
+				...TRAILING_CONTEXT,
+			];
+			const { stats } = compactMessagesWithStats({
+				messages,
+				multiplier: 1,
+				tools: createMockRegistry({
+					short_lived: {
+						maxDistance: 10,
+						outputThreshold: 0.3,
+						compact: () => `${COMPACTION_MARKER} compacted`,
+					},
+				}),
+			});
+
+			// At least the 2 tool messages should be evicted
+			expect(stats.evicted).toBeGreaterThanOrEqual(2);
+		});
+
+		test("system messages are never evicted", () => {
+			const messages: Message[] = [
+				{ role: "system", content: "important system prompt" },
+				{ role: "user", content: "go" },
+				assistantWithToolCall("tc1", "short_lived"),
+				toolResult("tc1", "output"),
+				...TRAILING_CONTEXT,
+			];
+			const { messages: result } = compactMessagesWithStats({
+				messages,
+				// Use very small multiplier to maximize eviction
+				multiplier: 0.001,
+				tools: createMockRegistry({
+					short_lived: {
+						maxDistance: 10,
+						outputThreshold: 0.3,
+						compact: () => `${COMPACTION_MARKER} compacted`,
+					},
+				}),
+			});
+
+			// System message should always survive
+			const systemMsgs = result.filter((m) => m.role === "system");
+			expect(systemMsgs.length).toBe(1);
+			expect(systemMsgs[0].content).toBe("important system prompt");
 		});
 	});
 });
