@@ -18,7 +18,7 @@ export type ServerMessage =
 	| { type: "prompt_echo"; text: string; sessionId?: string }
 	| { type: "session_created"; sessionId: string }
 	| { type: "subagent_start"; sessionId: string; title: string; toolCallId: string }
-	| { type: "subagent_done"; sessionId: string }
+	| { type: "subagent_done"; sessionId: string; model: string; summary?: string }
 	| { type: "session_subscribed"; sessionId: string }
 	| { type: "session_locked"; sessionId: string };
 

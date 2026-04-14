@@ -108,6 +108,19 @@ export function useWebSocket() {
 				}
 				if (msg.type === "subagent_done") {
 					setSubagents((prev) => prev.map((s) => (s.sessionId === msg.sessionId ? { ...s, status: "done" } : s)));
+					// If peeking at this child, stamp the last assistant message with completion info
+					if (msg.sessionId === viewingSubagentIdRef.current) {
+						setMessages((prev) => {
+							const last = prev.at(-1);
+							if (last?.role === "assistant") {
+								return [
+									...prev.slice(0, -1),
+									{ ...last, timestamp: formatTimestamp(), model: msg.model, summary: msg.summary },
+								];
+							}
+							return prev;
+						});
+					}
 				}
 				return;
 			}

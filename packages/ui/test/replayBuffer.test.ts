@@ -133,7 +133,7 @@ describe("replayBufferToMessages", () => {
 		}
 	});
 
-	test("prompt_echo event creates a user message", () => {
+	test("prompt_echo event creates a user message with a timestamp", () => {
 		const events = [
 			{ type: "prompt_echo" as const, text: "Explore the codebase and find all usages of X", sessionId: "c1" },
 			{ type: "token" as const, text: "I'll look into that", sessionId: "c1" },
@@ -143,6 +143,7 @@ describe("replayBufferToMessages", () => {
 		expect(msgs[0].role).toBe("user");
 		if (msgs[0].role === "user") {
 			expect(msgs[0].text).toBe("Explore the codebase and find all usages of X");
+			expect(msgs[0].timestamp).toBeTruthy();
 		}
 		expect(msgs[1].role).toBe("assistant");
 	});

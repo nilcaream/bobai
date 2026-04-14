@@ -382,6 +382,10 @@ describe("createTaskTool", () => {
 		const doneMsg = wsMsgs.find((m) => m.type === "subagent_done");
 		expect(doneMsg).toBeTruthy();
 		expect(doneMsg.sessionId).toBe(startMsg.sessionId);
+		if (doneMsg?.type === "subagent_done") {
+			expect(doneMsg.model).toBe("test-model");
+			expect(doneMsg.summary).toBeDefined();
+		}
 	});
 
 	test("subagent_start includes toolCallId from context", async () => {

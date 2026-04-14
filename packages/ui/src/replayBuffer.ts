@@ -1,3 +1,4 @@
+import { formatTimestamp } from "./format";
 import { appendPart, appendText } from "./messageBuilder";
 import type { Message } from "./protocol";
 
@@ -12,7 +13,7 @@ export function replayBufferToMessages(events: BufferedEvent[]): Message[] {
 	let messages: Message[] = [];
 	for (const event of events) {
 		if (event.type === "prompt_echo") {
-			messages = [...messages, { role: "user", text: event.text as string, timestamp: "" }];
+			messages = [...messages, { role: "user", text: event.text as string, timestamp: formatTimestamp() }];
 		} else if (event.type === "token") {
 			messages = appendText(messages, event.text as string);
 		} else if (event.type === "tool_call") {

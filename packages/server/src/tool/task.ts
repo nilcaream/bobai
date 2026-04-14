@@ -366,8 +366,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				);
 			} catch (err) {
 				subagentStatus.set(childSessionId, "error");
-				sendWs?.({ type: "subagent_done", sessionId: childSessionId });
 				const turnSummary = activeProvider.getTurnSummary?.() ?? "";
+				sendWs?.({ type: "subagent_done", sessionId: childSessionId, model, summary: turnSummary });
 				const errChildTokens = activeProvider.getTurnPromptTokens?.() ?? 0;
 				const errChildChars = activeProvider.getTurnPromptChars?.() ?? 0;
 				if (parentState !== undefined) activeProvider.restoreTurnState?.(parentState);
@@ -408,7 +408,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			}
 
 			subagentStatus.set(childSessionId, "done");
-			sendWs?.({ type: "subagent_done", sessionId: childSessionId });
+			sendWs?.({ type: "subagent_done", sessionId: childSessionId, model, summary: turnSummary });
 
 			// Extract final assistant text
 			const lastAssistant = [...newMessages]
