@@ -39,10 +39,9 @@ cd packages/ui && bunx vite build
 
 ## Glossary
 
-Application vocabulary, UI anatomy, and core concepts are documented in
-[`docs/glossary.md`](docs/glossary.md). Read it before any session that
-involves UI work, dot commands, or domain concepts — it saves significant
-code-diving time.
+Read [`docs/glossary.md`](docs/glossary.md) before starting work.
+It defines application vocabulary, UI anatomy, and core concepts —
+faster than exploring the codebase.
 
 ## Hard Constraints
 
