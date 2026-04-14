@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import { createDbGuard, type DbGuard } from "./db-guard";
 
 export interface BobaiConfig {
 	id?: string;
@@ -20,6 +21,7 @@ export interface Project {
 	debug?: boolean;
 	dir: string;
 	db: Database;
+	dbGuard: DbGuard;
 }
 
 export async function initProject(projectRoot: string): Promise<Project> {
@@ -43,6 +45,8 @@ export async function initProject(projectRoot: string): Promise<Project> {
 	const db = new Database(dbFile, { create: true });
 	db.exec("PRAGMA journal_mode = WAL");
 	db.exec("PRAGMA foreign_keys = ON");
+
+	const dbGuard = createDbGuard(dbFile);
 
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS sessions (
@@ -103,5 +107,6 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		debug: config.debug,
 		dir: bobaiDir,
 		db,
+		dbGuard,
 	};
 }

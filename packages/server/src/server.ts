@@ -5,6 +5,8 @@ import { compactToBudget } from "./compaction/compact-to-budget";
 import { createCompactionRegistry } from "./compaction/registry";
 import { NON_TOOL_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
+import type { DbGuard } from "./db-guard";
+import { DbDisconnectedError } from "./db-guard";
 import { formatPromptDate } from "./format-date";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
@@ -32,6 +34,7 @@ export interface ServerOptions {
 	port: number;
 	staticDir?: string;
 	db?: Database;
+	dbGuard?: DbGuard;
 	provider?: Provider;
 	model?: string;
 	maxIterations?: number;
@@ -50,6 +53,22 @@ export function createServer(options: ServerOptions) {
 
 	// Track active AbortControllers per WebSocket for cleanup on disconnect
 	const wsAbortControllers = new Map<object, AbortController>();
+
+	// Track all connected WebSockets for broadcasting
+	const allWebSockets = new Set<object>();
+
+	function handleDbDisconnected(err: DbDisconnectedError) {
+		options.logger?.error("DB", err.message);
+		// Abort all active agent loops
+		for (const controller of wsAbortControllers.values()) {
+			controller.abort();
+		}
+		wsAbortControllers.clear();
+		// Broadcast to all connected WebSockets
+		for (const ws of allWebSockets) {
+			send(ws as { send: (msg: string) => void }, { type: "db_disconnected" });
+		}
+	}
 
 	// Per-session promise chain to prevent concurrent agent loops on the same session
 	const sessionLocks = new Map<string, Promise<void>>();
@@ -352,9 +371,18 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return Response.json({ ok: false, error: "Database not available" });
 				}
-				const body = (await req.json()) as CommandRequest;
-				const result = handleCommand(options.db, body, options.configDir);
-				return Response.json(result);
+				try {
+					options.dbGuard?.assertConnected();
+					const body = (await req.json()) as CommandRequest;
+					const result = handleCommand(options.db, body, options.configDir);
+					return Response.json(result);
+				} catch (err) {
+					if (err instanceof DbDisconnectedError) {
+						handleDbDisconnected(err);
+						return Response.json({ ok: false, error: "Database disconnected" });
+					}
+					throw err;
+				}
 			}
 
 			if (url.pathname === "/bobai/subagents") {
@@ -438,6 +466,15 @@ export function createServer(options: ServerOptions) {
 				if (!options.db) {
 					return Response.json({ ok: false, error: "Database not available" });
 				}
+				try {
+					options.dbGuard?.assertConnected();
+				} catch (err) {
+					if (err instanceof DbDisconnectedError) {
+						handleDbDisconnected(err);
+						return Response.json({ ok: false, error: "Database disconnected" });
+					}
+					throw err;
+				}
 				const sid = decodeURIComponent(deleteMatch[1]);
 				const session = getSession(options.db, sid);
 				if (!session) {
@@ -466,6 +503,9 @@ export function createServer(options: ServerOptions) {
 			return new Response("Not Found", { status: 404 });
 		},
 		websocket: {
+			open(ws) {
+				allWebSockets.add(ws);
+			},
 			message(ws, raw) {
 				let msg: ClientMessage;
 				try {
@@ -527,8 +567,13 @@ export function createServer(options: ServerOptions) {
 								signal: controller.signal,
 								debug: options.debug,
 								startedAt: options.startedAt,
+								dbGuard: options.dbGuard,
 							})
 								.catch((err) => {
+									if (err instanceof DbDisconnectedError) {
+										handleDbDisconnected(err);
+										return;
+									}
 									send(ws, { type: "error", message: "Unexpected error" });
 									console.error("Unhandled error in handlePrompt:", err);
 								})
@@ -560,6 +605,7 @@ export function createServer(options: ServerOptions) {
 				send(ws, { type: "error", message: `Unknown message type: ${msg.type}` });
 			},
 			close(ws) {
+				allWebSockets.delete(ws);
 				releaseOwnership(ws);
 				const controller = wsAbortControllers.get(ws);
 				if (controller) {

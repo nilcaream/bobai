@@ -20,7 +20,8 @@ export type ServerMessage =
 	| { type: "subagent_start"; sessionId: string; title: string; toolCallId: string }
 	| { type: "subagent_done"; sessionId: string; model: string; summary?: string }
 	| { type: "session_subscribed"; sessionId: string }
-	| { type: "session_locked"; sessionId: string };
+	| { type: "session_locked"; sessionId: string }
+	| { type: "db_disconnected" };
 
 export function send(ws: { send: (msg: string) => void }, msg: ServerMessage) {
 	ws.send(JSON.stringify(msg));

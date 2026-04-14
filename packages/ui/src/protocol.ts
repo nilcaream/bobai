@@ -10,7 +10,8 @@ export type ServerMessage =
 	| { type: "session_subscribed"; sessionId: string }
 	| { type: "session_locked"; sessionId: string }
 	| { type: "subagent_start"; sessionId: string; title: string; toolCallId: string }
-	| { type: "subagent_done"; sessionId: string; model: string; summary?: string };
+	| { type: "subagent_done"; sessionId: string; model: string; summary?: string }
+	| { type: "db_disconnected" };
 
 export type RouteResult =
 	| { target: "parent"; msg: ServerMessage }

@@ -23,6 +23,7 @@ export function useWebSocket() {
 	const [sessionLocked, setSessionLocked] = useState(false);
 	const [welcomeMarkdown, setWelcomeMarkdown] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
+	const dbDisconnected = useRef(false);
 	const eventRouter = useRef(createEventRouter());
 	const messagesRef = useRef<Message[]>([]);
 	const autoScrollRef = useRef(true);
@@ -78,7 +79,7 @@ export function useWebSocket() {
 			// Session-level concerns — handle before the event router
 			if (msg.type === "session_created") {
 				sessionId.current = msg.sessionId;
-				setVolatileMessage(null);
+				if (!dbDisconnected.current) setVolatileMessage(null);
 				history.pushState(null, "", buildSessionUrl(msg.sessionId));
 				sendSubscribe(msg.sessionId);
 				return;
@@ -92,7 +93,17 @@ export function useWebSocket() {
 
 			if (msg.type === "session_subscribed") {
 				setSessionLocked(false);
-				setVolatileMessage(null);
+				if (!dbDisconnected.current) setVolatileMessage(null);
+				return;
+			}
+
+			if (msg.type === "db_disconnected") {
+				dbDisconnected.current = true;
+				setVolatileMessage({
+					text: "Database file was replaced or deleted. Session data can no longer be saved. Restart the server.",
+					kind: "error",
+				});
+				setIsStreaming(false);
 				return;
 			}
 
@@ -263,13 +274,21 @@ export function useWebSocket() {
 			if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
 			if (isStreaming) return;
 
+			if (dbDisconnected.current) {
+				setVolatileMessage({
+					text: "Database file was replaced or deleted. Session data can no longer be saved. Restart the server.",
+					kind: "error",
+				});
+				return;
+			}
+
 			// Clear peek state and buffers
 			if (viewingSubagentIdRef.current) {
 				exitSubagentPeek();
 			}
 			eventRouter.current.clearAllBuffers();
 			setSubagents([]);
-			setVolatileMessage(null);
+			if (!dbDisconnected.current) setVolatileMessage(null);
 
 			setIsStreaming(true);
 			// When staged skills are present, the server sends prompt_echo after skill
@@ -319,7 +338,7 @@ export function useWebSocket() {
 		setSubagents([]);
 		setParentId(null);
 		setParentTitle(null);
-		setVolatileMessage(null);
+		if (!dbDisconnected.current) setVolatileMessage(null);
 		setSessionLocked(false);
 		history.pushState(null, "", "/bobai");
 	}, [sendUnsubscribe, viewingSubagentIdRef, setViewingSubagentId, setViewingSubagentTitle, parentMessagesRef]);

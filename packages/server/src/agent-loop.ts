@@ -1,6 +1,7 @@
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
 import { computeCharBudget, EMERGENCY_TARGET, totalContentChars } from "./compaction/strength";
+import type { DbGuard } from "./db-guard";
 import type { Logger } from "./log/logger";
 import { getScope } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
@@ -103,6 +104,8 @@ export interface AgentLoopOptions {
 	rawMessages?: Message[];
 	logger?: Logger;
 	logDir?: string;
+	/** DB inode guard — throws DbDisconnectedError if the database file was replaced or deleted. */
+	dbGuard?: DbGuard;
 	/** Called when a read_file tool output is compacted during emergency compaction. */
 	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void;
 	onEvent: (event: AgentEvent) => void;
@@ -129,6 +132,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	const newMessages: Message[] = [];
 
 	for (let iteration = 0; iteration < maxIterations; iteration++) {
+		// Check if the database file was replaced or deleted
+		options.dbGuard?.assertConnected();
 		// Abort if the signal has been triggered (e.g. WebSocket closed)
 		signal?.throwIfAborted();
 
@@ -357,11 +362,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 					onMessage(toolMsg);
 
 					// Check abort between tool executions
+					options.dbGuard?.assertConnected();
 					signal?.throwIfAborted();
 				}
 			}
 
 			// Check abort between groups
+			options.dbGuard?.assertConnected();
 			signal?.throwIfAborted();
 		}
 

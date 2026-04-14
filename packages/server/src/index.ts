@@ -101,6 +101,7 @@ const server = createServer({
 	port,
 	staticDir,
 	db: project.db,
+	dbGuard: project.dbGuard,
 	provider,
 	model: config.model,
 	maxIterations: config.maxIterations,

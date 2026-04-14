@@ -5,6 +5,7 @@ import { runAgentLoop } from "./agent-loop";
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
 import { PRE_PROMPT_TARGET } from "./compaction/strength";
+import { DbDisconnectedError, type DbGuard } from "./db-guard";
 import { FileTime } from "./file/time";
 import { formatPromptDate } from "./format-date";
 import { loadInstructions } from "./instructions";
@@ -66,6 +67,7 @@ export interface PromptRequest {
 	signal?: AbortSignal;
 	debug?: boolean;
 	startedAt?: number;
+	dbGuard?: DbGuard;
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -330,6 +332,7 @@ export async function handlePrompt(req: PromptRequest) {
 				logger: scopedLogger,
 				logDir: req.logDir,
 				signal: req.signal,
+				dbGuard: req.dbGuard,
 				onReadFileCompacted: invalidateCompactedRead,
 				onEvent(event: AgentEvent) {
 					routeEventToWs(ws, event);
@@ -385,6 +388,9 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null, summary });
 	} catch (err) {
+		// DB disconnected errors must propagate to server.ts for broadcast handling
+		if (err instanceof DbDisconnectedError) throw err;
+
 		// Abort errors (e.g. WebSocket closed) are not real failures — don't persist error message
 		const isAbort = err instanceof DOMException && err.name === "AbortError";
 
