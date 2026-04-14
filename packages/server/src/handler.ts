@@ -6,11 +6,13 @@ import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
 import { PRE_PROMPT_TARGET } from "./compaction/strength";
 import { FileTime } from "./file/time";
+import { formatPromptDate } from "./format-date";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
 import { runWithScope } from "./log/logger";
 import { sessionScope } from "./log/session-tag";
 import { repairMessageOrdering } from "./message-repair";
+import { getProjectInfo } from "./project-info";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
@@ -28,6 +30,7 @@ import {
 } from "./session/repository";
 import type { SkillRegistry } from "./skill/skill";
 import { SubagentStatus } from "./subagent-status";
+import type { SystemPromptDebug, SystemPromptMetadata } from "./system-prompt";
 import { buildSystemPrompt } from "./system-prompt";
 import { bashTool } from "./tool/bash";
 import { editFileTool } from "./tool/edit-file";
@@ -61,6 +64,8 @@ export interface PromptRequest {
 	logger?: Logger;
 	logDir?: string;
 	signal?: AbortSignal;
+	debug?: boolean;
+	startedAt?: number;
 }
 
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
@@ -86,7 +91,6 @@ export async function handlePrompt(req: PromptRequest) {
 	const { ws, db, provider, model, text, sessionId, projectRoot, configDir, skills, skillDirectories, stagedSkills } = req;
 
 	const instructions = loadInstructions(configDir, projectRoot);
-	const systemPrompt = buildSystemPrompt(skills.list(), instructions);
 	let currentSessionId: string | undefined;
 	let sessionObj: { model: string | null; title: string | null } | null = null;
 	let effectiveModel = model;
@@ -118,6 +122,19 @@ export async function handlePrompt(req: PromptRequest) {
 		if (!sessionObj?.model && currentSessionId) {
 			updateSessionModel(db, currentSessionId, effectiveModel);
 		}
+
+		// Build metadata and optional debug info for system prompt
+		const projectInfo = await getProjectInfo(projectRoot);
+		const metadata: SystemPromptMetadata = {
+			date: formatPromptDate(),
+			projectDir: projectRoot,
+			gitBranch: projectInfo.git?.branch,
+		};
+		const debugInfo: SystemPromptDebug | undefined =
+			req.debug && req.startedAt != null && currentSessionId
+				? { uptimeSeconds: Math.floor((Date.now() - req.startedAt) / 1000), sessionId: currentSessionId }
+				: undefined;
+		const systemPrompt = buildSystemPrompt(skills.list(), instructions, { metadata, debug: debugInfo });
 
 		// Persist staged skills as real tool call/result pairs BEFORE the user message
 		// so they appear in the correct order in conversation history and survive reload.
@@ -206,6 +223,8 @@ export async function handlePrompt(req: PromptRequest) {
 			maxIterations: req.maxIterations,
 			logger: scopedLogger,
 			logDir: req.logDir,
+			debug: req.debug,
+			startedAt: req.startedAt,
 			onEvent(event) {
 				routeEventToWs(ws, event);
 			},

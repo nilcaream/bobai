@@ -110,6 +110,8 @@ const server = createServer({
 	skillDirectories,
 	logger,
 	logDir,
+	debug,
+	startedAt: Date.now(),
 });
 
 logger.info("SERVER", `Project: ${project.id}`);

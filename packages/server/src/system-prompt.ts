@@ -62,9 +62,22 @@ Context Compaction:
 - Do not mention compaction to the user unless they ask about it.`;
 }
 
+export interface SystemPromptMetadata {
+	date: string;
+	projectDir: string;
+	gitBranch?: string;
+}
+
+export interface SystemPromptDebug {
+	uptimeSeconds: number;
+	sessionId: string;
+}
+
 export interface SystemPromptOptions {
 	/** When true, builds the prompt for a subagent context (no task tool). */
 	subagent?: boolean;
+	metadata?: SystemPromptMetadata;
+	debug?: SystemPromptDebug;
 }
 
 export function buildSystemPrompt(
@@ -73,6 +86,20 @@ export function buildSystemPrompt(
 	options?: SystemPromptOptions,
 ): string {
 	const parts: string[] = [`<base>\n${buildBasePrompt(options)}\n</base>`];
+
+	if (options?.metadata) {
+		const { date, projectDir, gitBranch } = options.metadata;
+		const lines = [`- Date: ${date}`, `- Project: ${projectDir}`];
+		if (gitBranch !== undefined) {
+			lines.push(`- Branch: ${gitBranch}`);
+		}
+		parts.push(`<metadata>\n${lines.join("\n")}\n</metadata>`);
+	}
+
+	if (options?.debug) {
+		const { uptimeSeconds, sessionId } = options.debug;
+		parts.push(`<debug>\n- Time since restart: ${uptimeSeconds}s\n- Bob AI parent session ID: ${sessionId}\n</debug>`);
+	}
 
 	if (skills.length > 0) {
 		const listing = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");

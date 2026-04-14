@@ -7,10 +7,12 @@ import { compactToBudget } from "../compaction/compact-to-budget";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { PRE_PROMPT_TARGET } from "../compaction/strength";
 import { FileTime } from "../file/time";
+import { formatPromptDate } from "../format-date";
 import type { InstructionFile } from "../instructions";
 import type { Logger } from "../log/logger";
 import { runWithScope } from "../log/logger";
 import { subagentScope } from "../log/session-tag";
+import { getProjectInfo } from "../project-info";
 import { loadModelsConfig } from "../provider/copilot-models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import {
@@ -23,6 +25,7 @@ import {
 } from "../session/repository";
 import type { SkillRegistry } from "../skill/skill";
 import type { SubagentStatus } from "../subagent-status";
+import type { SystemPromptDebug, SystemPromptMetadata } from "../system-prompt";
 import { buildSystemPrompt } from "../system-prompt";
 import { bashTool } from "./bash";
 import { editFileTool } from "./edit-file";
@@ -65,6 +68,8 @@ export interface TaskToolDeps {
 	subagentStatus: SubagentStatus;
 	logger?: Logger;
 	logDir?: string;
+	debug?: boolean;
+	startedAt?: number;
 }
 
 export function createTaskTool(deps: TaskToolDeps): Tool {
@@ -83,6 +88,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		subagentStatus,
 		logger,
 		logDir,
+		debug,
+		startedAt,
 	} = deps;
 
 	return {
@@ -218,7 +225,17 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				});
 
 			// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
-			const subagentPrompt = buildSystemPrompt(skills.list(), instructions, { subagent: true });
+			const projectInfo = await getProjectInfo(projectRoot);
+			const metadata: SystemPromptMetadata = {
+				date: formatPromptDate(),
+				projectDir: projectRoot,
+				gitBranch: projectInfo.git?.branch,
+			};
+			const debugInfo: SystemPromptDebug | undefined =
+				debug && startedAt != null
+					? { uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), sessionId: childSessionId }
+					: undefined;
+			const subagentPrompt = buildSystemPrompt(skills.list(), instructions, { subagent: true, metadata, debug: debugInfo });
 			messages.unshift({ role: "system", content: subagentPrompt });
 
 			// Build tool registry without the task tool itself (no recursion)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { InstructionFile } from "../src/instructions";
 import type { Skill } from "../src/skill/skill";
-import { buildSystemPrompt } from "../src/system-prompt";
+import { buildSystemPrompt, type SystemPromptDebug, type SystemPromptMetadata } from "../src/system-prompt";
 
 describe("buildSystemPrompt", () => {
 	test("wraps base prompt in <base> tags", () => {
@@ -222,5 +222,131 @@ describe("buildSystemPrompt", () => {
 		const result = buildSystemPrompt(skills, instructions, { subagent: true });
 		expect(result).toContain("- **debugging**: Systematic debugging");
 		expect(result).toContain("Be helpful.");
+	});
+
+	// --- Metadata block ---
+
+	test("metadata block is included when metadata is provided", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon 14:32 UTC+2",
+			projectDir: "/home/user/projects/bobai",
+			gitBranch: "main",
+		};
+		const result = buildSystemPrompt([], [], { metadata });
+		expect(result).toContain("<metadata>");
+		expect(result).toContain("</metadata>");
+		expect(result).toContain("- Date: 2025-07-14 Mon 14:32 UTC+2");
+		expect(result).toContain("- Project: /home/user/projects/bobai");
+		expect(result).toContain("- Branch: main");
+	});
+
+	test("metadata block is omitted when metadata is not provided", () => {
+		const result = buildSystemPrompt([], []);
+		expect(result).not.toContain("<metadata>");
+		expect(result).not.toContain("</metadata>");
+	});
+
+	test("metadata block omits branch line when gitBranch is undefined", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon 14:32 UTC+2",
+			projectDir: "/home/user/projects/bobai",
+		};
+		const result = buildSystemPrompt([], [], { metadata });
+		expect(result).toContain("- Date: 2025-07-14 Mon 14:32 UTC+2");
+		expect(result).toContain("- Project: /home/user/projects/bobai");
+		expect(result).not.toContain("- Branch:");
+	});
+
+	test("metadata block appears after base and before skills", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon 14:32 UTC+2",
+			projectDir: "/home/user/projects/bobai",
+			gitBranch: "main",
+		};
+		const skills: Skill[] = [{ name: "tdd", description: "Test-driven development", content: "...", filePath: "/a/SKILL.md" }];
+		const result = buildSystemPrompt(skills, [], { metadata });
+		const baseIdx = result.indexOf("</base>");
+		const metadataIdx = result.indexOf("<metadata>");
+		const skillsIdx = result.indexOf("<skills>");
+		expect(metadataIdx).toBeGreaterThan(baseIdx);
+		expect(skillsIdx).toBeGreaterThan(metadataIdx);
+	});
+
+	test("metadata block appears after base and before instructions when no skills", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon 14:32 UTC+2",
+			projectDir: "/home/user/projects/bobai",
+			gitBranch: "main",
+		};
+		const instructions: InstructionFile[] = [{ type: "bobai-global", source: "/global/AGENT.md", content: "Be helpful." }];
+		const result = buildSystemPrompt([], instructions, { metadata });
+		const baseIdx = result.indexOf("</base>");
+		const metadataIdx = result.indexOf("<metadata>");
+		// Search after </base> to avoid matching literal text in base prompt
+		const afterBase = result.indexOf("</base>");
+		const instructionIdx = result.indexOf("<instructions", afterBase);
+		expect(metadataIdx).toBeGreaterThan(baseIdx);
+		expect(instructionIdx).toBeGreaterThan(metadataIdx);
+	});
+
+	// --- Debug block ---
+
+	test("debug block is included when debug metadata is provided", () => {
+		const debug: SystemPromptDebug = {
+			uptimeSeconds: 3642,
+			sessionId: "abc-123-def",
+		};
+		const result = buildSystemPrompt([], [], { debug });
+		expect(result).toContain("<debug>");
+		expect(result).toContain("</debug>");
+		expect(result).toContain("- Time since restart: 3642s");
+		expect(result).toContain("- Bob AI parent session ID: abc-123-def");
+	});
+
+	test("debug block is omitted when debug is not provided", () => {
+		const result = buildSystemPrompt([], []);
+		expect(result).not.toContain("<debug>");
+		expect(result).not.toContain("</debug>");
+	});
+
+	test("debug block appears after metadata and before skills", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon 14:32 UTC+2",
+			projectDir: "/home/user/projects/bobai",
+			gitBranch: "main",
+		};
+		const debug: SystemPromptDebug = {
+			uptimeSeconds: 100,
+			sessionId: "sess-001",
+		};
+		const skills: Skill[] = [{ name: "tdd", description: "Test-driven development", content: "...", filePath: "/a/SKILL.md" }];
+		const result = buildSystemPrompt(skills, [], { metadata, debug });
+		const metadataIdx = result.indexOf("<metadata>");
+		const debugIdx = result.indexOf("<debug>");
+		const skillsIdx = result.indexOf("<skills>");
+		expect(debugIdx).toBeGreaterThan(metadataIdx);
+		expect(skillsIdx).toBeGreaterThan(debugIdx);
+	});
+
+	test("subagent prompt includes metadata and debug blocks", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon 14:32 UTC+2",
+			projectDir: "/home/user/projects/bobai",
+			gitBranch: "feature-x",
+		};
+		const debug: SystemPromptDebug = {
+			uptimeSeconds: 999,
+			sessionId: "sub-abc",
+		};
+		const result = buildSystemPrompt([], [], { subagent: true, metadata, debug });
+		expect(result).toContain("<metadata>");
+		expect(result).toContain("- Date: 2025-07-14 Mon 14:32 UTC+2");
+		expect(result).toContain("- Project: /home/user/projects/bobai");
+		expect(result).toContain("- Branch: feature-x");
+		expect(result).toContain("</metadata>");
+		expect(result).toContain("<debug>");
+		expect(result).toContain("- Time since restart: 999s");
+		expect(result).toContain("- Bob AI parent session ID: sub-abc");
+		expect(result).toContain("</debug>");
 	});
 });

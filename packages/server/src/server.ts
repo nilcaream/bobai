@@ -5,6 +5,7 @@ import { compactToBudget } from "./compaction/compact-to-budget";
 import { createCompactionRegistry } from "./compaction/registry";
 import { NON_TOOL_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
+import { formatPromptDate } from "./format-date";
 import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
@@ -40,6 +41,8 @@ export interface ServerOptions {
 	skillDirectories?: string[];
 	logger?: Logger;
 	logDir?: string;
+	debug?: boolean;
+	startedAt?: number;
 }
 
 export function createServer(options: ServerOptions) {
@@ -133,7 +136,17 @@ export function createServer(options: ServerOptions) {
 				// Build a fresh system prompt with current skills and instructions
 				const skills = options.skills ?? { list: () => [], get: () => undefined };
 				const instructions = loadInstructions(options.configDir ?? "", options.projectRoot ?? process.cwd());
-				const systemPrompt = buildSystemPrompt(skills.list(), instructions);
+				const projectInfo = await getProjectInfo(options.projectRoot ?? process.cwd());
+				const metadata = {
+					date: formatPromptDate(),
+					projectDir: options.projectRoot ?? process.cwd(),
+					gitBranch: projectInfo.git?.branch,
+				};
+				const debugInfo =
+					options.debug && options.startedAt != null
+						? { uptimeSeconds: Math.floor((Date.now() - options.startedAt) / 1000), sessionId }
+						: undefined;
+				const systemPrompt = buildSystemPrompt(skills.list(), instructions, { metadata, debug: debugInfo });
 
 				// BACKWARD COMPAT: Sessions created before the dynamic system prompt change
 				// stored the system message in the DB at sort_order 0. Strip it — we always
@@ -512,6 +525,8 @@ export function createServer(options: ServerOptions) {
 								logger: options.logger,
 								logDir: options.logDir,
 								signal: controller.signal,
+								debug: options.debug,
+								startedAt: options.startedAt,
 							})
 								.catch((err) => {
 									send(ws, { type: "error", message: "Unexpected error" });
