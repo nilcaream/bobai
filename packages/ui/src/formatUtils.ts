@@ -230,9 +230,7 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 		sections.push("");
 		sections.push(`# Compaction reach at current multiplier (${stats.multiplier.toFixed(2)})`);
 		sections.push("");
-		sections.push(
-			"| role / tool | type | threshold | base distance | calculated distance | untouched | compacted | evicted |",
-		);
+		sections.push("| role / tool | type | threshold | base distance | calculated distance | untouched | compacted | evicted |");
 		sections.push("|---|---|---|---|---|---|---|---|");
 		for (const entry of stats.toolReach) {
 			if (entry.threshold === -1) {

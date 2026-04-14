@@ -117,7 +117,7 @@ export function handleSessionCommand(params: {
 		}
 		// Pick the first match, applying self/owned rules
 		const currentId = params.getSessionId();
-		const first = matches[0]!;
+		const first = matches[0] as (typeof matches)[0];
 		if (first.id === currentId) {
 			// Self — silently no-op (idempotent)
 			return;
