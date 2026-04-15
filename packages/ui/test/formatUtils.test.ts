@@ -422,8 +422,9 @@ describe("formatCompactionSummary", () => {
 		expect(result).toContain(
 			"| role / tool | type | threshold | base distance | calculated distance | untouched | compacted | evicted |",
 		);
-		expect(result).toContain("| grep_search | output | 0.20 | 100 | 150 | 0-29 | 30-149 | 150+ |");
-		expect(result).toContain("| read_file | output | 0.30 | 100 | 150 | 0-44 | 45-149 | 150+ |");
+		// maxDistance = 80 - 1 = 79, so eviction (150) is unreachable, compacted range capped at 79
+		expect(result).toContain("| grep_search | output | 0.20 | 100 | 150 | 0-29 | 30-79 | never |");
+		expect(result).toContain("| read_file | output | 0.30 | 100 | 150 | 0-44 | 45-79 | never |");
 		expect(result).toContain("| task | output | 0.80 | 100 | 0 | always | never | never |");
 		expect(result).toContain("| user | — | — | — | — | always | never | never |");
 	});
@@ -456,7 +457,71 @@ describe("formatCompactionSummary", () => {
 		};
 		const result = formatCompactionSummary(stats);
 
-		// minimumDistance=0 but evictionDistance>0: untouched=always, compacted=never, evicted=300+
-		expect(result).toContain("| skill | output | 0.00 | 200 | 300 | always | never | 300+ |");
+		// maxDistance = 40 - 1 = 39, eviction (300) is unreachable
+		expect(result).toContain("| skill | output | 0.00 | 200 | 300 | always | never | never |");
+	});
+
+	test("compaction reach with reachable eviction distance", () => {
+		const stats: CompactionStats = {
+			multiplier: 2.0,
+			iterations: 1,
+			charsBefore: 10000,
+			charsAfter: 8000,
+			charBudget: 9000,
+			charsPerToken: 3.5,
+			type: "pre-prompt",
+			parameters: { defaultMaxDistance: 100 },
+			estimatedContextNeeded: 0.65,
+			target: 0.8,
+			elapsedMs: 5.0,
+			messagesBefore: { total: 500 },
+			messagesAfter: { total: 500 },
+			toolReach: [
+				{
+					name: "grep_search",
+					type: "output",
+					threshold: 0.2,
+					baseDistance: 100,
+					minimumDistance: 40,
+					evictionDistance: 200,
+				},
+			],
+		};
+		const result = formatCompactionSummary(stats);
+
+		// maxDistance = 500 - 1 = 499, eviction (200) is reachable
+		expect(result).toContain("| grep_search | output | 0.20 | 100 | 200 | 0-39 | 40-199 | 200-499 |");
+	});
+
+	test("compaction reach where compaction itself is unreachable", () => {
+		const stats: CompactionStats = {
+			multiplier: 2.0,
+			iterations: 1,
+			charsBefore: 10000,
+			charsAfter: 8000,
+			charBudget: 9000,
+			charsPerToken: 3.5,
+			type: "pre-prompt",
+			parameters: { defaultMaxDistance: 100 },
+			estimatedContextNeeded: 0.65,
+			target: 0.8,
+			elapsedMs: 5.0,
+			messagesBefore: { total: 20 },
+			messagesAfter: { total: 20 },
+			toolReach: [
+				{
+					name: "task",
+					type: "output",
+					threshold: 0.7,
+					baseDistance: 300,
+					minimumDistance: 420,
+					evictionDistance: 600,
+				},
+			],
+		};
+		const result = formatCompactionSummary(stats);
+
+		// maxDistance = 19, both compaction (420) and eviction (600) unreachable
+		expect(result).toContain("| task | output | 0.70 | 300 | 600 | always | never | never |");
 	});
 });
