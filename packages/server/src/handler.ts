@@ -43,6 +43,7 @@ import { createSkillTool } from "./tool/skill";
 import { sqlite3Tool } from "./tool/sqlite3";
 import { createTaskTool } from "./tool/task";
 import { createToolRegistry } from "./tool/tool";
+import { webFetchTool } from "./tool/web-fetch";
 import { writeFileTool } from "./tool/write-file";
 
 // TODO: Module-level singleton accumulates entries forever. Consider per-session scoping
@@ -245,6 +246,7 @@ export async function handlePrompt(req: PromptRequest) {
 			grepSearchTool,
 			bashTool,
 			sqlite3Tool,
+			webFetchTool,
 			taskTool,
 			skillTool,
 		]);

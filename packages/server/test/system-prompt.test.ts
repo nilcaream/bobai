@@ -32,6 +32,7 @@ describe("buildSystemPrompt", () => {
 		expect(result).toContain("edit_file");
 		expect(result).toContain("grep_search");
 		expect(result).toContain("bash");
+		expect(result).toContain("web_fetch");
 	});
 
 	test("mentions task tool for subagent delegation", () => {
@@ -199,6 +200,7 @@ describe("buildSystemPrompt", () => {
 		expect(result).toContain("- grep_search:");
 		expect(result).toContain("- bash:");
 		expect(result).toContain("- sqlite3:");
+		expect(result).toContain("- web_fetch:");
 		expect(result).toContain("- skill:");
 	});
 

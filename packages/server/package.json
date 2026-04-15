@@ -10,11 +10,13 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.0.0",
-		"@types/bun": "latest"
+		"@types/bun": "latest",
+		"@types/turndown": "^5.0.6"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.81.0",
 		"diff": "^8.0.4",
-		"gray-matter": "^4.0.3"
+		"gray-matter": "^4.0.3",
+		"turndown": "^7.2.4"
 	}
 }

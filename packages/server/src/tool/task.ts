@@ -37,6 +37,7 @@ import { createSkillTool } from "./skill";
 import { sqlite3Tool } from "./sqlite3";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { createToolRegistry } from "./tool";
+import { webFetchTool } from "./web-fetch";
 import { writeFileTool } from "./write-file";
 
 /** Compaction threshold for the task tool's output. */
@@ -249,6 +250,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				grepSearchTool,
 				bashTool,
 				sqlite3Tool,
+				webFetchTool,
 				skillTool,
 			]);
 

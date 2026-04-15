@@ -11,6 +11,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 	bash: "Execute a bash command in the project directory. Use for running tests, builds, linters, git, and other shell operations.",
 	sqlite3:
 		"Execute a SQL query against a SQLite database in the project directory. Use for querying, creating, and modifying SQLite databases without needing sqlite3 installed on the system.",
+	web_fetch:
+		"Fetch a web page and return its content as markdown, text, or HTML. Uses content negotiation to prefer markdown for token efficiency.",
 	task: "Launch a subagent to handle complex, multi-step tasks autonomously. Each subagent runs independently with its own tool access (except task). Use for tasks that can run in isolation — exploring code, researching patterns, or implementing discrete features. For exploratory/read-only tasks, instruct the subagent to avoid edit_file and write_file.",
 	skill:
 		"Load a skill by name to get specialized instructions and workflows. Use when a task matches an available skill's description.",
@@ -24,10 +26,21 @@ const PARENT_TOOLS = [
 	"grep_search",
 	"bash",
 	"sqlite3",
+	"web_fetch",
 	"task",
 	"skill",
 ];
-const SUBAGENT_TOOLS = ["read_file", "list_directory", "write_file", "edit_file", "grep_search", "bash", "sqlite3", "skill"];
+const SUBAGENT_TOOLS = [
+	"read_file",
+	"list_directory",
+	"write_file",
+	"edit_file",
+	"grep_search",
+	"bash",
+	"sqlite3",
+	"web_fetch",
+	"skill",
+];
 
 const SUBAGENT_NOTE = `
 Note: You are running as a subagent (spawned by the \`task\` tool). The \`task\` tool is not available in this context — you cannot create nested subagents. Complete your work directly using the tools listed above.`;

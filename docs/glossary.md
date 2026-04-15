@@ -137,7 +137,7 @@ tool has:
 - A **mergeable** flag — when true, the UI can visually merge adjacent results.
 
 Built-in tools: `read_file`, `list_directory`, `file_search`, `write_file`,
-`edit_file`, `grep_search`, `bash`, `sqlite3`, `task`, `skill`.
+`edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `task`, `skill`.
 
 ### Skill
 

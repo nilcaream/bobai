@@ -12,6 +12,7 @@ import { readFileTool } from "../src/tool/read-file";
 import { createSkillTool } from "../src/tool/skill";
 import { sqlite3Tool } from "../src/tool/sqlite3";
 import { createTaskTool } from "../src/tool/task";
+import { webFetchTool } from "../src/tool/web-fetch";
 import { writeFileTool } from "../src/tool/write-file";
 
 // ---------------------------------------------------------------------------
@@ -108,6 +109,12 @@ describe("threshold values", () => {
 		expect(sqlite3Tool.baseDistance).toBe(150);
 	});
 
+	test("web_fetch: outputThreshold = 0.35, baseDistance = 150", () => {
+		expect(webFetchTool.outputThreshold).toBe(0.35);
+		expect(webFetchTool.argsThreshold).toBeUndefined();
+		expect(webFetchTool.baseDistance).toBe(150);
+	});
+
 	test("write_file: argsThreshold = 0.50, no outputThreshold, baseDistance = 150", () => {
 		expect(writeFileTool.argsThreshold).toBe(0.5);
 		expect(writeFileTool.outputThreshold).toBeUndefined();
@@ -165,6 +172,10 @@ describe("compact() method presence", () => {
 		expect(typeof sqlite3Tool.compact).toBe("function");
 	});
 
+	test("web_fetch has compact()", () => {
+		expect(typeof webFetchTool.compact).toBe("function");
+	});
+
 	test("task has compact()", () => {
 		expect(typeof makeTaskTool().compact).toBe("function");
 	});
@@ -213,6 +224,10 @@ describe("compactArgs() method presence", () => {
 
 	test("sqlite3 has NO compactArgs()", () => {
 		expect(sqlite3Tool.compactArgs).toBeUndefined();
+	});
+
+	test("web_fetch has NO compactArgs()", () => {
+		expect(webFetchTool.compactArgs).toBeUndefined();
 	});
 });
 
@@ -752,6 +767,40 @@ describe("sqlite3 compact()", () => {
 });
 
 // ---------------------------------------------------------------------------
+// web_fetch compact()
+// ---------------------------------------------------------------------------
+
+describe("web_fetch compact()", () => {
+	const compact = requireMethod(webFetchTool.compact, "web_fetch.compact");
+
+	test("preserves error messages", () => {
+		expect(compact("Error: HTTP 404 Not Found", { url: "https://example.com" })).toBe("Error: HTTP 404 Not Found");
+	});
+
+	test("preserves short output (20 lines or fewer)", () => {
+		const short = makeLines(20, "content");
+		expect(compact(short, { url: "https://example.com" })).toBe(short);
+	});
+
+	test("compacts output longer than 20 lines — keeps first 15", () => {
+		const lines = makeLines(50, "content");
+		const result = compact(lines, { url: "https://example.com/page" });
+		expect(result).toContain(COMPACTION_MARKER);
+		expect(result).toContain("web_fetch(https://example.com/page)");
+		expect(result).toContain("first 15 of 50 lines");
+		expect(result).toContain("content 1");
+		expect(result).toContain("content 15");
+		expect(result).not.toContain("content 16");
+	});
+
+	test("uses '?' for missing url", () => {
+		const lines = makeLines(30, "content");
+		const result = compact(lines, {});
+		expect(result).toContain("web_fetch(?)");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Old interface fields should NOT exist
 // ---------------------------------------------------------------------------
 
@@ -797,5 +846,9 @@ describe("old interface fields removed", () => {
 
 	test("task has no compactionResistance", () => {
 		expectNoKey(makeTaskTool(), "compactionResistance");
+	});
+
+	test("web_fetch has no compactionResistance", () => {
+		expectNoKey(webFetchTool, "compactionResistance");
 	});
 });
