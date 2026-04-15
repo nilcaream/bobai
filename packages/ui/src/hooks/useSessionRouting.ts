@@ -5,7 +5,7 @@ export function useSessionRouting(
 	loadSession: (id: string, opts?: { skipUrlUpdate?: boolean }) => Promise<boolean>,
 	newChat: () => void,
 	setWelcomeMarkdown: (md: string | null) => void,
-	setVolatileMessage: (msg: { text: string; kind: "error" | "success" } | null) => void,
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void,
 	isStreaming: boolean,
 	connected: boolean,
 	getSessionId: () => string | null,
@@ -19,7 +19,7 @@ export function useSessionRouting(
 		if (urlSessionId) {
 			loadSession(urlSessionId, { skipUrlUpdate: true }).then((success) => {
 				if (!success) {
-					setVolatileMessage({ text: "Session not found", kind: "error" });
+					addVolatileMessage("Session not found", "error");
 				}
 			});
 		} else {

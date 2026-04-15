@@ -50,8 +50,9 @@ export function App() {
 		loadSession,
 		getSessionId,
 		setSessionId,
-		volatileMessage,
-		setVolatileMessage,
+		volatileMessages,
+		addVolatileMessage,
+		clearVolatileMessages,
 		sessionLocked,
 		viewingSubagentId,
 		viewingSubagentTitle,
@@ -87,7 +88,7 @@ export function App() {
 		loadSession,
 		newChat,
 		setWelcomeMarkdown,
-		setVolatileMessage,
+		addVolatileMessage,
 		isStreaming,
 		connected,
 		getSessionId,
@@ -218,8 +219,6 @@ export function App() {
 		const text = input.trim();
 		if (!text || !connected) return;
 
-		setVolatileMessage(null);
-
 		const parsed = parseDotInput(text, activeDotCommands);
 
 		// When session is locked, only .new and .session commands are allowed
@@ -270,7 +269,7 @@ export function App() {
 					setStatus,
 					defaultStatus: defaultStatus.current,
 					setView,
-					setVolatileMessage,
+					addVolatileMessage,
 				});
 			} else if (parsed.command === "subagent") {
 				handleSubagentCommand({
@@ -280,7 +279,7 @@ export function App() {
 					peekSubagentWithScroll,
 					peekSubagentFromDbWithScroll,
 					setStagedSkills,
-					setVolatileMessage,
+					addVolatileMessage,
 				});
 			} else {
 				handleGenericCommand({
@@ -291,7 +290,7 @@ export function App() {
 					setModel,
 					setTitle,
 					setStatus,
-					setVolatileMessage,
+					addVolatileMessage,
 					modelList,
 				});
 			}
@@ -340,20 +339,20 @@ export function App() {
 		if (slashParsed) {
 			if (slashParsed.matches.length === 1) {
 				const name = slashParsed.matches[0]?.name;
-				if (name) handleSlashCommand({ name, stagedSkills, setStagedSkills });
+				if (name) handleSlashCommand({ name, stagedSkills, setStagedSkills, addVolatileMessage });
 			}
 			clearInput();
 			return;
 		}
 
 		if (parentId) {
-			setVolatileMessage({ text: "Subagent sessions are read-only", kind: "error" });
+			addVolatileMessage("Subagent sessions are read-only", "error");
 			clearInput();
 			return;
 		}
 
 		if (view.mode === "context" || view.mode === "compaction") {
-			setVolatileMessage({ text: "Read-only view", kind: "error" });
+			addVolatileMessage("Read-only view", "error");
 			clearInput();
 			return;
 		}
@@ -362,6 +361,7 @@ export function App() {
 		autoScrollRef.current = true;
 		setView((prev) => ({ ...prev, mode: "chat" }));
 		setWelcomeMarkdown(null);
+		clearVolatileMessages();
 		sendPrompt(text, stagedSkills.length > 0 ? stagedSkills : undefined);
 		setStagedSkills([]);
 		resetHistory();
@@ -472,20 +472,13 @@ export function App() {
 					))}
 			</div>
 
-			{volatileMessage && (
-				<div className={`panel panel--volatile panel--volatile-${volatileMessage.kind}`}>{volatileMessage.text}</div>
-			)}
-
-			{stagedSkills.length > 0 && (
-				<div className="panel panel--tool">
-					{stagedSkills.map((s, i) => (
-						<div key={s.name}>
-							{`▸ Staging ${s.name} skill`}
-							{i < stagedSkills.length - 1 ? "  " : ""}
-						</div>
-					))}
+			{volatileMessages.map((msg, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: volatile messages have no stable ID
+				<div key={i} className={`panel panel--volatile panel--volatile-${msg.kind}`}>
+					{msg.text}
 				</div>
-			)}
+			))}
+
 			<DotCommandPanel
 				parsed={parsedDotInput}
 				modelList={modelList}

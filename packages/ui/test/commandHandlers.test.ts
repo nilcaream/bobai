@@ -256,7 +256,7 @@ describe("handleSessionCommand", () => {
 			setStatus: mock(() => {}),
 			defaultStatus: "idle",
 			setView: mock(() => {}),
-			setVolatileMessage: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
 			...overrides,
 		};
 	}
@@ -264,35 +264,26 @@ describe("handleSessionCommand", () => {
 	test("empty arg is a no-op", () => {
 		const params = makeParams({ arg: "" });
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
 	test("null sessionList sets volatile error", () => {
 		const params = makeParams({ arg: "1", sessionList: null });
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Session list not loaded",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session list not loaded", "error");
 	});
 
 	test("invalid index sets volatile error", () => {
 		const params = makeParams({ arg: "99" });
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Invalid session index: 99",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid session index: 99", "error");
 	});
 
 	test("non-numeric arg triggers text search (no longer treated as invalid index)", () => {
 		const params = makeParams({ arg: "xyz" });
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: 'No session matching "xyz"',
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "xyz"', "error");
 	});
 
 	// -- Delete subcommand --
@@ -301,10 +292,7 @@ describe("handleSessionCommand", () => {
 		// Session 2 (bbb) is owned=true, and current session is "current-id" (not bbb)
 		const params = makeParams({ arg: "2 delete" });
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Cannot delete: session is active in another tab",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Cannot delete: session is active in another tab", "error");
 	});
 
 	test("delete current session clears state then fetches DELETE", async () => {
@@ -327,10 +315,7 @@ describe("handleSessionCommand", () => {
 		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/session/aaa", { method: "DELETE" });
 
 		await flushPromises();
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: 'Session aaa "Session A" has been removed',
-			kind: "success",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('Session aaa "Session A" has been removed', "success");
 	});
 
 	test("delete non-self non-owned session fetches DELETE without clearing state", async () => {
@@ -347,10 +332,7 @@ describe("handleSessionCommand", () => {
 
 		await flushPromises();
 		// No title → just id
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Session aaa has been removed",
-			kind: "success",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session aaa has been removed", "success");
 	});
 
 	test("delete with ok:false sets error from response", async () => {
@@ -359,10 +341,7 @@ describe("handleSessionCommand", () => {
 		handleSessionCommand(params);
 		await flushPromises();
 
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "DB error",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("DB error", "error");
 	});
 
 	test("delete with ok:false and no error field uses fallback message", async () => {
@@ -371,10 +350,7 @@ describe("handleSessionCommand", () => {
 		handleSessionCommand(params);
 		await flushPromises();
 
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Failed to delete session",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to delete session", "error");
 	});
 
 	test("delete fetch failure sets volatile error", async () => {
@@ -383,10 +359,7 @@ describe("handleSessionCommand", () => {
 		handleSessionCommand(params);
 		await flushPromises();
 
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Failed to delete session",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to delete session", "error");
 	});
 
 	// -- Session switching --
@@ -398,16 +371,13 @@ describe("handleSessionCommand", () => {
 		});
 		handleSessionCommand(params);
 		expect(params.loadSession).not.toHaveBeenCalled();
-		expect(params.setVolatileMessage).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 
 	test("switching to owned-by-other session sets error", () => {
 		const params = makeParams({ arg: "2" }); // bbb, owned=true
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Session is active in another tab",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session is active in another tab", "error");
 		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
@@ -432,10 +402,7 @@ describe("handleSessionCommand", () => {
 	test("unknown subcommand sets volatile error", () => {
 		const params = makeParams({ arg: "1 fix" });
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Unknown subcommand: fix",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Unknown subcommand: fix", "error");
 		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
@@ -472,10 +439,7 @@ describe("handleSessionCommand", () => {
 			sessionList: [{ index: 1, id: "s1", title: "implement tests", updatedAt: "2024-01-01", owned: false }],
 		});
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: 'No session matching "nonexistent"',
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "nonexistent"', "error");
 	});
 
 	test("text search: first match is self — silently no-op", () => {
@@ -489,7 +453,7 @@ describe("handleSessionCommand", () => {
 		});
 		handleSessionCommand(params);
 		expect(params.loadSession).not.toHaveBeenCalled();
-		expect(params.setVolatileMessage).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 
 	test("text search: first match is owned by another tab — shows error", () => {
@@ -501,10 +465,7 @@ describe("handleSessionCommand", () => {
 			],
 		});
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Session is active in another tab",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session is active in another tab", "error");
 		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
@@ -526,10 +487,7 @@ describe("handleSessionCommand", () => {
 			sessionList: [{ index: 1, id: "s1", title: null, updatedAt: "2024-01-01", owned: false }],
 		});
 		handleSessionCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: 'No session matching "test"',
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "test"', "error");
 	});
 });
 
@@ -556,7 +514,7 @@ describe("handleSubagentCommand", () => {
 			peekSubagentWithScroll: mock(() => {}),
 			peekSubagentFromDbWithScroll: mock(() => {}),
 			setStagedSkills: mock(() => {}),
-			setVolatileMessage: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
 			...overrides,
 		};
 	}
@@ -566,34 +524,25 @@ describe("handleSubagentCommand", () => {
 		handleSubagentCommand(params);
 		expect(params.peekSubagentWithScroll).not.toHaveBeenCalled();
 		expect(params.peekSubagentFromDbWithScroll).not.toHaveBeenCalled();
-		expect(params.setVolatileMessage).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 
 	test("null subagentList sets volatile error", () => {
 		const params = makeParams({ arg: "1", subagentList: null });
 		handleSubagentCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Subagent list not loaded",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Subagent list not loaded", "error");
 	});
 
 	test("invalid index sets volatile error", () => {
 		const params = makeParams({ arg: "99" });
 		handleSubagentCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Invalid subagent index: 99",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid subagent index: 99", "error");
 	});
 
 	test("non-numeric arg sets volatile error", () => {
 		const params = makeParams({ arg: "foo" });
 		handleSubagentCommand(params);
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Invalid subagent index: foo",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid subagent index: foo", "error");
 	});
 
 	test("valid index with live (running) subagent calls peekSubagentWithScroll", () => {
@@ -637,7 +586,7 @@ describe("handleGenericCommand", () => {
 			setModel: mock(() => {}),
 			setTitle: mock(() => {}),
 			setStatus: mock(() => {}),
-			setVolatileMessage: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
 			modelList: null as { index: number; id: string; cost: string }[] | null,
 			...overrides,
 		};
@@ -738,10 +687,7 @@ describe("handleGenericCommand", () => {
 		handleGenericCommand(params);
 		await flushPromises();
 
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Bad command",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Bad command", "error");
 	});
 
 	test("on failure (ok: false) without error field, uses fallback", async () => {
@@ -750,10 +696,7 @@ describe("handleGenericCommand", () => {
 		handleGenericCommand(params);
 		await flushPromises();
 
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Command failed",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Command failed", "error");
 	});
 
 	test("on fetch error, sets volatile error with generic message", async () => {
@@ -762,10 +705,7 @@ describe("handleGenericCommand", () => {
 		handleGenericCommand(params);
 		await flushPromises();
 
-		expect(params.setVolatileMessage).toHaveBeenCalledWith({
-			text: "Failed to execute command",
-			kind: "error",
-		});
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
 	});
 
 	test("includes null sessionId when getSessionId returns null", async () => {
@@ -861,6 +801,7 @@ describe("handleSlashCommand", () => {
 			name: "test-skill",
 			stagedSkills: [] as { name: string; content: string }[],
 			setStagedSkills: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
 			...overrides,
 		};
 	}
@@ -920,6 +861,14 @@ describe("handleSlashCommand", () => {
 		await flushPromises();
 
 		expect(params.setStagedSkills).not.toHaveBeenCalled();
+	});
+
+	test("successful staging adds volatile info message", async () => {
+		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ name: "test-skill", content: "content" })));
+		const params = makeParams();
+		handleSlashCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("▸ Staging test-skill skill", "info");
 	});
 
 	test("does not deduplicate against different skill names", async () => {

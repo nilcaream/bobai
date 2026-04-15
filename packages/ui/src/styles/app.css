@@ -183,6 +183,10 @@ body,
 	border-left-color: var(--accent-tool-success);
 }
 
+.panel--volatile-info {
+	border-left-color: var(--accent-tool-success);
+}
+
 .context-header {
 	font-weight: 700;
 	color: var(--text-status);

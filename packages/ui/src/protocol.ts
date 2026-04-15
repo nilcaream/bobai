@@ -32,6 +32,8 @@ export type ProjectInfo = {
 
 export type StagedSkill = { name: string; content: string };
 
+export type VolatileMessage = { text: string; kind: "error" | "success" | "info" };
+
 export type MessagePart =
 	| { type: "text"; content: string }
 	| { type: "tool_call"; id: string; content: string }

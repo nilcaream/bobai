@@ -4,7 +4,7 @@ import { formatTimestamp } from "./format";
 import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useSubagentPeek } from "./hooks/useSubagentPeek";
 import { appendPart, appendText } from "./messageBuilder";
-import type { Message, MessagePart, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo } from "./protocol";
+import type { Message, MessagePart, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo, VolatileMessage } from "./protocol";
 import { buildSessionUrl } from "./urlUtils";
 
 export function useWebSocket() {
@@ -19,11 +19,17 @@ export function useWebSocket() {
 	const [parentId, setParentId] = useState<string | null>(null);
 	const [parentTitle, setParentTitle] = useState<string | null>(null);
 	const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
-	const [volatileMessage, setVolatileMessage] = useState<{ text: string; kind: "error" | "success" } | null>(null);
+	const [volatileMessages, setVolatileMessages] = useState<VolatileMessage[]>([]);
 	const [sessionLocked, setSessionLocked] = useState(false);
 	const [welcomeMarkdown, setWelcomeMarkdown] = useState<string | null>(null);
 	const sessionId = useRef<string | null>(null);
 	const dbDisconnected = useRef(false);
+	const addVolatileMessage = useCallback((text: string, kind: VolatileMessage["kind"]) => {
+		setVolatileMessages((prev) => [...prev, { text, kind }]);
+	}, []);
+	const clearVolatileMessages = useCallback(() => {
+		setVolatileMessages([]);
+	}, []);
 	const eventRouter = useRef(createEventRouter());
 	const messagesRef = useRef<Message[]>([]);
 	const autoScrollRef = useRef(true);
@@ -79,7 +85,7 @@ export function useWebSocket() {
 			// Session-level concerns — handle before the event router
 			if (msg.type === "session_created") {
 				sessionId.current = msg.sessionId;
-				if (!dbDisconnected.current) setVolatileMessage(null);
+				clearVolatileMessages();
 				history.pushState(null, "", buildSessionUrl(msg.sessionId));
 				sendSubscribe(msg.sessionId);
 				return;
@@ -87,22 +93,22 @@ export function useWebSocket() {
 
 			if (msg.type === "session_locked") {
 				setSessionLocked(true);
-				setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
+				addVolatileMessage("Session is active in another tab", "error");
 				return;
 			}
 
 			if (msg.type === "session_subscribed") {
 				setSessionLocked(false);
-				if (!dbDisconnected.current) setVolatileMessage(null);
+				clearVolatileMessages();
 				return;
 			}
 
 			if (msg.type === "db_disconnected") {
 				dbDisconnected.current = true;
-				setVolatileMessage({
-					text: "Database file was replaced or deleted. Session data can no longer be saved. Restart the server.",
-					kind: "error",
-				});
+				addVolatileMessage(
+					"Database file was replaced or deleted. Session data can no longer be saved. Restart the server.",
+					"error",
+				);
 				setIsStreaming(false);
 				return;
 			}
@@ -257,7 +263,15 @@ export function useWebSocket() {
 		ws.current = socket;
 		fetchProjectInfo();
 		return () => socket.close();
-	}, [fetchProjectInfo, sendSubscribe, viewingSubagentIdRef, parentMessagesRef, parentStatusRef]);
+	}, [
+		fetchProjectInfo,
+		sendSubscribe,
+		viewingSubagentIdRef,
+		parentMessagesRef,
+		parentStatusRef,
+		addVolatileMessage,
+		clearVolatileMessages,
+	]);
 
 	// Warn user before navigating away during active generation
 	useEffect(() => {
@@ -275,10 +289,6 @@ export function useWebSocket() {
 			if (isStreaming) return;
 
 			if (dbDisconnected.current) {
-				setVolatileMessage({
-					text: "Database file was replaced or deleted. Session data can no longer be saved. Restart the server.",
-					kind: "error",
-				});
 				return;
 			}
 
@@ -288,7 +298,7 @@ export function useWebSocket() {
 			}
 			eventRouter.current.clearAllBuffers();
 			setSubagents([]);
-			if (!dbDisconnected.current) setVolatileMessage(null);
+			clearVolatileMessages();
 
 			setIsStreaming(true);
 			// When staged skills are present, the server sends prompt_echo after skill
@@ -311,7 +321,7 @@ export function useWebSocket() {
 			fetchProjectInfo();
 			ws.current.send(JSON.stringify(payload));
 		},
-		[isStreaming, fetchProjectInfo, exitSubagentPeek, viewingSubagentIdRef],
+		[isStreaming, fetchProjectInfo, exitSubagentPeek, viewingSubagentIdRef, clearVolatileMessages],
 	);
 
 	const sendCancel = useCallback(() => {
@@ -338,10 +348,17 @@ export function useWebSocket() {
 		setSubagents([]);
 		setParentId(null);
 		setParentTitle(null);
-		if (!dbDisconnected.current) setVolatileMessage(null);
+		clearVolatileMessages();
 		setSessionLocked(false);
 		history.pushState(null, "", "/bobai");
-	}, [sendUnsubscribe, viewingSubagentIdRef, setViewingSubagentId, setViewingSubagentTitle, parentMessagesRef]);
+	}, [
+		sendUnsubscribe,
+		viewingSubagentIdRef,
+		setViewingSubagentId,
+		setViewingSubagentTitle,
+		parentMessagesRef,
+		clearVolatileMessages,
+	]);
 
 	const { loadSession } = useSessionLoader({
 		sessionId,
@@ -353,7 +370,8 @@ export function useWebSocket() {
 		setParentTitle,
 		setSubagents,
 		setStatus,
-		setVolatileMessage,
+		addVolatileMessage,
+		clearVolatileMessages,
 		setSessionLocked,
 		setWelcomeMarkdown,
 		viewingSubagentIdRef,
@@ -388,8 +406,9 @@ export function useWebSocket() {
 			history.replaceState(null, "", buildSessionUrl(id));
 			sendSubscribe(id);
 		},
-		volatileMessage,
-		setVolatileMessage,
+		volatileMessages,
+		addVolatileMessage,
+		clearVolatileMessages,
 		sessionLocked,
 		viewingSubagentId,
 		viewingSubagentTitle,

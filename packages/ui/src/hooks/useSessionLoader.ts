@@ -14,7 +14,8 @@ interface UseSessionLoaderOptions {
 	setParentTitle: React.Dispatch<React.SetStateAction<string | null>>;
 	setSubagents: React.Dispatch<React.SetStateAction<SubagentInfo[]>>;
 	setStatus: React.Dispatch<React.SetStateAction<string>>;
-	setVolatileMessage: React.Dispatch<React.SetStateAction<{ text: string; kind: "error" | "success" } | null>>;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	clearVolatileMessages: () => void;
 	setSessionLocked: React.Dispatch<React.SetStateAction<boolean>>;
 	setWelcomeMarkdown: React.Dispatch<React.SetStateAction<string | null>>;
 	viewingSubagentIdRef: React.MutableRefObject<string | null>;
@@ -35,7 +36,8 @@ export function useSessionLoader({
 	setParentTitle,
 	setSubagents,
 	setStatus,
-	setVolatileMessage,
+	addVolatileMessage,
+	clearVolatileMessages,
 	setSessionLocked,
 	setWelcomeMarkdown,
 	viewingSubagentIdRef,
@@ -66,7 +68,7 @@ export function useSessionLoader({
 						// Session is owned by another tab — go straight to locked state
 						sessionId.current = targetId;
 						setSessionLocked(true);
-						setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
+						addVolatileMessage("Session is active in another tab", "error");
 						setMessages([]);
 						if (!options?.skipUrlUpdate) {
 							history.pushState(null, "", buildSessionUrl(targetId));
@@ -97,7 +99,7 @@ export function useSessionLoader({
 				// even if the user was scrolled up in the previous session.
 				autoScrollRef.current = true;
 				setMessages(reconstructMessages(data.messages));
-				setVolatileMessage(null);
+				clearVolatileMessages();
 
 				if (!options?.skipUrlUpdate) {
 					history.pushState(null, "", buildSessionUrl(data.session.id));
@@ -131,7 +133,8 @@ export function useSessionLoader({
 			setParentTitle,
 			setSubagents,
 			setStatus,
-			setVolatileMessage,
+			addVolatileMessage,
+			clearVolatileMessages,
 			setSessionLocked,
 			setWelcomeMarkdown,
 			viewingSubagentIdRef,

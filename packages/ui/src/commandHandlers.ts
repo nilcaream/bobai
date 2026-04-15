@@ -7,7 +7,7 @@ import type { StagedSkill, SubagentInfo } from "./protocol";
 // ---------------------------------------------------------------------------
 
 interface VolatileMessageSetter {
-	setVolatileMessage: (msg: { text: string; kind: "error" | "success" } | null) => void;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,14 +88,14 @@ export function handleSessionCommand(params: {
 	setStatus: (status: string) => void;
 	defaultStatus: string;
 	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
-	setVolatileMessage: VolatileMessageSetter["setVolatileMessage"];
+	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
 }): void {
 	if (!params.arg) {
 		// .session with space but no number — no-op (list is in dot panel)
 		return;
 	}
 	if (!params.sessionList) {
-		params.setVolatileMessage({ text: "Session list not loaded", kind: "error" });
+		params.addVolatileMessage("Session list not loaded", "error");
 		return;
 	}
 
@@ -112,7 +112,7 @@ export function handleSessionCommand(params: {
 			return words.every((w) => lower.includes(w));
 		});
 		if (matches.length === 0) {
-			params.setVolatileMessage({ text: `No session matching "${params.arg}"`, kind: "error" });
+			params.addVolatileMessage(`No session matching "${params.arg}"`, "error");
 			return;
 		}
 		// Pick the first match, applying self/owned rules
@@ -123,7 +123,7 @@ export function handleSessionCommand(params: {
 			return;
 		}
 		if (first.owned) {
-			params.setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
+			params.addVolatileMessage("Session is active in another tab", "error");
 			return;
 		}
 		params.loadSession(first.id);
@@ -137,20 +137,20 @@ export function handleSessionCommand(params: {
 	const subcommand = parts[1];
 	const targetSession = params.sessionList.find((s) => s.index === index);
 	if (!targetSession) {
-		params.setVolatileMessage({ text: `Invalid session index: ${firstWord}`, kind: "error" });
+		params.addVolatileMessage(`Invalid session index: ${firstWord}`, "error");
 		return;
 	}
 
 	// Delete subcommand: .session N delete (only recognized subcommand)
 	if (subcommand) {
 		if (subcommand !== "delete") {
-			params.setVolatileMessage({ text: `Unknown subcommand: ${subcommand}`, kind: "error" });
+			params.addVolatileMessage(`Unknown subcommand: ${subcommand}`, "error");
 			return;
 		}
 		const isTargetSelf = targetSession.id === params.getSessionId();
 		const isOwnedByOther = targetSession.owned && !isTargetSelf;
 		if (isOwnedByOther) {
-			params.setVolatileMessage({ text: "Cannot delete: session is active in another tab", kind: "error" });
+			params.addVolatileMessage("Cannot delete: session is active in another tab", "error");
 			return;
 		}
 		// If deleting current session, clear it first (releases ownership)
@@ -165,13 +165,13 @@ export function handleSessionCommand(params: {
 			.then((data: { ok: boolean; id?: string; title?: string | null; error?: string }) => {
 				if (data.ok) {
 					const label = data.title ? `${data.id} "${data.title}"` : (data.id ?? targetSession.id);
-					params.setVolatileMessage({ text: `Session ${label} has been removed`, kind: "success" });
+					params.addVolatileMessage(`Session ${label} has been removed`, "success");
 				} else {
-					params.setVolatileMessage({ text: data.error ?? "Failed to delete session", kind: "error" });
+					params.addVolatileMessage(data.error ?? "Failed to delete session", "error");
 				}
 			})
 			.catch(() => {
-				params.setVolatileMessage({ text: "Failed to delete session", kind: "error" });
+				params.addVolatileMessage("Failed to delete session", "error");
 			});
 		return;
 	}
@@ -183,7 +183,7 @@ export function handleSessionCommand(params: {
 		return;
 	}
 	if (targetSession.owned) {
-		params.setVolatileMessage({ text: "Session is active in another tab", kind: "error" });
+		params.addVolatileMessage("Session is active in another tab", "error");
 		return;
 	}
 	params.loadSession(targetSession.id);
@@ -202,20 +202,20 @@ export function handleSubagentCommand(params: {
 	peekSubagentWithScroll: (sessionId: string) => void;
 	peekSubagentFromDbWithScroll: (sessionId: string) => void;
 	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
-	setVolatileMessage: VolatileMessageSetter["setVolatileMessage"];
+	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
 }): void {
 	if (!params.arg) {
 		// .subagent with space but no number — no-op
 		return;
 	}
 	if (!params.subagentList) {
-		params.setVolatileMessage({ text: "Subagent list not loaded", kind: "error" });
+		params.addVolatileMessage("Subagent list not loaded", "error");
 		return;
 	}
 	const index = Number.parseInt(params.arg, 10);
 	const targetSubagent = !Number.isNaN(index) ? params.subagentList.find((s) => s.index === index) : undefined;
 	if (!targetSubagent) {
-		params.setVolatileMessage({ text: `Invalid subagent index: ${params.arg}`, kind: "error" });
+		params.addVolatileMessage(`Invalid subagent index: ${params.arg}`, "error");
 		return;
 	}
 	// Check if this subagent is currently live (running) — use peek instead of DB load
@@ -240,7 +240,7 @@ export function handleGenericCommand(params: {
 	setModel: (id: string) => void;
 	setTitle: (title: string | null) => void;
 	setStatus: (status: string) => void;
-	setVolatileMessage: VolatileMessageSetter["setVolatileMessage"];
+	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
 	modelList: { index: number; id: string; cost: string }[] | null;
 }): void {
 	const sid = params.getSessionId();
@@ -267,11 +267,11 @@ export function handleGenericCommand(params: {
 					params.setStatus(result.status);
 				}
 			} else {
-				params.setVolatileMessage({ text: result.error ?? "Command failed", kind: "error" });
+				params.addVolatileMessage(result.error ?? "Command failed", "error");
 			}
 		})
 		.catch(() => {
-			params.setVolatileMessage({ text: "Failed to execute command", kind: "error" });
+			params.addVolatileMessage("Failed to execute command", "error");
 		});
 }
 
@@ -305,6 +305,7 @@ export function handleSlashCommand(params: {
 	name: string;
 	stagedSkills: StagedSkill[];
 	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
+	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
 }): void {
 	// Deduplicate
 	if (params.stagedSkills.some((s) => s.name === params.name)) return;
@@ -320,6 +321,7 @@ export function handleSlashCommand(params: {
 		.then((data) => {
 			if (!data) return;
 			params.setStagedSkills((prev) => [...prev, { name: data.name, content: data.content }]);
+			params.addVolatileMessage(`▸ Staging ${data.name} skill`, "info");
 		})
 		.catch(() => {
 			// Silently ignore
