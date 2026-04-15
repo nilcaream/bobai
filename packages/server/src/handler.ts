@@ -391,8 +391,10 @@ export async function handlePrompt(req: PromptRequest) {
 		// DB disconnected errors must propagate to server.ts for broadcast handling
 		if (err instanceof DbDisconnectedError) throw err;
 
-		// Abort errors (e.g. WebSocket closed) are not real failures — don't persist error message
-		const isAbort = err instanceof DOMException && err.name === "AbortError";
+		// Abort errors (e.g. cancel, WebSocket closed, timeout) are not real failures.
+		// Check signal.aborted to catch any error type thrown during abort (DOMException,
+		// Anthropic SDK's APIUserAbortError, etc.) rather than matching specific classes.
+		const isAbort = req.signal?.aborted || (err instanceof DOMException && err.name === "AbortError");
 
 		if (!isAbort) {
 			// Persist error as assistant message so agent can resume with context
