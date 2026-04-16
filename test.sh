@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Bob AI — full project verification
-# Runs all tests, type checks, and linting. Fails fast on first error.
+# Runs all available lint, typecheck, test, and build steps. Fails fast on first error.
 #
 # Usage: ./test.sh
 
@@ -50,6 +50,14 @@ pass "UI typecheck"
 step "UI: tests"
 (cd packages/ui && bun test) || fail "UI tests"
 pass "UI tests"
+
+step "Server: build"
+bun build --target=bun --minify --outfile=dist/server.js packages/server/src/index.ts || fail "Server build"
+pass "Server build"
+
+step "UI: build"
+(cd packages/ui && bunx vite build) || fail "UI build"
+pass "UI build"
 
 # --- Done ---
 
