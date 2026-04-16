@@ -201,6 +201,47 @@ describe("refreshModels", () => {
 		expect(claudeCall?.body.max_tokens).toBe(16);
 	});
 
+	test("Responses API models are probed via /responses with input format", async () => {
+		const calls: { url: string; body: Record<string, unknown> }[] = [];
+		globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {
+			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+
+			if (urlStr.includes("models.dev")) {
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-4.1", "gpt-5.4"]))));
+			}
+
+			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
+				return Promise.resolve(new Response(null, { status: 200 }));
+			}
+
+			if (urlStr.includes("api.individual.githubcopilot.com")) {
+				calls.push({
+					url: urlStr,
+					body: JSON.parse(init?.body as string),
+				});
+				return Promise.resolve(new Response(null, { status: 200 }));
+			}
+
+			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
+		});
+
+		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+
+		const gptCall = calls.find((c) => c.body.model === "gpt-4.1");
+		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
+
+		// GPT-4.1 goes to chat/completions
+		expect(gptCall?.url).toContain("/chat/completions");
+
+		// GPT-5.4 goes to /responses
+		expect(responsesCall?.url).toContain("/responses");
+		expect(responsesCall?.url).not.toContain("/chat/completions");
+		expect(responsesCall?.body.input).toBeDefined();
+		expect(responsesCall?.body.messages).toBeUndefined();
+		expect(responsesCall?.body.store).toBe(false);
+		expect(responsesCall?.body.stream).toBe(false);
+	});
+
 	test("ping requests use correct headers and body", async () => {
 		const calls: { headers: Record<string, string>; body: unknown }[] = [];
 		globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {

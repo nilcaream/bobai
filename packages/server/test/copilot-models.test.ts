@@ -3,8 +3,8 @@ import type { CatalogModel } from "../src/models-catalog";
 import { buildModelConfigs, CURATED_MODELS, PREMIUM_REQUEST_MULTIPLIERS } from "../src/provider/copilot-models";
 
 describe("copilot model constants", () => {
-	test("curated list has 7 models", () => {
-		expect(CURATED_MODELS).toHaveLength(7);
+	test("curated list has 10 models", () => {
+		expect(CURATED_MODELS).toHaveLength(10);
 	});
 
 	test("every curated model has a multiplier", () => {

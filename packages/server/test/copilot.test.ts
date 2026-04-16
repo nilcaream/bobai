@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { StoredAuth } from "../src/auth/store";
-import { createCopilotProvider, isCopilotClaude } from "../src/provider/copilot";
+import { createCopilotProvider, isCopilotClaude, isCopilotResponses } from "../src/provider/copilot";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
 
@@ -2259,5 +2259,203 @@ describe("Anthropic routing for Claude models", () => {
 		expect(summary).toContain("claude-sonnet-4.6");
 		expect(summary).toContain("user: 1");
 		expect(summary).toContain("premium: 1.00");
+	});
+});
+
+// ── isCopilotResponses routing ────────────────────────────────────────────
+
+describe("isCopilotResponses", () => {
+	test("gpt-5.4 → true", () => {
+		expect(isCopilotResponses("gpt-5.4")).toBe(true);
+	});
+
+	test("gpt-5.3-codex → true", () => {
+		expect(isCopilotResponses("gpt-5.3-codex")).toBe(true);
+	});
+
+	test("gpt-5.4-mini → true", () => {
+		expect(isCopilotResponses("gpt-5.4-mini")).toBe(true);
+	});
+
+	test("gpt-5-mini → false", () => {
+		expect(isCopilotResponses("gpt-5-mini")).toBe(false);
+	});
+
+	test("gpt-4o → false", () => {
+		expect(isCopilotResponses("gpt-4o")).toBe(false);
+	});
+
+	test("gpt-4.1 → false", () => {
+		expect(isCopilotResponses("gpt-4.1")).toBe(false);
+	});
+
+	test("claude-sonnet-4.6 → false", () => {
+		expect(isCopilotResponses("claude-sonnet-4.6")).toBe(false);
+	});
+});
+
+// ── Responses API routing for GPT-5+ models ──────────────────────────────
+
+function responsesSSEStream(events: { event: string; data: unknown }[]): ReadableStream<Uint8Array> {
+	const encoder = new TextEncoder();
+	const lines = events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join("");
+	return new ReadableStream({
+		start(controller) {
+			controller.enqueue(encoder.encode(lines));
+			controller.close();
+		},
+	});
+}
+
+function responsesTextStream(text: string, inputTokens = 10) {
+	return responsesSSEStream([
+		{ event: "response.created", data: { type: "response.created", response: { id: "resp_1" } } },
+		{
+			event: "response.output_item.added",
+			data: { type: "response.output_item.added", item: { type: "message", id: "msg_1", role: "assistant" } },
+		},
+		{ event: "response.output_text.delta", data: { type: "response.output_text.delta", delta: text } },
+		{
+			event: "response.completed",
+			data: {
+				type: "response.completed",
+				response: {
+					id: "resp_1",
+					status: "completed",
+					usage: { input_tokens: inputTokens, output_tokens: 5, total_tokens: inputTokens + 5 },
+				},
+			},
+		},
+	]);
+}
+
+describe("Responses API routing for GPT-5+ models", () => {
+	const originalFetch = globalThis.fetch;
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-responses-"));
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	test("routes gpt-5.4 to /responses endpoint", async () => {
+		let capturedUrl = "";
+
+		globalThis.fetch = mock(async (url: string | URL | Request) => {
+			capturedUrl = url.toString();
+			return new Response(responsesTextStream("Hi from GPT-5.4"), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			/* drain */
+		}
+
+		expect(capturedUrl).toContain("/responses");
+		expect(capturedUrl).not.toContain("chat/completions");
+	});
+
+	test("request body has input (not messages), store: false, stream: true", async () => {
+		let capturedBody: Record<string, unknown> = {};
+
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedBody = JSON.parse(init?.body as string);
+			return new Response(responsesTextStream("ok"), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			/* drain */
+		}
+
+		expect(capturedBody.input).toBeDefined();
+		expect(capturedBody.messages).toBeUndefined();
+		expect(capturedBody.store).toBe(false);
+		expect(capturedBody.stream).toBe(true);
+		expect(capturedBody.model).toBe("gpt-5.4");
+	});
+
+	test("yields text and tool_call events correctly", async () => {
+		const stream = responsesSSEStream([
+			{ event: "response.created", data: { type: "response.created", response: { id: "resp_1" } } },
+			{
+				event: "response.output_item.added",
+				data: {
+					type: "response.output_item.added",
+					output_index: 0,
+					item: { type: "function_call", call_id: "call_1", name: "read_file" },
+				},
+			},
+			{
+				event: "response.function_call_arguments.delta",
+				data: { type: "response.function_call_arguments.delta", output_index: 0, delta: '{"path":"src/index.ts"}' },
+			},
+			{
+				event: "response.completed",
+				data: {
+					type: "response.completed",
+					response: {
+						id: "resp_1",
+						status: "completed",
+						usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+					},
+				},
+			},
+		]);
+
+		globalThis.fetch = mock(async () => {
+			return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "read the file" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(events.some((e) => e.type === "tool_call_start" && e.name === "read_file")).toBe(true);
+		expect(events.some((e) => e.type === "tool_call_delta")).toBe(true);
+		expect(events.some((e) => e.type === "usage")).toBe(true);
+		expect(events.some((e) => e.type === "finish" && e.reason === "tool_calls")).toBe(true);
+	});
+
+	test("yields text events from Responses API stream", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(responsesTextStream("Hi from GPT-5.4"), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(e);
+		}
+
+		expect(events.some((e) => e.type === "text" && e.text === "Hi from GPT-5.4")).toBe(true);
+		expect(events.some((e) => e.type === "finish" && e.reason === "stop")).toBe(true);
 	});
 });

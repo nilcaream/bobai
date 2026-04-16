@@ -10,6 +10,8 @@ import { parseAnthropicStream } from "./anthropic-stream";
 import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider";
+import { convertMessagesToResponses, convertToolsToResponses } from "./responses-convert";
+import { parseResponsesSSE } from "./responses-stream";
 import { parseSSE } from "./sse";
 
 const COPILOT_CONFIGURATION =
@@ -73,6 +75,16 @@ function resolveInitiator(messages: Message[]): "user" | "agent" {
 
 export function isCopilotClaude(modelId: string): boolean {
 	return /^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId);
+}
+
+/**
+ * Models that require the OpenAI Responses API instead of Chat Completions.
+ * GPT-5+ (except gpt-5-mini which works fine with Chat Completions).
+ */
+export function isCopilotResponses(modelId: string): boolean {
+	const match = /^gpt-(\d+)/.exec(modelId);
+	if (!match) return false;
+	return Number(match[1]) >= 5 && !modelId.startsWith("gpt-5-mini");
 }
 
 export function createCopilotProvider(
@@ -358,6 +370,167 @@ export function createCopilotProvider(
 		throw lastError ?? new Error("Unexpected: no response after retry loop");
 	}
 
+	// ── OpenAI Responses API streaming path ──────────────────────────────
+
+	async function* streamResponses(
+		options: ProviderOptions,
+		initiator: "user" | "agent",
+		callChars: number,
+	): AsyncGenerator<StreamEvent> {
+		const input = convertMessagesToResponses(options.messages);
+		const tools = options.tools?.length ? convertToolsToResponses(options.tools) : undefined;
+
+		let lastError: unknown;
+		let retriedAuth = false;
+		let downgradeWarned = false;
+
+		for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+			const effectiveInitiator = attempt > 0 ? "agent" : initiator;
+			if (attempt === 1 && initiator === "user" && !downgradeWarned) {
+				downgradeWarned = true;
+				logger?.warn("RETRY", `Downgrading x-initiator from "user" to "agent" for retry to protect premium quota`);
+			}
+
+			const controller = new AbortController();
+			const signals: AbortSignal[] = [controller.signal];
+			if (options.signal) signals.push(options.signal);
+			const combinedSignal = AbortSignal.any(signals);
+			const timer = createRollingTimer(controller, REQUEST_TIMEOUT_MS);
+
+			let response: Response | undefined;
+
+			try {
+				response = await fetch(`${baseUrl}/responses`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...copilotConfig.headers,
+						"Openai-Intent": "conversation-edits",
+						Authorization: `Bearer ${sessionToken}`,
+						"x-initiator": effectiveInitiator,
+					},
+					body: JSON.stringify({
+						model: options.model,
+						input,
+						...(tools ? { tools } : {}),
+						stream: true,
+						store: false,
+						reasoning: { effort: "medium", summary: "auto" },
+						include: ["reasoning.encrypted_content"],
+					}),
+					signal: combinedSignal,
+				});
+				// Headers received — switch from connection timeout to body watchdog
+				timer.reset(BODY_TIMEOUT_MS);
+			} catch (err) {
+				timer.clear();
+				// If the CALLER aborted (not our timeout), do not retry
+				if (options.signal?.aborted) {
+					throw err;
+				}
+				lastError = err;
+				const isTimeout = timer.fired;
+				logger?.warn(
+					"RETRY",
+					`Responses fetch attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+						`${isTimeout ? "timeout" : "network"} ${errorMessage(err).slice(0, 200)}`,
+				);
+				if (attempt === MAX_RETRIES) {
+					throw isTimeout ? new TimeoutError(MAX_RETRIES + 1, lastError) : lastError;
+				}
+				await new Promise((r) => setTimeout(r, BACKOFF_MS));
+				await ensureValidSession();
+				continue;
+			}
+
+			if (!response.ok) {
+				timer.clear();
+
+				if (response.status !== 429 && response.status < 500) {
+					if ((response.status === 401 || response.status === 400) && !retriedAuth) {
+						const body = await response.text();
+						retriedAuth = true;
+						logger?.warn(
+							"AUTH",
+							`Got ${response.status} from responses (body: ${body.slice(0, 200)}), ` +
+								`forcing token refresh. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`,
+						);
+						sessionExpires = 0;
+						await ensureValidSession();
+						continue;
+					}
+					throw new ProviderError(response.status, await response.text());
+				}
+
+				// Retryable: 429 or 5xx
+				lastError = new ProviderError(response.status, await response.text());
+				if (attempt === MAX_RETRIES) throw lastError;
+
+				await new Promise((r) => setTimeout(r, BACKOFF_MS));
+				await ensureValidSession();
+				continue;
+			}
+
+			if (!response.body) {
+				timer.clear();
+				yield { type: "finish" as const, reason: "stop" as const };
+				return;
+			}
+
+			try {
+				for await (const event of parseResponsesSSE(response.body, options.model, effectiveInitiator, resolvedConfigDir)) {
+					timer.reset(BODY_TIMEOUT_MS);
+					if (event.type === "usage") {
+						if (options.onMetrics) {
+							options.onMetrics({
+								model: options.model,
+								promptTokens: event.tokenCount,
+								promptChars: callChars,
+								totalTokens: event.tokenCount,
+								initiator: effectiveInitiator,
+							});
+						} else {
+							turnModel = options.model;
+							turnTokens += event.tokenCount;
+							turnLastCallTokens = event.tokenCount;
+							turnLastCallChars = callChars;
+							if (effectiveInitiator === "agent") turnAgentCalls++;
+							else turnUserCalls++;
+							const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
+						}
+					}
+					yield event;
+				}
+				timer.clear();
+				return;
+			} catch (err) {
+				timer.clear();
+
+				// If the CALLER aborted (not our timeout), do not retry
+				if (options.signal?.aborted) {
+					throw err;
+				}
+
+				// Body-read error (timeout or network) — treat as retryable
+				lastError = err;
+				const isTimeout = timer.fired;
+				logger?.warn(
+					"RETRY",
+					`Responses stream attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+						`${isTimeout ? "timeout" : "network"} ${errorMessage(err).slice(0, 200)}`,
+				);
+				if (attempt === MAX_RETRIES) {
+					throw isTimeout ? new TimeoutError(MAX_RETRIES + 1, lastError) : lastError;
+				}
+				await new Promise((r) => setTimeout(r, BACKOFF_MS));
+				await ensureValidSession();
+			}
+		}
+
+		throw lastError ?? new Error("Unexpected: no response after retry loop");
+	}
+
 	return {
 		id: "github-copilot",
 
@@ -464,6 +637,11 @@ export function createCopilotProvider(
 
 			if (isCopilotClaude(options.model)) {
 				yield* streamClaude(options, initiator, callChars);
+				return;
+			}
+
+			if (isCopilotResponses(options.model)) {
+				yield* streamResponses(options, initiator, callChars);
 				return;
 			}
 
@@ -754,6 +932,25 @@ export async function refreshModels(sessionToken: string, baseUrl: string, confi
 						messages: [{ role: "user", content: "Ping. Respond pong." }],
 						max_tokens: 16,
 						stream: false,
+					}),
+					signal: AbortSignal.timeout(20_000),
+				});
+			} else if (isCopilotResponses(config.id)) {
+				// Responses API models: probe via OpenAI Responses API
+				response = await fetch(`${baseUrl}/responses`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...copilotConfig.headers,
+						"Openai-Intent": "conversation-edits",
+						Authorization: `Bearer ${sessionToken}`,
+						"x-initiator": "agent",
+					},
+					body: JSON.stringify({
+						model: config.id,
+						input: [{ role: "user", content: [{ type: "input_text", text: "Ping. Respond pong." }] }],
+						stream: false,
+						store: false,
 					}),
 					signal: AbortSignal.timeout(20_000),
 				});
