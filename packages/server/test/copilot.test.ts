@@ -1692,6 +1692,163 @@ describe("Retry logic", () => {
 		expect(capturedInitiators[0]).toBe("user");
 		expect(capturedInitiators[1]).toBe("agent");
 	});
+
+	test("throws TimeoutError when all retries exhaust due to body timeout (OpenAI)", async () => {
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			const signal = init?.signal;
+			const stream = new ReadableStream<Uint8Array>({
+				start(controller) {
+					if (signal) {
+						signal.addEventListener("abort", () =>
+							controller.error(signal.reason ?? new DOMException("The operation was aborted", "AbortError")),
+						);
+					}
+				},
+			});
+			return new Response(stream, {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, {
+			backoffBaseMs: 10,
+			bodyTimeoutMs: 50,
+		});
+
+		let caught: unknown;
+		try {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				/* drain */
+			}
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeDefined();
+		expect((caught as Error).name).toBe("TimeoutError");
+		expect((caught as Error).message).toContain("timed out after 4 attempt");
+	});
+
+	test("throws TimeoutError when all retries exhaust due to body timeout (Anthropic)", async () => {
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			const url = input instanceof Request ? input.url : input.toString();
+			if (url.includes("copilot_internal/v2/token")) {
+				return new Response(
+					JSON.stringify({
+						token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			const signal = init?.signal;
+			const stream = new ReadableStream<Uint8Array>({
+				start(controller) {
+					if (signal) {
+						signal.addEventListener("abort", () =>
+							controller.error(signal.reason ?? new DOMException("The operation was aborted", "AbortError")),
+						);
+					}
+				},
+			});
+			return new Response(stream, {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, {
+			backoffBaseMs: 10,
+			bodyTimeoutMs: 50,
+		});
+
+		let caught: unknown;
+		try {
+			for await (const _ of provider.stream({
+				model: "claude-sonnet-4.6",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				/* drain */
+			}
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeDefined();
+		expect((caught as Error).name).toBe("TimeoutError");
+		expect((caught as Error).message).toContain("timed out after 4 attempt");
+	});
+
+	test("logs retry attempts to logger (Anthropic)", async () => {
+		let attempt = 0;
+		const logged: string[] = [];
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			const url = input instanceof Request ? input.url : input.toString();
+			if (url.includes("copilot_internal/v2/token")) {
+				return new Response(
+					JSON.stringify({
+						token: "tid=fresh;exp=9999;proxy-ep=proxy.individual.githubcopilot.com",
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			attempt++;
+			if (attempt <= 1) {
+				const signal = init?.signal;
+				const stream = new ReadableStream<Uint8Array>({
+					start(controller) {
+						if (signal) {
+							signal.addEventListener("abort", () =>
+								controller.error(signal.reason ?? new DOMException("The operation was aborted", "AbortError")),
+							);
+						}
+					},
+				});
+				return new Response(stream, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				});
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const fakeLogger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: () => {},
+			info: () => {},
+			warn: (system: string, msg: string) => {
+				logged.push(`${system}: ${msg}`);
+			},
+			error: () => {},
+			withScope: () => fakeLogger,
+		};
+
+		const provider = createCopilotProvider(makeAuth(), configDir, fakeLogger, {
+			backoffBaseMs: 10,
+			bodyTimeoutMs: 50,
+		});
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const retryLogs = logged.filter((l) => l.startsWith("RETRY:"));
+		expect(retryLogs.length).toBeGreaterThanOrEqual(1);
+		expect(retryLogs[0]).toContain("Anthropic stream attempt 1/4 failed");
+		expect(retryLogs[0]).toContain("timeout");
+	});
 });
 
 // ── Corrupt token detection ───────────────────────────────────────────────

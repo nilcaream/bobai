@@ -19,7 +19,7 @@ import { send } from "./protocol";
 import { loadModelsConfig } from "./provider/copilot-models";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
-import { AuthError, ProviderError } from "./provider/provider";
+import { AuthError, ProviderError, TimeoutError } from "./provider/provider";
 import {
 	appendMessage,
 	createSession,
@@ -406,6 +406,8 @@ export async function handlePrompt(req: PromptRequest) {
 					errorText = err.permanent
 						? `[Error: Authentication failed (${err.status}). Run \`bobai auth\` to re-authenticate.]`
 						: `[Error: Token refresh failed: ${err.body}. Check your network connection and try again.]`;
+				} else if (err instanceof TimeoutError) {
+					errorText = `[Error: ${err.body}]`;
 				} else if (err instanceof ProviderError) {
 					errorText = `[Error: Provider error (${err.status}): ${err.body}]`;
 				} else {
@@ -421,9 +423,13 @@ export async function handlePrompt(req: PromptRequest) {
 				} else {
 					send(ws, { type: "error", message: `Token refresh failed: ${err.body}` });
 				}
+			} else if (err instanceof TimeoutError) {
+				scopedLogger?.error("HANDLER", `${err.body}`);
+				send(ws, { type: "error", message: err.body });
 			} else if (err instanceof ProviderError) {
 				send(ws, { type: "error", message: `Provider error (${err.status}): ${err.body}` });
 			} else {
+				scopedLogger?.error("HANDLER", `Unexpected error: ${(err as Error).message}`);
 				console.error("Unexpected error in handlePrompt:", err);
 				send(ws, { type: "error", message: "Unexpected error during generation" });
 			}

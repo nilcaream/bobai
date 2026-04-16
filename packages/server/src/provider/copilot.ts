@@ -9,7 +9,7 @@ import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic
 import { parseAnthropicStream } from "./anthropic-stream";
 import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
-import { AuthError, ProviderError } from "./provider";
+import { AuthError, ProviderError, TimeoutError } from "./provider";
 import { parseSSE } from "./sse";
 
 const COPILOT_CONFIGURATION =
@@ -198,18 +198,27 @@ export function createCopilotProvider(
 	function createRollingTimer(
 		controller: AbortController,
 		initialMs: number,
-	): { reset: (ms: number) => void; clear: () => void } {
-		let id: ReturnType<typeof setTimeout> | undefined = setTimeout(() => controller.abort(), initialMs);
+	): { reset: (ms: number) => void; clear: () => void; readonly fired: boolean } {
+		let id: ReturnType<typeof setTimeout> | undefined;
+		let fired = false;
+		const fire = () => {
+			fired = true;
+			controller.abort();
+		};
+		id = setTimeout(fire, initialMs);
 		return {
 			reset(ms: number) {
 				if (id !== undefined) clearTimeout(id);
-				id = setTimeout(() => controller.abort(), ms);
+				id = setTimeout(fire, ms);
 			},
 			clear() {
 				if (id !== undefined) {
 					clearTimeout(id);
 					id = undefined;
 				}
+			},
+			get fired() {
+				return fired;
 			},
 		};
 	}
@@ -313,6 +322,13 @@ export function createCopilotProvider(
 
 				lastError = err;
 				const status = errorStatus(err);
+				const isTimeout = timer.fired;
+
+				logger?.warn(
+					"RETRY",
+					`Anthropic stream attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+						`${isTimeout ? "timeout" : `status=${status || "network"}`} ${errorMessage(err).slice(0, 200)}`,
+				);
 
 				// Non-retryable 4xx (except 429) — fail immediately unless auth retry
 				if (status !== 429 && status >= 400 && status < 500) {
@@ -331,7 +347,9 @@ export function createCopilotProvider(
 				}
 
 				// Retryable: 429, 5xx, network/timeout errors
-				if (attempt === MAX_RETRIES) throw lastError;
+				if (attempt === MAX_RETRIES) {
+					throw isTimeout ? new TimeoutError(MAX_RETRIES + 1, lastError) : lastError;
+				}
 				await new Promise((r) => setTimeout(r, BACKOFF_MS));
 				await ensureValidSession();
 			}
@@ -497,8 +515,16 @@ export function createCopilotProvider(
 						throw err;
 					}
 					lastError = err;
+					const isTimeout = timer.fired;
+					logger?.warn(
+						"RETRY",
+						`OpenAI fetch attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+							`${isTimeout ? "timeout" : "network"} ${errorMessage(err).slice(0, 200)}`,
+					);
 					// Timeout errors and network errors are retryable; fall through to backoff
-					if (attempt === MAX_RETRIES) throw lastError;
+					if (attempt === MAX_RETRIES) {
+						throw isTimeout ? new TimeoutError(MAX_RETRIES + 1, lastError) : lastError;
+					}
 					await new Promise((r) => setTimeout(r, BACKOFF_MS));
 					await ensureValidSession();
 					continue;
@@ -636,7 +662,15 @@ export function createCopilotProvider(
 
 					// Body-read error (timeout or network) — treat as retryable
 					lastError = err;
-					if (attempt === MAX_RETRIES) throw lastError;
+					const isTimeout = timer.fired;
+					logger?.warn(
+						"RETRY",
+						`OpenAI body-read attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+							`${isTimeout ? "timeout" : "network"} ${errorMessage(err).slice(0, 200)}`,
+					);
+					if (attempt === MAX_RETRIES) {
+						throw isTimeout ? new TimeoutError(MAX_RETRIES + 1, lastError) : lastError;
+					}
 					await new Promise((r) => setTimeout(r, BACKOFF_MS));
 					await ensureValidSession();
 				}

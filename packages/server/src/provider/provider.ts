@@ -102,6 +102,14 @@ export class ProviderError extends Error {
 	}
 }
 
+export class TimeoutError extends ProviderError {
+	constructor(attempts: number, cause?: unknown) {
+		const causeMsg = cause instanceof Error ? `: ${cause.message}` : "";
+		super(0, `Request timed out after ${attempts} attempt${attempts > 1 ? "s" : ""}${causeMsg}`);
+		this.name = "TimeoutError";
+	}
+}
+
 export class AuthError extends ProviderError {
 	constructor(
 		status: number,

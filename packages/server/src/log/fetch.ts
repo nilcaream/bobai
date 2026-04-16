@@ -135,7 +135,14 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 					options.logger.debug("HTTP", `Dumped to ${filename}`);
 				},
 				(err) => {
-					options.logger.error("HTTP", `Dump failed: ${err}`);
+					// Suppress abort errors — these are expected when our rolling timer
+					// or the caller cancels mid-stream. The retry logic logs the real cause.
+					const isAbort =
+						(err instanceof DOMException && err.name === "AbortError") ||
+						(err instanceof Error && err.message === "The operation was aborted.");
+					if (!isAbort) {
+						options.logger.error("HTTP", `Dump failed: ${err}`);
+					}
 				},
 			);
 
