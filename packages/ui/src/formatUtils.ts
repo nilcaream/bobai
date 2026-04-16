@@ -251,12 +251,9 @@ export function formatCompactionSummary(stats: CompactionStats): string {
 			} else {
 				const compactEnd = Math.min(entry.evictionDistance - 1, maxDistance);
 				const evictionReachable = maxDistance > 0 && entry.evictionDistance <= maxDistance;
-				const untouched =
-					maxDistance > 0 && entry.minimumDistance > maxDistance ? "always" : `0-${entry.minimumDistance - 1}`;
+				const untouched = maxDistance > 0 && entry.minimumDistance > maxDistance ? "always" : `0-${entry.minimumDistance - 1}`;
 				const compacted =
-					maxDistance > 0 && entry.minimumDistance > maxDistance
-						? "never"
-						: `${entry.minimumDistance}-${compactEnd}`;
+					maxDistance > 0 && entry.minimumDistance > maxDistance ? "never" : `${entry.minimumDistance}-${compactEnd}`;
 				const evicted = evictionReachable ? `${entry.evictionDistance}-${maxDistance}` : "never";
 				sections.push(
 					`| ${entry.name} | ${entry.type} | ${entry.threshold.toFixed(2)} | ${entry.baseDistance} | ${entry.evictionDistance} | ${untouched} | ${compacted} | ${evicted} |`,

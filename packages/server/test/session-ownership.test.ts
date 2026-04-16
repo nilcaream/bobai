@@ -1,43 +1,17 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { ServerMessage } from "../src/protocol";
-import { createServer } from "../src/server";
 import { createSession } from "../src/session/repository";
-import { createTestDb } from "./helpers";
+import { createTestDb, openWs, startTestServer, waitForWsMessage } from "./helpers";
 
-/**
- * Helper: open a WebSocket, wait for it to be connected, return it.
- */
-function openWs(wsUrl: string): Promise<WebSocket> {
-	return new Promise((resolve, reject) => {
-		const ws = new WebSocket(wsUrl);
-		ws.onopen = () => resolve(ws);
-		ws.onerror = (e) => reject(e);
-	});
-}
-
-/**
- * Helper: send a JSON message and wait for the first response that matches a predicate.
- */
 function sendAndWait(
 	ws: WebSocket,
 	msg: object,
 	predicate: (m: ServerMessage) => boolean,
 	timeoutMs = 2000,
 ): Promise<ServerMessage> {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error("Timed out waiting for message")), timeoutMs);
-		const handler = (event: MessageEvent) => {
-			const parsed = JSON.parse(event.data as string) as ServerMessage;
-			if (predicate(parsed)) {
-				clearTimeout(timer);
-				ws.removeEventListener("message", handler);
-				resolve(parsed);
-			}
-		};
-		ws.addEventListener("message", handler);
-		ws.send(JSON.stringify(msg));
-	});
+	ws.send(JSON.stringify(msg));
+	return waitForWsMessage(ws, predicate, timeoutMs);
 }
 
 describe("Session Ownership", () => {
@@ -48,9 +22,10 @@ describe("Session Ownership", () => {
 
 	beforeAll(() => {
 		db = createTestDb();
-		server = createServer({ port: 0, db });
-		wsUrl = `ws://localhost:${server.port}/bobai/ws`;
-		baseUrl = `http://localhost:${server.port}`;
+		const started = startTestServer({ port: 0, db });
+		server = started.server;
+		wsUrl = started.wsUrl;
+		baseUrl = started.baseUrl;
 	});
 
 	afterAll(() => {
@@ -198,9 +173,10 @@ describe("Session Ownership", () => {
 	test("sessions list includes owned field", async () => {
 		// Create a fresh server+db to avoid interference from other tests
 		const freshDb = createTestDb();
-		const freshServer = createServer({ port: 0, db: freshDb });
-		const freshWsUrl = `ws://localhost:${freshServer.port}/bobai/ws`;
-		const freshBaseUrl = `http://localhost:${freshServer.port}`;
+		const started = startTestServer({ port: 0, db: freshDb });
+		const freshServer = started.server;
+		const freshWsUrl = started.wsUrl;
+		const freshBaseUrl = started.baseUrl;
 
 		try {
 			const s1 = createSession(freshDb);

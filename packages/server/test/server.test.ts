@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import path from "node:path";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
-import { createServer } from "../src/server";
-import { createTestDb } from "./helpers";
+import { createTestDb, startTestServer } from "./helpers";
 
 const uiDist = path.resolve(import.meta.dir, "../../ui/dist");
 
@@ -11,8 +10,9 @@ describe("HTTP server", () => {
 	let baseUrl: string;
 
 	beforeAll(() => {
-		server = createServer({ port: 0, staticDir: uiDist });
-		baseUrl = `http://localhost:${server.port}`;
+		const started = startTestServer({ port: 0, staticDir: uiDist });
+		server = started.server;
+		baseUrl = started.baseUrl;
 	});
 
 	afterAll(() => {
@@ -66,8 +66,9 @@ describe("WebSocket server", () => {
 	let wsUrl: string;
 
 	beforeAll(() => {
-		server = createServer({ port: 0 });
-		wsUrl = `ws://localhost:${server.port}/bobai/ws`;
+		const started = startTestServer({ port: 0 });
+		server = started.server;
+		wsUrl = started.wsUrl;
 	});
 
 	afterAll(() => {
@@ -123,8 +124,9 @@ describe("WebSocket server", () => {
 		};
 
 		const testDb = createTestDb();
-		const testServer = createServer({ port: 0, db: testDb, provider: slowProvider, model: "test" });
-		const testWsUrl = `ws://localhost:${testServer.port}/bobai/ws`;
+		const started = startTestServer({ port: 0, db: testDb, provider: slowProvider, model: "test" });
+		const testServer = started.server;
+		const testWsUrl = started.wsUrl;
 
 		try {
 			const clientWs = new WebSocket(testWsUrl);

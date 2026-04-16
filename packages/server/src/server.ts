@@ -191,7 +191,7 @@ export function createServer(options: ServerOptions) {
 				const storedPromptTokens = session?.promptTokens ?? 0;
 				const storedPromptChars = session?.promptChars ?? 0;
 				const modelId = session?.model ?? options.model ?? "";
-				const modelConfigs = loadModelsConfig();
+				const modelConfigs = loadModelsConfig(options.configDir);
 				const modelConfig = modelConfigs.find((m) => m.id === modelId);
 				const contextWindow = modelConfig?.contextWindow ?? 0;
 				if (contextWindow <= 0) {
