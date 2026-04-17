@@ -153,8 +153,15 @@ Skills are discovered from `SKILL.md` files in configured directories.
 ### Provider
 
 The LLM backend. Currently only **GitHub Copilot** is supported, which routes
-to either OpenAI or Anthropic APIs depending on the model. The provider handles
-streaming, token counting, turn metrics, and auth token management.
+to one of three APIs depending on the model:
+
+- **Anthropic Messages API** (`/v1/messages`) — Claude models
+- **OpenAI Responses API** (`/responses`) — GPT-5.2+ models (except gpt-5-mini)
+- **OpenAI Chat Completions** (`/chat/completions`) — everything else (gpt-5-mini, Gemini, Grok)
+
+The provider handles streaming, token counting, turn metrics, retry logic with
+x-initiator downgrade, and auth token management (VS Code impersonation approach
+with session token exchange and coalesced refresh).
 
 An **isolated turn provider** wraps the main provider for parallel subagent
 execution with independent metrics.
@@ -163,8 +170,12 @@ execution with independent metrics.
 
 An LLM model available through the provider. Each model has an ID (e.g.,
 `claude-sonnet-4.6`), context window size, max output tokens, and a **premium
-request multiplier** (cost factor). Models are probed at startup — only
-reachable models are enabled.
+request multiplier** (cost factor). Models with multiplier 0 (gpt-5-mini,
+gpt-4.1, gpt-4o) are included in paid Copilot plans at no premium cost.
+
+Models are defined in a **curated list** and probed at startup via
+`bobai refresh` — only reachable models are enabled. Model metadata
+(context window, max output) is fetched from `models.dev`.
 
 ### Compaction
 
