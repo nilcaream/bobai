@@ -7,7 +7,7 @@ import type { Logger } from "../log/logger";
 import { fetchCatalog } from "../models-catalog";
 import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
 import { parseAnthropicStream } from "./anthropic-stream";
-import { buildModelConfigs, formatModelDisplay, loadModelsConfig, PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
+import { buildModelConfigs, formatModelDisplay, getPremiumRequestMultiplier, loadModelsConfig } from "./copilot-models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider";
 import { convertMessagesToResponses, convertToolsToResponses } from "./responses-convert";
@@ -316,7 +316,7 @@ export function createCopilotProvider(
 							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
-							const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+							const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
 							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
 					}
@@ -496,7 +496,7 @@ export function createCopilotProvider(
 							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
-							const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+							const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
 							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
 					}
@@ -799,7 +799,7 @@ export function createCopilotProvider(
 								turnLastCallChars = callChars;
 								if (effectiveInitiator === "agent") turnAgentCalls++;
 								else turnUserCalls++;
-								const multiplier = PREMIUM_REQUEST_MULTIPLIERS[options.model as keyof typeof PREMIUM_REQUEST_MULTIPLIERS] ?? 0;
+								const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
 								if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 							}
 

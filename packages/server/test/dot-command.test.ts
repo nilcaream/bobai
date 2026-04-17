@@ -88,7 +88,7 @@ describe("handleCommand", () => {
 		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.status).toBe("gpt-4o | 0x | 0 tokens");
+			expect(result.status).toBe("grok-code-fast-1 | 0.25x | 0 tokens");
 			expect(result.sessionId).toBe(session.id);
 		}
 		const updated = getSession(db, session.id);
@@ -107,7 +107,7 @@ describe("handleCommand", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
-			expect(result.status).toBe("gpt-4o | 0x | 0 tokens");
+			expect(result.status).toBe("grok-code-fast-1 | 0.25x | 0 tokens");
 			const session = getSession(db, result.sessionId ?? "");
 			expect(session?.model).toBe(CURATED_MODELS[0]);
 		}
@@ -198,7 +198,7 @@ describe("HTTP endpoints", () => {
 		expect(body.models.length).toBe(CURATED_MODELS.length);
 		expect(body.models[0].index).toBe(1);
 		expect(body.models[0].id).toBe(CURATED_MODELS[0]);
-		expect(body.models[0].cost).toBe("0x");
+		expect(body.models[0].cost).toBe("0.25x");
 		expect(body.defaultModel).toBe("gpt-5-mini");
 		expect(body.defaultStatus).toBe("gpt-5-mini | 0x | 0 tokens");
 	});
@@ -213,7 +213,7 @@ describe("HTTP endpoints", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { ok: boolean; status?: string };
 		expect(body.ok).toBe(true);
-		expect(body.status).toBe("gpt-4o | 0x | 0 tokens");
+		expect(body.status).toBe("grok-code-fast-1 | 0.25x | 0 tokens");
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe(CURATED_MODELS[0]);
 	});

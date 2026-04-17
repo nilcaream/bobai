@@ -67,7 +67,7 @@ describe("refreshModels", () => {
 	});
 
 	test("models that respond to ping get enabled: true", async () => {
-		globalThis.fetch = mockFetch({ "gpt-4.1": 200, "claude-sonnet-4.6": 200 });
+		globalThis.fetch = mockFetch({ "gpt-5.4": 200, "claude-sonnet-4.6": 200 });
 
 		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
@@ -77,7 +77,7 @@ describe("refreshModels", () => {
 	});
 
 	test("models that fail ping get enabled: false", async () => {
-		globalThis.fetch = mockFetch({ "gpt-4.1": 403, "claude-sonnet-4.6": 403 });
+		globalThis.fetch = mockFetch({ "gpt-5.4": 403, "claude-sonnet-4.6": 403 });
 
 		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
@@ -87,12 +87,12 @@ describe("refreshModels", () => {
 	});
 
 	test("mixed results — some pass, some fail", async () => {
-		globalThis.fetch = mockFetch({ "gpt-4.1": 200, "claude-sonnet-4.6": 403 });
+		globalThis.fetch = mockFetch({ "gpt-5.4": 200, "claude-sonnet-4.6": 403 });
 
 		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
-		const gpt = configs.find((c: { id: string }) => c.id === "gpt-4.1");
+		const gpt = configs.find((c: { id: string }) => c.id === "gpt-5.4");
 		const claude = configs.find((c: { id: string }) => c.id === "claude-sonnet-4.6");
 		expect(gpt.enabled).toBe(true);
 		expect(claude.enabled).toBe(false);
@@ -101,25 +101,25 @@ describe("refreshModels", () => {
 	});
 
 	test("config file is written with correct structure", async () => {
-		globalThis.fetch = mockFetch({ "gpt-4.1": 200 });
+		globalThis.fetch = mockFetch({ "gpt-5.4": 200 });
 
 		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
 		expect(configs).toHaveLength(1);
 		expect(configs[0]).toEqual({
-			id: "gpt-4.1",
-			name: "GPT-4.1",
+			id: "gpt-5.4",
+			name: "GPT-5.4",
 			contextWindow: 128000,
 			maxOutput: 16000,
-			premiumRequestMultiplier: 0,
+			premiumRequestMultiplier: 1,
 			enabled: true,
 		});
 	});
 
 	test("returns correct summary counts", async () => {
 		globalThis.fetch = mockFetch({
-			"gpt-4.1": 200,
+			"gpt-5.4": 200,
 			"claude-sonnet-4.6": 200,
 			"claude-opus-4.6": 403,
 		});
@@ -133,14 +133,14 @@ describe("refreshModels", () => {
 
 	test("network error during ping is caught and model stays disabled", async () => {
 		globalThis.fetch = mockFetch({
-			"gpt-4.1": 200,
+			"gpt-5.4": 200,
 			"claude-sonnet-4.6": new Error("ECONNREFUSED"),
 		});
 
 		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
-		const gpt = configs.find((c: { id: string }) => c.id === "gpt-4.1");
+		const gpt = configs.find((c: { id: string }) => c.id === "gpt-5.4");
 		const claude = configs.find((c: { id: string }) => c.id === "claude-sonnet-4.6");
 		expect(gpt.enabled).toBe(true);
 		expect(claude.enabled).toBe(false);
@@ -149,7 +149,7 @@ describe("refreshModels", () => {
 
 	test("creates configDir if it does not exist", async () => {
 		const nestedDir = path.join(tmpDir, "nested", "deep");
-		globalThis.fetch = mockFetch({ "gpt-4.1": 200 });
+		globalThis.fetch = mockFetch({ "gpt-5.4": 200 });
 
 		await refreshModels("fake-token", TEST_BASE_URL, nestedDir);
 
@@ -167,7 +167,7 @@ describe("refreshModels", () => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 
 			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-4.1", "claude-sonnet-4.6"]))));
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.4", "claude-sonnet-4.6"]))));
 			}
 
 			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
@@ -187,17 +187,15 @@ describe("refreshModels", () => {
 
 		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 
-		const gptCall = calls.find((c) => c.body.model === "gpt-4.1");
+		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
 		const claudeCall = calls.find((c) => c.body.model === "claude-sonnet-4.6");
 
-		// GPT goes to chat/completions
-		expect(gptCall?.url).toContain("/chat/completions");
-		expect(gptCall?.url).not.toContain("/v1/messages");
-		expect(gptCall?.body.max_tokens).toBeUndefined();
+		expect(responsesCall?.url).toContain("/responses");
+		expect(responsesCall?.url).not.toContain("/v1/messages");
+		expect(responsesCall?.body.input).toBeDefined();
 
-		// Claude goes to /v1/messages
 		expect(claudeCall?.url).toContain("/v1/messages");
-		expect(claudeCall?.url).not.toContain("/chat/completions");
+		expect(claudeCall?.url).not.toContain("/responses");
 		expect(claudeCall?.body.max_tokens).toBe(16);
 	});
 
@@ -207,7 +205,7 @@ describe("refreshModels", () => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 
 			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-4.1", "gpt-5.4"]))));
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.2", "gpt-5.4"]))));
 			}
 
 			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
@@ -227,13 +225,11 @@ describe("refreshModels", () => {
 
 		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
 
-		const gptCall = calls.find((c) => c.body.model === "gpt-4.1");
+		const chatCall = calls.find((c) => c.body.model === "gpt-5.2");
 		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
 
-		// GPT-4.1 goes to chat/completions
-		expect(gptCall?.url).toContain("/chat/completions");
+		expect(chatCall?.url).toContain("/responses");
 
-		// GPT-5.4 goes to /responses
 		expect(responsesCall?.url).toContain("/responses");
 		expect(responsesCall?.url).not.toContain("/chat/completions");
 		expect(responsesCall?.body.input).toBeDefined();
@@ -248,10 +244,9 @@ describe("refreshModels", () => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 
 			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-4.1"]))));
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.4"]))));
 			}
 
-			// enableModels policy calls
 			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
 				return Promise.resolve(new Response(null, { status: 200 }));
 			}
@@ -273,9 +268,10 @@ describe("refreshModels", () => {
 		expect(calls[0].headers["x-initiator"]).toBe("agent");
 		expect(calls[0].headers.Authorization).toBe("Bearer test-token-123");
 		expect(calls[0].body).toEqual({
-			model: "gpt-4.1",
-			messages: [{ role: "user", content: "Ping. Respond pong." }],
+			model: "gpt-5.4",
+			input: [{ role: "user", content: [{ type: "input_text", text: "Ping. Respond pong." }] }],
 			stream: false,
+			store: false,
 		});
 	});
 });

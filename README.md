@@ -152,13 +152,23 @@ Bob AI creates the project config automatically when you first run `bobai` in a 
 
 | Model | Premium Multiplier |
 |-------|-------------------|
-| gpt-4o | 0x (free) |
-| gpt-4.1 | 0x (free) |
-| gpt-5-mini | 0x (free, default) |
 | grok-code-fast-1 | 0.25x |
 | claude-haiku-4.5 | 0.33x |
-| claude-sonnet-4.6 | 1x |
+| gpt-5.2 | 1x |
+| gpt-5.2-codex | 1x |
+| gpt-5.3-codex | 1x |
+| gpt-5.4 | 1x |
+| gemini-2.5-pro | 1x |
+| gemini-3.1-pro-preview | 1x |
+| gemini-3-flash-preview | 0.33x |
+| claude-opus-4.5 | 3x |
 | claude-opus-4.6 | 3x |
+| claude-sonnet-4.5 | 1x |
+| claude-sonnet-4.6 | 1x |
+| gpt-5-mini | 0x (default) |
+| gpt-5.4-mini | 0.33x |
+
+Preview model IDs are shown as returned by Copilot. For pricing, Bob AI best-matches documented model names when GitHub omits the `-preview` suffix in billing docs.
 
 Use `.model` in the chat to switch models mid-session.
 

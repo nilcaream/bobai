@@ -1,4 +1,4 @@
-import { PREMIUM_REQUEST_MULTIPLIERS } from "./copilot-models";
+import { getPremiumRequestMultiplier } from "./copilot-models";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 
 /**
@@ -34,7 +34,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 					turnLastCallChars = metrics.promptChars;
 					if (metrics.initiator === "agent") turnAgentCalls++;
 					else turnUserCalls++;
-					const multiplier = PREMIUM_REQUEST_MULTIPLIERS[metrics.model] ?? 0;
+					const multiplier = getPremiumRequestMultiplier(metrics.model) ?? 0;
 					if (metrics.initiator === "user") turnPremiumCost += multiplier;
 				},
 			});

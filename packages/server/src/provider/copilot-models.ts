@@ -9,36 +9,72 @@ export interface ModelConfig extends CatalogModel {
 }
 
 export const CURATED_MODELS = [
-	"gpt-4o",
-	"gpt-4.1",
-	"gpt-5-mini",
-	"gpt-5.3-codex",
-	"gpt-5.4",
-	"gpt-5.4-mini",
 	"grok-code-fast-1",
 	"claude-haiku-4.5",
-	"claude-sonnet-4.6",
+	"gpt-5.2",
+	"gpt-5.2-codex",
+	"gpt-5.3-codex",
+	"gpt-5.4",
+	"gemini-2.5-pro",
+	"gemini-3.1-pro-preview",
+	"gemini-3-flash-preview",
+	"claude-opus-4.5",
 	"claude-opus-4.6",
+	"claude-sonnet-4.5",
+	"claude-sonnet-4.6",
+	"gpt-5-mini",
+	"gpt-5.4-mini",
 ] as const;
 
 type CuratedModelId = (typeof CURATED_MODELS)[number];
 
-export const PREMIUM_REQUEST_MULTIPLIERS: Record<CuratedModelId, number> = {
-	"gpt-4o": 0,
-	"gpt-4.1": 0,
-	"gpt-5-mini": 0,
-	"gpt-5.3-codex": 1,
-	"gpt-5.4": 1,
-	"gpt-5.4-mini": 0.33,
+type PricedModelId = CuratedModelId | "gemini-3-pro" | "gemini-3.1-pro" | "gemini-3-flash" | "gpt-4.1" | "gpt-4o";
+
+export const PREMIUM_REQUEST_MULTIPLIERS: Record<PricedModelId, number> = {
 	"grok-code-fast-1": 0.25,
 	"claude-haiku-4.5": 0.33,
-	"claude-sonnet-4.6": 1,
+	"gpt-5.2": 1,
+	"gpt-5.2-codex": 1,
+	"gpt-5.3-codex": 1,
+	"gpt-5.4": 1,
+	"gemini-2.5-pro": 1,
+	"gemini-3-pro-preview": 1,
+	"gemini-3.1-pro-preview": 1,
+	"gemini-3-flash-preview": 0.33,
+	"claude-opus-4.5": 3,
 	"claude-opus-4.6": 3,
+	"claude-sonnet-4.5": 1,
+	"claude-sonnet-4.6": 1,
+	"gpt-5-mini": 0,
+	"gpt-5.4-mini": 0.33,
+	"gemini-3-pro": 1,
+	"gemini-3.1-pro": 1,
+	"gemini-3-flash": 0.33,
+	"gpt-4.1": 0,
+	"gpt-4o": 0,
 };
+
+function normalizePricingModelId(modelId: string): PricedModelId | null {
+	if (modelId in PREMIUM_REQUEST_MULTIPLIERS) {
+		return modelId as PricedModelId;
+	}
+
+	const withoutPreview = modelId.replace(/-preview$/, "");
+	if (withoutPreview in PREMIUM_REQUEST_MULTIPLIERS) {
+		return withoutPreview as PricedModelId;
+	}
+
+	return null;
+}
+
+export function getPremiumRequestMultiplier(modelId: string): number | undefined {
+	const normalized = normalizePricingModelId(modelId);
+	return normalized ? PREMIUM_REQUEST_MULTIPLIERS[normalized] : undefined;
+}
 
 /** Format the cost label for a model (e.g. "0x", "1x", "3x"). */
 export function formatModelCost(modelId: string): string {
-	const multiplier = PREMIUM_REQUEST_MULTIPLIERS[modelId as CuratedModelId];
+	const multiplier = getPremiumRequestMultiplier(modelId);
 	return multiplier !== undefined ? `${multiplier}x` : "?x";
 }
 
@@ -92,7 +128,7 @@ export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {
 		if (m) {
 			configs.push({
 				...m,
-				premiumRequestMultiplier: PREMIUM_REQUEST_MULTIPLIERS[id] ?? 1,
+				premiumRequestMultiplier: getPremiumRequestMultiplier(id) ?? 1,
 				enabled: false,
 			});
 		}
