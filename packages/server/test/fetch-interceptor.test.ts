@@ -217,4 +217,31 @@ describe("fetch interceptor", () => {
 		expect(content).toContain(" world");
 		expect(content).toContain("[DONE]");
 	});
+
+	test("does not log dump failure when recording stream sees closed controller race", async () => {
+		const logger = createLogger({ level: "debug", logDir: tmpDir });
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode("x"));
+				controller.close();
+			},
+		});
+		const mockFetch = mock(async () => new Response(stream, { status: 200 })) as unknown as typeof fetch;
+		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+
+		const response = await intercepted("https://api.githubcopilot.com/chat/completions", {
+			method: "POST",
+			body: "{}",
+		});
+
+		// Monkey-patch reader cancel path to simulate downstream close/cancel race.
+		// This reproduces the condition where enqueue/close can hit an already closed controller.
+		await response.body?.cancel();
+
+		await Bun.sleep(50);
+		const logFiles = fs.readdirSync(tmpDir).filter((f) => f.endsWith(".log"));
+		if (logFiles.length === 0) return;
+		const logContent = fs.readFileSync(path.join(tmpDir, logFiles[0]), "utf8");
+		expect(logContent).not.toContain("Dump failed: TypeError [ERR_INVALID_STATE]: Invalid state: Controller is already closed");
+	});
 });

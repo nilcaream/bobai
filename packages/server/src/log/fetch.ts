@@ -54,6 +54,10 @@ function headersToRecord(headers: HeadersInit | undefined): Record<string, strin
  * also being recorded. On stream completion the full text is passed to
  * `onComplete`; on error it goes to `onError`.
  */
+function isControllerAlreadyClosedError(err: unknown): boolean {
+	return err instanceof TypeError && err.message.includes("Controller is already closed");
+}
+
 function createRecordingStream(
 	original: ReadableStream<Uint8Array>,
 	onComplete: (body: string) => void,
@@ -73,7 +77,9 @@ function createRecordingStream(
 				controller.close();
 				onComplete(recorded);
 			} catch (err) {
-				controller.error(err);
+				if (!isControllerAlreadyClosedError(err)) {
+					controller.error(err);
+				}
 				onError(err);
 			}
 		},
@@ -140,6 +146,10 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 					const isAbort =
 						(err instanceof DOMException && err.name === "AbortError") ||
 						(err instanceof Error && err.message === "The operation was aborted.");
+					if (isControllerAlreadyClosedError(err)) {
+						options.logger.debug("HTTP", `Dump skipped: ${err}`);
+						return;
+					}
 					if (!isAbort) {
 						options.logger.error("HTTP", `Dump failed: ${err}`);
 					}

@@ -1000,6 +1000,47 @@ describe("Retry logic", () => {
 		expect(events.some((e) => e.type === "text" && e.text === "ok")).toBe(true);
 	});
 
+	test("logs retry attempts for Responses API 429 errors", async () => {
+		let attempt = 0;
+		const logged: string[] = [];
+
+		globalThis.fetch = mock(async () => {
+			attempt++;
+			if (attempt === 1) {
+				return new Response("Rate limited", { status: 429 });
+			}
+			return new Response(responsesTextStream("ok"), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const fakeLogger = {
+			level: "debug" as const,
+			logDir: "",
+			debug: () => {},
+			info: () => {},
+			warn: (system: string, msg: string) => {
+				logged.push(`${system}: ${msg}`);
+			},
+			error: () => {},
+			withScope: () => fakeLogger,
+		};
+
+		const provider = createCopilotProvider(makeAuth(), configDir, fakeLogger, fast);
+		for await (const _ of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			/* drain */
+		}
+
+		const retryLogs = logged.filter((l) => l.startsWith("RETRY:"));
+		expect(attempt).toBe(2);
+		expect(retryLogs.length).toBeGreaterThanOrEqual(1);
+		expect(retryLogs.some((l) => l.includes("Responses HTTP attempt 1/4 failed: status=429"))).toBe(true);
+	});
+
 	test("does not retry on 4xx other than 400, 401, 429", async () => {
 		let attempt = 0;
 

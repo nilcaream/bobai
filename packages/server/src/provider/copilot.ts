@@ -181,7 +181,7 @@ export function createCopilotProvider(
 	const MAX_RETRIES = 3;
 	const REQUEST_TIMEOUT_MS = 120_000;
 	const BODY_TIMEOUT_MS = testOverrides?.bodyTimeoutMs ?? 120_000;
-	const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 10_000;
+	const BACKOFF_MS = testOverrides?.backoffBaseMs ?? 30_000;
 
 	/** Extract an HTTP status code from an error thrown by fetch() or the Anthropic SDK. */
 	function errorStatus(err: unknown): number {
@@ -464,6 +464,11 @@ export function createCopilotProvider(
 
 				// Retryable: 429 or 5xx
 				lastError = new ProviderError(response.status, await response.text());
+				logger?.warn(
+					"RETRY",
+					`Responses HTTP attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+						`status=${response.status} ${errorMessage(lastError).slice(0, 200)}; retrying in ${BACKOFF_MS}ms`,
+				);
 				if (attempt === MAX_RETRIES) throw lastError;
 
 				await new Promise((r) => setTimeout(r, BACKOFF_MS));
@@ -734,6 +739,11 @@ export function createCopilotProvider(
 
 					// Retryable: 429 or 5xx
 					lastError = new ProviderError(response.status, await response.text());
+					logger?.warn(
+						"RETRY",
+						`OpenAI HTTP attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ` +
+							`status=${response.status} ${errorMessage(lastError).slice(0, 200)}; retrying in ${BACKOFF_MS}ms`,
+					);
 					if (attempt === MAX_RETRIES) throw lastError;
 
 					await new Promise((r) => setTimeout(r, BACKOFF_MS));
