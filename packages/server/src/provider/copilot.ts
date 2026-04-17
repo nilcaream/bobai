@@ -859,7 +859,7 @@ export function createCopilotProvider(
 	};
 }
 
-export async function enableModels(sessionToken: string, baseUrl: string, modelIds: string[]): Promise<void> {
+export async function enableModels(sessionToken: string, baseUrl: string, modelIds: string[], padWidth = 20): Promise<void> {
 	console.log("Enabling models");
 
 	const results = await Promise.all(
@@ -887,7 +887,7 @@ export async function enableModels(sessionToken: string, baseUrl: string, modelI
 	);
 
 	for (const r of results) {
-		console.log(`- ${r.id.padEnd(20)}: ${r.status}`);
+		console.log(`- ${r.id.padEnd(padWidth)} : ${r.status}`);
 	}
 }
 
@@ -897,27 +897,47 @@ export interface RefreshResult {
 	configPath: string;
 }
 
-export async function refreshModels(sessionToken: string, baseUrl: string, configDir: string): Promise<RefreshResult> {
+export async function refreshModels(
+	sessionToken: string,
+	baseUrl: string,
+	configDir: string,
+	options?: { verify?: boolean },
+): Promise<RefreshResult> {
 	console.log("Fetching model catalog from models.dev");
 	const catalog = await fetchCatalog("github-copilot");
 	console.log(`- Got ${catalog.length} models`);
 	const configs = buildModelConfigs(catalog);
+
+	if (!options?.verify) {
+		for (const config of configs) {
+			config.enabled = true;
+		}
+		fs.mkdirSync(configDir, { recursive: true });
+		const configPath = path.join(configDir, "copilot-models.json");
+		fs.writeFileSync(configPath, JSON.stringify(configs, null, "\t"));
+		console.log("");
+		console.log(`Wrote ${configs.length} models (curated list) to ${configPath}`);
+		console.log("Run `bobai refresh --verify` to verify that curated models are currently available.");
+		return { total: configs.length, enabled: configs.length, configPath };
+	}
+
+	const padWidth = Math.max(...configs.map((c) => c.id.length), 0);
 
 	console.log("");
 	await enableModels(
 		sessionToken,
 		baseUrl,
 		configs.map((c) => c.id),
+		padWidth,
 	);
 	console.log("");
 
 	console.log("Checking models");
 	for (const config of configs) {
-		process.stdout.write(`- ${config.id.padEnd(20)}`);
+		process.stdout.write(`- ${config.id.padEnd(padWidth)} : `);
 		try {
 			let response: Response;
 			if (isCopilotClaude(config.id)) {
-				// Claude models: probe via Anthropic Messages API
 				response = await fetch(`${baseUrl}/v1/messages`, {
 					method: "POST",
 					headers: {
@@ -933,10 +953,9 @@ export async function refreshModels(sessionToken: string, baseUrl: string, confi
 						max_tokens: 16,
 						stream: false,
 					}),
-					signal: AbortSignal.timeout(20_000),
+					signal: AbortSignal.timeout(40_000),
 				});
 			} else if (isCopilotResponses(config.id)) {
-				// Responses API models: probe via OpenAI Responses API
 				response = await fetch(`${baseUrl}/responses`, {
 					method: "POST",
 					headers: {
@@ -952,10 +971,9 @@ export async function refreshModels(sessionToken: string, baseUrl: string, confi
 						stream: false,
 						store: false,
 					}),
-					signal: AbortSignal.timeout(20_000),
+					signal: AbortSignal.timeout(40_000),
 				});
 			} else {
-				// Non-Claude models: probe via OpenAI Chat Completions
 				response = await fetch(`${baseUrl}/chat/completions`, {
 					method: "POST",
 					headers: {
@@ -970,17 +988,17 @@ export async function refreshModels(sessionToken: string, baseUrl: string, confi
 						messages: [{ role: "user", content: "Ping. Respond pong." }],
 						stream: false,
 					}),
-					signal: AbortSignal.timeout(20_000),
+					signal: AbortSignal.timeout(40_000),
 				});
 			}
 			if (response.ok) {
 				config.enabled = true;
-				console.log(": OK");
+				console.log("OK");
 			} else {
-				console.log(`: failed (HTTP ${response.status})`);
+				console.log(`failed (HTTP ${response.status})`);
 			}
 		} catch (err) {
-			console.log(`: failed (${err instanceof Error ? err.message : "unknown error"})`);
+			console.log(`failed (${err instanceof Error ? err.message : "unknown error"})`);
 		}
 	}
 

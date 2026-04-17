@@ -28,13 +28,19 @@ if (cli.command === "auth") {
 	installFetchInterceptor({ logger, logDir, debug: cli.debug });
 	logger.info("AUTH", "Starting authentication flow");
 	const auth = await authorize(globalConfigDir);
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
+	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, { verify: true });
 	process.exit(0);
 }
 
 if (cli.command === "refresh") {
 	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
 	installFetchInterceptor({ logger, logDir, debug: cli.debug });
+
+	if (!cli.verify) {
+		await refreshModels("", "", globalConfigDir, { verify: false });
+		process.exit(0);
+	}
+
 	let auth = loadAuth(globalConfigDir);
 	if (!auth) {
 		console.error("No auth found. Run `bobai auth` first.");
@@ -52,7 +58,7 @@ if (cli.command === "refresh") {
 			process.exit(1);
 		}
 	}
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir);
+	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, { verify: true });
 	process.exit(0);
 }
 

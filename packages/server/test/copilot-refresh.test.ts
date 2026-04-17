@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -56,20 +56,23 @@ function mockFetch(pingResults: Record<string, number | Error>) {
 describe("refreshModels", () => {
 	const originalFetch = globalThis.fetch;
 	let tmpDir: string;
+	let stdoutSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-refresh-"));
+		stdoutSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		stdoutSpy.mockRestore();
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
 	test("models that respond to ping get enabled: true", async () => {
 		globalThis.fetch = mockFetch({ "gpt-5.4": 200, "claude-sonnet-4.6": 200 });
 
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
 		expect(configs.every((c: { enabled: boolean }) => c.enabled)).toBe(true);
@@ -79,7 +82,7 @@ describe("refreshModels", () => {
 	test("models that fail ping get enabled: false", async () => {
 		globalThis.fetch = mockFetch({ "gpt-5.4": 403, "claude-sonnet-4.6": 403 });
 
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
 		expect(configs.every((c: { enabled: boolean }) => !c.enabled)).toBe(true);
@@ -89,7 +92,7 @@ describe("refreshModels", () => {
 	test("mixed results — some pass, some fail", async () => {
 		globalThis.fetch = mockFetch({ "gpt-5.4": 200, "claude-sonnet-4.6": 403 });
 
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
 		const gpt = configs.find((c: { id: string }) => c.id === "gpt-5.4");
@@ -103,7 +106,7 @@ describe("refreshModels", () => {
 	test("config file is written with correct structure", async () => {
 		globalThis.fetch = mockFetch({ "gpt-5.4": 200 });
 
-		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
 		expect(configs).toHaveLength(1);
@@ -124,7 +127,7 @@ describe("refreshModels", () => {
 			"claude-opus-4.6": 403,
 		});
 
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 
 		expect(result.total).toBe(3);
 		expect(result.enabled).toBe(2);
@@ -137,7 +140,7 @@ describe("refreshModels", () => {
 			"claude-sonnet-4.6": new Error("ECONNREFUSED"),
 		});
 
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
 
 		const gpt = configs.find((c: { id: string }) => c.id === "gpt-5.4");
@@ -151,7 +154,7 @@ describe("refreshModels", () => {
 		const nestedDir = path.join(tmpDir, "nested", "deep");
 		globalThis.fetch = mockFetch({ "gpt-5.4": 200 });
 
-		await refreshModels("fake-token", TEST_BASE_URL, nestedDir);
+		await refreshModels("fake-token", TEST_BASE_URL, nestedDir, { verify: true });
 
 		expect(fs.existsSync(path.join(nestedDir, "copilot-models.json"))).toBe(true);
 	});
@@ -159,6 +162,35 @@ describe("refreshModels", () => {
 	test("throws when catalog fetch fails", async () => {
 		globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
 		expect(refreshModels("token", TEST_BASE_URL, tmpDir)).rejects.toThrow("ECONNREFUSED");
+	});
+
+	test("non-verified refresh writes curated models as enabled without probing", async () => {
+		const consoleLog = spyOn(console, "log").mockImplementation(() => {});
+		globalThis.fetch = mock((url: string | URL | Request) => {
+			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+			if (urlStr.includes("models.dev")) {
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.4", "claude-sonnet-4.6", "gpt-5-mini"]))));
+			}
+			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
+		}) as typeof fetch;
+
+		try {
+			const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+			const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
+
+			expect(result.total).toBe(3);
+			expect(result.enabled).toBe(3);
+			expect(configs.map((c: { id: string; enabled: boolean }) => [c.id, c.enabled])).toEqual([
+				["gpt-5.4", true],
+				["claude-sonnet-4.6", true],
+				["gpt-5-mini", true],
+			]);
+			expect(consoleLog.mock.calls.flat().join("\n")).toContain(
+				"Run `bobai refresh --verify` to verify that curated models are currently available.",
+			);
+		} finally {
+			consoleLog.mockRestore();
+		}
 	});
 
 	test("Claude models are probed via /v1/messages with max_tokens", async () => {
@@ -185,7 +217,7 @@ describe("refreshModels", () => {
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		});
 
-		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 
 		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
 		const claudeCall = calls.find((c) => c.body.model === "claude-sonnet-4.6");
@@ -223,7 +255,7 @@ describe("refreshModels", () => {
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		});
 
-		await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
+		await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
 
 		const chatCall = calls.find((c) => c.body.model === "gpt-5.2");
 		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
@@ -262,7 +294,7 @@ describe("refreshModels", () => {
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		});
 
-		await refreshModels("test-token-123", TEST_BASE_URL, tmpDir);
+		await refreshModels("test-token-123", TEST_BASE_URL, tmpDir, { verify: true });
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0].headers["x-initiator"]).toBe("agent");
