@@ -1,4 +1,7 @@
 import type { DotCommand, ParsedDotInput } from "./commandParser";
+import { fuzzyFilterAndSort } from "./commandParser";
+
+export type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
 
 export function DotCommandPanel({
 	parsed,
@@ -9,7 +12,7 @@ export function DotCommandPanel({
 	sessionLocked,
 }: {
 	parsed: ParsedDotInput | null;
-	modelList: { index: number; id: string; cost: string }[] | null;
+	modelList: ModelListItem[] | null;
 	sessionList: { index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[] | null;
 	subagentList: { index: number; title: string; sessionId: string }[] | null;
 	getSessionId: () => string | null;
@@ -63,18 +66,32 @@ function renderSelectMode(matches: DotCommand[]) {
 	);
 }
 
-function renderModelPanel(args: string, modelList: { index: number; id: string; cost: string }[] | null) {
+function renderModelPanel(args: string, modelList: ModelListItem[] | null) {
 	if (!modelList) return "Loading models...";
-	const filtered = args ? modelList.filter((m) => String(m.index).startsWith(args.trim())) : modelList;
-	return filtered.length > 0 ? (
-		filtered.map((m) => (
+	const argText = (args ?? "").trim();
+	const firstToken = argText.split(/\s+/)[0] ?? "";
+	const isNumeric = !argText || /^\d+$/.test(firstToken);
+	const filtered = isNumeric
+		? firstToken
+			? modelList.filter((m) => String(m.index).includes(firstToken))
+			: modelList
+		: fuzzyFilterAndSort(modelList, argText, (m) => m.id).slice(0, 20);
+	if (filtered.length === 0) return <div>No matching models</div>;
+	const maxIndex = Math.max(...filtered.map((m) => m.index));
+	const padWidth = String(maxIndex).length;
+	return filtered.map((m) => {
+		const paddedIndex = String(m.index).padStart(padWidth, " ");
+		const suffix = m.contextWindow > 0 ? `(${m.cost}, ${formatContextWindow(m.contextWindow)})` : `(${m.cost})`;
+		return (
 			<div key={m.id}>
-				{m.index}: {m.id} ({m.cost})
+				{paddedIndex}: {m.id} {suffix}
 			</div>
-		))
-	) : (
-		<div>No matching models</div>
-	);
+		);
+	});
+}
+
+function formatContextWindow(contextWindow: number): string {
+	return `${Math.round(contextWindow / 1000)}k`;
 }
 
 function renderSessionPanel(
@@ -111,13 +128,12 @@ function renderSessionPanel(
 		return renderSessionList(filtered, SESSION_DISPLAY_LIMIT, getSessionId, sessionLocked);
 	}
 
-	// Text mode: filter by title words
-	const words = argText.toLowerCase().split(/\s+/).filter(Boolean);
-	const filtered = sessionList.filter((s) => {
-		if (!s.title) return false;
-		const lower = s.title.toLowerCase();
-		return words.every((w) => lower.includes(w));
-	});
+	// Text mode: fuzzy rank by title
+	const filtered = fuzzyFilterAndSort(
+		sessionList.filter((s) => s.title),
+		argText,
+		(s) => s.title ?? "",
+	).slice(0, SESSION_DISPLAY_LIMIT);
 	return renderSessionList(filtered, SESSION_DISPLAY_LIMIT, getSessionId, sessionLocked);
 }
 
@@ -162,8 +178,14 @@ function renderSubagentPanel(args: string, subagentList: { index: number; title:
 	if (subagentList.length === 0) return "No subagent sessions";
 
 	const SUBAGENT_DISPLAY_LIMIT = 20;
-	const indexPart = (args ?? "").trim();
-	const filtered = indexPart ? subagentList.filter((s) => String(s.index).includes(indexPart)) : subagentList;
+	const argText = (args ?? "").trim();
+	const firstToken = argText.split(/\s+/)[0] ?? "";
+	const isNumeric = !argText || /^\d+$/.test(firstToken);
+	const filtered = isNumeric
+		? firstToken
+			? subagentList.filter((s) => String(s.index).includes(firstToken))
+			: subagentList
+		: fuzzyFilterAndSort(subagentList, argText, (s) => s.title).slice(0, SUBAGENT_DISPLAY_LIMIT);
 	const display = filtered.slice(0, SUBAGENT_DISPLAY_LIMIT);
 	const maxIndex = display.length > 0 ? Math.max(...display.map((s) => s.index)) : 0;
 	const padWidth = String(maxIndex).length;

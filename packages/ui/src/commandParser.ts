@@ -1,3 +1,7 @@
+import { fuzzyMatch, SLASH_FUZZY_OPTIONS } from "./fuzzySearch";
+
+export { fuzzyFilterAndSort, fuzzyMatch } from "./fuzzySearch";
+
 export type DotCommand = { name: string; description: string };
 
 export type SkillInfo = { name: string; description: string };
@@ -76,40 +80,7 @@ export function parseDotInput(text: string, activeDotCommands: DotCommand[]): Pa
 }
 
 export function fuzzyMatchSkill(query: string, name: string): number | null {
-	// Returns a score (lower is better) or null if no match.
-	// Every character in query must appear in name in order.
-	// Bonus for: matching at word starts (after '-'), consecutive matches.
-	if (query.length === 0) return 0;
-
-	const q = query.toLowerCase();
-	const n = name.toLowerCase();
-
-	// Fast path: prefix match gets the best possible score
-	if (n.startsWith(q)) return 0;
-
-	let qi = 0;
-	let score = 0;
-	let prevMatchIdx = -2; // track consecutive matches
-	const wordStarts = new Set<number>([0]);
-	for (let i = 0; i < n.length; i++) {
-		if (n[i] === "-") wordStarts.add(i + 1);
-	}
-
-	for (let ni = 0; ni < n.length && qi < q.length; ni++) {
-		if (n[ni] === q[qi]) {
-			// Penalize non-word-start matches more
-			const atWordStart = wordStarts.has(ni);
-			score += atWordStart ? 0 : 1;
-			// Penalize non-consecutive matches
-			score += ni === prevMatchIdx + 1 ? 0 : 1;
-			prevMatchIdx = ni;
-			qi++;
-		}
-	}
-
-	// All query characters consumed?
-	if (qi < q.length) return null;
-	return score;
+	return fuzzyMatch(query, name, SLASH_FUZZY_OPTIONS);
 }
 
 export function parseSlashInput(text: string, skillList: SkillInfo[] | null, isReadOnly: boolean): ParsedSlashInput | null {

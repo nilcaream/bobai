@@ -83,16 +83,16 @@ describe("handleCommand", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("model command updates session model and returns status", () => {
+	test("model command updates session model using id-sorted order and returns status", () => {
 		const session = createSession(db);
 		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.status).toBe("grok-code-fast-1 | 0.25x | 0 tokens");
+			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
 			expect(result.sessionId).toBe(session.id);
 		}
 		const updated = getSession(db, session.id);
-		expect(updated?.model).toBe(CURATED_MODELS[0]);
+		expect(updated?.model).toBe("claude-haiku-4.5");
 	});
 
 	test("model command rejects invalid index", () => {
@@ -107,10 +107,35 @@ describe("handleCommand", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
-			expect(result.status).toBe("grok-code-fast-1 | 0.25x | 0 tokens");
+			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
 			const session = getSession(db, result.sessionId ?? "");
-			expect(session?.model).toBe(CURATED_MODELS[0]);
+			expect(session?.model).toBe("claude-haiku-4.5");
 		}
+	});
+
+	test("model command uses the same config-backed sorted order as /bobai/models", () => {
+		const configModels = [
+			{ id: "claude-haiku-4.5", contextWindow: 1000 },
+			{ id: "claude-sonnet-4.5", contextWindow: 500000 },
+		];
+		fs.writeFileSync(
+			path.join(tmpDir, "copilot-models.json"),
+			JSON.stringify(
+				configModels.map((m) => ({
+					id: m.id,
+					name: m.id,
+					contextWindow: m.contextWindow,
+					maxOutput: 64000,
+					premiumRequestMultiplier: 1,
+					enabled: true,
+				})),
+			),
+		);
+		const session = createSession(db);
+		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
+		expect(result.ok).toBe(true);
+		const updated = getSession(db, session.id);
+		expect(updated?.model).toBe("claude-haiku-4.5");
 	});
 
 	test("title command updates session title", () => {
@@ -187,24 +212,31 @@ describe("HTTP endpoints", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("GET /bobai/models returns curated model list with cost strings, defaultModel and defaultStatus", async () => {
+	test("GET /bobai/models returns id-sorted model list with cost, context, defaultModel and defaultStatus", async () => {
 		const res = await fetch(`${baseUrl}/bobai/models`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
-			models: { index: number; id: string; cost: string }[];
+			models: { index: number; id: string; cost: string; contextWindow: number }[];
 			defaultModel: string;
 			defaultStatus: string;
 		};
 		expect(body.models.length).toBe(CURATED_MODELS.length);
-		expect(body.models[0].index).toBe(1);
-		expect(body.models[0].id).toBe(CURATED_MODELS[0]);
-		expect(body.models[0].cost).toBe("0.25x");
+		expect(body.models[0]).toEqual({ index: 1, id: "claude-haiku-4.5", cost: "0.33x", contextWindow: 0 });
+		expect(body.models.findIndex((model) => model.id === "claude-haiku-4.5")).toBeLessThan(
+			body.models.findIndex((model) => model.id === "gpt-5.2"),
+		);
+		expect(body.models.findIndex((model) => model.id === "gpt-5.2")).toBeLessThan(
+			body.models.findIndex((model) => model.id === "gpt-5.4"),
+		);
 		expect(body.defaultModel).toBe("gpt-5-mini");
 		expect(body.defaultStatus).toBe("gpt-5-mini | 0x | 0 tokens");
 	});
 
-	test("POST /bobai/command executes model command and returns status", async () => {
+	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {
 		const session = createSession(db);
+		const modelsRes = await fetch(`${baseUrl}/bobai/models`);
+		const modelsBody = (await modelsRes.json()) as { models: { index: number; id: string }[] };
+		const firstVisible = modelsBody.models[0];
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -213,9 +245,10 @@ describe("HTTP endpoints", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { ok: boolean; status?: string };
 		expect(body.ok).toBe(true);
-		expect(body.status).toBe("grok-code-fast-1 | 0.25x | 0 tokens");
+		expect(firstVisible?.id).toBe("claude-haiku-4.5");
+		expect(body.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
 		const updated = getSession(db, session.id);
-		expect(updated?.model).toBe(CURATED_MODELS[0]);
+		expect(updated?.model).toBe(firstVisible?.id);
 	});
 
 	test("POST /bobai/command returns error for bad command", async () => {

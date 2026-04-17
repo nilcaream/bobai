@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CatalogModel } from "../src/models-catalog";
 import {
 	buildModelConfigs,
+	buildSortedModelList,
 	CURATED_MODELS,
 	formatModelCost,
 	PREMIUM_REQUEST_MULTIPLIERS,
@@ -75,5 +76,46 @@ describe("buildModelConfigs", () => {
 	test("returns empty array for empty catalog", () => {
 		const configs = buildModelConfigs([]);
 		expect(configs).toHaveLength(0);
+	});
+});
+
+describe("buildSortedModelList", () => {
+	test("returns id-sorted order with cost and context window metadata", () => {
+		const models = buildSortedModelList([
+			{ id: "claude-opus-4.6", name: "Claude Opus 4.6", contextWindow: 144000, maxOutput: 64000 },
+			{ id: "gpt-5.4", name: "GPT-5.4", contextWindow: 272000, maxOutput: 64000 },
+			{ id: "gpt-5.2", name: "GPT-5.2", contextWindow: 128000, maxOutput: 64000 },
+			{ id: "gpt-5-mini", name: "GPT-5 Mini", contextWindow: 264000, maxOutput: 64000 },
+			{ id: "gpt-5.4-mini", name: "GPT-5.4 Mini", contextWindow: 200000, maxOutput: 64000 },
+		]);
+
+		expect(models.findIndex((model) => model.id === "claude-opus-4.6")).toBeLessThan(
+			models.findIndex((model) => model.id === "gpt-5.2"),
+		);
+		expect(models.findIndex((model) => model.id === "gpt-5.2")).toBeLessThan(
+			models.findIndex((model) => model.id === "gpt-5.4"),
+		);
+		expect(models.findIndex((model) => model.id === "gpt-5-mini")).toBeLessThan(
+			models.findIndex((model) => model.id === "gpt-5.2"),
+		);
+		expect(models.findIndex((model) => model.id === "gpt-5.4")).toBeLessThan(
+			models.findIndex((model) => model.id === "gpt-5.4-mini"),
+		);
+		expect(models.findIndex((model) => model.id === "gpt-5.4-mini")).toBeLessThan(
+			models.findIndex((model) => model.id === "grok-code-fast-1"),
+		);
+		expect(models.find((model) => model.id === "gpt-5-mini")).toEqual({ id: "gpt-5-mini", cost: "0x", contextWindow: 264000 });
+		expect(models.find((model) => model.id === "gpt-5.4-mini")).toEqual({
+			id: "gpt-5.4-mini",
+			cost: "0.33x",
+			contextWindow: 200000,
+		});
+		expect(models.find((model) => model.id === "gpt-5.4")).toEqual({ id: "gpt-5.4", cost: "1x", contextWindow: 272000 });
+	});
+
+	test("returns contextWindow 0 when catalog metadata is missing", () => {
+		const models = buildSortedModelList([{ id: "gpt-5.2", name: "GPT-5.2", contextWindow: 264000, maxOutput: 64000 }]);
+		const missing = models.find((model) => model.id === "gpt-5-mini");
+		expect(missing).toEqual({ id: "gpt-5-mini", cost: "0x", contextWindow: 0 });
 	});
 });

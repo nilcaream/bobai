@@ -15,7 +15,7 @@ import { sessionScope } from "./log/session-tag";
 import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
-import { CURATED_MODELS, formatModelCost, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
+import { buildSortedModelList, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
 import type { AssistantMessage, Provider } from "./provider/provider";
 import {
 	deleteSession,
@@ -357,11 +357,12 @@ export function createServer(options: ServerOptions) {
 			}
 
 			if (url.pathname === "/bobai/models") {
-				const models = CURATED_MODELS.map((id, i) => ({
-					index: i + 1,
-					id,
-					cost: formatModelCost(id),
-				}));
+				const models = buildSortedModelList(options.configDir ? loadModelsConfig(options.configDir) : loadModelsConfig()).map(
+					(model, i) => ({
+						index: i + 1,
+						...model,
+					}),
+				);
 				const defaultModel = options.model ?? "gpt-5-mini";
 				const defaultStatus = formatModelDisplay(defaultModel, 0, options.configDir);
 				return Response.json({ models, defaultModel, defaultStatus });

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { CURATED_MODELS, formatModelDisplay } from "./provider/copilot-models";
+import { buildSortedModelList, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
 import { createSession, getSession, listSubagentSessions, updateSessionModel, updateSessionTitle } from "./session/repository";
 
 export interface CommandRequest {
@@ -47,11 +47,15 @@ function withSessionId(result: CommandResult, sessionId: string): CommandResult 
 }
 
 function handleModelCommand(db: Database, sessionId: string, args: string, configDir?: string): CommandResult {
+	const sortedModels = buildSortedModelList(loadModelsConfig(configDir));
 	const index = Number.parseInt(args, 10);
-	if (Number.isNaN(index) || index < 1 || index > CURATED_MODELS.length) {
-		return { ok: false, error: `Invalid model index: ${args}. Must be 1-${CURATED_MODELS.length}` };
+	if (Number.isNaN(index) || index < 1 || index > sortedModels.length) {
+		return { ok: false, error: `Invalid model index: ${args}` };
 	}
-	const modelId = CURATED_MODELS[index - 1];
+	const modelId = sortedModels[index - 1]?.id;
+	if (!modelId) {
+		return { ok: false, error: `Invalid model index: ${args}` };
+	}
 	updateSessionModel(db, sessionId, modelId);
 	const session = getSession(db, sessionId);
 	const promptTokens = session?.promptTokens ?? 0;

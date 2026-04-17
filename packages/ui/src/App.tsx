@@ -20,7 +20,7 @@ import {
 	READ_ONLY_DOT_COMMANDS,
 	STREAMING_DOT_COMMANDS,
 } from "./commandParser";
-import { DotCommandPanel } from "./DotCommandPanel";
+import { DotCommandPanel, type ModelListItem } from "./DotCommandPanel";
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
 import { useAutoScroll } from "./hooks/useAutoScroll";
 import { useGlobalKeyboard } from "./hooks/useGlobalKeyboard";
@@ -65,7 +65,7 @@ export function App() {
 		sendCancel,
 	} = useWebSocket();
 	const [input, setInput] = useState("");
-	const [modelList, setModelList] = useState<{ index: number; id: string; cost: string }[] | null>(null);
+	const [modelList, setModelList] = useState<ModelListItem[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
 	const defaultStatus = useRef("");
@@ -162,7 +162,7 @@ export function App() {
 	useEffect(() => {
 		fetch("/bobai/models")
 			.then((res) => res.json())
-			.then((data: { models: { index: number; id: string; cost: string }[]; defaultModel: string; defaultStatus: string }) => {
+			.then((data: { models: ModelListItem[]; defaultModel: string; defaultStatus: string }) => {
 				setModelList(data.models);
 				defaultStatus.current = data.defaultStatus;
 				setModel((prev) => prev ?? data.defaultModel);

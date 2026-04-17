@@ -13,6 +13,10 @@ const defaultProps = {
 	sessionLocked: false,
 };
 
+function makeModel(index: number, id: string, cost: string, contextWindow = 0) {
+	return { index, id, cost, contextWindow };
+}
+
 function dot(overrides: Partial<ParsedDotInput> = {}): ParsedDotInput {
 	return {
 		mode: "args",
@@ -57,16 +61,13 @@ describe("DotCommandPanel", () => {
 
 	// --- Model panel ---
 
-	test("model panel: shows model list with index, id, cost", () => {
+	test("model panel: shows model list with index, id, cost, and context when available", () => {
 		const parsed = dot({ command: "model", args: "" });
-		const models = [
-			{ index: 1, id: "gpt-4o", cost: "$$$" },
-			{ index: 2, id: "claude-sonnet", cost: "$$" },
-		];
+		const models = [makeModel(1, "gpt-4o", "0x", 128000), makeModel(2, "claude-sonnet", "1x", 200000)];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		const text = container.textContent ?? "";
-		expect(text).toContain("1: gpt-4o ($$$)");
-		expect(text).toContain("2: claude-sonnet ($$)");
+		expect(text).toContain("1: gpt-4o (0x, 128k)");
+		expect(text).toContain("2: claude-sonnet (1x, 200k)");
 	});
 
 	test("model panel: shows 'Loading models...' when modelList is null", () => {
@@ -75,26 +76,72 @@ describe("DotCommandPanel", () => {
 		expect(screen.queryByText("Loading models...")).not.toBeNull();
 	});
 
-	test("model panel: filters models by args", () => {
+	test("model panel: numeric args still filter by index contains semantics", () => {
 		const parsed = dot({ command: "model", args: "2" });
 		const models = [
-			{ index: 1, id: "gpt-4o", cost: "$$$" },
-			{ index: 2, id: "claude-sonnet", cost: "$$" },
-			{ index: 21, id: "gemini-pro", cost: "$" },
+			makeModel(1, "gpt-4o", "0x", 128000),
+			makeModel(2, "claude-sonnet", "1x", 200000),
+			makeModel(21, "gemini-pro", "1x", 256000),
 		];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		const text = container.textContent ?? "";
-		// index "2" matches index 2 and 21 (startsWith)
 		expect(text).not.toContain("gpt-4o");
 		expect(text).toContain("claude-sonnet");
 		expect(text).toContain("gemini-pro");
 	});
 
+	test("model panel: text args use fuzzy search on id", () => {
+		const parsed = dot({ command: "model", args: "g54" });
+		const models = [
+			makeModel(1, "claude-sonnet-4.6", "1x", 200000),
+			makeModel(2, "gpt-5.4", "1x", 256000),
+			makeModel(3, "gemini-3-flash", "0.33x", 1000000),
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("gpt-5.4");
+		expect(text).not.toContain("claude-sonnet-4.6");
+	});
+
+	test("model panel: falls back to cost-only formatting when context is missing", () => {
+		const parsed = dot({ command: "model", args: "" });
+		const models = [makeModel(3, "some-model", "1x", 0)];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
+		expect(container.textContent ?? "").toContain("3: some-model (1x)");
+	});
+
 	test("model panel: shows 'No matching models' when filter yields nothing", () => {
-		const parsed = dot({ command: "model", args: "99" });
-		const models = [{ index: 1, id: "gpt-4o", cost: "$$$" }];
+		const parsed = dot({ command: "model", args: "zzz" });
+		const models = [makeModel(1, "gpt-4o", "0x", 128000)];
 		render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		expect(screen.queryByText("No matching models")).not.toBeNull();
+	});
+
+	test("model panel: rows are shown in server-provided order", () => {
+		const parsed = dot({ command: "model", args: "" });
+		const models = [makeModel(1, "b-model", "1x", 100000), makeModel(2, "a-model", "1x", 200000)];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
+		const rows = Array.from(container.querySelectorAll(".panel--dot > div")).map((row) => row.textContent ?? "");
+		expect(rows[0]).toContain("b-model");
+		expect(rows[1]).toContain("a-model");
+	});
+
+	test("model panel: left-pads indices when the list has 10+ items", () => {
+		const parsed = dot({ command: "model", args: "" });
+		const models = Array.from({ length: 10 }, (_, i) => makeModel(i + 1, `model-${i + 1}`, "1x", 100000));
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain(" 1: model-1 (1x, 100k)");
+		expect(text).toContain("10: model-10 (1x, 100k)");
+	});
+
+	test("model panel: text results are truncated to the first 20 visible rows", () => {
+		const parsed = dot({ command: "model", args: "mod" });
+		const models = Array.from({ length: 25 }, (_, i) => makeModel(i + 1, `model-${i + 1}`, "1x", 100000));
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
+		const rows = container.querySelectorAll(".panel--dot > div");
+		expect(rows.length).toBe(20);
+		expect(container.textContent ?? "").not.toContain("model-25");
 	});
 
 	// --- New panel ---
@@ -162,18 +209,17 @@ describe("DotCommandPanel", () => {
 		expect(screen.queryByText(/Delete session "My Chat"/)).not.toBeNull();
 	});
 
-	test("session panel: filters by title words when arg is non-numeric", () => {
-		const parsed = dot({ command: "session", args: "im tes" });
+	test("session panel: text mode uses fuzzy title search, not plain word containment", () => {
+		const parsed = dot({ command: "session", args: "g54" });
 		const sessions = [
-			{ index: 1, id: "s1", title: "implement tests", updatedAt: "2025-01-15T10:30:00Z", owned: false },
+			{ index: 1, id: "s1", title: "GPT 5.4 migration", updatedAt: "2025-01-15T10:30:00Z", owned: false },
 			{ index: 2, id: "s2", title: "fix UI issues", updatedAt: "2025-01-15T11:00:00Z", owned: false },
 			{ index: 3, id: "s3", title: "some other tests", updatedAt: "2025-01-15T12:00:00Z", owned: false },
 		];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
 		const text = container.textContent ?? "";
-		expect(text).toContain("implement tests");
+		expect(text).toContain("GPT 5.4 migration");
 		expect(text).not.toContain("fix UI issues");
-		// "some other tests" does NOT contain "im", so it's excluded
 		expect(text).not.toContain("some other tests");
 	});
 
@@ -237,6 +283,23 @@ describe("DotCommandPanel", () => {
 		expect(text).not.toContain("Session Two");
 	});
 
+	test("session panel: text results preserve original order for equal scores and are truncated to 20 rows", () => {
+		const parsed = dot({ command: "session", args: "task" });
+		const sessions = Array.from({ length: 25 }, (_, i) => ({
+			index: i + 1,
+			id: `s${i + 1}`,
+			title: `Task ${i + 1}`,
+			updatedAt: "2025-01-15T10:30:00Z",
+			owned: false,
+		}));
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
+		const rows = Array.from(container.querySelectorAll(".panel--dot > div")).map((row) => row.textContent ?? "");
+		expect(rows).toHaveLength(20);
+		expect(rows[0]).toContain("Task 1");
+		expect(rows[19]).toContain("Task 20");
+		expect(container.textContent ?? "").not.toContain("Task 25");
+	});
+
 	// --- Subagent panel ---
 
 	test("subagent panel: shows subagent list", () => {
@@ -261,6 +324,35 @@ describe("DotCommandPanel", () => {
 		const parsed = dot({ command: "subagent", args: "" });
 		render(<DotCommandPanel {...defaultProps} parsed={parsed} subagentList={[]} />);
 		expect(screen.queryByText("No subagent sessions")).not.toBeNull();
+	});
+
+	test("subagent panel: text input filters by title using fuzzy ranking", () => {
+		const parsed = dot({ command: "subagent", args: "cr" });
+		const subagents = [
+			{ index: 1, title: "Research task", sessionId: "sub1" },
+			{ index: 2, title: "Code review", sessionId: "sub2" },
+			{ index: 3, title: "Follow up", sessionId: "sub3" },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} subagentList={subagents} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("Code review");
+		expect(text).not.toContain("Research task");
+		expect(text).not.toContain("Follow up");
+	});
+
+	test("subagent panel: text results preserve original order for equal scores and are truncated to 20 rows", () => {
+		const parsed = dot({ command: "subagent", args: "task" });
+		const subagents = Array.from({ length: 25 }, (_, i) => ({
+			index: i + 1,
+			title: `Task ${i + 1}`,
+			sessionId: `sub${i + 1}`,
+		}));
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} subagentList={subagents} />);
+		const rows = Array.from(container.querySelectorAll(".panel--dot > div")).map((row) => row.textContent ?? "");
+		expect(rows).toHaveLength(20);
+		expect(rows[0]).toContain("Task 1");
+		expect(rows[19]).toContain("Task 20");
+		expect(container.textContent ?? "").not.toContain("Task 25");
 	});
 
 	// --- View panel ---

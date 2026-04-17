@@ -1,5 +1,6 @@
 import type { ViewMode } from "./commandParser";
-import { VIEW_MODES } from "./commandParser";
+import { fuzzyFilterAndSort, VIEW_MODES } from "./commandParser";
+import type { ModelListItem } from "./DotCommandPanel";
 import type { StagedSkill, SubagentInfo } from "./protocol";
 
 // ---------------------------------------------------------------------------
@@ -8,6 +9,17 @@ import type { StagedSkill, SubagentInfo } from "./protocol";
 
 interface VolatileMessageSetter {
 	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+}
+
+function resolveVisibleModel(modelList: ModelListItem[], arg: string): ModelListItem | undefined {
+	const trimmed = arg.trim();
+	const firstToken = trimmed.split(/\s+/)[0] ?? "";
+	if (!trimmed) return undefined;
+	if (/^\d+$/.test(firstToken)) {
+		const idx = Number.parseInt(firstToken, 10);
+		return modelList.find((m) => m.index === idx);
+	}
+	return fuzzyFilterAndSort(modelList, trimmed, (m) => m.id)[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -104,13 +116,11 @@ export function handleSessionCommand(params: {
 	const isNumeric = /^\d+$/.test(firstWord);
 
 	if (!isNumeric) {
-		// Text search: find sessions whose title contains all words
-		const words = params.arg.toLowerCase().split(/\s+/).filter(Boolean);
-		const matches = params.sessionList.filter((s) => {
-			if (!s.title) return false;
-			const lower = s.title.toLowerCase();
-			return words.every((w) => lower.includes(w));
-		});
+		const matches = fuzzyFilterAndSort(
+			params.sessionList.filter((s) => s.title),
+			params.arg,
+			(s) => s.title ?? "",
+		);
 		if (matches.length === 0) {
 			params.addVolatileMessage(`No session matching "${params.arg}"`, "error");
 			return;
@@ -212,10 +222,17 @@ export function handleSubagentCommand(params: {
 		params.addVolatileMessage("Subagent list not loaded", "error");
 		return;
 	}
-	const index = Number.parseInt(params.arg, 10);
-	const targetSubagent = !Number.isNaN(index) ? params.subagentList.find((s) => s.index === index) : undefined;
+	const trimmedArg = params.arg.trim();
+	const firstWord = trimmedArg.split(/\s+/)[0] ?? "";
+	const isNumeric = /^\d+$/.test(firstWord);
+	const targetSubagent = isNumeric
+		? params.subagentList.find((s) => s.index === Number.parseInt(firstWord, 10))
+		: fuzzyFilterAndSort(params.subagentList, trimmedArg, (s) => s.title)[0];
 	if (!targetSubagent) {
-		params.addVolatileMessage(`Invalid subagent index: ${params.arg}`, "error");
+		params.addVolatileMessage(
+			isNumeric ? `Invalid subagent index: ${params.arg}` : `No subagent matching "${params.arg}"`,
+			"error",
+		);
 		return;
 	}
 	// Check if this subagent is currently live (running) — use peek instead of DB load
@@ -241,13 +258,22 @@ export function handleGenericCommand(params: {
 	setTitle: (title: string | null) => void;
 	setStatus: (status: string) => void;
 	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
-	modelList: { index: number; id: string; cost: string }[] | null;
+	modelList: ModelListItem[] | null;
 }): void {
 	const sid = params.getSessionId();
+	const resolvedModel =
+		params.command === "model" && params.modelList ? resolveVisibleModel(params.modelList, params.args) : undefined;
+	const submittedArgs = params.command === "model" && resolvedModel ? String(resolvedModel.index) : params.args;
+	const firstToken = params.args.trim().split(/\s+/)[0] ?? "";
+	const isNumericModelArg = params.command === "model" && /^\d+$/.test(firstToken);
+	if (params.command === "model" && params.modelList && params.args.trim() && !resolvedModel && !isNumericModelArg) {
+		params.addVolatileMessage(`No model matching "${params.args}"`, "error");
+		return;
+	}
 	fetch("/bobai/command", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ command: params.command, args: params.args, sessionId: sid }),
+		body: JSON.stringify({ command: params.command, args: submittedArgs, sessionId: sid }),
 	})
 		.then((res) => res.json())
 		.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string }) => {
@@ -255,9 +281,9 @@ export function handleGenericCommand(params: {
 				if (result.sessionId) {
 					params.setSessionId(result.sessionId);
 				}
-				if (params.command === "model" && params.modelList) {
-					const idx = Number.parseInt(params.args, 10);
-					const selected = params.modelList.find((m) => m.index === idx);
+				if (params.command === "model") {
+					const selected =
+						resolvedModel ?? (params.modelList ? resolveVisibleModel(params.modelList, submittedArgs) : undefined);
 					if (selected) params.setModel(selected.id);
 				}
 				if (params.command === "title") {

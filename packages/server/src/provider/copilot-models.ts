@@ -135,3 +135,21 @@ export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {
 	}
 	return configs;
 }
+
+export type SortedModelListItem = {
+	id: string;
+	cost: string;
+	contextWindow: number;
+};
+
+export function buildSortedModelList(catalog: CatalogModel[] = loadModelsConfig()): SortedModelListItem[] {
+	const catalogMap = new Map(catalog.map((model) => [model.id, model]));
+	return [...CURATED_MODELS]
+		.map((id) => ({
+			id,
+			cost: formatModelCost(id),
+			contextWindow: catalogMap.get(id)?.contextWindow ?? 0,
+		}))
+		.sort((a, b) => a.id.localeCompare(b.id))
+		.map(({ id, cost, contextWindow }) => ({ id, cost, contextWindow }));
+}

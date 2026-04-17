@@ -11,6 +11,10 @@ import {
 } from "../src/commandHandlers";
 import type { ViewMode } from "../src/commandParser";
 
+function makeModel(index: number, id: string, cost: string, contextWindow = 0) {
+	return { index, id, cost, contextWindow };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -408,11 +412,11 @@ describe("handleSessionCommand", () => {
 
 	// -- Text search --
 
-	test("text search: loads first session matching all words in title", () => {
+	test("text search: loads first fuzzy-visible session", () => {
 		const params = makeParams({
-			arg: "im tes",
+			arg: "g54",
 			sessionList: [
-				{ index: 1, id: "s1", title: "implement tests", updatedAt: "2024-01-01", owned: false },
+				{ index: 1, id: "s1", title: "GPT 5.4 migration", updatedAt: "2024-01-01", owned: false },
 				{ index: 2, id: "s2", title: "fix UI issues", updatedAt: "2024-01-02", owned: false },
 				{ index: 3, id: "s3", title: "some other tests", updatedAt: "2024-01-03", owned: false },
 			],
@@ -442,12 +446,12 @@ describe("handleSessionCommand", () => {
 		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "nonexistent"', "error");
 	});
 
-	test("text search: first match is self — silently no-op", () => {
+	test("text search: first visible match is self — silently no-op", () => {
 		const params = makeParams({
-			arg: "test",
+			arg: "ta",
 			sessionList: [
-				{ index: 1, id: "current-id", title: "test alpha", updatedAt: "2024-01-01", owned: false },
-				{ index: 2, id: "s2", title: "test beta", updatedAt: "2024-01-02", owned: false },
+				{ index: 1, id: "current-id", title: "Task alpha", updatedAt: "2024-01-01", owned: false },
+				{ index: 2, id: "s2", title: "Task beta", updatedAt: "2024-01-02", owned: false },
 			],
 			getSessionId: mock(() => "current-id"),
 		});
@@ -456,12 +460,12 @@ describe("handleSessionCommand", () => {
 		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 
-	test("text search: first match is owned by another tab — shows error", () => {
+	test("text search: first visible match owned by another tab — shows error", () => {
 		const params = makeParams({
-			arg: "test",
+			arg: "ta",
 			sessionList: [
-				{ index: 1, id: "s1", title: "test alpha", updatedAt: "2024-01-01", owned: true },
-				{ index: 2, id: "s2", title: "test beta", updatedAt: "2024-01-02", owned: false },
+				{ index: 1, id: "s1", title: "Task alpha", updatedAt: "2024-01-01", owned: true },
+				{ index: 2, id: "s2", title: "Task beta", updatedAt: "2024-01-02", owned: false },
 			],
 		});
 		handleSessionCommand(params);
@@ -539,13 +543,13 @@ describe("handleSubagentCommand", () => {
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid subagent index: 99", "error");
 	});
 
-	test("non-numeric arg sets volatile error", () => {
+	test("text search with no match sets volatile error", () => {
 		const params = makeParams({ arg: "foo" });
 		handleSubagentCommand(params);
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid subagent index: foo", "error");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No subagent matching "foo"', "error");
 	});
 
-	test("valid index with live (running) subagent calls peekSubagentWithScroll", () => {
+	test("numeric index with live (running) subagent calls peekSubagentWithScroll", () => {
 		const params = makeParams({ arg: "1" }); // sub-aaa is running
 		handleSubagentCommand(params);
 		expect(params.peekSubagentWithScroll).toHaveBeenCalledWith("sub-aaa");
@@ -553,12 +557,38 @@ describe("handleSubagentCommand", () => {
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
 	});
 
-	test("valid index with non-live subagent calls peekSubagentFromDbWithScroll", () => {
+	test("numeric index with non-live subagent calls peekSubagentFromDbWithScroll", () => {
 		const params = makeParams({ arg: "2" }); // sub-bbb is done
 		handleSubagentCommand(params);
 		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledWith("sub-bbb");
 		expect(params.peekSubagentWithScroll).not.toHaveBeenCalled();
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
+	});
+
+	test("text search: first fuzzy-visible live subagent uses live peek", () => {
+		const params = makeParams({
+			arg: "sa",
+			subagentList: [
+				{ index: 1, title: "Sub A", sessionId: "sub-aaa" },
+				{ index: 2, title: "Sub B", sessionId: "sub-bbb" },
+			],
+		});
+		handleSubagentCommand(params);
+		expect(params.peekSubagentWithScroll).toHaveBeenCalledWith("sub-aaa");
+		expect(params.peekSubagentFromDbWithScroll).not.toHaveBeenCalled();
+	});
+
+	test("text search: first fuzzy-visible completed subagent uses db peek", () => {
+		const params = makeParams({
+			arg: "br",
+			subagentList: [
+				{ index: 1, title: "Sub A", sessionId: "sub-aaa" },
+				{ index: 2, title: "Bug review", sessionId: "sub-bbb" },
+			],
+		});
+		handleSubagentCommand(params);
+		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledWith("sub-bbb");
+		expect(params.peekSubagentWithScroll).not.toHaveBeenCalled();
 	});
 
 	test("clears staged skills on success regardless of live/db path", () => {
@@ -587,7 +617,7 @@ describe("handleGenericCommand", () => {
 			setTitle: mock(() => {}),
 			setStatus: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
-			modelList: null as { index: number; id: string; cost: string }[] | null,
+			modelList: null as { index: number; id: string; cost: string; contextWindow: number }[] | null,
 			...overrides,
 		};
 	}
@@ -601,6 +631,19 @@ describe("handleGenericCommand", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ command: "model", args: "3", sessionId: "sid-123" }),
+		});
+	});
+
+	test("model text submit posts the resolved numeric index, not the raw query", async () => {
+		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
+		const modelList = [makeModel(1, "claude-3", "$0.02", 200000), makeModel(2, "gpt-5.4", "$0.01", 256000)];
+		const params = makeParams({ command: "model", args: "g54", modelList });
+		handleGenericCommand(params);
+
+		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "model", args: "2", sessionId: "sid-123" }),
 		});
 	});
 
@@ -622,12 +665,9 @@ describe("handleGenericCommand", () => {
 		expect(params.setSessionId).not.toHaveBeenCalled();
 	});
 
-	test('on success with command "model", finds model in list and calls setModel', async () => {
+	test('on success with command "model", finds numeric model index in list and calls setModel', async () => {
 		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const modelList = [
-			{ index: 1, id: "gpt-4", cost: "$0.01" },
-			{ index: 2, id: "claude-3", cost: "$0.02" },
-		];
+		const modelList = [makeModel(1, "gpt-4", "$0.01", 128000), makeModel(2, "claude-3", "$0.02", 200000)];
 		const params = makeParams({ command: "model", args: "2", modelList });
 		handleGenericCommand(params);
 		await flushPromises();
@@ -635,14 +675,50 @@ describe("handleGenericCommand", () => {
 		expect(params.setModel).toHaveBeenCalledWith("claude-3");
 	});
 
-	test('on success with command "model" but no matching index, does not call setModel', async () => {
+	test('on success with command "model" and text args, resolves first fuzzy-visible model and calls setModel', async () => {
 		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const modelList = [{ index: 1, id: "gpt-4", cost: "$0.01" }];
-		const params = makeParams({ command: "model", args: "5", modelList });
+		const modelList = [makeModel(1, "claude-3", "$0.02", 200000), makeModel(2, "gpt-5.4", "$0.01", 256000)];
+		const params = makeParams({ command: "model", args: "g54", modelList });
+		handleGenericCommand(params);
+		await flushPromises();
+
+		expect(params.setModel).toHaveBeenCalledWith("gpt-5.4");
+	});
+
+	test('on success with command "model" but no matching numeric or fuzzy result, does not call setModel', async () => {
+		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
+		const modelList = [makeModel(1, "gpt-4", "$0.01", 128000)];
+		const params = makeParams({ command: "model", args: "zzz", modelList });
 		handleGenericCommand(params);
 		await flushPromises();
 
 		expect(params.setModel).not.toHaveBeenCalled();
+	});
+
+	test("model text submit with no match does not post raw text and shows existing error behavior", () => {
+		const params = makeParams({
+			command: "model",
+			args: "zzz",
+			modelList: [makeModel(1, "gpt-4", "$0.01", 128000)],
+		});
+		handleGenericCommand(params);
+		expect(globalThis.fetch).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No model matching "zzz"', "error");
+	});
+
+	test("model numeric submit with invalid index still posts to server for server-style invalid-index error", () => {
+		const params = makeParams({
+			command: "model",
+			args: "999",
+			modelList: [makeModel(1, "gpt-4", "$0.01", 128000)],
+		});
+		handleGenericCommand(params);
+		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "model", args: "999", sessionId: "sid-123" }),
+		});
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 
 	test('on success with command "model" but null modelList, does not call setModel', async () => {
