@@ -55,6 +55,17 @@ step "Server: build"
 bun build --target=bun --minify --outfile=dist/server.js packages/server/src/index.ts || fail "Server build"
 pass "Server build"
 
+step "Server: smoke test"
+# Verify the bundled server module loads without runtime errors (e.g. missing globals).
+# Uses --port on an unlikely port; the import itself is the real test.
+# The server will fail to fully start (no auth token), but that's after module load succeeds.
+smoke_output=$(timeout 5 bun dist/server.js --port 0 2>&1 || true)
+if echo "${smoke_output}" | grep -qi "ReferenceError\|SyntaxError\|TypeError.*is not defined\|Cannot find module"; then
+    echo "${smoke_output}" >&2
+    fail "Server smoke test (bundled server fails to load)"
+fi
+pass "Server smoke test"
+
 step "UI: build"
 (cd packages/ui && bunx vite build) || fail "UI build"
 pass "UI build"

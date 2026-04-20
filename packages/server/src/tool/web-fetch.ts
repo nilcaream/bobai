@@ -1,4 +1,6 @@
+import { join } from "node:path";
 import TurndownService from "turndown";
+import { extractText, getDocumentProxy } from "unpdf";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 import { escapeMarkdown } from "./tool";
@@ -77,6 +79,47 @@ function isHtmlContentType(ct: string): boolean {
 	return ct.includes("text/html") || ct.includes("application/xhtml+xml");
 }
 
+function isPdfContentType(ct: string): boolean {
+	return ct.includes("application/pdf");
+}
+
+function isTextContentType(ct: string): boolean {
+	const lower = ct.toLowerCase().split(";")[0].trim();
+	if (lower.startsWith("text/")) return true;
+	if (lower === "application/json" || lower === "application/xml" || lower === "application/pdf") return true;
+	if (lower.endsWith("+json") || lower.endsWith("+xml")) return true;
+	return false;
+}
+
+async function extractPdfText(buf: ArrayBuffer): Promise<string> {
+	const pdf = await getDocumentProxy(new Uint8Array(buf));
+	try {
+		const { text } = await extractText(pdf, { mergePages: true });
+		return (text as string).trim();
+	} finally {
+		await pdf.cleanup();
+	}
+}
+
+async function saveContent(ctx: ToolContext, data: string | Buffer): Promise<void> {
+	if (!ctx.toolCallId) return;
+	const filePath = join(ctx.projectRoot, ".bobai", "downloads", ctx.sessionId, ctx.toolCallId);
+	await Bun.write(filePath, data);
+}
+
+function downloadPath(ctx: ToolContext): string {
+	return `.bobai/downloads/${ctx.sessionId}/${ctx.toolCallId}`;
+}
+
+function formatLlmOutput(content: string, truncated: string, ctx: ToolContext): string {
+	if (!ctx.toolCallId) return truncated;
+	const path = downloadPath(ctx);
+	const header = `Complete file available at ${path}`;
+	const wasTruncated = truncated !== content;
+	const hint = wasTruncated ? `\n\nUse read_file tool on ${path} to read more.` : "";
+	return `${header}\n\n${truncated}${hint}`;
+}
+
 function formatSummary(status: string, elapsedSec: number): string {
 	const now = new Date();
 	const pad = (n: number) => String(n).padStart(2, "0");
@@ -126,13 +169,19 @@ export const webFetchTool: Tool = {
 	compact(output: string, callArgs: Record<string, unknown>): string {
 		if (output.startsWith("Error")) return output;
 		const lines = output.split("\n");
-		if (lines.length <= 20) return output;
+		// Output with header (has toolCallId): keep only the header line
+		if (lines[0].startsWith("Complete file available at ")) {
+			if (lines.length <= 3) return output;
+			return `${COMPACTION_MARKER} ${lines[0]}`;
+		}
+		// Legacy output without header: fall back to existing behavior
+		if (lines.length <= 3) return output;
 		const url = typeof callArgs.url === "string" ? callArgs.url : "?";
 		const head = lines.slice(0, 15).join("\n");
 		return `${COMPACTION_MARKER} web_fetch(${url}) — showing first 15 of ${lines.length} lines\n${head}`;
 	},
 
-	async execute(args: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
+	async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
 		const url = typeof args.url === "string" ? args.url : "";
 		const format = (typeof args.format === "string" ? args.format : "markdown") as Format;
 		const timeoutParam = typeof args.timeout === "number" ? args.timeout : DEFAULT_TIMEOUT_MS / 1000;
@@ -170,9 +219,9 @@ export const webFetchTool: Tool = {
 				const msg = `Error: HTTP ${response.status} ${response.statusText}`;
 				return {
 					llmOutput: msg,
-					uiOutput: msg,
+					uiOutput: url,
 					mergeable: false,
-					summary: formatSummary(`HTTP ${response.status}`, elapsed),
+					summary: formatSummary(`HTTP ${response.status} ${response.statusText}`, elapsed),
 				};
 			}
 
@@ -203,8 +252,60 @@ export const webFetchTool: Tool = {
 			}
 
 			const elapsed = (performance.now() - startTime) / 1000;
-			const raw = new TextDecoder().decode(buf);
 			const contentType = response.headers.get("content-type") ?? "";
+
+			// Handle PDF content
+			if (isPdfContentType(contentType)) {
+				try {
+					const text = await extractPdfText(buf);
+					if (!text) {
+						const msg = "PDF contains no extractable text (possibly scanned/image-based).";
+						return {
+							llmOutput: msg,
+							uiOutput: msg,
+							mergeable: false,
+							summary: formatSummary("PDF empty", elapsed),
+						};
+					}
+					const truncated = truncateOutput(text);
+					await saveContent(ctx, text);
+					return {
+						llmOutput: formatLlmOutput(text, truncated, ctx),
+						uiOutput: `${escapeMarkdown(url)}\n\n---\n\n${truncated}`,
+						mergeable: false,
+						summary: formatSummary(`${contentType} | ${buf.byteLength} bytes`, elapsed),
+					};
+				} catch (pdfErr) {
+					const msg = `Error: Failed to parse PDF — ${(pdfErr as Error).message}`;
+					return {
+						llmOutput: msg,
+						uiOutput: msg,
+						mergeable: false,
+						summary: formatSummary("PDF error", elapsed),
+					};
+				}
+			}
+
+			// Handle binary (non-text) content
+			if (!isTextContentType(contentType)) {
+				await saveContent(ctx, Buffer.from(buf));
+				const size = buf.byteLength;
+				let llmOutput: string;
+				if (ctx.toolCallId) {
+					const path = downloadPath(ctx);
+					llmOutput = `Complete file available at ${path}\nBinary file (${contentType}, ${size} bytes). Use bash tool to process.`;
+				} else {
+					llmOutput = `Binary content (${contentType}, ${size} bytes). Cannot display binary data.`;
+				}
+				return {
+					llmOutput,
+					uiOutput: `${escapeMarkdown(url)}\n${contentType} | ${size} bytes`,
+					mergeable: false,
+					summary: formatSummary(`${contentType} | ${size} bytes`, elapsed),
+				};
+			}
+
+			const raw = new TextDecoder().decode(buf);
 
 			// Convert based on format and content type
 			let content: string;
@@ -223,11 +324,13 @@ export const webFetchTool: Tool = {
 			}
 
 			const truncated = truncateOutput(content);
-			const bytesLabel = `${buf.byteLength} bytes`;
+			const bytesLabel = `${contentType} | ${buf.byteLength} bytes`;
+
+			await saveContent(ctx, content);
 
 			return {
-				llmOutput: truncated,
-				uiOutput: `**${escapeMarkdown(url)}**\n\n---\n\n${truncated}`,
+				llmOutput: formatLlmOutput(content, truncated, ctx),
+				uiOutput: `${escapeMarkdown(url)}\n\n---\n\n${truncated}`,
 				mergeable: false,
 				summary: formatSummary(bytesLabel, elapsed),
 			};
@@ -244,4 +347,4 @@ export const webFetchTool: Tool = {
 	},
 };
 
-export { htmlToMarkdown, htmlToText, truncateOutput };
+export { htmlToMarkdown, htmlToText, isTextContentType, truncateOutput };

@@ -17,6 +17,7 @@
 		"@anthropic-ai/sdk": "^0.81.0",
 		"diff": "^8.0.4",
 		"gray-matter": "^4.0.3",
-		"turndown": "^7.2.4"
+		"turndown": "^7.2.4",
+		"unpdf": "^1.6.0"
 	}
 }

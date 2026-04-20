@@ -24,6 +24,7 @@ import { sqlite3Tool } from "../tool/sqlite3";
 import { TASK_ARGS_THRESHOLD, TASK_BASE_DISTANCE, TASK_OUTPUT_THRESHOLD } from "../tool/task";
 import type { Tool, ToolRegistry } from "../tool/tool";
 import { createToolRegistry } from "../tool/tool";
+import { webFetchTool } from "../tool/web-fetch";
 import { writeFileTool } from "../tool/write-file";
 import { COMPACTION_MARKER } from "./default-strategy";
 
@@ -91,6 +92,7 @@ export function createCompactionRegistry(): ToolRegistry {
 		grepSearchTool,
 		bashTool,
 		sqlite3Tool,
+		webFetchTool,
 		skillCompactionStub,
 		taskCompactionStub,
 	]);

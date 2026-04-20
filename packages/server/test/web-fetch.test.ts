@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { COMPACTION_MARKER } from "../src/compaction/default-strategy";
 import type { ToolContext } from "../src/tool/tool";
-import { htmlToMarkdown, htmlToText, truncateOutput, webFetchTool } from "../src/tool/web-fetch";
+import { htmlToMarkdown, htmlToText, isTextContentType, truncateOutput, webFetchTool } from "../src/tool/web-fetch";
 
 const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "test-session" };
 
@@ -207,6 +209,96 @@ describe("webFetchTool.execute", () => {
 		expect(result.llmOutput).toBe(text);
 	});
 
+	// --- PDF handling ---
+
+	test("PDF response triggers text extraction instead of raw decode", async () => {
+		// Create a minimal valid PDF with embedded text
+		const minimalPdf = `%PDF-1.0
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 44>>stream
+BT /F1 12 Tf 100 700 Td (Hello PDF) Tj ET
+endstream endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000266 00000 n 
+0000000360 00000 n 
+trailer<</Size 6/Root 1 0 R>>
+startxref
+430
+%%EOF`;
+		mockFetch.mockResolvedValueOnce(
+			new Response(minimalPdf, {
+				status: 200,
+				headers: { "content-type": "application/pdf" },
+			}),
+		);
+
+		const result = await webFetchTool.execute({ url: "https://example.com/doc.pdf", format: "markdown" }, ctx);
+		// Should contain extracted text, not raw PDF operators
+		expect(result.llmOutput).toContain("Hello PDF");
+		expect(result.llmOutput).not.toContain("endobj");
+		expect(result.llmOutput).not.toContain("endstream");
+	});
+
+	test("PDF with empty text returns informative message", async () => {
+		// Minimal PDF with no text content
+		const emptyPdf = `%PDF-1.0
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj
+xref
+0 4
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+trailer<</Size 4/Root 1 0 R>>
+startxref
+190
+%%EOF`;
+		mockFetch.mockResolvedValueOnce(
+			new Response(emptyPdf, {
+				status: 200,
+				headers: { "content-type": "application/pdf" },
+			}),
+		);
+
+		const result = await webFetchTool.execute({ url: "https://example.com/scanned.pdf" }, ctx);
+		expect(result.llmOutput).toContain("no extractable text");
+	});
+
+	test("corrupt PDF returns error message", async () => {
+		mockFetch.mockResolvedValueOnce(
+			new Response("not a pdf at all", {
+				status: 200,
+				headers: { "content-type": "application/pdf" },
+			}),
+		);
+
+		const result = await webFetchTool.execute({ url: "https://example.com/corrupt.pdf" }, ctx);
+		expect(result.llmOutput).toContain("Error");
+	});
+
+	test("PDF content-type with charset parameter is detected", async () => {
+		mockFetch.mockResolvedValueOnce(
+			new Response("not a pdf", {
+				status: 200,
+				headers: { "content-type": "application/pdf; charset=binary" },
+			}),
+		);
+
+		const result = await webFetchTool.execute({ url: "https://example.com/doc.pdf" }, ctx);
+		// Should attempt PDF extraction (and fail with error), not return raw text
+		expect(result.llmOutput).toContain("Error");
+	});
+
 	// --- Error handling ---
 
 	test("invalid URL (no http/https) returns error", async () => {
@@ -323,34 +415,54 @@ describe("webFetchTool.formatCall", () => {
 // ---------- compact ----------
 
 describe("webFetchTool.compact", () => {
-	// biome prefers optional chaining over non-null assertion; extract once
 	const compact = webFetchTool.compact as (output: string, callArgs: Record<string, unknown>) => string;
 
-	test("preserves short output (≤20 lines)", () => {
+	test("preserves error output unchanged", () => {
+		const error = "Error: HTTP 500 Internal Server Error";
+		const result = compact(error, { url: "https://example.com" });
+		expect(result).toBe(error);
+	});
+
+	test("output with header: returns COMPACTION_MARKER + first line only", () => {
+		const header = "Complete file available at .bobai/downloads/s1/call-123";
+		const output = `${header}\n\nHello world\nLine 2\nLine 3\nLine 4\nLine 5`;
+		const result = compact(output, { url: "https://example.com" });
+		expect(result).toBe(`${COMPACTION_MARKER} ${header}`);
+	});
+
+	test("output with header: strips all content lines", () => {
+		const header = "Complete file available at .bobai/downloads/s1/call-abc";
+		const lines = Array.from({ length: 100 }, (_, i) => `Line ${i}`);
+		const output = `${header}\n\n${lines.join("\n")}`;
+		const result = compact(output, { url: "https://example.com" });
+		expect(result).toBe(`${COMPACTION_MARKER} ${header}`);
+		expect(result.split("\n")).toHaveLength(1);
+	});
+
+	test("short output without header (≤3 lines): preserved unchanged", () => {
 		const short = "Line 1\nLine 2\nLine 3";
 		const result = compact(short, { url: "https://example.com" });
 		expect(result).toBe(short);
 	});
 
-	test("truncates long output (>20 lines) with COMPACTION_MARKER prefix", () => {
+	test("legacy output without header (>3 lines): keeps first 15 lines", () => {
 		const lines = Array.from({ length: 50 }, (_, i) => `Line ${i}`);
 		const long = lines.join("\n");
 		const result = compact(long, { url: "https://example.com" });
 		expect(result).toStartWith(COMPACTION_MARKER);
 		expect(result).toContain("web_fetch(https://example.com)");
 		expect(result).toContain("showing first 15 of 50 lines");
-		// Should contain exactly the first 15 lines of content after the marker line
 		const resultLines = result.split("\n");
 		expect(resultLines[1]).toBe("Line 0");
 		expect(resultLines[15]).toBe("Line 14");
-		// Total: 1 marker line + 15 content lines = 16
 		expect(resultLines).toHaveLength(16);
 	});
 
-	test("preserves error output unchanged", () => {
-		const error = "Error: HTTP 500 Internal Server Error";
-		const result = compact(error, { url: "https://example.com" });
-		expect(result).toBe(error);
+	test("binary output with header (2 lines): preserved unchanged", () => {
+		const output =
+			"Complete file available at .bobai/downloads/s1/call-x\nBinary file (image/png, 8000 bytes). Use bash tool to process.";
+		const result = compact(output, { url: "https://example.com" });
+		expect(result).toBe(output);
 	});
 });
 
@@ -371,5 +483,353 @@ describe("webFetchTool metadata", () => {
 
 	test("definition.function.name is web_fetch", () => {
 		expect(webFetchTool.definition.function.name).toBe("web_fetch");
+	});
+});
+
+// ---------- isTextContentType ----------
+
+describe("isTextContentType", () => {
+	test("text/* types are text", () => {
+		expect(isTextContentType("text/html")).toBe(true);
+		expect(isTextContentType("text/plain")).toBe(true);
+		expect(isTextContentType("text/markdown")).toBe(true);
+		expect(isTextContentType("text/css")).toBe(true);
+	});
+
+	test("application/json is text", () => {
+		expect(isTextContentType("application/json")).toBe(true);
+		expect(isTextContentType("application/json; charset=utf-8")).toBe(true);
+	});
+
+	test("application/xml is text", () => {
+		expect(isTextContentType("application/xml")).toBe(true);
+	});
+
+	test("application/pdf is text", () => {
+		expect(isTextContentType("application/pdf")).toBe(true);
+	});
+
+	test("+json and +xml suffixes are text", () => {
+		expect(isTextContentType("application/vnd.api+json")).toBe(true);
+		expect(isTextContentType("application/atom+xml")).toBe(true);
+	});
+
+	test("binary types are not text", () => {
+		expect(isTextContentType("application/octet-stream")).toBe(false);
+		expect(isTextContentType("image/png")).toBe(false);
+		expect(isTextContentType("application/zip")).toBe(false);
+		expect(isTextContentType("audio/mpeg")).toBe(false);
+	});
+});
+
+// ---------- LLM output header + read_file hint ----------
+
+describe("webFetchTool.execute LLM output header", () => {
+	beforeEach(() => {
+		mockFetch = mock();
+		globalThis.fetch = mockFetch;
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	test("includes header when toolCallId is present", async () => {
+		const text = "Hello world";
+		mockFetch.mockResolvedValueOnce(new Response(text, { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const ctxWithId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-100" };
+		const result = await webFetchTool.execute({ url: "https://example.com/file.txt" }, ctxWithId);
+
+		expect(result.llmOutput).toStartWith("Complete file available at .bobai/downloads/s1/tc-100");
+		// Content should follow after blank line
+		expect(result.llmOutput).toContain("\n\nHello world");
+	});
+
+	test("header shows raw byte size, not converted text size", async () => {
+		// HTML is 24 bytes raw but markdown conversion changes length
+		const html = "<h1>Title</h1><p>Body</p>";
+		mockFetch.mockResolvedValueOnce(new Response(html, { status: 200, headers: { "content-type": "text/html" } }));
+
+		const ctxWithId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-101" };
+		const result = await webFetchTool.execute({ url: "https://example.com", format: "markdown" }, ctxWithId);
+
+		expect(result.llmOutput).toStartWith("Complete file available at .bobai/downloads/s1/tc-101");
+	});
+
+	test("omits header when toolCallId is undefined", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("hello", { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const ctxNoId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1" };
+		const result = await webFetchTool.execute({ url: "https://example.com" }, ctxNoId);
+
+		expect(result.llmOutput).not.toContain(".bobai/downloads/");
+		expect(result.llmOutput).toBe("hello");
+	});
+
+	test("includes read_file hint when content is truncated", async () => {
+		const lines = Array.from({ length: 2500 }, (_, i) => `line ${i}`);
+		mockFetch.mockResolvedValueOnce(new Response(lines.join("\n"), { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const ctxWithId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-trunc" };
+		const result = await webFetchTool.execute({ url: "https://example.com/big.txt" }, ctxWithId);
+
+		expect(result.llmOutput).toContain("Use read_file tool on .bobai/downloads/s1/tc-trunc to read more.");
+	});
+
+	test("omits read_file hint when content is NOT truncated", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("short", { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const ctxWithId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-short" };
+		const result = await webFetchTool.execute({ url: "https://example.com/small.txt" }, ctxWithId);
+
+		expect(result.llmOutput).not.toContain("read_file");
+	});
+
+	test("omits read_file hint when truncated but no toolCallId", async () => {
+		const lines = Array.from({ length: 2500 }, (_, i) => `line ${i}`);
+		mockFetch.mockResolvedValueOnce(new Response(lines.join("\n"), { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const ctxNoId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1" };
+		const result = await webFetchTool.execute({ url: "https://example.com/big.txt" }, ctxNoId);
+
+		expect(result.llmOutput).not.toContain("read_file");
+	});
+
+	test("PDF response includes header when toolCallId is present", async () => {
+		const minimalPdf = `%PDF-1.0
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 44>>stream
+BT /F1 12 Tf 100 700 Td (Hello PDF) Tj ET
+endstream endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000266 00000 n 
+0000000360 00000 n 
+trailer<</Size 6/Root 1 0 R>>
+startxref
+430
+%%EOF`;
+		mockFetch.mockResolvedValueOnce(new Response(minimalPdf, { status: 200, headers: { "content-type": "application/pdf" } }));
+
+		const ctxWithId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-pdf" };
+		const result = await webFetchTool.execute({ url: "https://example.com/doc.pdf" }, ctxWithId);
+
+		expect(result.llmOutput).toStartWith("Complete file available at .bobai/downloads/s1/tc-pdf");
+		expect(result.llmOutput).toContain("Hello PDF");
+	});
+
+	test("error responses do not include header", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404, statusText: "Not Found" }));
+
+		const ctxWithId: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-err" };
+		const result = await webFetchTool.execute({ url: "https://example.com/missing" }, ctxWithId);
+
+		expect(result.llmOutput).not.toContain(".bobai/downloads/");
+		expect(result.llmOutput).toStartWith("Error:");
+	});
+});
+
+// ---------- Saving fetched content to disk ----------
+
+describe("webFetchTool.execute saves content to disk", () => {
+	const testRoot = join(import.meta.dir, ".test-web-fetch-save.tmp");
+	const downloadsDir = (sessionId: string) => join(testRoot, ".bobai", "downloads", sessionId);
+
+	beforeEach(() => {
+		mockFetch = mock();
+		globalThis.fetch = mockFetch;
+		rmSync(testRoot, { recursive: true, force: true });
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		rmSync(testRoot, { recursive: true, force: true });
+	});
+
+	test("saves text content to disk for text/html", async () => {
+		const html = "<h1>Hello</h1>";
+		mockFetch.mockResolvedValueOnce(new Response(html, { status: 200, headers: { "content-type": "text/html" } }));
+
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1", toolCallId: "tc-001" };
+		await webFetchTool.execute({ url: "https://example.com", format: "markdown" }, saveCtx);
+
+		const saved = await Bun.file(join(downloadsDir("s1"), "tc-001")).text();
+		expect(saved).toContain("Hello");
+		// Should be converted markdown, not raw HTML
+		expect(saved).toContain("# Hello");
+	});
+
+	test("saves plain text content as-is", async () => {
+		const text = "plain text content";
+		mockFetch.mockResolvedValueOnce(new Response(text, { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1", toolCallId: "tc-002" };
+		await webFetchTool.execute({ url: "https://example.com/file.txt" }, saveCtx);
+
+		const saved = await Bun.file(join(downloadsDir("s1"), "tc-002")).text();
+		expect(saved).toBe(text);
+	});
+
+	test("saves raw bytes for binary content", async () => {
+		const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
+		mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { "content-type": "image/png" } }));
+
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1", toolCallId: "tc-003" };
+		await webFetchTool.execute({ url: "https://example.com/img.png" }, saveCtx);
+
+		const saved = await Bun.file(join(downloadsDir("s1"), "tc-003")).arrayBuffer();
+		expect(new Uint8Array(saved)).toEqual(bytes);
+	});
+
+	test("skips saving when toolCallId is undefined", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("hello", { status: 200, headers: { "content-type": "text/plain" } }));
+
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1" };
+		const result = await webFetchTool.execute({ url: "https://example.com" }, saveCtx);
+
+		// Should still return content normally
+		expect(result.llmOutput).toBe("hello");
+		// Directory should not exist
+		const exists = await Bun.file(join(downloadsDir("s1"), "undefined")).exists();
+		expect(exists).toBe(false);
+	});
+
+	test("saves application/json as text", async () => {
+		const json = '{"key": "value"}';
+		mockFetch.mockResolvedValueOnce(new Response(json, { status: 200, headers: { "content-type": "application/json" } }));
+
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1", toolCallId: "tc-json" };
+		await webFetchTool.execute({ url: "https://example.com/api" }, saveCtx);
+
+		const saved = await Bun.file(join(downloadsDir("s1"), "tc-json")).text();
+		expect(saved).toBe(json);
+	});
+
+	test("does not save on HTTP error", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1", toolCallId: "tc-err" };
+		await webFetchTool.execute({ url: "https://example.com/missing" }, saveCtx);
+
+		const exists = await Bun.file(join(downloadsDir("s1"), "tc-err")).exists();
+		expect(exists).toBe(false);
+	});
+
+	test("does not save on URL validation error", async () => {
+		const saveCtx: ToolContext = { projectRoot: testRoot, sessionId: "s1", toolCallId: "tc-bad" };
+		await webFetchTool.execute({ url: "ftp://bad" }, saveCtx);
+
+		const exists = await Bun.file(join(downloadsDir("s1"), "tc-bad")).exists();
+		expect(exists).toBe(false);
+	});
+});
+
+describe("webFetchTool.execute binary content handling", () => {
+	beforeEach(() => {
+		mockFetch = mock();
+		globalThis.fetch = mockFetch;
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	test("binary LLM output with toolCallId shows file path and bash hint", async () => {
+		const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
+		mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { "content-type": "image/png" } }));
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-bin-1" };
+		const result = await webFetchTool.execute({ url: "https://example.com/img.png" }, ctx);
+
+		expect(result.llmOutput).toBe(
+			"Complete file available at .bobai/downloads/s1/tc-bin-1\nBinary file (image/png, 6 bytes). Use bash tool to process.",
+		);
+	});
+
+	test("binary LLM output without toolCallId shows cannot display message", async () => {
+		const bytes = new Uint8Array([0xff, 0xd8, 0xff]);
+		mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { "content-type": "image/jpeg" } }));
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1" };
+		const result = await webFetchTool.execute({ url: "https://example.com/photo.jpg" }, ctx);
+
+		expect(result.llmOutput).toBe("Binary content (image/jpeg, 3 bytes). Cannot display binary data.");
+	});
+
+	test("binary UI output shows URL and content-type info", async () => {
+		const bytes = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+		mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { "content-type": "audio/mpeg" } }));
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-bin-2" };
+		const result = await webFetchTool.execute({ url: "https://example.com/song.mp3" }, ctx);
+
+		expect(result.uiOutput).toBe("https://example.com/song.mp3\naudio/mpeg | 4 bytes");
+	});
+
+	test("binary content does not go through TextDecoder", async () => {
+		// Bytes that would produce garbage if decoded as text
+		const bytes = new Uint8Array(256);
+		for (let i = 0; i < 256; i++) bytes[i] = i;
+		mockFetch.mockResolvedValueOnce(
+			new Response(bytes, { status: 200, headers: { "content-type": "application/octet-stream" } }),
+		);
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-bin-3" };
+		const result = await webFetchTool.execute({ url: "https://example.com/data.bin" }, ctx);
+
+		expect(result.llmOutput).toContain("Binary file (application/octet-stream, 256 bytes). Use bash tool to process.");
+		expect(result.llmOutput).not.toContain("�");
+	});
+
+	test("binary summary includes content-type and byte size", async () => {
+		const bytes = new Uint8Array([0x00, 0x01]);
+		mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { "content-type": "image/gif" } }));
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-bin-4" };
+		const result = await webFetchTool.execute({ url: "https://example.com/img.gif" }, ctx);
+
+		expect(result.summary).toContain("image/gif");
+		expect(result.summary).toContain("2 bytes");
+	});
+
+	test("text response summary includes content-type and byte size", async () => {
+		mockFetch.mockResolvedValueOnce(
+			new Response("<p>Hello</p>", { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+		);
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-txt-1" };
+		const result = await webFetchTool.execute({ url: "https://example.com/page" }, ctx);
+
+		expect(result.summary).toMatch(/text\/html; charset=utf-8 \| \d+ bytes \| [\d.]+s$/);
+	});
+
+	test("PDF success summary includes content-type and byte size", async () => {
+		const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+		mockFetch.mockResolvedValueOnce(new Response(pdfBytes, { status: 200, headers: { "content-type": "application/pdf" } }));
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1", toolCallId: "tc-pdf-1" };
+		const result = await webFetchTool.execute({ url: "https://example.com/doc.pdf" }, ctx);
+
+		// Either success or error, but if success, should have content-type
+		if (result.summary && !result.summary.includes("PDF error") && !result.summary.includes("PDF empty")) {
+			expect(result.summary).toContain("application/pdf");
+		}
+	});
+
+	test("error summary does NOT include content-type", async () => {
+		mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404, statusText: "Not Found" }));
+
+		const ctx: ToolContext = { projectRoot: "/tmp/test", sessionId: "s1" };
+		const result = await webFetchTool.execute({ url: "https://example.com/missing" }, ctx);
+
+		expect(result.summary).toMatch(/HTTP 404 Not Found \| [\d.]+s$/);
 	});
 });

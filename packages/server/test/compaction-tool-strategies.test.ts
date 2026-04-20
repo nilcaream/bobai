@@ -777,9 +777,11 @@ describe("web_fetch compact()", () => {
 		expect(compact("Error: HTTP 404 Not Found", { url: "https://example.com" })).toBe("Error: HTTP 404 Not Found");
 	});
 
-	test("preserves short output (20 lines or fewer)", () => {
+	test("compacts legacy output longer than 3 lines", () => {
 		const short = makeLines(20, "content");
-		expect(compact(short, { url: "https://example.com" })).toBe(short);
+		const result = compact(short, { url: "https://example.com" });
+		expect(result).toContain(COMPACTION_MARKER);
+		expect(result).toContain("web_fetch(https://example.com)");
 	});
 
 	test("compacts output longer than 20 lines — keeps first 15", () => {

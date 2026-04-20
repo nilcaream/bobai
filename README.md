@@ -221,6 +221,8 @@ The LLM has access to these tools during a conversation:
 | `file_search` | Find files by glob pattern |
 | `grep_search` | Search file contents with regex |
 | `bash` | Run shell commands (30s timeout) |
+| `sqlite3` | Execute SQL queries against SQLite databases |
+| `web_fetch` | Fetch web pages and URLs; extracts text from PDFs |
 | `task` | Spawn a subagent for independent work |
 | `skill` | Load a skill for specialized instructions |
 

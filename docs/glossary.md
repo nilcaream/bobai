@@ -201,8 +201,9 @@ Layered instruction files injected into the system prompt:
 ### Project
 
 A working directory with Bob AI initialized. Project state lives in the
-`.bobai/` directory: config (`bobai.json`), database (`bobai.db`), and
-project-level instructions.
+`.bobai/` directory: config (`bobai.json`), database (`bobai.db`),
+project-level instructions, compacted tool outputs (`compaction/`),
+and downloaded web content (`downloads/`).
 
 ---
 
