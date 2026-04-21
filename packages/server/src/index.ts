@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { authorize } from "./auth/authorize";
-import { loadAuth, saveAuth } from "./auth/store";
+import { authorizeCopilot, authorizeOpenRouter } from "./auth/authorize";
+import { getCopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "./auth/store";
 import { parseCLI } from "./cli";
 import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
@@ -14,7 +14,7 @@ import { initProject } from "./project";
 import { deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
 import { createConfiguredProvider } from "./provider/factory";
 import { providerModelsConfigExists } from "./provider/models";
-import { isSupportedProvider } from "./provider/providers";
+import { isSupportedAuthProvider, isSupportedProvider, SUPPORTED_AUTH_PROVIDERS } from "./provider/providers";
 import { createServer } from "./server";
 import { builtinSkills } from "./skill/builtin";
 import { discoverSkills } from "./skill/skill";
@@ -28,10 +28,30 @@ const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
 if (cli.command === "auth") {
 	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
 	installFetchInterceptor({ logger, logDir, debug: cli.debug });
-	logger.info("AUTH", "Starting authentication flow");
-	const auth = await authorize(globalConfigDir);
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, { verify: true });
-	process.exit(0);
+
+	if (!cli.provider) {
+		for (const provider of SUPPORTED_AUTH_PROVIDERS) {
+			console.log(provider);
+		}
+		process.exit(1);
+	}
+
+	if (!isSupportedAuthProvider(cli.provider)) {
+		console.error(`Unsupported provider: ${cli.provider}`);
+		process.exit(1);
+	}
+
+	logger.info("AUTH", `Starting authentication flow for ${cli.provider}`);
+	if (cli.provider === "github-copilot") {
+		const auth = await authorizeCopilot(globalConfigDir);
+		await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, { verify: true });
+		process.exit(0);
+	}
+
+	if (cli.provider === "openrouter") {
+		await authorizeOpenRouter(globalConfigDir);
+		process.exit(0);
+	}
 }
 
 if (cli.command === "refresh") {
@@ -43,20 +63,21 @@ if (cli.command === "refresh") {
 		process.exit(0);
 	}
 
-	let auth = loadAuth(globalConfigDir);
+	const store = loadAuthStore(globalConfigDir);
+	let auth = store ? getCopilotAuth(store) : undefined;
 	if (!auth) {
-		console.error("No auth found. Run `bobai auth` first.");
+		console.error("No auth found. Run `bobai auth github-copilot` first.");
 		process.exit(1);
 	}
 	if (Date.now() >= auth.expires) {
 		try {
 			const session = await exchangeToken(auth.refresh);
 			auth = { refresh: auth.refresh, access: session.access, expires: session.expires };
-			saveAuth(globalConfigDir, auth);
+			saveAuthStore(globalConfigDir, setCopilotAuth(store ?? { version: 1, providers: {} }, auth));
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			console.error(`Token refresh failed: ${message}`);
-			console.error("Your session may have expired. Run `bobai auth` to re-authenticate.");
+			console.error("Your session may have expired. Run `bobai auth github-copilot` to re-authenticate.");
 			process.exit(1);
 		}
 	}

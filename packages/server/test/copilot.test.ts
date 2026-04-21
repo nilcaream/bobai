@@ -445,10 +445,11 @@ describe("CopilotProvider", () => {
 			expect(fetchCalls[1].url).toContain("chat/completions");
 			expect(fetchCalls[1].headers.Authorization).toContain("tid=new");
 
-			// Should persist the refreshed auth
+			// Should persist the refreshed auth under the provider-keyed auth store
 			const saved = JSON.parse(fs.readFileSync(path.join(configDir, "auth.json"), "utf8"));
-			expect(saved.refresh).toBe("gho_testauthrefreshtoken1234567890abcdef");
-			expect(saved.access).toContain("tid=new");
+			expect(saved.version).toBe(1);
+			expect(saved.providers["github-copilot"].refresh).toBe("gho_testauthrefreshtoken1234567890abcdef");
+			expect(saved.providers["github-copilot"].access).toContain("tid=new");
 		} finally {
 			fs.rmSync(configDir, { recursive: true, force: true });
 		}

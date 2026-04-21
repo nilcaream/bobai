@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadAuth, type StoredAuth, saveAuth } from "../src/auth/store";
+import {
+	type AuthStore,
+	getCopilotAuth,
+	getOpenRouterAuth,
+	loadAuthStore,
+	saveAuthStore,
+	setCopilotAuth,
+	setOpenRouterAuth,
+} from "../src/auth/store";
 
 describe("auth store", () => {
 	let tmpDir: string;
@@ -15,45 +23,62 @@ describe("auth store", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("saveAuth creates auth.json with correct permissions", () => {
-		saveAuth(tmpDir, { refresh: "gho_abc", access: "tid=x;exp=y", expires: 1000 });
+	test("saveAuthStore creates auth.json with correct permissions", () => {
+		saveAuthStore(tmpDir, { version: 1, providers: {} });
 		const filePath = path.join(tmpDir, "auth.json");
 		expect(fs.existsSync(filePath)).toBe(true);
 		const stat = fs.statSync(filePath);
 		expect(stat.mode & 0o777).toBe(0o600);
 	});
 
-	test("saveAuth writes all three fields", () => {
-		const auth: StoredAuth = { refresh: "gho_abc", access: "tid=x", expires: 99999 };
-		saveAuth(tmpDir, auth);
-		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8"));
-		expect(raw).toEqual(auth);
+	test("round-trips a provider-keyed auth document", () => {
+		const store: AuthStore = {
+			version: 1,
+			providers: {
+				"github-copilot": {
+					refresh: "refresh-token",
+					access: "access-token",
+					expires: 123,
+				},
+				openrouter: {
+					apiKey: "or-key",
+				},
+			},
+		};
+
+		saveAuthStore(tmpDir, store);
+		expect(loadAuthStore(tmpDir)).toEqual(store);
 	});
 
-	test("saveAuth overwrites existing auth", () => {
-		saveAuth(tmpDir, { refresh: "old", access: "old", expires: 1 });
-		saveAuth(tmpDir, { refresh: "new", access: "new", expires: 2 });
-		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8"));
-		expect(raw.refresh).toBe("new");
+	test("setCopilotAuth stores copilot credentials under github-copilot", () => {
+		const store: AuthStore = { version: 1, providers: {} };
+		const next = setCopilotAuth(store, { refresh: "r", access: "a", expires: 1 });
+		expect(getCopilotAuth(next)).toEqual({ refresh: "r", access: "a", expires: 1 });
 	});
 
-	test("loadAuth returns auth when present", () => {
-		const auth: StoredAuth = { refresh: "gho_abc", access: "tid=x", expires: 99999 };
-		saveAuth(tmpDir, auth);
-		expect(loadAuth(tmpDir)).toEqual(auth);
+	test("setOpenRouterAuth stores api key under openrouter", () => {
+		const store: AuthStore = { version: 1, providers: {} };
+		const next = setOpenRouterAuth(store, { apiKey: "key-123" });
+		expect(getOpenRouterAuth(next)).toEqual({ apiKey: "key-123" });
 	});
 
-	test("loadAuth returns undefined when file is missing", () => {
-		expect(loadAuth(tmpDir)).toBeUndefined();
+	test("setOpenRouterAuth overwrites an existing key", () => {
+		const store: AuthStore = {
+			version: 1,
+			providers: {
+				openrouter: { apiKey: "old" },
+			},
+		};
+		const next = setOpenRouterAuth(store, { apiKey: "new" });
+		expect(getOpenRouterAuth(next)).toEqual({ apiKey: "new" });
 	});
 
-	test("loadAuth returns undefined for old format { token }", () => {
-		fs.writeFileSync(path.join(tmpDir, "auth.json"), JSON.stringify({ token: "gho_old" }));
-		expect(loadAuth(tmpDir)).toBeUndefined();
+	test("loadAuthStore returns undefined when file is missing", () => {
+		expect(loadAuthStore(tmpDir)).toBeUndefined();
 	});
 
-	test("loadAuth returns undefined for corrupt JSON", () => {
+	test("loadAuthStore returns undefined for corrupt JSON", () => {
 		fs.writeFileSync(path.join(tmpDir, "auth.json"), "not json");
-		expect(loadAuth(tmpDir)).toBeUndefined();
+		expect(loadAuthStore(tmpDir)).toBeUndefined();
 	});
 });

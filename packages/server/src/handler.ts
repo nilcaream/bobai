@@ -405,7 +405,7 @@ export async function handlePrompt(req: PromptRequest) {
 				let errorText: string;
 				if (err instanceof AuthError) {
 					errorText = err.permanent
-						? `[Error: Authentication failed (${err.status}). Run \`bobai auth\` to re-authenticate.]`
+						? `[Error: Authentication failed (${err.status}). Run \`bobai auth github-copilot\` to re-authenticate.]`
 						: `[Error: Token refresh failed: ${err.body}. Check your network connection and try again.]`;
 				} else if (err instanceof TimeoutError) {
 					errorText = `[Error: ${err.body}]`;
@@ -420,7 +420,7 @@ export async function handlePrompt(req: PromptRequest) {
 
 			if (err instanceof AuthError) {
 				if (err.permanent) {
-					send(ws, { type: "error", message: `Authentication expired. Run \`bobai auth\` to re-authenticate.` });
+					send(ws, { type: "error", message: `Authentication expired. Run \`bobai auth github-copilot\` to re-authenticate.` });
 				} else {
 					send(ws, { type: "error", message: `Token refresh failed: ${err.body}` });
 				}

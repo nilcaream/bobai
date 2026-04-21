@@ -1,8 +1,10 @@
 import { exchangeToken } from "../provider/copilot";
 import { pollForToken, requestDeviceCode } from "./device-flow";
-import { type StoredAuth, saveAuth } from "./store";
+import { validateOpenRouterKey } from "./openrouter";
+import { promptSecret } from "./prompt-secret";
+import { type AuthStore, type CopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth, setOpenRouterAuth } from "./store";
 
-export async function authorize(configDir: string): Promise<StoredAuth> {
+export async function authorizeCopilot(configDir: string): Promise<CopilotAuth> {
 	console.log("Authenticating with GitHub Copilot");
 
 	const deviceCode = await requestDeviceCode();
@@ -22,8 +24,27 @@ export async function authorize(configDir: string): Promise<StoredAuth> {
 	console.log("- Session obtained");
 	console.log("");
 
-	const auth: StoredAuth = { refresh: githubToken, access: session.access, expires: session.expires };
-	saveAuth(configDir, auth);
+	const auth: CopilotAuth = { refresh: githubToken, access: session.access, expires: session.expires };
+	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
+	saveAuthStore(configDir, setCopilotAuth(store, auth));
 
 	return auth;
 }
+
+export async function authorizeOpenRouter(
+	configDir: string,
+	deps: {
+		promptSecret?: (prompt: string) => Promise<string>;
+		validateOpenRouterKey?: (apiKey: string) => Promise<void>;
+	} = {},
+): Promise<void> {
+	const readSecret = deps.promptSecret ?? promptSecret;
+	const checkKey = deps.validateOpenRouterKey ?? validateOpenRouterKey;
+	const apiKey = await readSecret("Paste OpenRouter API key: ");
+	await checkKey(apiKey);
+	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
+	saveAuthStore(configDir, setOpenRouterAuth(store, { apiKey }));
+	console.log("OpenRouter key saved");
+}
+
+export const authorize = authorizeCopilot;

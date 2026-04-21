@@ -1,32 +1,69 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export interface StoredAuth {
+export interface CopilotAuth {
 	refresh: string;
 	access: string;
 	expires: number;
 }
 
-export function saveAuth(configDir: string, auth: StoredAuth): void {
+export interface OpenRouterAuth {
+	apiKey: string;
+}
+
+export interface AuthStore {
+	version: 1;
+	providers: {
+		"github-copilot"?: CopilotAuth;
+		openrouter?: OpenRouterAuth;
+	};
+}
+
+export function saveAuthStore(configDir: string, store: AuthStore): void {
 	fs.mkdirSync(configDir, { recursive: true });
 	const filePath = path.join(configDir, "auth.json");
-	// Atomic write: write to temp file in same directory, then rename.
-	// rename() is atomic on the same filesystem, so readers never see a
-	// truncated/partial file (e.g. if the process is killed mid-write).
 	const tmpPath = `${filePath}.${process.pid}.tmp`;
-	fs.writeFileSync(tmpPath, JSON.stringify(auth, null, "\t"), { mode: 0o600 });
+	fs.writeFileSync(tmpPath, JSON.stringify(store, null, "\t"), { mode: 0o600 });
 	fs.renameSync(tmpPath, filePath);
 }
 
-export function loadAuth(configDir: string): StoredAuth | undefined {
+export function loadAuthStore(configDir: string): AuthStore | undefined {
 	try {
 		const filePath = path.join(configDir, "auth.json");
-		const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-		if (typeof raw.refresh === "string" && typeof raw.access === "string" && typeof raw.expires === "number") {
-			return { refresh: raw.refresh, access: raw.access, expires: raw.expires };
+		const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<AuthStore>;
+		if (raw.version !== 1 || typeof raw.providers !== "object" || raw.providers === null) {
+			return undefined;
 		}
-		return undefined;
+		return raw as AuthStore;
 	} catch {
 		return undefined;
 	}
+}
+
+export function getCopilotAuth(store: AuthStore): CopilotAuth | undefined {
+	return store.providers["github-copilot"];
+}
+
+export function getOpenRouterAuth(store: AuthStore): OpenRouterAuth | undefined {
+	return store.providers.openrouter;
+}
+
+export function setCopilotAuth(store: AuthStore, auth: CopilotAuth): AuthStore {
+	return {
+		...store,
+		providers: {
+			...store.providers,
+			"github-copilot": auth,
+		},
+	};
+}
+
+export function setOpenRouterAuth(store: AuthStore, auth: OpenRouterAuth): AuthStore {
+	return {
+		...store,
+		providers: {
+			...store.providers,
+			openrouter: auth,
+		},
+	};
 }

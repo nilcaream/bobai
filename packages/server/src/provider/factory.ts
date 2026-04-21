@@ -1,5 +1,5 @@
-import { authorize as defaultAuthorize } from "../auth/authorize";
-import { loadAuth as defaultLoadAuth, type StoredAuth } from "../auth/store";
+import { authorizeCopilot as defaultAuthorizeCopilot } from "../auth/authorize";
+import { type AuthStore, type CopilotAuth, loadAuthStore as defaultLoadAuthStore, getCopilotAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { createCopilotProvider as defaultCreateCopilotProvider } from "./copilot";
 import { providerModelsConfigExists as defaultProviderModelsConfigExists } from "./models";
@@ -14,9 +14,9 @@ export interface CreateProviderOptions {
 
 export interface CreateProviderDeps {
 	providerModelsConfigExists?: (providerId: ProviderId, configDir?: string) => boolean;
-	loadAuth?: (configDir: string) => StoredAuth | undefined;
-	authorize?: (configDir: string) => Promise<StoredAuth>;
-	createCopilotProvider?: (auth: StoredAuth, configDir?: string, logger?: Logger) => Provider;
+	loadAuthStore?: (configDir: string) => AuthStore | undefined;
+	authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
+	createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger) => Provider;
 }
 
 export async function createConfiguredProvider(
@@ -24,8 +24,8 @@ export async function createConfiguredProvider(
 	deps: CreateProviderDeps = {},
 ): Promise<Provider> {
 	const providerModelsConfigExists = deps.providerModelsConfigExists ?? defaultProviderModelsConfigExists;
-	const loadAuth = deps.loadAuth ?? defaultLoadAuth;
-	const authorize = deps.authorize ?? defaultAuthorize;
+	const loadAuthStore = deps.loadAuthStore ?? defaultLoadAuthStore;
+	const authorizeCopilot = deps.authorizeCopilot ?? defaultAuthorizeCopilot;
 	const createCopilotProvider = deps.createCopilotProvider ?? defaultCreateCopilotProvider;
 
 	switch (options.providerId) {
@@ -33,9 +33,10 @@ export async function createConfiguredProvider(
 			if (!providerModelsConfigExists(options.providerId, options.configDir)) {
 				throw new Error("Model configuration not found. Please run: bobai refresh");
 			}
-			let auth = loadAuth(options.configDir);
+			const store = loadAuthStore(options.configDir);
+			let auth = store ? getCopilotAuth(store) : undefined;
 			if (!auth) {
-				auth = await authorize(options.configDir);
+				auth = await authorizeCopilot(options.configDir);
 			}
 			return createCopilotProvider(auth, options.configDir, options.logger);
 		}

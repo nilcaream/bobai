@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import { type StoredAuth, saveAuth } from "../auth/store";
+import { type AuthStore, type CopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { fetchCatalog } from "../models-catalog";
 import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
@@ -88,7 +88,7 @@ export function isCopilotResponses(modelId: string): boolean {
 }
 
 export function createCopilotProvider(
-	auth: StoredAuth,
+	auth: CopilotAuth,
 	configDir?: string,
 	logger?: Logger,
 	/** @internal — exposed for unit tests to avoid multi-second backoff waits */
@@ -104,7 +104,7 @@ export function createCopilotProvider(
 
 	// Warn about potentially corrupt refresh token
 	if (refreshToken.startsWith("gho_") && refreshToken.length < 20) {
-		const msg = `Refresh token looks corrupt: prefix=gho_ len=${refreshToken.length} (expected 40+). Run 'bobai auth' to re-authenticate.`;
+		const msg = `Refresh token looks corrupt: prefix=gho_ len=${refreshToken.length} (expected 40+). Run 'bobai auth github-copilot' to re-authenticate.`;
 		logger?.warn("AUTH", msg);
 		console.warn(`[WARN] ${msg}`);
 	}
@@ -155,7 +155,11 @@ export function createCopilotProvider(
 			sessionToken = result.access;
 			sessionExpires = result.expires;
 			baseUrl = result.baseUrl;
-			saveAuth(resolvedConfigDir, { refresh: refreshToken, access: sessionToken, expires: sessionExpires });
+			const store: AuthStore = loadAuthStore(resolvedConfigDir) ?? { version: 1, providers: {} };
+			saveAuthStore(
+				resolvedConfigDir,
+				setCopilotAuth(store, { refresh: refreshToken, access: sessionToken, expires: sessionExpires }),
+			);
 			logger?.info("AUTH", `Token refreshed successfully. session=${tokenSummary(sessionToken)} baseUrl=${baseUrl}`);
 		})();
 

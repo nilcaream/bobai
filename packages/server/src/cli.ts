@@ -6,6 +6,7 @@ export interface ServeCommand {
 export interface AuthCommand {
 	command: "auth";
 	debug: boolean;
+	provider?: string;
 }
 
 export interface RefreshCommand {
@@ -21,7 +22,8 @@ export function parseCLI(argv: string[]): CLICommand {
 	const verify = argv.includes("--verify");
 
 	if (argv[0] === "auth") {
-		return { command: "auth", debug };
+		const provider = argv.find((arg, index) => index > 0 && !arg.startsWith("--"));
+		return { command: "auth", debug, provider };
 	}
 
 	if (argv[0] === "refresh") {
