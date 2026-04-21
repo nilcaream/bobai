@@ -7,6 +7,7 @@ import { handleCommand } from "../src/command";
 import { handlePrompt } from "../src/handler";
 import { CURATED_MODELS } from "../src/provider/copilot-models";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
+import type { ProviderId } from "../src/provider/providers";
 import { createServer } from "../src/server";
 import {
 	appendMessage,
@@ -72,6 +73,7 @@ describe("session title update", () => {
 describe("handleCommand", () => {
 	let db: Database;
 	let tmpDir: string;
+	const providerId: ProviderId = "github-copilot";
 
 	beforeAll(() => {
 		db = createTestDb();
@@ -85,7 +87,7 @@ describe("handleCommand", () => {
 
 	test("model command updates session model using id-sorted order and returns status", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
+		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, { providerId, configDir: tmpDir });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
@@ -97,13 +99,17 @@ describe("handleCommand", () => {
 
 	test("model command rejects invalid index", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "model", args: "99", sessionId: session.id }, tmpDir);
+		const result = handleCommand(
+			db,
+			{ command: "model", args: "99", sessionId: session.id },
+			{ providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Invalid model index");
 	});
 
 	test("model command creates session when none provided", () => {
-		const result = handleCommand(db, { command: "model", args: "1" }, tmpDir);
+		const result = handleCommand(db, { command: "model", args: "1" }, { providerId, configDir: tmpDir });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
@@ -113,7 +119,7 @@ describe("handleCommand", () => {
 		}
 	});
 
-	test("model command uses the same config-backed sorted order as /bobai/models", () => {
+	test("model command uses provider-aware options and the same config-backed sorted order as /bobai/models", () => {
 		const configModels = [
 			{ id: "claude-haiku-4.5", contextWindow: 1000 },
 			{ id: "claude-sonnet-4.5", contextWindow: 500000 },
@@ -132,7 +138,7 @@ describe("handleCommand", () => {
 			),
 		);
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, tmpDir);
+		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, { providerId, configDir: tmpDir });
 		expect(result.ok).toBe(true);
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe("claude-haiku-4.5");
@@ -140,7 +146,11 @@ describe("handleCommand", () => {
 
 	test("title command updates session title", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "title", args: "My Chat Title", sessionId: session.id }, tmpDir);
+		const result = handleCommand(
+			db,
+			{ command: "title", args: "My Chat Title", sessionId: session.id },
+			{ providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(true);
 		const updated = getSession(db, session.id);
 		expect(updated?.title).toBe("My Chat Title");
@@ -148,20 +158,24 @@ describe("handleCommand", () => {
 
 	test("title command rejects empty title", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "title", args: "", sessionId: session.id }, tmpDir);
+		const result = handleCommand(db, { command: "title", args: "", sessionId: session.id }, { providerId, configDir: tmpDir });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Title cannot be empty");
 	});
 
 	test("session command returns ok (no-op)", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "session", args: "", sessionId: session.id }, tmpDir);
+		const result = handleCommand(
+			db,
+			{ command: "session", args: "", sessionId: session.id },
+			{ providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(true);
 	});
 
 	test("unknown command returns error", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "foo", args: "", sessionId: session.id }, tmpDir);
+		const result = handleCommand(db, { command: "foo", args: "", sessionId: session.id }, { providerId, configDir: tmpDir });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Unknown command");
 	});
@@ -202,7 +216,7 @@ describe("HTTP endpoints", () => {
 	beforeAll(() => {
 		db = createTestDb();
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
-		server = createServer({ port: 0, db, configDir: tmpDir });
+		server = createServer({ port: 0, db, configDir: tmpDir, providerId: "github-copilot" });
 		baseUrl = `http://localhost:${server.port}`;
 	});
 
@@ -212,7 +226,7 @@ describe("HTTP endpoints", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("GET /bobai/models returns id-sorted model list with cost, context, defaultModel and defaultStatus", async () => {
+	test("GET /bobai/models returns id-sorted model list with cost, context, defaultModel and defaultStatus for the configured provider", async () => {
 		const res = await fetch(`${baseUrl}/bobai/models`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {

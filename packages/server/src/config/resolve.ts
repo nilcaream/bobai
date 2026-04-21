@@ -1,3 +1,5 @@
+import { DEFAULT_PROVIDER_ID, getDefaultModelForProvider } from "../provider/providers";
+
 export interface ResolvedConfig {
 	provider: string;
 	model: string;
@@ -11,8 +13,8 @@ interface ConfigLayer {
 }
 
 const DEFAULTS: ResolvedConfig = {
-	provider: "github-copilot",
-	model: "gpt-5-mini",
+	provider: DEFAULT_PROVIDER_ID,
+	model: getDefaultModelForProvider(DEFAULT_PROVIDER_ID),
 };
 
 export function resolveConfig(project: ConfigLayer, global: ConfigLayer): ResolvedConfig {

@@ -1,11 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { resolveConfig } from "../src/config/resolve";
+import { DEFAULT_PROVIDER_ID, getDefaultModelForProvider } from "../src/provider/providers";
 
 describe("resolveConfig", () => {
 	test("returns defaults when no overrides provided", () => {
 		const config = resolveConfig({}, {});
 		expect(config.provider).toBe("github-copilot");
 		expect(config.model).toBe("gpt-5-mini");
+	});
+
+	test("returns shared provider defaults when no overrides provided", () => {
+		const config = resolveConfig({}, {});
+		expect(config.provider).toBe(DEFAULT_PROVIDER_ID);
+		expect(config.model).toBe(getDefaultModelForProvider(DEFAULT_PROVIDER_ID));
 	});
 
 	test("global preferences override defaults", () => {

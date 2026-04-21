@@ -13,8 +13,9 @@ import type { Logger } from "../log/logger";
 import { runWithScope } from "../log/logger";
 import { subagentScope } from "../log/session-tag";
 import { getProjectInfo } from "../project-info";
-import { loadModelsConfig } from "../provider/copilot-models";
+import { getProviderModelConfig } from "../provider/models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
+import { isSupportedProvider, type ProviderId } from "../provider/providers";
 import {
 	appendMessage,
 	createSubagentSession,
@@ -258,8 +259,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			// New sessions have no tool messages yet, so this is a no-op.
 			const childSession = getSession(db, childSessionId);
 			const childPromptTokens = childSession?.promptTokens ?? 0;
-			const childModelConfigs = loadModelsConfig();
-			const childModelConfig = childModelConfigs.find((m) => m.id === model);
+			const providerId: ProviderId = isSupportedProvider(provider.id) ? provider.id : "github-copilot";
+			const childModelConfig = getProviderModelConfig(providerId, model, undefined);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
 			if (childContextWindow <= 0) {
 				childLogger?.warn("CONFIG", `No contextWindow for model "${model}"; subagent compaction disabled`);

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
-import { buildSortedModelList, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
+import { buildSortedProviderModelList, formatProviderModelDisplay } from "./provider/models";
+import { DEFAULT_PROVIDER_ID, type ProviderId } from "./provider/providers";
 import { createSession, getSession, listSubagentSessions, updateSessionModel, updateSessionTitle } from "./session/repository";
 
 export interface CommandRequest {
@@ -8,9 +9,14 @@ export interface CommandRequest {
 	sessionId?: string;
 }
 
+export interface CommandOptions {
+	providerId?: ProviderId;
+	configDir?: string;
+}
+
 export type CommandResult = { ok: true; status?: string; sessionId?: string } | { ok: false; error: string };
 
-export function handleCommand(db: Database, req: CommandRequest, configDir?: string): CommandResult {
+export function handleCommand(db: Database, req: CommandRequest, options: CommandOptions = {}): CommandResult {
 	const { command, args } = req;
 	let { sessionId } = req;
 
@@ -25,9 +31,12 @@ export function handleCommand(db: Database, req: CommandRequest, configDir?: str
 		}
 	}
 
+	const providerId = options.providerId ?? DEFAULT_PROVIDER_ID;
+	const configDir = options.configDir;
+
 	switch (command) {
 		case "model":
-			return withSessionId(handleModelCommand(db, sessionId, args, configDir), sessionId);
+			return withSessionId(handleModelCommand(db, sessionId, args, { providerId, configDir }), sessionId);
 		case "title":
 			return withSessionId(handleTitleCommand(db, sessionId, args), sessionId);
 		case "subagent":
@@ -46,8 +55,13 @@ function withSessionId(result: CommandResult, sessionId: string): CommandResult 
 	return result;
 }
 
-function handleModelCommand(db: Database, sessionId: string, args: string, configDir?: string): CommandResult {
-	const sortedModels = buildSortedModelList(loadModelsConfig(configDir));
+function handleModelCommand(
+	db: Database,
+	sessionId: string,
+	args: string,
+	options: { providerId: ProviderId; configDir?: string },
+): CommandResult {
+	const sortedModels = buildSortedProviderModelList(options.providerId, options.configDir);
 	const index = Number.parseInt(args, 10);
 	if (Number.isNaN(index) || index < 1 || index > sortedModels.length) {
 		return { ok: false, error: `Invalid model index: ${args}` };
@@ -59,7 +73,10 @@ function handleModelCommand(db: Database, sessionId: string, args: string, confi
 	updateSessionModel(db, sessionId, modelId);
 	const session = getSession(db, sessionId);
 	const promptTokens = session?.promptTokens ?? 0;
-	return { ok: true, status: formatModelDisplay(modelId, promptTokens, configDir) };
+	return {
+		ok: true,
+		status: formatProviderModelDisplay(options.providerId, modelId, promptTokens, options.configDir),
+	};
 }
 
 function handleSubagentCommand(db: Database, sessionId: string): CommandResult {

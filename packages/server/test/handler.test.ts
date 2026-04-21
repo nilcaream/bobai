@@ -1,5 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { handlePrompt } from "../src/handler";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { AuthError, ProviderError } from "../src/provider/provider";
@@ -137,6 +140,44 @@ describe("handlePrompt", () => {
 		]);
 		expect(msgs.at(-1).type).toBe("done");
 		expect(msgs.at(-1).sessionId).toBeTruthy();
+	});
+
+	test("completes prompt handling when provider-specific model metadata exists", async () => {
+		const ws = mockWs();
+		const provider = mockProvider(["metadata ok"]);
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-"));
+		try {
+			fs.writeFileSync(
+				path.join(tmpDir, "copilot-models.json"),
+				JSON.stringify([
+					{
+						id: "gpt-5-mini",
+						name: "GPT-5 Mini",
+						contextWindow: 264000,
+						maxOutput: 64000,
+						premiumRequestMultiplier: 0,
+						enabled: true,
+					},
+				]),
+			);
+
+			await handlePrompt({
+				ws,
+				db,
+				provider,
+				model: "gpt-5-mini",
+				text: "hi",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
+
+			const msgs = ws.messages();
+			expect(msgs.find((m: { type: string }) => m.type === "done")).toBeTruthy();
+			expect(msgs.find((m: { type: string; text?: string }) => m.type === "token" && m.text === "metadata ok")).toBeTruthy();
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	test("persists user and assistant messages to DB", async () => {

@@ -11,8 +11,10 @@ import { createLogger } from "./log/logger";
 import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
-import { createCopilotProvider, deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
-import { modelsConfigExists } from "./provider/copilot-models";
+import { deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
+import { createConfiguredProvider } from "./provider/factory";
+import { providerModelsConfigExists } from "./provider/models";
+import { isSupportedProvider } from "./provider/providers";
 import { createServer } from "./server";
 import { builtinSkills } from "./skill/builtin";
 import { discoverSkills } from "./skill/skill";
@@ -85,17 +87,21 @@ for (const skill of skills.list()) {
 	logger.info("SKILL", `${skill.name}: ${skill.filePath}`);
 }
 
-if (!modelsConfigExists(globalConfigDir)) {
+if (!isSupportedProvider(config.provider)) {
+	console.error(`Unsupported provider: ${config.provider}`);
+	process.exit(1);
+}
+
+if (!providerModelsConfigExists(config.provider, globalConfigDir)) {
 	console.error("Model configuration not found. Please run: bobai refresh");
 	process.exit(1);
 }
 
-let auth = loadAuth(globalConfigDir);
-if (!auth) {
-	auth = await authorize(globalConfigDir);
-}
-
-const provider = createCopilotProvider(auth, globalConfigDir, logger);
+const provider = await createConfiguredProvider({
+	providerId: config.provider,
+	configDir: globalConfigDir,
+	logger,
+});
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 // Bundled layout: server.js + ui/ live side-by-side in dist/.
 // Source layout:  packages/server/src/index.ts → ../../ui/dist.
@@ -109,6 +115,7 @@ const server = createServer({
 	db: project.db,
 	dbGuard: project.dbGuard,
 	provider,
+	providerId: config.provider,
 	model: config.model,
 	maxIterations: config.maxIterations,
 	projectRoot: process.cwd(),

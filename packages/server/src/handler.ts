@@ -16,10 +16,11 @@ import { repairMessageOrdering } from "./message-repair";
 import { getProjectInfo } from "./project-info";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
-import { loadModelsConfig } from "./provider/copilot-models";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
+import { getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider/provider";
+import { isSupportedProvider, type ProviderId } from "./provider/providers";
 import {
 	appendMessage,
 	createSession,
@@ -255,8 +256,8 @@ export async function handlePrompt(req: PromptRequest) {
 		// Uses the session's last known prompt token count and the model's context window.
 		const currentSession = getSession(db, currentSessionId);
 		const sessionPromptTokens = currentSession?.promptTokens ?? 0;
-		const modelConfigs = loadModelsConfig();
-		const modelConfig = modelConfigs.find((m) => m.id === effectiveModel);
+		const providerId: ProviderId = isSupportedProvider(provider.id) ? provider.id : "github-copilot";
+		const modelConfig = getProviderModelConfig(providerId, effectiveModel, configDir);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
 		if (contextWindow <= 0) {
 			scopedLogger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);

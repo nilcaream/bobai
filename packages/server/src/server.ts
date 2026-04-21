@@ -15,8 +15,9 @@ import { sessionScope } from "./log/session-tag";
 import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
-import { buildSortedModelList, formatModelDisplay, loadModelsConfig } from "./provider/copilot-models";
+import { buildSortedProviderModelList, formatProviderModelDisplay, getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Provider } from "./provider/provider";
+import { DEFAULT_PROVIDER_ID, isSupportedProvider, type ProviderId } from "./provider/providers";
 import {
 	deleteSession,
 	getMessages,
@@ -36,6 +37,7 @@ export interface ServerOptions {
 	db?: Database;
 	dbGuard?: DbGuard;
 	provider?: Provider;
+	providerId?: ProviderId;
 	model?: string;
 	maxIterations?: number;
 	projectRoot?: string;
@@ -48,8 +50,15 @@ export interface ServerOptions {
 	startedAt?: number;
 }
 
+function resolveConfiguredProviderId(providerId?: ProviderId, runtimeProviderId?: string): ProviderId {
+	if (providerId) return providerId;
+	if (runtimeProviderId && isSupportedProvider(runtimeProviderId)) return runtimeProviderId;
+	return DEFAULT_PROVIDER_ID;
+}
+
 export function createServer(options: ServerOptions) {
 	const staticDir = options.staticDir;
+	const configuredProviderId = resolveConfiguredProviderId(options.providerId, options.provider?.id);
 
 	// Track active AbortControllers per WebSocket for cleanup on disconnect
 	const wsAbortControllers = new Map<object, AbortController>();
@@ -191,8 +200,7 @@ export function createServer(options: ServerOptions) {
 				const storedPromptTokens = session?.promptTokens ?? 0;
 				const storedPromptChars = session?.promptChars ?? 0;
 				const modelId = session?.model ?? options.model ?? "";
-				const modelConfigs = loadModelsConfig(options.configDir);
-				const modelConfig = modelConfigs.find((m) => m.id === modelId);
+				const modelConfig = getProviderModelConfig(configuredProviderId, modelId, options.configDir);
 				const contextWindow = modelConfig?.contextWindow ?? 0;
 				if (contextWindow <= 0) {
 					options.logger
@@ -357,14 +365,12 @@ export function createServer(options: ServerOptions) {
 			}
 
 			if (url.pathname === "/bobai/models") {
-				const models = buildSortedModelList(options.configDir ? loadModelsConfig(options.configDir) : loadModelsConfig()).map(
-					(model, i) => ({
-						index: i + 1,
-						...model,
-					}),
-				);
+				const models = buildSortedProviderModelList(configuredProviderId, options.configDir).map((model, i) => ({
+					index: i + 1,
+					...model,
+				}));
 				const defaultModel = options.model ?? "gpt-5-mini";
-				const defaultStatus = formatModelDisplay(defaultModel, 0, options.configDir);
+				const defaultStatus = formatProviderModelDisplay(configuredProviderId, defaultModel, 0, options.configDir);
 				return Response.json({ models, defaultModel, defaultStatus });
 			}
 
@@ -375,7 +381,7 @@ export function createServer(options: ServerOptions) {
 				try {
 					options.dbGuard?.assertConnected();
 					const body = (await req.json()) as CommandRequest;
-					const result = handleCommand(options.db, body, options.configDir);
+					const result = handleCommand(options.db, body, { providerId: configuredProviderId, configDir: options.configDir });
 					return Response.json(result);
 				} catch (err) {
 					if (err instanceof DbDisconnectedError) {
@@ -410,7 +416,9 @@ export function createServer(options: ServerOptions) {
 				}
 				const session = getMostRecentParentSession(options.db);
 				if (!session) return Response.json(null);
-				const status = session.model ? formatModelDisplay(session.model, session.promptTokens, options.configDir) : null;
+				const status = session.model
+					? formatProviderModelDisplay(configuredProviderId, session.model, session.promptTokens, options.configDir)
+					: null;
 				return Response.json({ id: session.id, title: session.title, model: session.model, status });
 			}
 
@@ -446,7 +454,9 @@ export function createServer(options: ServerOptions) {
 					// The system prompt is now dynamic, not persisted. Remove this filter
 					// once all legacy sessions are gone.
 					.filter((m) => m.role !== "system");
-				const status = session.model ? formatModelDisplay(session.model, session.promptTokens, options.configDir) : null;
+				const status = session.model
+					? formatProviderModelDisplay(configuredProviderId, session.model, session.promptTokens, options.configDir)
+					: null;
 				return Response.json({
 					session: { id: session.id, title: session.title, model: session.model, parentId: session.parentId },
 					messages,
