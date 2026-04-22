@@ -1,23 +1,30 @@
-export const SUPPORTED_RUNTIME_PROVIDERS = ["github-copilot", "openrouter"] as const;
-export const SUPPORTED_AUTH_PROVIDERS = ["github-copilot", "openrouter"] as const;
-export const DEFAULT_PROVIDER_ID = "github-copilot";
+import {
+	type AuthProviderId,
+	DEFAULT_PROVIDER_ID,
+	getProviderDescriptor,
+	type ProviderId,
+	SUPPORTED_AUTH_PROVIDER_IDS,
+	SUPPORTED_RUNTIME_PROVIDER_IDS,
+} from "./registry";
 
-export type ProviderId = (typeof SUPPORTED_RUNTIME_PROVIDERS)[number];
-export type AuthProviderId = (typeof SUPPORTED_AUTH_PROVIDERS)[number];
+export { DEFAULT_PROVIDER_ID };
+export type { ProviderId, AuthProviderId };
+
+export const SUPPORTED_RUNTIME_PROVIDERS = SUPPORTED_RUNTIME_PROVIDER_IDS;
+export const SUPPORTED_AUTH_PROVIDERS = SUPPORTED_AUTH_PROVIDER_IDS;
 
 export function isSupportedProvider(value: string): value is ProviderId {
-	return SUPPORTED_RUNTIME_PROVIDERS.includes(value as ProviderId);
+	return getProviderDescriptor(value) !== undefined;
 }
 
 export function isSupportedAuthProvider(value: string): value is AuthProviderId {
-	return SUPPORTED_AUTH_PROVIDERS.includes(value as AuthProviderId);
+	return SUPPORTED_AUTH_PROVIDER_IDS.includes(value as AuthProviderId);
 }
 
 export function getDefaultModelForProvider(providerId: ProviderId): string {
-	switch (providerId) {
-		case "github-copilot":
-			return "gpt-5-mini";
-		case "openrouter":
-			return "openrouter/free";
+	const descriptor = getProviderDescriptor(providerId);
+	if (!descriptor) {
+		throw new Error(`Unsupported provider: ${providerId}`);
 	}
+	return descriptor.defaultModel;
 }

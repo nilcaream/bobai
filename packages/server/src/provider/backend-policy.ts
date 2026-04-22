@@ -1,5 +1,5 @@
-import { isCopilotClaude, isCopilotResponses } from "./copilot";
 import { getDefaultModelForProvider, isSupportedProvider, type ProviderId } from "./providers";
+import { getProviderDescriptor } from "./registry";
 
 export const API_FAMILIES = ["anthropic-messages", "openai-responses", "openai-chat-completions"] as const;
 
@@ -21,14 +21,11 @@ export function getDefaultSessionBackend(providerId: ProviderId): SessionBackend
 }
 
 export function getApiFamilyForModel(providerId: ProviderId, modelId: string): ApiFamily {
-	switch (providerId) {
-		case "github-copilot":
-			if (isCopilotClaude(modelId)) return "anthropic-messages";
-			if (isCopilotResponses(modelId)) return "openai-responses";
-			return "openai-chat-completions";
-		case "openrouter":
-			return "openai-chat-completions";
+	const descriptor = getProviderDescriptor(providerId);
+	if (!descriptor) {
+		throw new Error(`Unsupported provider: ${providerId}`);
 	}
+	return descriptor.getApiFamily(modelId);
 }
 
 export function isRuntimeSupportedProvider(providerId: string): providerId is ProviderId {

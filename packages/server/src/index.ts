@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { authorizeCopilot, authorizeOpenRouter } from "./auth/authorize";
+import { authorizeCopilot, getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
 import { getCopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "./auth/store";
 import { parseCLI } from "./cli";
 import { loadGlobalConfig } from "./config/global";
@@ -13,7 +13,7 @@ import { resolvePort } from "./port";
 import { initProject } from "./project";
 import { deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
 import { providerModelsConfigExists } from "./provider/models";
-import { isSupportedAuthProvider, isSupportedProvider, SUPPORTED_AUTH_PROVIDERS } from "./provider/providers";
+import { isSupportedAuthProvider, isSupportedProvider } from "./provider/providers";
 import { createProviderRuntimeManager } from "./provider/runtime-manager";
 import { createServer } from "./server";
 import { builtinSkills } from "./skill/builtin";
@@ -30,8 +30,8 @@ if (cli.command === "auth") {
 	installFetchInterceptor({ logger, logDir, debug: cli.debug });
 
 	if (!cli.provider) {
-		for (const provider of SUPPORTED_AUTH_PROVIDERS) {
-			console.log(provider);
+		for (const provider of listSupportedAuthProviders()) {
+			console.log(provider.id);
 		}
 		process.exit(1);
 	}
@@ -48,10 +48,13 @@ if (cli.command === "auth") {
 		process.exit(0);
 	}
 
-	if (cli.provider === "openrouter") {
-		await authorizeOpenRouter(globalConfigDir);
-		process.exit(0);
+	const authProvider = getAuthProvider(cli.provider);
+	if (!authProvider) {
+		console.error(`Unsupported provider: ${cli.provider}`);
+		process.exit(1);
 	}
+	await authProvider.authorize(globalConfigDir);
+	process.exit(0);
 }
 
 if (cli.command === "refresh") {

@@ -1,6 +1,5 @@
-import { formatModelLabel } from "./copilot-models";
-import { getProviderModelConfig } from "./models";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
+import { getProviderDescriptor } from "./registry";
 
 /**
  * Create a provider wrapper with isolated turn-tracking state.
@@ -46,26 +45,24 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 		getTurnSummary(): string | undefined {
 			if (turnStartTime === 0 || !turnModel) return undefined;
 			const elapsed = (performance.now() - turnStartTime) / 1000;
-			const modelConfig =
-				original.id === "github-copilot" || original.id === "openrouter"
-					? getProviderModelConfig(original.id, turnModel)
-					: undefined;
-			const modelName = turnModel.includes("/") ? (turnModel.split("/").at(-1) ?? turnModel) : turnModel;
+			const descriptor = getProviderDescriptor(original.id);
 			const contextDelta = turnInputTokens - baselineTokens;
 			const contextSign = contextDelta > 0 ? "+" : "";
-			const parts = [modelName];
-			if (original.id === "github-copilot") {
-				parts.push(modelConfig?.label ?? formatModelLabel(turnModel));
+			const summaryParts = descriptor?.buildTurnSummaryParts?.({
+				modelId: turnModel,
+				inputTokens: turnInputTokens,
+				outputTokens: turnOutputTokens,
+			}) ?? {
+				modelName: turnModel.includes("/") ? (turnModel.split("/").at(-1) ?? turnModel) : turnModel,
+			};
+			const parts = [summaryParts.modelName];
+			if (summaryParts.pricingLabel) {
+				parts.push(summaryParts.pricingLabel);
 			}
 			parts.push(`in: ${turnInputTokens}`);
 			parts.push(`out: ${turnOutputTokens}`);
-			if (original.id === "openrouter") {
-				if (modelConfig?.label === "free") {
-					parts.push("free");
-				} else if (modelConfig?.inputPrice !== undefined && modelConfig.outputPrice !== undefined) {
-					const cost = (turnInputTokens * modelConfig.inputPrice + turnOutputTokens * modelConfig.outputPrice) / 1_000_000;
-					parts.push(`estimate: $${cost.toFixed(2)}`);
-				}
+			if (summaryParts.costEstimate) {
+				parts.push(summaryParts.costEstimate === "free" ? "free" : `estimate: ${summaryParts.costEstimate}`);
 			}
 			parts.push(`context: ${contextSign}${contextDelta}`);
 			parts.push(`${elapsed.toFixed(2)}s`);

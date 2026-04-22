@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { type AuthProviderId, SUPPORTED_AUTH_PROVIDERS } from "../provider/providers";
 
+export type { AuthProviderId };
+
 export interface CopilotAuth {
 	refresh: string;
 	access: string;

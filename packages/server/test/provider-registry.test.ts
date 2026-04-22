@@ -7,6 +7,7 @@ import {
 	SUPPORTED_AUTH_PROVIDERS,
 	SUPPORTED_RUNTIME_PROVIDERS,
 } from "../src/provider/providers";
+import { getProviderDescriptor } from "../src/provider/registry";
 
 describe("provider registry", () => {
 	test("exposes github-copilot as the default runtime provider", () => {
@@ -38,5 +39,12 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
 		expect(isSupportedProvider("openrouter")).toBe(true);
 		expect(getDefaultModelForProvider("openrouter")).toBe("openrouter/free");
+	});
+
+	test("exposes provider descriptor metadata through the registry", () => {
+		expect(getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
+		expect(getProviderDescriptor("github-copilot")?.getApiFamily("claude-haiku-4.5")).toBe("anthropic-messages");
+		expect(getProviderDescriptor("openrouter")?.defaultModel).toBe("openrouter/free");
+		expect(getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 	});
 });

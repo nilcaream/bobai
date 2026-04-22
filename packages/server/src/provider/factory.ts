@@ -1,18 +1,12 @@
 import { authorizeCopilot as defaultAuthorizeCopilot } from "../auth/authorize";
-import {
-	type AuthStore,
-	type CopilotAuth,
-	loadAuthStore as defaultLoadAuthStore,
-	getCopilotAuth,
-	getOpenRouterAuth,
-	type OpenRouterAuth,
-} from "../auth/store";
+import { type AuthStore, type CopilotAuth, loadAuthStore as defaultLoadAuthStore, type OpenRouterAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { createCopilotProvider as defaultCreateCopilotProvider } from "./copilot";
 import { providerModelsConfigExists as defaultProviderModelsConfigExists } from "./models";
 import { createOpenRouterProvider as defaultCreateOpenRouterProvider } from "./openrouter";
 import type { Provider } from "./provider";
 import type { ProviderId } from "./providers";
+import { getProviderDescriptor } from "./registry";
 
 export interface CreateProviderOptions {
 	providerId: ProviderId;
@@ -34,31 +28,21 @@ export async function createConfiguredProvider(
 ): Promise<Provider> {
 	const providerModelsConfigExists = deps.providerModelsConfigExists ?? defaultProviderModelsConfigExists;
 	const loadAuthStore = deps.loadAuthStore ?? defaultLoadAuthStore;
-	const authorizeCopilot = deps.authorizeCopilot ?? defaultAuthorizeCopilot;
-	const createCopilotProvider = deps.createCopilotProvider ?? defaultCreateCopilotProvider;
-	const createOpenRouterProvider = deps.createOpenRouterProvider ?? defaultCreateOpenRouterProvider;
-
-	switch (options.providerId) {
-		case "github-copilot": {
-			if (!providerModelsConfigExists(options.providerId, options.configDir)) {
-				throw new Error("Model configuration not found. Please run: bobai refresh");
-			}
-			const store = loadAuthStore(options.configDir);
-			let auth = store ? getCopilotAuth(store) : undefined;
-			if (!auth) {
-				auth = await authorizeCopilot(options.configDir);
-			}
-			return createCopilotProvider(auth, options.configDir, options.logger);
-		}
-		case "openrouter": {
-			const store = loadAuthStore(options.configDir);
-			const auth = store ? getOpenRouterAuth(store) : undefined;
-			if (!auth) {
-				throw new Error("OpenRouter authentication not found. Please run: bobai auth openrouter");
-			}
-			return createOpenRouterProvider(auth, options.logger);
-		}
-		default:
-			throw new Error(`Unsupported provider: ${options.providerId}`);
+	const descriptor = getProviderDescriptor(options.providerId);
+	if (!descriptor) {
+		throw new Error(`Unsupported provider: ${options.providerId}`);
 	}
+
+	if (!providerModelsConfigExists(options.providerId, options.configDir)) {
+		throw new Error("Model configuration not found. Please run: bobai refresh");
+	}
+
+	return descriptor.createConfiguredProvider({
+		configDir: options.configDir,
+		logger: options.logger,
+		store: loadAuthStore(options.configDir),
+		authorizeCopilot: deps.authorizeCopilot ?? defaultAuthorizeCopilot,
+		createCopilotProvider: deps.createCopilotProvider ?? defaultCreateCopilotProvider,
+		createOpenRouterProvider: deps.createOpenRouterProvider ?? defaultCreateOpenRouterProvider,
+	});
 }

@@ -2,7 +2,15 @@ import { exchangeToken } from "../provider/copilot";
 import { pollForToken, requestDeviceCode } from "./device-flow";
 import { validateOpenRouterKey } from "./openrouter";
 import { promptSecret } from "./prompt-secret";
-import { type AuthStore, type CopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth, setOpenRouterAuth } from "./store";
+import {
+	type AuthProviderId,
+	type AuthStore,
+	type CopilotAuth,
+	loadAuthStore,
+	saveAuthStore,
+	setCopilotAuth,
+	setOpenRouterAuth,
+} from "./store";
 
 export async function authorizeCopilot(configDir: string): Promise<CopilotAuth> {
 	console.log("Authenticating with GitHub Copilot");
@@ -45,6 +53,34 @@ export async function authorizeOpenRouter(
 	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
 	saveAuthStore(configDir, setOpenRouterAuth(store, { apiKey }));
 	console.log("OpenRouter key saved");
+}
+
+export interface AuthProviderEntry {
+	id: AuthProviderId;
+	authorize(configDir: string): Promise<void>;
+}
+
+const AUTH_PROVIDERS: AuthProviderEntry[] = [
+	{
+		id: "github-copilot",
+		authorize: async (configDir: string) => {
+			await authorizeCopilot(configDir);
+		},
+	},
+	{
+		id: "openrouter",
+		authorize: async (configDir: string) => {
+			await authorizeOpenRouter(configDir);
+		},
+	},
+];
+
+export function listSupportedAuthProviders(): AuthProviderEntry[] {
+	return AUTH_PROVIDERS;
+}
+
+export function getAuthProvider(providerId: AuthProviderId): AuthProviderEntry | undefined {
+	return AUTH_PROVIDERS.find((provider) => provider.id === providerId);
 }
 
 export const authorize = authorizeCopilot;
