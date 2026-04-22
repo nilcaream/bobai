@@ -26,6 +26,8 @@ export function getApiFamilyForModel(providerId: ProviderId, modelId: string): A
 			if (isCopilotClaude(modelId)) return "anthropic-messages";
 			if (isCopilotResponses(modelId)) return "openai-responses";
 			return "openai-chat-completions";
+		case "openrouter":
+			return "openai-chat-completions";
 	}
 }
 

@@ -64,7 +64,9 @@ describe("provider model facade", () => {
 	test("formats model display through the provider facade", () => {
 		withTempDir((tmpDir) => {
 			writeCopilotConfig(tmpDir);
-			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 0, tmpDir)).toBe("gpt-5-mini | 0x | 0 / 264000 | 0%");
+			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 12800, tmpDir)).toBe(
+				"github-copilot | gpt-5-mini | 0x | 12800 / 264000 | 5%",
+			);
 		});
 	});
 
@@ -78,6 +80,51 @@ describe("provider model facade", () => {
 				contextWindow: 264000,
 			});
 		});
+	});
+
+	test("uses a configured display label instead of deriving one from copilot pricing semantics", () => {
+		withTempDir((tmpDir) => {
+			fs.writeFileSync(
+				path.join(tmpDir, "copilot-models.json"),
+				JSON.stringify([
+					{
+						id: "gpt-5-mini",
+						name: "GPT-5 Mini",
+						contextWindow: 264000,
+						maxOutput: 64000,
+						premiumRequestMultiplier: 0,
+						label: "free",
+						enabled: true,
+					},
+				]),
+			);
+
+			expect(buildSortedProviderModelList("github-copilot", tmpDir).find((model) => model.id === "gpt-5-mini")).toEqual({
+				id: "gpt-5-mini",
+				cost: "free",
+				contextWindow: 264000,
+			});
+			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 12800, tmpDir)).toBe(
+				"github-copilot | gpt-5-mini | free | 12800 / 264000 | 5%",
+			);
+		});
+	});
+
+	test("loads curated openrouter model metadata through the provider facade", () => {
+		const models = loadProviderModelsConfig("openrouter");
+		expect(models.find((model) => model.id === "google/gemma-3-27b-it:free")).toMatchObject({
+			contextWindow: expect.any(Number),
+			maxOutput: expect.any(Number),
+			label: expect.any(String),
+		});
+		expect(buildSortedProviderModelList("openrouter")).toContainEqual({
+			id: "anthropic/claude-haiku-4.5",
+			cost: "$0.50 | $5.12",
+			contextWindow: 128000,
+		});
+		expect(formatProviderModelDisplay("openrouter", "anthropic/claude-haiku-4.5", 12800)).toBe(
+			"openrouter | anthropic/claude-haiku-4.5 | $0.50 | $5.12 | 12800 / 128000 | 10%",
+		);
 	});
 
 	test("throws a clear error for unsupported providers", () => {

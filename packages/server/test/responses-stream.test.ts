@@ -87,7 +87,7 @@ describe("parseResponsesSSE", () => {
 				type: "usage",
 				tokenCount: 42,
 				tokenLimit: 0,
-				display: "test-model | ?x | 42 tokens",
+				display: "test-model | ?x | 42 / 0 | 0%",
 			},
 			{ type: "finish", reason: "stop" },
 		]);
@@ -145,7 +145,7 @@ describe("parseResponsesSSE", () => {
 				type: "usage",
 				tokenCount: 20,
 				tokenLimit: 0,
-				display: "test-model | ?x | 20 tokens",
+				display: "test-model | ?x | 20 / 0 | 0%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -211,7 +211,7 @@ describe("parseResponsesSSE", () => {
 				type: "usage",
 				tokenCount: 30,
 				tokenLimit: 0,
-				display: "test-model | ?x | 30 tokens",
+				display: "test-model | ?x | 30 / 0 | 0%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -263,7 +263,7 @@ describe("parseResponsesSSE", () => {
 				type: "usage",
 				tokenCount: 15,
 				tokenLimit: 0,
-				display: "test-model | ?x | 15 tokens",
+				display: "test-model | ?x | 15 / 0 | 0%",
 			},
 			{ type: "finish", reason: "stop" },
 		]);
@@ -339,7 +339,7 @@ describe("parseResponsesSSE", () => {
 				type: "usage",
 				tokenCount: 50,
 				tokenLimit: 0,
-				display: "test-model | ?x | 50 tokens",
+				display: "test-model | ?x | 50 / 0 | 0%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);

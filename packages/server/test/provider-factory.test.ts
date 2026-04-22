@@ -43,4 +43,34 @@ describe("provider factory", () => {
 
 		expect(result).toBe(provider);
 	});
+
+	test("creates openrouter provider from auth store entry", async () => {
+		const store: AuthStore = {
+			version: 1,
+			providers: {
+				openrouter: { apiKey: "or-key" },
+			},
+		};
+		const provider: Provider = {
+			id: "openrouter",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+
+		const result = await createConfiguredProvider(
+			{ providerId: "openrouter", configDir: "/cfg" },
+			{
+				providerModelsConfigExists: () => true,
+				loadAuthStore: () => store,
+				createOpenRouterProvider: (auth, logger) => {
+					expect(auth).toEqual({ apiKey: "or-key" });
+					expect(logger).toBeUndefined();
+					return provider;
+				},
+			},
+		);
+
+		expect(result).toBe(provider);
+	});
 });

@@ -1,4 +1,5 @@
-import { getPremiumRequestMultiplier } from "./copilot-models";
+import { formatModelLabel } from "./copilot-models";
+import { getProviderModelConfig } from "./models";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 
 /**
@@ -13,11 +14,8 @@ import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 export function createIsolatedTurnProvider(original: Provider): Provider {
 	let turnStartTime = 0;
 	let turnModel = "";
-	let turnAgentCalls = 0;
-	let turnUserCalls = 0;
-	let turnPremiumCost = 0;
-	let turnTokens = 0;
-	let turnLastCallTokens = 0;
+	let turnInputTokens = 0;
+	let turnOutputTokens = 0;
 	let turnLastCallChars = 0;
 	let baselineTokens = 0;
 
@@ -29,13 +27,9 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 				...options,
 				onMetrics(metrics) {
 					turnModel = metrics.model;
-					turnTokens += metrics.totalTokens;
-					turnLastCallTokens = metrics.promptTokens;
+					turnInputTokens = metrics.promptTokens;
+					turnOutputTokens = metrics.outputTokens;
 					turnLastCallChars = metrics.promptChars;
-					if (metrics.initiator === "agent") turnAgentCalls++;
-					else turnUserCalls++;
-					const multiplier = getPremiumRequestMultiplier(metrics.model) ?? 0;
-					if (metrics.initiator === "user") turnPremiumCost += multiplier;
 				},
 			});
 		},
@@ -43,40 +37,39 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 		beginTurn(sessionPromptTokens?: number) {
 			turnStartTime = performance.now();
 			turnModel = "";
-			turnAgentCalls = 0;
-			turnUserCalls = 0;
-			turnPremiumCost = 0;
-			turnTokens = 0;
-			turnLastCallTokens = 0;
+			turnInputTokens = 0;
+			turnOutputTokens = 0;
 			turnLastCallChars = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
 
 		getTurnSummary(): string | undefined {
-			if (turnStartTime === 0) return undefined;
+			if (turnStartTime === 0 || !turnModel) return undefined;
 			const elapsed = (performance.now() - turnStartTime) / 1000;
-			let contextDisplay: string;
-			if (baselineTokens === 0) {
-				contextDisplay = `context: ${turnLastCallTokens}`;
-			} else {
-				const contextDelta = turnLastCallTokens - baselineTokens;
-				const sign = contextDelta > 0 ? "+" : "";
-				contextDisplay = `context: ${sign}${contextDelta}`;
+			const modelConfig =
+				original.id === "github-copilot" || original.id === "openrouter"
+					? getProviderModelConfig(original.id, turnModel)
+					: undefined;
+			const modelName = turnModel.includes("/") ? (turnModel.split("/").at(-1) ?? turnModel) : turnModel;
+			const contextDelta = turnInputTokens - baselineTokens;
+			const contextSign = contextDelta > 0 ? "+" : "";
+			const parts = [modelName];
+			if (original.id === "github-copilot") {
+				parts.push(modelConfig?.label ?? formatModelLabel(turnModel));
 			}
-			const parts = [
-				turnModel,
-				`agent: ${turnAgentCalls}`,
-				`user: ${turnUserCalls}`,
-				`premium: ${turnPremiumCost.toFixed(2)}`,
-				`tokens: ${turnTokens}`,
-				contextDisplay,
-				`${elapsed.toFixed(2)}s`,
-			];
+			parts.push(`in: ${turnInputTokens}`);
+			parts.push(`out: ${turnOutputTokens}`);
+			if (original.id === "openrouter" && modelConfig?.inputPrice !== undefined && modelConfig.outputPrice !== undefined) {
+				const cost = (turnInputTokens * modelConfig.inputPrice + turnOutputTokens * modelConfig.outputPrice) / 1_000_000;
+				parts.push(`cost: $${cost.toFixed(2)}`);
+			}
+			parts.push(`context: ${contextSign}${contextDelta}`);
+			parts.push(`${elapsed.toFixed(2)}s`);
 			return ` | ${parts.join(" | ")}`;
 		},
 
 		getTurnPromptTokens(): number {
-			return turnLastCallTokens;
+			return turnInputTokens;
 		},
 
 		getTurnPromptChars(): number {
@@ -87,11 +80,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			return {
 				turnStartTime,
 				turnModel,
-				turnAgentCalls,
-				turnUserCalls,
-				turnPremiumCost,
-				turnTokens,
-				turnLastCallTokens,
+				turnInputTokens,
+				turnOutputTokens,
 				turnLastCallChars,
 				baselineTokens,
 			};
@@ -101,21 +91,15 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			const s = state as {
 				turnStartTime: number;
 				turnModel: string;
-				turnAgentCalls: number;
-				turnUserCalls: number;
-				turnPremiumCost: number;
-				turnTokens: number;
-				turnLastCallTokens: number;
+				turnInputTokens: number;
+				turnOutputTokens: number;
 				turnLastCallChars?: number;
 				baselineTokens: number;
 			};
 			turnStartTime = s.turnStartTime;
 			turnModel = s.turnModel;
-			turnAgentCalls = s.turnAgentCalls;
-			turnUserCalls = s.turnUserCalls;
-			turnPremiumCost = s.turnPremiumCost;
-			turnTokens = s.turnTokens;
-			turnLastCallTokens = s.turnLastCallTokens;
+			turnInputTokens = s.turnInputTokens;
+			turnOutputTokens = s.turnOutputTokens;
 			turnLastCallChars = s.turnLastCallChars ?? 0;
 			baselineTokens = s.baselineTokens;
 		},

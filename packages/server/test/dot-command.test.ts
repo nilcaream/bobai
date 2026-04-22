@@ -98,7 +98,7 @@ describe("handleCommand", () => {
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
+			expect(result.status).toBe("github-copilot | claude-haiku-4.5 | 0.33x | 0 / 0 | 0%");
 			expect(result.sessionId).toBe(session.id);
 			expect(result.provider).toBe("github-copilot");
 			expect(result.model).toBe("claude-haiku-4.5");
@@ -127,7 +127,7 @@ describe("handleCommand", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
-			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
+			expect(result.status).toBe("github-copilot | claude-haiku-4.5 | 0.33x | 0 / 0 | 0%");
 			expect(result.provider).toBe("github-copilot");
 			expect(result.model).toBe("claude-haiku-4.5");
 			const session = getSession(db, result.sessionId ?? "");
@@ -282,14 +282,27 @@ describe("HTTP endpoints", () => {
 			body.models.findIndex((model) => model.id === "gpt-5.4"),
 		);
 		expect(body.defaultModel).toBe("gpt-5-mini");
-		expect(body.defaultStatus).toBe("gpt-5-mini | 0x | 0 tokens");
+		expect(body.defaultStatus).toBe("github-copilot | gpt-5-mini | 0x | 0 / 0 | 0%");
 	});
 
-	test("GET /bobai/models returns 400 for runtime-unsupported provider", async () => {
+	test("GET /bobai/models returns curated openrouter rows", async () => {
 		const res = await fetch(`${baseUrl}/bobai/models?provider=openrouter`);
-		expect(res.status).toBe(400);
-		const body = await res.text();
-		expect(body).toMatch(/Unsupported provider|runtime is not supported/i);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			providerId: string;
+			models: { index: number; id: string; cost: string; contextWindow: number }[];
+			defaultModel: string;
+			defaultStatus: string;
+		};
+		expect(body.providerId).toBe("openrouter");
+		expect(body.models).toContainEqual({
+			index: expect.any(Number),
+			id: "anthropic/claude-haiku-4.5",
+			cost: "$0.50 | $5.12",
+			contextWindow: 128000,
+		});
+		expect(body.defaultModel).toBe("google/gemma-3-27b-it:free");
+		expect(body.defaultStatus).toBe("openrouter | google/gemma-3-27b-it:free | free | 0 / 131072 | 0%");
 	});
 
 	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {
@@ -310,7 +323,7 @@ describe("HTTP endpoints", () => {
 		const body = (await res.json()) as { ok: boolean; status?: string };
 		expect(body.ok).toBe(true);
 		expect(firstVisible?.id).toBe("claude-haiku-4.5");
-		expect(body.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
+		expect(body.status).toBe("github-copilot | claude-haiku-4.5 | 0.33x | 0 / 0 | 0%");
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe(firstVisible?.id);
 	});

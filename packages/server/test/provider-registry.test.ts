@@ -15,7 +15,7 @@ describe("provider registry", () => {
 
 	test("lists supported auth providers separately from runtime providers", () => {
 		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter"]);
-		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot"]);
+		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot", "openrouter"]);
 	});
 
 	test("returns the default model for github-copilot", () => {
@@ -24,7 +24,7 @@ describe("provider registry", () => {
 
 	test("recognizes supported runtime provider ids", () => {
 		expect(isSupportedProvider("github-copilot")).toBe(true);
-		expect(isSupportedProvider("openrouter")).toBe(false);
+		expect(isSupportedProvider("openrouter")).toBe(true);
 		expect(isSupportedProvider("anything-else")).toBe(false);
 	});
 
@@ -34,8 +34,9 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("anything-else")).toBe(false);
 	});
 
-	test("openrouter is an auth provider but not yet a runtime provider", () => {
+	test("recognizes openrouter as a runtime provider", () => {
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
-		expect(isSupportedProvider("openrouter")).toBe(false);
+		expect(isSupportedProvider("openrouter")).toBe(true);
+		expect(getDefaultModelForProvider("openrouter")).toBe("google/gemma-3-27b-it:free");
 	});
 });

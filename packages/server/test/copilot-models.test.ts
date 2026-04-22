@@ -60,6 +60,7 @@ describe("buildModelConfigs", () => {
 			contextWindow: 264000,
 			maxOutput: 64000,
 			premiumRequestMultiplier: 1,
+			label: "1x",
 			enabled: false,
 		});
 		expect(configs.find((c) => c.id === "gemini-3-pro-preview")).toBeUndefined();

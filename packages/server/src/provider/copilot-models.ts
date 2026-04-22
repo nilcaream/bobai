@@ -5,6 +5,7 @@ import type { CatalogModel } from "../models-catalog";
 
 export interface ModelConfig extends CatalogModel {
 	premiumRequestMultiplier: number;
+	label?: string;
 	enabled: boolean;
 }
 
@@ -72,15 +73,21 @@ export function getPremiumRequestMultiplier(modelId: string): number | undefined
 	return normalized ? PREMIUM_REQUEST_MULTIPLIERS[normalized] : undefined;
 }
 
-/** Format the cost label for a model (e.g. "0x", "1x", "3x"). */
-export function formatModelCost(modelId: string): string {
+/** Format the default display label for a model (e.g. "0x", "1x", "3x"). */
+export function formatModelLabel(modelId: string): string {
 	const multiplier = getPremiumRequestMultiplier(modelId);
 	return multiplier !== undefined ? `${multiplier}x` : "?x";
 }
 
+export const formatModelCost = formatModelLabel;
+
+function getModelLabel(modelConfig: Pick<ModelConfig, "id" | "label"> | undefined, modelId: string): string {
+	return modelConfig?.label ?? formatModelLabel(modelId);
+}
+
 /** Format the status prefix for a model (e.g. "gpt-5-mini | 0x"). */
-function formatModelStatus(modelId: string): string {
-	return `${modelId} | ${formatModelCost(modelId)}`;
+function formatModelStatus(modelId: string, modelConfig?: Pick<ModelConfig, "id" | "label">): string {
+	return `${modelId} | ${getModelLabel(modelConfig, modelId)}`;
 }
 
 /** Check whether the copilot-models.json config file exists. */
@@ -104,9 +111,9 @@ export function loadModelsConfig(configDir?: string): ModelConfig[] {
 
 /** Format the full display string for a model (e.g. "gpt-5-mini | 0x | 1547 / 128000 | 1%"). */
 export function formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string {
-	const statusPrefix = formatModelStatus(modelId);
 	const configs = loadModelsConfig(configDir);
 	const modelConfig = configs.find((m) => m.id === modelId);
+	const statusPrefix = formatModelStatus(modelId, modelConfig);
 	const contextWindow = modelConfig?.contextWindow ?? 0;
 	if (contextWindow > 0) {
 		const percent = Math.round((promptTokens / contextWindow) * 100);
@@ -117,7 +124,7 @@ export function formatModelDisplay(modelId: string, promptTokens: number, config
 	} else {
 		console.warn(`[WARN] Model "${modelId}" has no contextWindow configured; status bar will lack context window info`);
 	}
-	return `${statusPrefix} | ${promptTokens} tokens`;
+	return `${statusPrefix} | ${promptTokens} / ${contextWindow} | 0%`;
 }
 
 export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {
@@ -129,6 +136,7 @@ export function buildModelConfigs(catalog: CatalogModel[]): ModelConfig[] {
 			configs.push({
 				...m,
 				premiumRequestMultiplier: getPremiumRequestMultiplier(id) ?? 1,
+				label: formatModelLabel(id),
 				enabled: false,
 			});
 		}
@@ -142,14 +150,17 @@ export type SortedModelListItem = {
 	contextWindow: number;
 };
 
-export function buildSortedModelList(catalog: CatalogModel[] = loadModelsConfig()): SortedModelListItem[] {
+export function buildSortedModelList(catalog: ModelConfig[] = loadModelsConfig()): SortedModelListItem[] {
 	const catalogMap = new Map(catalog.map((model) => [model.id, model]));
 	return [...CURATED_MODELS]
-		.map((id) => ({
-			id,
-			cost: formatModelCost(id),
-			contextWindow: catalogMap.get(id)?.contextWindow ?? 0,
-		}))
+		.map((id) => {
+			const modelConfig = catalogMap.get(id);
+			return {
+				id,
+				cost: getModelLabel(modelConfig, id),
+				contextWindow: modelConfig?.contextWindow ?? 0,
+			};
+		})
 		.sort((a, b) => a.id.localeCompare(b.id))
 		.map(({ id, cost, contextWindow }) => ({ id, cost, contextWindow }));
 }

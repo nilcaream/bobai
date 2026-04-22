@@ -19,7 +19,13 @@ import { send } from "./protocol";
 import { isRuntimeSupportedProvider } from "./provider/backend-policy";
 import { buildSortedProviderModelList, formatProviderModelDisplay, getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Provider } from "./provider/provider";
-import { DEFAULT_PROVIDER_ID, isSupportedAuthProvider, isSupportedProvider, type ProviderId } from "./provider/providers";
+import {
+	DEFAULT_PROVIDER_ID,
+	getDefaultModelForProvider,
+	isSupportedAuthProvider,
+	isSupportedProvider,
+	type ProviderId,
+} from "./provider/providers";
 import type { ProviderRuntimeManager } from "./provider/runtime-manager";
 import {
 	deleteSession,
@@ -395,7 +401,10 @@ export function createServer(options: ServerOptions) {
 					index: i + 1,
 					...model,
 				}));
-				const defaultModel = options.model ?? "gpt-5-mini";
+				const defaultModel =
+					requestedProvider === configuredProviderId
+						? (options.model ?? getDefaultModelForProvider(requestedProvider))
+						: getDefaultModelForProvider(requestedProvider);
 				const defaultStatus = formatProviderModelDisplay(requestedProvider, defaultModel, 0, options.configDir);
 				return Response.json({ providerId: requestedProvider, models, defaultModel, defaultStatus });
 			}

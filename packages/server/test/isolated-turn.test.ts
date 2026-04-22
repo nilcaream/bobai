@@ -14,7 +14,14 @@ function mockProvider(): Provider {
 			// Route metrics via onMetrics if provided, otherwise accumulate locally
 			const initiator = opts.initiator ?? "agent";
 			if (opts.onMetrics) {
-				opts.onMetrics({ model: opts.model, promptTokens: 500, promptChars: 1200, totalTokens: 750, initiator });
+				opts.onMetrics({
+					model: opts.model,
+					promptTokens: 500,
+					outputTokens: 250,
+					promptChars: 1200,
+					totalTokens: 750,
+					initiator,
+				});
 			} else {
 				turnModel = opts.model;
 				turnCalls++;
@@ -73,8 +80,7 @@ describe("createIsolatedTurnProvider", () => {
 
 		expect(original.getTurnSummary?.()).toBe(" | started | calls: 1");
 		const isoSummary = isolated.getTurnSummary?.();
-		expect(isoSummary).toBeDefined();
-		expect(isoSummary).toContain("agent: 0");
+		expect(isoSummary).toBeUndefined();
 	});
 
 	test("two isolated providers from same original don't interfere", () => {
@@ -87,8 +93,8 @@ describe("createIsolatedTurnProvider", () => {
 
 		const aSummary = a.getTurnSummary?.();
 		const bSummary = b.getTurnSummary?.();
-		expect(aSummary).toContain("context: -10");
-		expect(bSummary).toContain("context: -20");
+		expect(aSummary).toBeUndefined();
+		expect(bSummary).toBeUndefined();
 	});
 
 	test("saveTurnState / restoreTurnState works independently", () => {
@@ -100,7 +106,7 @@ describe("createIsolatedTurnProvider", () => {
 		isolated.beginTurn?.(999);
 		isolated.restoreTurnState?.(saved);
 		const summary = isolated.getTurnSummary?.();
-		expect(summary).toContain("context: -50");
+		expect(summary).toBeUndefined();
 	});
 
 	test("save/restore on isolated does not affect original", () => {
@@ -130,11 +136,8 @@ describe("createIsolatedTurnProvider", () => {
 		const customState = {
 			turnStartTime: 1000,
 			turnModel: "gpt-4o",
-			turnAgentCalls: 5,
-			turnUserCalls: 2,
-			turnPremiumCost: 3.5,
-			turnTokens: 12000,
-			turnLastCallTokens: 8000,
+			turnInputTokens: 8000,
+			turnOutputTokens: 4000,
 			turnLastCallChars: 25000,
 			baselineTokens: 6000,
 		};
@@ -144,10 +147,8 @@ describe("createIsolatedTurnProvider", () => {
 		expect(isolated.getTurnPromptChars?.()).toBe(25000);
 		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("gpt-4o");
-		expect(summary).toContain("agent: 5");
-		expect(summary).toContain("user: 2");
-		expect(summary).toContain("premium: 3.50");
-		expect(summary).toContain("tokens: 12000");
+		expect(summary).toContain("in: 8000");
+		expect(summary).toContain("out: 4000");
 		expect(summary).toContain("context: +2000");
 	});
 
@@ -164,9 +165,9 @@ describe("createIsolatedTurnProvider", () => {
 		// The isolated provider should have accumulated metrics from onMetrics
 		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("test-model");
-		expect(summary).toContain("agent: 1");
-		expect(summary).toContain("tokens: 750");
-		expect(summary).toContain("context: 500"); // promptTokens=500, baselineTokens=0
+		expect(summary).toContain("in: 500");
+		expect(summary).toContain("out: 250");
+		expect(summary).toContain("context: +500"); // promptTokens=500, baselineTokens=0
 
 		// The original should NOT have been affected
 		expect(original.getTurnSummary?.()).not.toContain("test-model");
@@ -193,9 +194,9 @@ describe("createIsolatedTurnProvider", () => {
 		const aSummary = a.getTurnSummary?.();
 		const bSummary = b.getTurnSummary?.();
 		expect(aSummary).toContain("model-a");
-		expect(aSummary).toContain("agent: 1");
+		expect(aSummary).toContain("in: 500");
 		expect(bSummary).toContain("model-b");
-		expect(bSummary).toContain("agent: 1");
+		expect(bSummary).toContain("in: 500");
 	});
 
 	test("getTurnPromptChars returns chars from onMetrics", async () => {

@@ -116,6 +116,7 @@ describe("refreshModels", () => {
 			contextWindow: 128000,
 			maxOutput: 16000,
 			premiumRequestMultiplier: 1,
+			label: "1x",
 			enabled: true,
 		});
 	});

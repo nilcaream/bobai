@@ -309,6 +309,7 @@ export function createCopilotProvider(
 							options.onMetrics({
 								model: options.model,
 								promptTokens: event.tokenCount,
+								outputTokens: 0,
 								promptChars: callChars,
 								totalTokens: event.tokenCount,
 								initiator: effectiveInitiator,
@@ -494,6 +495,7 @@ export function createCopilotProvider(
 							options.onMetrics({
 								model: options.model,
 								promptTokens: event.tokenCount,
+								outputTokens: 0,
 								promptChars: callChars,
 								totalTokens: event.tokenCount,
 								initiator: effectiveInitiator,
@@ -802,6 +804,7 @@ export function createCopilotProvider(
 								options.onMetrics({
 									model: options.model,
 									promptTokens,
+									outputTokens: Math.max(0, totalTokens - promptTokens),
 									promptChars: callChars,
 									totalTokens,
 									initiator: effectiveInitiator,

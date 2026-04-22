@@ -34,7 +34,14 @@ function mockConcurrentProvider(): Provider {
 			yield { type: "text", text: "ok" };
 			const initiator = opts.initiator ?? "agent";
 			if (opts.onMetrics) {
-				opts.onMetrics({ model: opts.model, promptTokens: 500, promptChars: 1200, totalTokens: 750, initiator });
+				opts.onMetrics({
+					model: opts.model,
+					promptTokens: 500,
+					outputTokens: 250,
+					promptChars: 1200,
+					totalTokens: 750,
+					initiator,
+				});
 			}
 			yield { type: "finish", reason: "stop" };
 		},
@@ -50,14 +57,16 @@ describe("handler-level session isolation", () => {
 			simulateSession(provider, 10000, 2), // existing session, 2 calls
 		]);
 
-		// Session A: new session (baseline=0), 3 agent calls
-		expect(sessionA.summary).toContain("agent: 3");
-		expect(sessionA.summary).toContain("context: 500"); // absolute (baseline=0)
+		// Session A: new session (baseline=0)
+		expect(sessionA.summary).toContain("in: 500");
+		expect(sessionA.summary).toContain("out: 250");
+		expect(sessionA.summary).toContain("context: +500");
 		expect(sessionA.promptTokens).toBe(500);
 
-		// Session B: existing session (baseline=10000), 2 agent calls
-		expect(sessionB.summary).toContain("agent: 2");
-		expect(sessionB.summary).toContain("context: -9500"); // 500 - 10000
+		// Session B: existing session (baseline=10000)
+		expect(sessionB.summary).toContain("in: 500");
+		expect(sessionB.summary).toContain("out: 250");
+		expect(sessionB.summary).toContain("context: -9500");
 		expect(sessionB.promptTokens).toBe(500);
 	});
 
@@ -88,12 +97,15 @@ describe("handler-level session isolation", () => {
 
 		// Parent's restored state should be intact
 		const parentSummary = parentA.getTurnSummary?.();
-		expect(parentSummary).toContain("agent: 1"); // only parent's 1 call
-		expect(childSummary).toContain("context: 500"); // child absolute
+		expect(parentSummary).toContain("in: 500");
+		expect(parentSummary).toContain("out: 250");
+		expect(parentSummary).toContain("context: -4500");
+		expect(childSummary).toContain("context: +500");
 
 		// Session B should be completely independent
 		const bSummary = sessionB.getTurnSummary?.();
-		expect(bSummary).toContain("agent: 1");
-		expect(bSummary).toContain("context: -49500"); // 500 - 50000
+		expect(bSummary).toContain("in: 500");
+		expect(bSummary).toContain("out: 250");
+		expect(bSummary).toContain("context: -49500");
 	});
 });

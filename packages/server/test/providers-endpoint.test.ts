@@ -37,7 +37,7 @@ describe("GET /bobai/providers", () => {
 		};
 		expect(body.providers).toEqual([
 			{ index: 1, id: "github-copilot", runtimeSupported: true },
-			{ index: 2, id: "openrouter", runtimeSupported: false },
+			{ index: 2, id: "openrouter", runtimeSupported: true },
 		]);
 		expect(body.defaultProvider).toBe("github-copilot");
 	});

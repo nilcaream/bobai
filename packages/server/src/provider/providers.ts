@@ -1,4 +1,4 @@
-export const SUPPORTED_RUNTIME_PROVIDERS = ["github-copilot"] as const;
+export const SUPPORTED_RUNTIME_PROVIDERS = ["github-copilot", "openrouter"] as const;
 export const SUPPORTED_AUTH_PROVIDERS = ["github-copilot", "openrouter"] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot";
 
@@ -17,5 +17,7 @@ export function getDefaultModelForProvider(providerId: ProviderId): string {
 	switch (providerId) {
 		case "github-copilot":
 			return "gpt-5-mini";
+		case "openrouter":
+			return "google/gemma-3-27b-it:free";
 	}
 }

@@ -7,7 +7,7 @@ import { handlePrompt } from "../src/handler";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { AuthError, ProviderError } from "../src/provider/provider";
 import type { ProviderRuntimeManager } from "../src/provider/runtime-manager";
-import { createSession, getMessages } from "../src/session/repository";
+import { createSession, getMessages, updateSessionPromptTokens } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
 
@@ -58,6 +58,30 @@ function failingProvider(status: number, body: string): Provider {
 				throw new ProviderError(status, body);
 			}
 			return gen();
+		},
+	};
+}
+
+function metricsProvider(
+	providerId: Provider["id"],
+	model: string,
+	promptTokens: number,
+	outputTokens: number,
+	text = "summary text",
+): Provider {
+	return {
+		id: providerId,
+		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+			yield { type: "text", text };
+			opts.onMetrics?.({
+				model,
+				promptTokens,
+				outputTokens,
+				promptChars: 100,
+				totalTokens: promptTokens + outputTokens,
+				initiator: opts.initiator ?? "user",
+			});
+			yield { type: "finish", reason: "stop" };
 		},
 	};
 }
@@ -260,6 +284,87 @@ describe("handlePrompt", () => {
 		expect(stored[0].content).toBe("my question");
 		expect(stored[1].role).toBe("assistant");
 		expect(stored[1].content).toBe("response text");
+	});
+
+	test("formats github-copilot message summaries with the model label", async () => {
+		const ws = mockWs();
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-summary-"));
+		try {
+			fs.writeFileSync(
+				path.join(tmpDir, "copilot-models.json"),
+				JSON.stringify([
+					{
+						id: "claude-haiku-4.5",
+						name: "Claude Haiku 4.5",
+						contextWindow: 128000,
+						maxOutput: 64000,
+						premiumRequestMultiplier: 0.33,
+						label: "0.33x",
+						enabled: true,
+					},
+				]),
+			);
+			const session = createSession(db, {
+				provider: "github-copilot",
+				model: "claude-haiku-4.5",
+				apiFamily: "anthropic-messages",
+			});
+			updateSessionPromptTokens(db, session.id, 3760, 0);
+			await handlePrompt({
+				ws,
+				db,
+				provider: metricsProvider("github-copilot", "claude-haiku-4.5", 7473, 3123),
+				defaultProviderId: "github-copilot",
+				sessionId: session.id,
+				model: "claude-haiku-4.5",
+				text: "hello",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
+
+			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+			expect(done?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
+			);
+			const stored = getMessages(db, session.id);
+			expect(stored.at(-1)?.metadata?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
+			);
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	test("formats openrouter message summaries with estimated cost", async () => {
+		const ws = mockWs();
+		const session = createSession(db, {
+			provider: "openrouter",
+			model: "anthropic/claude-haiku-4.5",
+			apiFamily: "openai-chat-completions",
+		});
+		updateSessionPromptTokens(db, session.id, 3760, 0);
+		await handlePrompt({
+			ws,
+			db,
+			provider: metricsProvider("openrouter", "anthropic/claude-haiku-4.5", 7473, 3123),
+			defaultProviderId: "openrouter",
+			sessionId: session.id,
+			model: "anthropic/claude-haiku-4.5",
+			text: "hello",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+		expect(done?.summary).toMatch(
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| cost: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+		);
+		const stored = getMessages(db, session.id);
+		expect(stored.at(-1)?.metadata?.summary).toMatch(
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| cost: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+		);
 	});
 
 	test("resumes existing session with sessionId", async () => {
