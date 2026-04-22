@@ -86,35 +86,52 @@ describe("handleCommand", () => {
 	});
 
 	test("model command updates session model using id-sorted order and returns status", () => {
-		const session = createSession(db);
-		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, { providerId, configDir: tmpDir });
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		const result = handleCommand(
+			db,
+			{ command: "model", args: "1", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
 			expect(result.sessionId).toBe(session.id);
+			expect(result.provider).toBe("github-copilot");
+			expect(result.model).toBe("claude-haiku-4.5");
 		}
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe("claude-haiku-4.5");
 	});
 
 	test("model command rejects invalid index", () => {
-		const session = createSession(db);
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
 		const result = handleCommand(
 			db,
 			{ command: "model", args: "99", sessionId: session.id },
-			{ providerId, configDir: tmpDir },
+			{ defaultProviderId: providerId, configDir: tmpDir },
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Invalid model index");
 	});
 
 	test("model command creates session when none provided", () => {
-		const result = handleCommand(db, { command: "model", args: "1" }, { providerId, configDir: tmpDir });
+		const result = handleCommand(db, { command: "model", args: "1" }, { defaultProviderId: providerId, configDir: tmpDir });
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
 			expect(result.status).toBe("claude-haiku-4.5 | 0.33x | 0 tokens");
+			expect(result.provider).toBe("github-copilot");
+			expect(result.model).toBe("claude-haiku-4.5");
 			const session = getSession(db, result.sessionId ?? "");
+			expect(session?.provider).toBe("github-copilot");
 			expect(session?.model).toBe("claude-haiku-4.5");
 		}
 	});
@@ -137,8 +154,16 @@ describe("handleCommand", () => {
 				})),
 			),
 		);
-		const session = createSession(db);
-		const result = handleCommand(db, { command: "model", args: "1", sessionId: session.id }, { providerId, configDir: tmpDir });
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		const result = handleCommand(
+			db,
+			{ command: "model", args: "1", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(true);
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe("claude-haiku-4.5");
@@ -149,7 +174,7 @@ describe("handleCommand", () => {
 		const result = handleCommand(
 			db,
 			{ command: "title", args: "My Chat Title", sessionId: session.id },
-			{ providerId, configDir: tmpDir },
+			{ defaultProviderId: providerId, configDir: tmpDir },
 		);
 		expect(result.ok).toBe(true);
 		const updated = getSession(db, session.id);
@@ -158,7 +183,11 @@ describe("handleCommand", () => {
 
 	test("title command rejects empty title", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "title", args: "", sessionId: session.id }, { providerId, configDir: tmpDir });
+		const result = handleCommand(
+			db,
+			{ command: "title", args: "", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Title cannot be empty");
 	});
@@ -168,23 +197,31 @@ describe("handleCommand", () => {
 		const result = handleCommand(
 			db,
 			{ command: "session", args: "", sessionId: session.id },
-			{ providerId, configDir: tmpDir },
+			{ defaultProviderId: providerId, configDir: tmpDir },
 		);
 		expect(result.ok).toBe(true);
 	});
 
 	test("unknown command returns error", () => {
 		const session = createSession(db);
-		const result = handleCommand(db, { command: "foo", args: "", sessionId: session.id }, { providerId, configDir: tmpDir });
+		const result = handleCommand(
+			db,
+			{ command: "foo", args: "", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Unknown command");
 	});
 
 	test("subagent command lists recent subagent sessions", () => {
 		const freshDb = createTestDb();
-		const parent = createSession(freshDb);
-		createSubagentSession(freshDb, parent.id, "Task Alpha", "gpt-5-mini");
-		createSubagentSession(freshDb, parent.id, "Task Beta", "gpt-5-mini");
+		const parent = createSession(freshDb, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		createSubagentSession(freshDb, parent.id, "Task Alpha", "gpt-5-mini", "github-copilot", "openai-chat-completions");
+		createSubagentSession(freshDb, parent.id, "Task Beta", "gpt-5-mini", "github-copilot", "openai-chat-completions");
 
 		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
 		expect(result.ok).toBe(true);
@@ -227,13 +264,15 @@ describe("HTTP endpoints", () => {
 	});
 
 	test("GET /bobai/models returns id-sorted model list with cost, context, defaultModel and defaultStatus for the configured provider", async () => {
-		const res = await fetch(`${baseUrl}/bobai/models`);
+		const res = await fetch(`${baseUrl}/bobai/models?provider=github-copilot`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
+			providerId: string;
 			models: { index: number; id: string; cost: string; contextWindow: number }[];
 			defaultModel: string;
 			defaultStatus: string;
 		};
+		expect(body.providerId).toBe("github-copilot");
 		expect(body.models.length).toBe(CURATED_MODELS.length);
 		expect(body.models[0]).toEqual({ index: 1, id: "claude-haiku-4.5", cost: "0.33x", contextWindow: 0 });
 		expect(body.models.findIndex((model) => model.id === "claude-haiku-4.5")).toBeLessThan(
@@ -246,9 +285,20 @@ describe("HTTP endpoints", () => {
 		expect(body.defaultStatus).toBe("gpt-5-mini | 0x | 0 tokens");
 	});
 
+	test("GET /bobai/models returns 400 for runtime-unsupported provider", async () => {
+		const res = await fetch(`${baseUrl}/bobai/models?provider=openrouter`);
+		expect(res.status).toBe(400);
+		const body = await res.text();
+		expect(body).toMatch(/Unsupported provider|runtime is not supported/i);
+	});
+
 	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {
-		const session = createSession(db);
-		const modelsRes = await fetch(`${baseUrl}/bobai/models`);
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		const modelsRes = await fetch(`${baseUrl}/bobai/models?provider=github-copilot`);
 		const modelsBody = (await modelsRes.json()) as { models: { index: number; id: string }[] };
 		const firstVisible = modelsBody.models[0];
 		const res = await fetch(`${baseUrl}/bobai/command`, {
@@ -266,7 +316,11 @@ describe("HTTP endpoints", () => {
 	});
 
 	test("POST /bobai/command returns error for bad command", async () => {
-		const session = createSession(db);
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -314,14 +368,28 @@ describe("HTTP endpoints", () => {
 		const freshDb = createTestDb();
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
-		createSession(freshDb);
-		const s2 = createSession(freshDb);
+		createSession(freshDb, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		const s2 = createSession(freshDb, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
 		updateSessionTitle(freshDb, s2.id, "Latest");
 		const res = await fetch(`${base}/bobai/sessions/recent`);
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { id: string; title: string | null; model: string | null } | null;
+		const body = (await res.json()) as {
+			id: string;
+			title: string | null;
+			provider: string | null;
+			model: string | null;
+		} | null;
 		expect(body).not.toBeNull();
 		expect(body?.id).toBe(s2.id);
+		expect(body?.provider).toBe("github-copilot");
 		s.stop(true);
 		freshDb.close();
 	});
@@ -342,18 +410,23 @@ describe("HTTP endpoints", () => {
 		const freshDb = createTestDb();
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
-		const session = createSession(freshDb);
+		const session = createSession(freshDb, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
 		updateSessionTitle(freshDb, session.id, "Test Session");
 		appendMessage(freshDb, session.id, "user", "hello");
 		appendMessage(freshDb, session.id, "assistant", "hi there");
 		const res = await fetch(`${base}/bobai/session/${session.id}/load`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
-			session: { id: string; title: string; model: string | null; parentId: string | null };
+			session: { id: string; title: string; provider: string | null; model: string | null; parentId: string | null };
 			messages: { role: string; content: string }[];
 		};
 		expect(body.session.id).toBe(session.id);
 		expect(body.session.title).toBe("Test Session");
+		expect(body.session.provider).toBe("github-copilot");
 		expect(body.messages.length).toBe(2); // user + assistant
 		s.stop(true);
 		freshDb.close();

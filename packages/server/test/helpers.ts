@@ -10,6 +10,8 @@ export function createTestDb(): Database {
 			id TEXT PRIMARY KEY,
 			title TEXT,
 			model TEXT,
+			provider TEXT,
+			api_family TEXT,
 			parent_id TEXT REFERENCES sessions(id),
 			prompt_tokens INTEGER NOT NULL DEFAULT 0,
 			prompt_chars INTEGER NOT NULL DEFAULT 0,

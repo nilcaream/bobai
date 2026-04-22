@@ -20,7 +20,7 @@ import {
 	READ_ONLY_DOT_COMMANDS,
 	STREAMING_DOT_COMMANDS,
 } from "./commandParser";
-import { DotCommandPanel, type ModelListItem } from "./DotCommandPanel";
+import { DotCommandPanel, type ModelListItem, type ProviderListItem } from "./DotCommandPanel";
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
 import { useAutoScroll } from "./hooks/useAutoScroll";
 import { useGlobalKeyboard } from "./hooks/useGlobalKeyboard";
@@ -38,6 +38,8 @@ export function App() {
 		isStreaming,
 		sendPrompt,
 		newChat,
+		provider,
+		setProvider,
 		setModel,
 		title,
 		setTitle,
@@ -66,6 +68,7 @@ export function App() {
 	} = useWebSocket();
 	const [input, setInput] = useState("");
 	const [modelList, setModelList] = useState<ModelListItem[] | null>(null);
+	const [providerList, setProviderList] = useState<ProviderListItem[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
 	const defaultStatus = useRef("");
@@ -157,10 +160,20 @@ export function App() {
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
 	}
 
-	// Fetch models eagerly on mount — needed for status bar and dot panel
-	// biome-ignore lint/correctness/useExhaustiveDependencies: setModel/setStatus are stable React state setters
 	useEffect(() => {
-		fetch("/bobai/models")
+		fetch("/bobai/providers")
+			.then((res) => res.json())
+			.then((data: { providers: ProviderListItem[]; defaultProvider: string }) => {
+				setProviderList(data.providers);
+				setProvider((prev) => prev ?? data.defaultProvider);
+			})
+			.catch(() => setProviderList(null));
+	}, [setProvider]);
+
+	// Fetch models for the active provider — needed for status bar and dot panel
+	useEffect(() => {
+		if (!provider) return;
+		fetch(`/bobai/models?provider=${encodeURIComponent(provider)}`)
 			.then((res) => res.json())
 			.then((data: { models: ModelListItem[]; defaultModel: string; defaultStatus: string }) => {
 				setModelList(data.models);
@@ -169,7 +182,7 @@ export function App() {
 				setStatus((prev) => prev || data.defaultStatus);
 			})
 			.catch(() => {});
-	}, []);
+	}, [provider, setModel, setStatus]);
 
 	// Fetch skills eagerly on mount — needed for slash command panel
 	useEffect(() => {
@@ -287,6 +300,7 @@ export function App() {
 					args: (parsed.args ?? "").trim(),
 					getSessionId,
 					setSessionId,
+					setProvider,
 					setModel,
 					setTitle,
 					setStatus,
@@ -482,6 +496,7 @@ export function App() {
 			<DotCommandPanel
 				parsed={parsedDotInput}
 				modelList={modelList}
+				providerList={providerList}
 				sessionList={sessionList}
 				subagentList={subagentList}
 				getSessionId={getSessionId}

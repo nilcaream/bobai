@@ -33,4 +33,9 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
 		expect(isSupportedAuthProvider("anything-else")).toBe(false);
 	});
+
+	test("openrouter is an auth provider but not yet a runtime provider", () => {
+		expect(isSupportedAuthProvider("openrouter")).toBe(true);
+		expect(isSupportedProvider("openrouter")).toBe(false);
+	});
 });

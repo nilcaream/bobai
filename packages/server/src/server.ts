@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import path from "node:path";
+import { listAuthenticatedProviders as listAuthProviderIds, loadAuthStore } from "./auth/store";
 import { type CommandRequest, handleCommand } from "./command";
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { createCompactionRegistry } from "./compaction/registry";
@@ -15,9 +16,11 @@ import { sessionScope } from "./log/session-tag";
 import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
+import { isRuntimeSupportedProvider } from "./provider/backend-policy";
 import { buildSortedProviderModelList, formatProviderModelDisplay, getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Provider } from "./provider/provider";
-import { DEFAULT_PROVIDER_ID, isSupportedProvider, type ProviderId } from "./provider/providers";
+import { DEFAULT_PROVIDER_ID, isSupportedAuthProvider, isSupportedProvider, type ProviderId } from "./provider/providers";
+import type { ProviderRuntimeManager } from "./provider/runtime-manager";
 import {
 	deleteSession,
 	getMessages,
@@ -37,6 +40,7 @@ export interface ServerOptions {
 	db?: Database;
 	dbGuard?: DbGuard;
 	provider?: Provider;
+	runtimeManager?: ProviderRuntimeManager;
 	providerId?: ProviderId;
 	model?: string;
 	maxIterations?: number;
@@ -54,6 +58,10 @@ function resolveConfiguredProviderId(providerId?: ProviderId, runtimeProviderId?
 	if (providerId) return providerId;
 	if (runtimeProviderId && isSupportedProvider(runtimeProviderId)) return runtimeProviderId;
 	return DEFAULT_PROVIDER_ID;
+}
+
+function resolveSessionProviderId(sessionProvider: string | null | undefined, configuredProviderId: ProviderId): ProviderId {
+	return sessionProvider && isSupportedProvider(sessionProvider) ? sessionProvider : configuredProviderId;
 }
 
 export function createServer(options: ServerOptions) {
@@ -364,14 +372,32 @@ export function createServer(options: ServerOptions) {
 				});
 			}
 
+			if (url.pathname === "/bobai/providers") {
+				const store = loadAuthStore(options.configDir ?? "");
+				const providers = listAuthProviderIds(store).map((id, i) => ({
+					index: i + 1,
+					id,
+					runtimeSupported: isRuntimeSupportedProvider(id),
+				}));
+				return Response.json({ providers, defaultProvider: configuredProviderId });
+			}
+
 			if (url.pathname === "/bobai/models") {
-				const models = buildSortedProviderModelList(configuredProviderId, options.configDir).map((model, i) => ({
+				const providerParam = url.searchParams.get("provider");
+				const requestedProvider = providerParam ?? configuredProviderId;
+				if (!isSupportedAuthProvider(requestedProvider)) {
+					return new Response(`Unsupported provider: ${requestedProvider}`, { status: 400 });
+				}
+				if (!isSupportedProvider(requestedProvider)) {
+					return new Response(`Provider runtime is not supported yet: ${requestedProvider}`, { status: 400 });
+				}
+				const models = buildSortedProviderModelList(requestedProvider, options.configDir).map((model, i) => ({
 					index: i + 1,
 					...model,
 				}));
 				const defaultModel = options.model ?? "gpt-5-mini";
-				const defaultStatus = formatProviderModelDisplay(configuredProviderId, defaultModel, 0, options.configDir);
-				return Response.json({ models, defaultModel, defaultStatus });
+				const defaultStatus = formatProviderModelDisplay(requestedProvider, defaultModel, 0, options.configDir);
+				return Response.json({ providerId: requestedProvider, models, defaultModel, defaultStatus });
 			}
 
 			if (url.pathname === "/bobai/command" && req.method === "POST") {
@@ -381,7 +407,17 @@ export function createServer(options: ServerOptions) {
 				try {
 					options.dbGuard?.assertConnected();
 					const body = (await req.json()) as CommandRequest;
-					const result = handleCommand(options.db, body, { providerId: configuredProviderId, configDir: options.configDir });
+					const store = loadAuthStore(options.configDir ?? "");
+					const authenticatedProviders = listAuthProviderIds(store).map((id, i) => ({
+						index: i + 1,
+						id,
+						runtimeSupported: isRuntimeSupportedProvider(id),
+					}));
+					const result = handleCommand(options.db, body, {
+						defaultProviderId: configuredProviderId,
+						configDir: options.configDir,
+						listAuthenticatedProviders: () => authenticatedProviders,
+					});
 					return Response.json(result);
 				} catch (err) {
 					if (err instanceof DbDisconnectedError) {
@@ -416,10 +452,17 @@ export function createServer(options: ServerOptions) {
 				}
 				const session = getMostRecentParentSession(options.db);
 				if (!session) return Response.json(null);
+				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
 				const status = session.model
-					? formatProviderModelDisplay(configuredProviderId, session.model, session.promptTokens, options.configDir)
+					? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
 					: null;
-				return Response.json({ id: session.id, title: session.title, model: session.model, status });
+				return Response.json({
+					id: session.id,
+					title: session.title,
+					provider: session.provider,
+					model: session.model,
+					status,
+				});
 			}
 
 			// GET /bobai/sessions — list parent sessions
@@ -454,11 +497,18 @@ export function createServer(options: ServerOptions) {
 					// The system prompt is now dynamic, not persisted. Remove this filter
 					// once all legacy sessions are gone.
 					.filter((m) => m.role !== "system");
+				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
 				const status = session.model
-					? formatProviderModelDisplay(configuredProviderId, session.model, session.promptTokens, options.configDir)
+					? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
 					: null;
 				return Response.json({
-					session: { id: session.id, title: session.title, model: session.model, parentId: session.parentId },
+					session: {
+						id: session.id,
+						title: session.title,
+						provider: session.provider,
+						model: session.model,
+						parentId: session.parentId,
+					},
 					messages,
 					status,
 				});
@@ -553,8 +603,8 @@ export function createServer(options: ServerOptions) {
 				}
 
 				if (msg.type === "prompt") {
-					const { db, provider, model } = options;
-					if (provider && model && db) {
+					const { db, provider, runtimeManager, model } = options;
+					if ((provider || runtimeManager) && model && db) {
 						// Create abort controller for this prompt — aborted on WebSocket close
 						const controller = new AbortController();
 						wsAbortControllers.set(ws, controller);
@@ -564,6 +614,8 @@ export function createServer(options: ServerOptions) {
 								ws,
 								db,
 								provider,
+								runtimeManager,
+								defaultProviderId: configuredProviderId,
 								model,
 								text: msg.text,
 								sessionId: msg.sessionId,

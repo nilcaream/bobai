@@ -1,6 +1,8 @@
+import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
 	appendMessage,
+	countSessionMessages,
 	createSession,
 	createSubagentSession,
 	deleteSession,
@@ -9,6 +11,7 @@ import {
 	getSession,
 	listSessions,
 	listSubagentSessions,
+	updateSessionBackend,
 } from "../src/session/repository";
 import { createTestDb } from "./helpers";
 
@@ -31,6 +34,17 @@ describe("session repository", () => {
 
 		const messages = getMessages(db, session.id);
 		expect(messages).toHaveLength(0);
+	});
+
+	test("createSession stores provider and apiFamily when provided", () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		expect(session.provider).toBe("github-copilot");
+		expect(session.model).toBe("gpt-5-mini");
+		expect(session.apiFamily).toBe("openai-chat-completions");
 	});
 
 	test("appendMessage adds messages with incrementing sort_order", () => {
@@ -62,6 +76,26 @@ describe("session repository", () => {
 		const found = getSession(db, created.id);
 		expect(found).not.toBeNull();
 		expect(found?.id).toBe(created.id);
+	});
+
+	test("updateSessionBackend updates provider, model, and apiFamily together", () => {
+		const session = createSession(db);
+		updateSessionBackend(db, session.id, {
+			provider: "github-copilot",
+			model: "claude-haiku-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		const updated = getSession(db, session.id);
+		expect(updated?.provider).toBe("github-copilot");
+		expect(updated?.model).toBe("claude-haiku-4.5");
+		expect(updated?.apiFamily).toBe("anthropic-messages");
+	});
+
+	test("countSessionMessages returns 0 for empty session and grows with persisted messages", () => {
+		const session = createSession(db);
+		expect(countSessionMessages(db, session.id)).toBe(0);
+		appendMessage(db, session.id, "user", "hello");
+		expect(countSessionMessages(db, session.id)).toBe(1);
 	});
 
 	test("getSession returns null for unknown id", () => {
@@ -126,11 +160,24 @@ describe("session repository", () => {
 	});
 
 	test("createSubagentSession creates a session with parent_id", () => {
-		const parent = createSession(db);
-		const child = createSubagentSession(db, parent.id, "Exploring codebase", "gpt-5-mini");
+		const parent = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+		const child = createSubagentSession(
+			db,
+			parent.id,
+			"Exploring codebase",
+			"gpt-5-mini",
+			"github-copilot",
+			"openai-chat-completions",
+		);
 		expect(child.id).toBeTruthy();
 		expect(child.title).toBe("Exploring codebase");
 		expect(child.parentId).toBe(parent.id);
+		expect(child.provider).toBe("github-copilot");
+		expect(child.apiFamily).toBe("openai-chat-completions");
 
 		const messages = getMessages(db, child.id);
 		expect(messages).toHaveLength(0);

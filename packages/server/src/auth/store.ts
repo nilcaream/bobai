@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { type AuthProviderId, SUPPORTED_AUTH_PROVIDERS } from "../provider/providers";
 
 export interface CopilotAuth {
 	refresh: string;
@@ -66,4 +67,9 @@ export function setOpenRouterAuth(store: AuthStore, auth: OpenRouterAuth): AuthS
 			openrouter: auth,
 		},
 	};
+}
+
+export function listAuthenticatedProviders(store: AuthStore | undefined): AuthProviderId[] {
+	if (!store) return [];
+	return SUPPORTED_AUTH_PROVIDERS.filter((providerId) => store.providers[providerId] !== undefined);
 }

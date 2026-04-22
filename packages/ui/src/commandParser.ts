@@ -25,6 +25,7 @@ export type ViewMode = (typeof VIEW_MODES)[number];
 export const ALL_DOT_COMMANDS: Record<string, DotCommand> = {
 	model: { name: "model", description: "Switch the AI model" },
 	new: { name: "new", description: "Start a new chat session" },
+	provider: { name: "provider", description: "Switch the AI provider" },
 	session: { name: "session", description: "Switch to another session" },
 	stop: { name: "stop", description: "Stop the current response" },
 	subagent: { name: "subagent", description: "View subagent sessions" },
@@ -38,7 +39,7 @@ export const pick = (...keys: string[]): DotCommand[] =>
 		return cmd ? [cmd] : [];
 	});
 
-export const FULL_DOT_COMMANDS = pick("model", "new", "session", "subagent", "title", "view");
+export const FULL_DOT_COMMANDS = pick("model", "new", "provider", "session", "subagent", "title", "view");
 export const READ_ONLY_DOT_COMMANDS = pick("new", "session", "subagent", "title", "view");
 export const LOCKED_DOT_COMMANDS = pick("new", "session");
 export const STREAMING_DOT_COMMANDS = pick("stop", "subagent");

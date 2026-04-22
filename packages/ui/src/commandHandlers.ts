@@ -254,6 +254,7 @@ export function handleGenericCommand(params: {
 	args: string;
 	getSessionId: () => string | null;
 	setSessionId: (id: string) => void;
+	setProvider: (id: string) => void;
 	setModel: (id: string) => void;
 	setTitle: (title: string | null) => void;
 	setStatus: (status: string) => void;
@@ -276,12 +277,17 @@ export function handleGenericCommand(params: {
 		body: JSON.stringify({ command: params.command, args: submittedArgs, sessionId: sid }),
 	})
 		.then((res) => res.json())
-		.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string }) => {
+		.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string; provider?: string; model?: string }) => {
 			if (result.ok) {
 				if (result.sessionId) {
 					params.setSessionId(result.sessionId);
 				}
-				if (params.command === "model") {
+				if (result.provider) {
+					params.setProvider(result.provider);
+				}
+				if (result.model) {
+					params.setModel(result.model);
+				} else if (params.command === "model") {
 					const selected =
 						resolvedModel ?? (params.modelList ? resolveVisibleModel(params.modelList, submittedArgs) : undefined);
 					if (selected) params.setModel(selected.id);

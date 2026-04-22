@@ -98,6 +98,16 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE sessions ADD COLUMN prompt_chars INTEGER NOT NULL DEFAULT 0");
 	}
 
+	// Migrate: add provider column to sessions if missing (session-scoped backend selection)
+	if (!sessionColumns.some((c) => c.name === "provider")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN provider TEXT");
+	}
+
+	// Migrate: add api_family column to sessions if missing (session backend contract)
+	if (!sessionColumns.some((c) => c.name === "api_family")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN api_family TEXT");
+	}
+
 	return {
 		id,
 		port: config.port,

@@ -83,6 +83,16 @@ describe("parseDotInput", () => {
 		expect(result?.matches).toHaveLength(1);
 		expect(result?.matches[0]?.name).toBe("stop");
 	});
+
+	test("provider command is available in full command set", () => {
+		expect(FULL_DOT_COMMANDS.some((cmd) => cmd.name === "provider")).toBe(true);
+	});
+
+	test("provider prefix parses like other commands", () => {
+		const result = parseDotInput(".pr", FULL_DOT_COMMANDS);
+		expect(result?.mode).toBe("select");
+		expect(result?.matches[0]?.name).toBe("provider");
+	});
 });
 
 describe("fuzzy matcher", () => {

@@ -1,0 +1,57 @@
+import { describe, expect, test } from "bun:test";
+import {
+	getApiFamilyForModel,
+	getDefaultSessionBackend,
+	validateModelSwitch,
+	validateProviderSwitch,
+} from "../src/provider/backend-policy";
+
+describe("backend policy", () => {
+	test("resolves github-copilot default backend", () => {
+		expect(getDefaultSessionBackend("github-copilot")).toEqual({
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+	});
+
+	test("maps copilot models to API families", () => {
+		expect(getApiFamilyForModel("github-copilot", "claude-haiku-4.5")).toBe("anthropic-messages");
+		expect(getApiFamilyForModel("github-copilot", "gpt-5.2")).toBe("openai-responses");
+		expect(getApiFamilyForModel("github-copilot", "gpt-5-mini")).toBe("openai-chat-completions");
+	});
+
+	test("allows provider switch on empty session when runtime is supported", () => {
+		const result = validateProviderSwitch({
+			hasMessages: false,
+			current: getDefaultSessionBackend("github-copilot"),
+			nextProvider: "github-copilot",
+		});
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.next).toEqual(getDefaultSessionBackend("github-copilot"));
+		}
+	});
+
+	test("rejects provider switch on non-empty session", () => {
+		const result = validateProviderSwitch({
+			hasMessages: true,
+			current: getDefaultSessionBackend("github-copilot"),
+			nextProvider: "github-copilot",
+		});
+		expect(result).toEqual({ ok: false, error: expect.stringMatching(/not yet supported/i) });
+	});
+
+	test("rejects cross-family model switch on non-empty session", () => {
+		const result = validateModelSwitch({
+			hasMessages: true,
+			current: {
+				provider: "github-copilot",
+				model: "claude-haiku-4.5",
+				apiFamily: "anthropic-messages",
+			},
+			nextModel: "gpt-5.2",
+		});
+		expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
+	});
+});

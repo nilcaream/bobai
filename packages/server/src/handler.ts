@@ -16,11 +16,13 @@ import { repairMessageOrdering } from "./message-repair";
 import { getProjectInfo } from "./project-info";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
+import { getDefaultSessionBackend } from "./provider/backend-policy";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import { getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider/provider";
 import { isSupportedProvider, type ProviderId } from "./provider/providers";
+import type { ProviderRuntimeManager } from "./provider/runtime-manager";
 import {
 	appendMessage,
 	createSession,
@@ -54,7 +56,9 @@ const subagentStatus = new SubagentStatus();
 export interface PromptRequest {
 	ws: { send: (msg: string) => void };
 	db: Database;
-	provider: Provider;
+	provider?: Provider;
+	runtimeManager?: ProviderRuntimeManager;
+	defaultProviderId?: ProviderId;
 	model: string;
 	text: string;
 	sessionId?: string;
@@ -92,11 +96,27 @@ function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent &
 }
 
 export async function handlePrompt(req: PromptRequest) {
-	const { ws, db, provider, model, text, sessionId, projectRoot, configDir, skills, skillDirectories, stagedSkills } = req;
+	const {
+		ws,
+		db,
+		provider,
+		runtimeManager,
+		model,
+		text,
+		sessionId,
+		projectRoot,
+		configDir,
+		skills,
+		skillDirectories,
+		stagedSkills,
+	} = req;
 
 	const instructions = loadInstructions(configDir, projectRoot);
+	const defaultProviderId = req.defaultProviderId ?? "github-copilot";
 	let currentSessionId: string | undefined;
-	let sessionObj: { model: string | null; title: string | null } | null = null;
+	let sessionObj: ReturnType<typeof getSession> | null = null;
+	let effectiveProviderId: ProviderId = defaultProviderId;
+	let activeProvider: Provider | undefined;
 	let effectiveModel = model;
 	let lastAssistantMessageId: string | null = null;
 	let turnProvider: ReturnType<typeof createIsolatedTurnProvider> | undefined;
@@ -112,13 +132,26 @@ export async function handlePrompt(req: PromptRequest) {
 			currentSessionId = sessionId;
 			sessionObj = session;
 		} else {
-			const session = createSession(db);
+			const backend = getDefaultSessionBackend(defaultProviderId);
+			const session = createSession(db, {
+				provider: backend.provider,
+				model: backend.model,
+				apiFamily: backend.apiFamily,
+			});
 			currentSessionId = session.id;
 			sessionObj = session;
 			send(ws, { type: "session_created", sessionId: currentSessionId });
 		}
 
+		effectiveProviderId = isSupportedProvider(sessionObj?.provider ?? "")
+			? (sessionObj?.provider as ProviderId)
+			: defaultProviderId;
 		effectiveModel = sessionObj?.model ?? model;
+		activeProvider = runtimeManager ? await runtimeManager.get(effectiveProviderId) : provider;
+		if (!activeProvider) {
+			send(ws, { type: "error", message: "No provider configured" });
+			return;
+		}
 
 		const scopedLogger = req.logger?.withScope(sessionScope(currentSessionId as string));
 
@@ -217,7 +250,7 @@ export async function handlePrompt(req: PromptRequest) {
 
 		const taskTool = createTaskTool({
 			db,
-			provider,
+			provider: activeProvider,
 			model: effectiveModel,
 			parentSessionId: currentSessionId,
 			projectRoot,
@@ -256,7 +289,7 @@ export async function handlePrompt(req: PromptRequest) {
 		// Uses the session's last known prompt token count and the model's context window.
 		const currentSession = getSession(db, currentSessionId);
 		const sessionPromptTokens = currentSession?.promptTokens ?? 0;
-		const providerId: ProviderId = isSupportedProvider(provider.id) ? provider.id : "github-copilot";
+		const providerId: ProviderId = isSupportedProvider(activeProvider.id) ? activeProvider.id : "github-copilot";
 		const modelConfig = getProviderModelConfig(providerId, effectiveModel, configDir);
 		const contextWindow = modelConfig?.contextWindow ?? 0;
 		if (contextWindow <= 0) {
@@ -303,7 +336,7 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 
 		// Create an isolated turn provider so concurrent sessions don't corrupt each other's metrics
-		turnProvider = createIsolatedTurnProvider(provider);
+		turnProvider = createIsolatedTurnProvider(activeProvider);
 		turnProvider.beginTurn?.(sessionPromptTokens);
 
 		// Run the agent loop
@@ -389,7 +422,14 @@ export async function handlePrompt(req: PromptRequest) {
 				turn_model: effectiveModel,
 			});
 		}
-		send(ws, { type: "done", sessionId: currentSessionId, model: effectiveModel, title: sessionObj?.title ?? null, summary });
+		send(ws, {
+			type: "done",
+			sessionId: currentSessionId,
+			provider: effectiveProviderId,
+			model: effectiveModel,
+			title: sessionObj?.title ?? null,
+			summary,
+		});
 	} catch (err) {
 		// DB disconnected errors must propagate to server.ts for broadcast handling
 		if (err instanceof DbDisconnectedError) throw err;
@@ -453,6 +493,7 @@ export async function handlePrompt(req: PromptRequest) {
 			send(ws, {
 				type: "done",
 				sessionId: currentSessionId,
+				provider: effectiveProviderId,
 				model: effectiveModel,
 				title: sessionObj?.title ?? null,
 				summary: errSummary,

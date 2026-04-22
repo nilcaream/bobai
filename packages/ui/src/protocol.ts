@@ -3,7 +3,7 @@ export type ServerMessage =
 	| { type: "tool_call"; id: string; output: string; sessionId?: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
 	| { type: "prompt_echo"; text: string; sessionId?: string }
-	| { type: "done"; sessionId: string; model: string; title?: string | null; summary?: string }
+	| { type: "done"; sessionId: string; provider?: string; model: string; title?: string | null; summary?: string }
 	| { type: "error"; message: string; sessionId?: string }
 	| { type: "status"; text: string; sessionId?: string }
 	| { type: "session_created"; sessionId: string }

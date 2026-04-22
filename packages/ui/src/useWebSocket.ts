@@ -12,6 +12,7 @@ export function useWebSocket() {
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [connected, setConnected] = useState(false);
 	const [isStreaming, setIsStreaming] = useState(false);
+	const [provider, setProvider] = useState<string | null>(null);
 	const [model, setModel] = useState<string | null>(null);
 	const [title, setTitle] = useState<string | null>(null);
 	const [status, setStatus] = useState("");
@@ -207,6 +208,7 @@ export function useWebSocket() {
 
 			if (msg.type === "done") {
 				sessionId.current = msg.sessionId;
+				if (msg.provider) setProvider(msg.provider);
 				setModel(msg.model);
 				if (msg.title) setTitle(msg.title);
 				setParentId(null);
@@ -342,6 +344,7 @@ export function useWebSocket() {
 
 		sessionId.current = null;
 		setMessages([]);
+		setProvider(null);
 		setModel(null);
 		setTitle(null);
 		setStatus("");
@@ -365,6 +368,7 @@ export function useWebSocket() {
 		sendSubscribe,
 		setMessages,
 		setTitle,
+		setProvider,
 		setModel,
 		setParentId,
 		setParentTitle,
@@ -389,6 +393,8 @@ export function useWebSocket() {
 		sendPrompt,
 		sendCancel,
 		newChat,
+		provider,
+		setProvider,
 		model,
 		setModel,
 		title,

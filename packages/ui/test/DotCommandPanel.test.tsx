@@ -7,6 +7,7 @@ const noopGetSessionId = () => null;
 
 const defaultProps = {
 	modelList: null,
+	providerList: null,
 	sessionList: null,
 	subagentList: null,
 	getSessionId: noopGetSessionId,
@@ -142,6 +143,18 @@ describe("DotCommandPanel", () => {
 		const rows = container.querySelectorAll(".panel--dot > div");
 		expect(rows.length).toBe(20);
 		expect(container.textContent ?? "").not.toContain("model-25");
+	});
+
+	test("provider panel lists authenticated providers with runtime support note", () => {
+		const parsed = dot({ command: "provider", args: "" });
+		const providers = [
+			{ index: 1, id: "github-copilot", runtimeSupported: true },
+			{ index: 2, id: "openrouter", runtimeSupported: false },
+		];
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} providerList={providers} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("1: github-copilot");
+		expect(text).toContain("2: openrouter (runtime not supported yet)");
 	});
 
 	// --- New panel ---

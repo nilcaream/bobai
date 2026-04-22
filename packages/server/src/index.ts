@@ -12,9 +12,9 @@ import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
 import { deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
-import { createConfiguredProvider } from "./provider/factory";
 import { providerModelsConfigExists } from "./provider/models";
 import { isSupportedAuthProvider, isSupportedProvider, SUPPORTED_AUTH_PROVIDERS } from "./provider/providers";
+import { createProviderRuntimeManager } from "./provider/runtime-manager";
 import { createServer } from "./server";
 import { builtinSkills } from "./skill/builtin";
 import { discoverSkills } from "./skill/skill";
@@ -118,8 +118,7 @@ if (!providerModelsConfigExists(config.provider, globalConfigDir)) {
 	process.exit(1);
 }
 
-const provider = await createConfiguredProvider({
-	providerId: config.provider,
+const runtimeManager = createProviderRuntimeManager({
 	configDir: globalConfigDir,
 	logger,
 });
@@ -135,7 +134,7 @@ const server = createServer({
 	staticDir,
 	db: project.db,
 	dbGuard: project.dbGuard,
-	provider,
+	runtimeManager,
 	providerId: config.provider,
 	model: config.model,
 	maxIterations: config.maxIterations,

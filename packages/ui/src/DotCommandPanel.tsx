@@ -2,10 +2,12 @@ import type { DotCommand, ParsedDotInput } from "./commandParser";
 import { fuzzyFilterAndSort } from "./commandParser";
 
 export type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
+export type ProviderListItem = { index: number; id: string; runtimeSupported: boolean };
 
 export function DotCommandPanel({
 	parsed,
 	modelList,
+	providerList,
 	sessionList,
 	subagentList,
 	getSessionId,
@@ -13,6 +15,7 @@ export function DotCommandPanel({
 }: {
 	parsed: ParsedDotInput | null;
 	modelList: ModelListItem[] | null;
+	providerList: ProviderListItem[] | null;
 	sessionList: { index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[] | null;
 	subagentList: { index: number; title: string; sessionId: string }[] | null;
 	getSessionId: () => string | null;
@@ -26,6 +29,8 @@ export function DotCommandPanel({
 		content = renderSelectMode(parsed.matches);
 	} else if (parsed.command === "model") {
 		content = renderModelPanel(parsed.args, modelList);
+	} else if (parsed.command === "provider") {
+		content = renderProviderPanel(parsed.args, providerList);
 	} else if (parsed.command === "new") {
 		const newTitle = parsed.args.trim();
 		content = newTitle ? `Start a new chat session: ${newTitle}` : "Start a new chat session (optional title)";
@@ -92,6 +97,31 @@ function renderModelPanel(args: string, modelList: ModelListItem[] | null) {
 
 function formatContextWindow(contextWindow: number): string {
 	return `${Math.round(contextWindow / 1000)}k`;
+}
+
+function renderProviderPanel(args: string, providerList: ProviderListItem[] | null) {
+	if (!providerList) return "Loading providers...";
+	if (providerList.length === 0) return "No authenticated providers";
+	const argText = (args ?? "").trim();
+	const firstToken = argText.split(/\s+/)[0] ?? "";
+	const isNumeric = !argText || /^\d+$/.test(firstToken);
+	const filtered = isNumeric
+		? firstToken
+			? providerList.filter((provider) => String(provider.index).includes(firstToken))
+			: providerList
+		: fuzzyFilterAndSort(providerList, argText, (provider) => provider.id).slice(0, 20);
+	if (filtered.length === 0) return <div>No matching providers</div>;
+	const maxIndex = Math.max(...filtered.map((provider) => provider.index));
+	const padWidth = String(maxIndex).length;
+	return filtered.map((provider) => {
+		const paddedIndex = String(provider.index).padStart(padWidth, " ");
+		return (
+			<div key={provider.id}>
+				{paddedIndex}: {provider.id}
+				{provider.runtimeSupported ? "" : " (runtime not supported yet)"}
+			</div>
+		);
+	});
 }
 
 function renderSessionPanel(

@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -66,6 +67,42 @@ describe("initProject", () => {
 			.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_messages_session'")
 			.all();
 		expect(indexes).toHaveLength(1);
+	});
+
+	test("migrates existing sessions table by adding provider and api_family columns", async () => {
+		fs.mkdirSync(path.join(tmpDir, ".bobai"), { recursive: true });
+		const dbFile = path.join(tmpDir, ".bobai", "bobai.db");
+		const db = new Database(dbFile, { create: true });
+		db.exec("PRAGMA foreign_keys = ON");
+		db.exec(`
+			CREATE TABLE sessions (
+				id TEXT PRIMARY KEY,
+				title TEXT,
+				model TEXT,
+				parent_id TEXT REFERENCES sessions(id),
+				prompt_tokens INTEGER NOT NULL DEFAULT 0,
+				prompt_chars INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)
+		`);
+		db.exec(`
+			CREATE TABLE messages (
+				id TEXT PRIMARY KEY,
+				session_id TEXT NOT NULL REFERENCES sessions(id),
+				role TEXT NOT NULL,
+				content TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				sort_order INTEGER NOT NULL,
+				metadata TEXT
+			)
+		`);
+		db.close();
+
+		const project = await initProject(tmpDir);
+		const columns = project.db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+		expect(columns.some((c) => c.name === "provider")).toBe(true);
+		expect(columns.some((c) => c.name === "api_family")).toBe(true);
 	});
 
 	test("reads debug from bobai.json", async () => {

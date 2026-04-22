@@ -613,6 +613,7 @@ describe("handleGenericCommand", () => {
 			args: "arg1",
 			getSessionId: mock(() => "sid-123"),
 			setSessionId: mock(() => {}),
+			setProvider: mock(() => {}),
 			setModel: mock(() => {}),
 			setTitle: mock(() => {}),
 			setStatus: mock(() => {}),
@@ -806,6 +807,28 @@ describe("handleGenericCommand", () => {
 		expect(params.setSessionId).toHaveBeenCalledWith("new-sid");
 		expect(params.setModel).toHaveBeenCalledWith("gpt-4");
 		expect(params.setStatus).toHaveBeenCalledWith("ready");
+	});
+
+	test("provider command updates provider, model, and status from server result", async () => {
+		globalThis.fetch = mock(() =>
+			Promise.resolve(
+				jsonResponse({
+					ok: true,
+					sessionId: "sid-1",
+					provider: "github-copilot",
+					model: "gpt-5-mini",
+					status: "gpt-5-mini | 0x | 0 tokens",
+				}),
+			),
+		);
+		const params = makeParams({ command: "provider", args: "1" });
+		handleGenericCommand(params);
+		await flushPromises();
+
+		expect(params.setSessionId).toHaveBeenCalledWith("sid-1");
+		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
+		expect(params.setModel).toHaveBeenCalledWith("gpt-5-mini");
+		expect(params.setStatus).toHaveBeenCalledWith("gpt-5-mini | 0x | 0 tokens");
 	});
 });
 

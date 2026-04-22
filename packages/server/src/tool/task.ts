@@ -13,6 +13,7 @@ import type { Logger } from "../log/logger";
 import { runWithScope } from "../log/logger";
 import { subagentScope } from "../log/session-tag";
 import { getProjectInfo } from "../project-info";
+import { getApiFamilyForModel } from "../provider/backend-policy";
 import { getProviderModelConfig } from "../provider/models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { isSupportedProvider, type ProviderId } from "../provider/providers";
@@ -177,7 +178,9 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				childSessionId = taskId;
 			} else {
 				// Create child session with description as title
-				const child = createSubagentSession(db, parentSessionId, description, model);
+				const inheritedProviderId: ProviderId = isSupportedProvider(activeProvider.id) ? activeProvider.id : "github-copilot";
+				const inheritedApiFamily = getApiFamilyForModel(inheritedProviderId, model);
+				const child = createSubagentSession(db, parentSessionId, description, model, inheritedProviderId, inheritedApiFamily);
 				childSessionId = child.id;
 
 				// Add the task prompt as a user message with agent metadata

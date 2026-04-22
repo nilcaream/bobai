@@ -9,6 +9,7 @@ interface UseSessionLoaderOptions {
 	sendSubscribe: (sid: string) => void;
 	setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 	setTitle: React.Dispatch<React.SetStateAction<string | null>>;
+	setProvider: React.Dispatch<React.SetStateAction<string | null>>;
 	setModel: React.Dispatch<React.SetStateAction<string | null>>;
 	setParentId: React.Dispatch<React.SetStateAction<string | null>>;
 	setParentTitle: React.Dispatch<React.SetStateAction<string | null>>;
@@ -31,6 +32,7 @@ export function useSessionLoader({
 	sendSubscribe,
 	setMessages,
 	setTitle,
+	setProvider,
 	setModel,
 	setParentId,
 	setParentTitle,
@@ -85,12 +87,13 @@ export function useSessionLoader({
 				const res = await fetch(`/bobai/session/${targetId}/load`);
 				if (!res.ok) return false;
 				const data = (await res.json()) as {
-					session: { id: string; title: string | null; model: string | null; parentId: string | null };
+					session: { id: string; title: string | null; provider: string | null; model: string | null; parentId: string | null };
 					messages: StoredMessage[];
 					status: string | null;
 				};
 				sessionId.current = data.session.id;
 				setTitle(data.session.title);
+				setProvider(data.session.provider);
 				setModel(data.session.model);
 				setParentId(data.session.parentId);
 				setSubagents([]);
@@ -128,6 +131,7 @@ export function useSessionLoader({
 			sessionId,
 			setMessages,
 			setTitle,
+			setProvider,
 			setModel,
 			setParentId,
 			setParentTitle,

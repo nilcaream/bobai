@@ -6,7 +6,8 @@ import path from "node:path";
 import { handlePrompt } from "../src/handler";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { AuthError, ProviderError } from "../src/provider/provider";
-import { getMessages } from "../src/session/repository";
+import type { ProviderRuntimeManager } from "../src/provider/runtime-manager";
+import { createSession, getMessages } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
 
@@ -102,10 +103,14 @@ describe("handlePrompt", () => {
 	test("creates new session when no sessionId provided", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["Hello"]);
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async () => provider,
+		};
 		await handlePrompt({
 			ws,
 			db,
-			provider,
+			runtimeManager,
+			defaultProviderId: "github-copilot",
 			model: "test-model",
 			text: "hi",
 			projectRoot: "/tmp",
@@ -118,13 +123,58 @@ describe("handlePrompt", () => {
 		expect(done.sessionId).toBeTruthy();
 	});
 
-	test("streams tokens then done with sessionId", async () => {
+	test("uses runtime manager to resolve the active provider for the session", async () => {
 		const ws = mockWs();
-		const provider = mockProvider(["Hello", " world"]);
+		const fallbackProvider: Provider = {
+			id: "mock",
+			stream() {
+				throw new Error("fallback provider should not be used");
+			},
+		};
+		const managedProvider = mockProvider(["managed provider"]);
+		let requestedProviderId: string | undefined;
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async (providerId) => {
+				requestedProviderId = providerId;
+				return managedProvider;
+			},
+		};
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+
 		await handlePrompt({
 			ws,
 			db,
-			provider,
+			provider: fallbackProvider,
+			runtimeManager,
+			defaultProviderId: "github-copilot",
+			model: "test-model",
+			text: "hi",
+			sessionId: session.id,
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		expect(requestedProviderId).toBe("github-copilot");
+		const msgs = ws.messages();
+		expect(msgs.find((m: { type: string; text?: string }) => m.type === "token" && m.text === "managed provider")).toBeTruthy();
+	});
+
+	test("streams tokens then done with sessionId", async () => {
+		const ws = mockWs();
+		const provider = mockProvider(["Hello", " world"]);
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async () => provider,
+		};
+		await handlePrompt({
+			ws,
+			db,
+			runtimeManager,
+			defaultProviderId: "github-copilot",
 			model: "test-model",
 			text: "hi",
 			projectRoot: "/tmp",
@@ -145,6 +195,9 @@ describe("handlePrompt", () => {
 	test("completes prompt handling when provider-specific model metadata exists", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["metadata ok"]);
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async () => provider,
+		};
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-"));
 		try {
 			fs.writeFileSync(
@@ -164,7 +217,8 @@ describe("handlePrompt", () => {
 			await handlePrompt({
 				ws,
 				db,
-				provider,
+				runtimeManager,
+				defaultProviderId: "github-copilot",
 				model: "gpt-5-mini",
 				text: "hi",
 				projectRoot: "/tmp",
@@ -183,10 +237,14 @@ describe("handlePrompt", () => {
 	test("persists user and assistant messages to DB", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["response text"]);
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async () => provider,
+		};
 		await handlePrompt({
 			ws,
 			db,
-			provider,
+			runtimeManager,
+			defaultProviderId: "github-copilot",
 			model: "test-model",
 			text: "my question",
 			projectRoot: "/tmp",
@@ -207,10 +265,14 @@ describe("handlePrompt", () => {
 	test("resumes existing session with sessionId", async () => {
 		const ws1 = mockWs();
 		const provider1 = mockProvider(["first response"]);
+		const runtimeManager1: ProviderRuntimeManager = {
+			get: async () => provider1,
+		};
 		await handlePrompt({
 			ws: ws1,
 			db,
-			provider: provider1,
+			runtimeManager: runtimeManager1,
+			defaultProviderId: "github-copilot",
 			model: "test-model",
 			text: "first",
 			projectRoot: "/tmp",
@@ -221,10 +283,14 @@ describe("handlePrompt", () => {
 
 		const ws2 = mockWs();
 		const provider2 = capturingProvider(["second response"]);
+		const runtimeManager2: ProviderRuntimeManager = {
+			get: async () => provider2,
+		};
 		await handlePrompt({
 			ws: ws2,
 			db,
-			provider: provider2,
+			runtimeManager: runtimeManager2,
+			defaultProviderId: "github-copilot",
 			model: "test-model",
 			text: "second",
 			sessionId,
@@ -252,10 +318,14 @@ describe("handlePrompt", () => {
 	test("sends error for unknown sessionId", async () => {
 		const ws = mockWs();
 		const provider = mockProvider(["x"]);
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async () => provider,
+		};
 		await handlePrompt({
 			ws,
 			db,
-			provider,
+			runtimeManager,
+			defaultProviderId: "github-copilot",
 			model: "test-model",
 			text: "hi",
 			sessionId: "nonexistent",
