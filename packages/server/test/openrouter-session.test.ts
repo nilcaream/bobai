@@ -95,8 +95,8 @@ describe("OpenRouter session flow", () => {
 
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("openrouter");
-		expect(body.model).toBe("google/gemma-3-27b-it:free");
-		expect(body.status).toBe("openrouter | google/gemma-3-27b-it:free | free | 0 / 131072 | 0%");
+		expect(body.model).toBe("openrouter/free");
+		expect(body.status).toBe("openrouter | openrouter/free | free | 0 / 200000 | 0%");
 	});
 
 	test("websocket prompt uses the OpenRouter runtime after provider switch", async () => {
@@ -131,14 +131,14 @@ describe("OpenRouter session flow", () => {
 		expect(messages.some((m) => m.type === "token" && m.text === "openrouter response")).toBe(true);
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("openrouter");
-		expect(done?.model).toBe("google/gemma-3-27b-it:free");
+		expect(done?.model).toBe("openrouter/free");
 		expect(done?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| cost: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
 		);
 		const stored = getMessages(db, session.id);
-		expect(stored.at(-1)?.metadata?.turn_model).toBe("google/gemma-3-27b-it:free");
+		expect(stored.at(-1)?.metadata?.turn_model).toBe("openrouter/free");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| cost: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 });

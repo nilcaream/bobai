@@ -301,8 +301,8 @@ describe("HTTP endpoints", () => {
 			cost: "$0.50 | $5.12",
 			contextWindow: 128000,
 		});
-		expect(body.defaultModel).toBe("google/gemma-3-27b-it:free");
-		expect(body.defaultStatus).toBe("openrouter | google/gemma-3-27b-it:free | free | 0 / 131072 | 0%");
+		expect(body.defaultModel).toBe("openrouter/free");
+		expect(body.defaultStatus).toBe("openrouter | openrouter/free | free | 0 / 200000 | 0%");
 	});
 
 	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {

@@ -18,6 +18,6 @@ export function getDefaultModelForProvider(providerId: ProviderId): string {
 		case "github-copilot":
 			return "gpt-5-mini";
 		case "openrouter":
-			return "google/gemma-3-27b-it:free";
+			return "openrouter/free";
 	}
 }

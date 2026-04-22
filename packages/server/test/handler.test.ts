@@ -359,11 +359,40 @@ describe("handlePrompt", () => {
 
 		const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
 		expect(done?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| cost: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
 		);
 		const stored = getMessages(db, session.id);
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| cost: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+		);
+	});
+
+	test("formats free openrouter message summaries with a free label", async () => {
+		const ws = mockWs();
+		const session = createSession(db, {
+			provider: "openrouter",
+			model: "openrouter/free",
+			apiFamily: "openai-chat-completions",
+		});
+		updateSessionPromptTokens(db, session.id, 5007, 0);
+		await handlePrompt({
+			ws,
+			db,
+			provider: metricsProvider("openrouter", "tencent/hy3-preview:free", 7446, 279),
+			defaultProviderId: "openrouter",
+			sessionId: session.id,
+			model: "openrouter/free",
+			text: "hello",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+		expect(done?.summary).toMatch(/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| free \| context: \+2439 \| \d+\.\d{2}s$/);
+		const stored = getMessages(db, session.id);
+		expect(stored.at(-1)?.metadata?.summary).toMatch(
+			/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| free \| context: \+2439 \| \d+\.\d{2}s$/,
 		);
 	});
 

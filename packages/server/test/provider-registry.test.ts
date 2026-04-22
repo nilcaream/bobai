@@ -37,6 +37,6 @@ describe("provider registry", () => {
 	test("recognizes openrouter as a runtime provider", () => {
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
 		expect(isSupportedProvider("openrouter")).toBe(true);
-		expect(getDefaultModelForProvider("openrouter")).toBe("google/gemma-3-27b-it:free");
+		expect(getDefaultModelForProvider("openrouter")).toBe("openrouter/free");
 	});
 });

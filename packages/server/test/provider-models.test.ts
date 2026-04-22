@@ -112,7 +112,7 @@ describe("provider model facade", () => {
 
 	test("loads curated openrouter model metadata through the provider facade", () => {
 		const models = loadProviderModelsConfig("openrouter");
-		expect(models.find((model) => model.id === "google/gemma-3-27b-it:free")).toMatchObject({
+		expect(models.find((model) => model.id === "openrouter/free")).toMatchObject({
 			contextWindow: expect.any(Number),
 			maxOutput: expect.any(Number),
 			label: expect.any(String),

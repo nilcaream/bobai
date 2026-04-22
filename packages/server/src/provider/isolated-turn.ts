@@ -59,9 +59,13 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			}
 			parts.push(`in: ${turnInputTokens}`);
 			parts.push(`out: ${turnOutputTokens}`);
-			if (original.id === "openrouter" && modelConfig?.inputPrice !== undefined && modelConfig.outputPrice !== undefined) {
-				const cost = (turnInputTokens * modelConfig.inputPrice + turnOutputTokens * modelConfig.outputPrice) / 1_000_000;
-				parts.push(`cost: $${cost.toFixed(2)}`);
+			if (original.id === "openrouter") {
+				if (modelConfig?.label === "free") {
+					parts.push("free");
+				} else if (modelConfig?.inputPrice !== undefined && modelConfig.outputPrice !== undefined) {
+					const cost = (turnInputTokens * modelConfig.inputPrice + turnOutputTokens * modelConfig.outputPrice) / 1_000_000;
+					parts.push(`estimate: $${cost.toFixed(2)}`);
+				}
 			}
 			parts.push(`context: ${contextSign}${contextDelta}`);
 			parts.push(`${elapsed.toFixed(2)}s`);

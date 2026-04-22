@@ -54,7 +54,7 @@ describe("openrouter provider", () => {
 		const provider = createOpenRouterProvider({ apiKey: "or-key" });
 		await collect(
 			provider.stream({
-				model: "google/gemma-3-27b-it:free",
+				model: "openrouter/free",
 				messages: [{ role: "user", content: "hello" }],
 			}),
 		);
@@ -65,7 +65,7 @@ describe("openrouter provider", () => {
 		expect(headers.Authorization).toBe("Bearer or-key");
 		expect(headers["Content-Type"]).toBe("application/json");
 		const body = JSON.parse(capturedInit?.body as string);
-		expect(body.model).toBe("google/gemma-3-27b-it:free");
+		expect(body.model).toBe("openrouter/free");
 		expect(body.stream).toBe(true);
 		expect(body.stream_options).toEqual({ include_usage: true });
 	});
@@ -125,7 +125,7 @@ describe("openrouter provider", () => {
 		const provider = createOpenRouterProvider({ apiKey: "bad" });
 		await expect(async () => {
 			for await (const _ of provider.stream({
-				model: "google/gemma-3-27b-it:free",
+				model: "openrouter/free",
 				messages: [{ role: "user", content: "hi" }],
 			})) {
 				// drain
