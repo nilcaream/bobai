@@ -73,4 +73,33 @@ describe("provider factory", () => {
 
 		expect(result).toBe(provider);
 	});
+
+	test("creates opencode-go provider from auth store entry", async () => {
+		const store = {
+			version: 1,
+			providers: {
+				"opencode-go": { apiKey: "go-key" },
+			},
+		} as AuthStore;
+		const provider: Provider = {
+			id: "opencode-go",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+
+		const result = await createConfiguredProvider(
+			{ providerId: "opencode-go", configDir: "/cfg" },
+			{
+				providerModelsConfigExists: () => true,
+				loadAuthStore: () => store,
+				createOpenCodeGoProvider: (auth) => {
+					expect(auth).toEqual({ apiKey: "go-key" });
+					return provider;
+				},
+			},
+		);
+
+		expect(result).toBe(provider);
+	});
 });

@@ -1,8 +1,15 @@
 import { authorizeCopilot as defaultAuthorizeCopilot } from "../auth/authorize";
-import { type AuthStore, type CopilotAuth, loadAuthStore as defaultLoadAuthStore, type OpenRouterAuth } from "../auth/store";
+import {
+	type AuthStore,
+	type CopilotAuth,
+	loadAuthStore as defaultLoadAuthStore,
+	type OpenCodeGoAuth,
+	type OpenRouterAuth,
+} from "../auth/store";
 import type { Logger } from "../log/logger";
 import { createCopilotProvider as defaultCreateCopilotProvider } from "./copilot";
 import { providerModelsConfigExists as defaultProviderModelsConfigExists } from "./models";
+import { createOpenCodeGoProvider as defaultCreateOpenCodeGoProvider } from "./opencode-go";
 import { createOpenRouterProvider as defaultCreateOpenRouterProvider } from "./openrouter";
 import type { Provider } from "./provider";
 import type { ProviderId } from "./providers";
@@ -20,6 +27,7 @@ export interface CreateProviderDeps {
 	authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
 	createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger) => Provider;
 	createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger) => Provider;
+	createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger) => Provider;
 }
 
 export async function createConfiguredProvider(
@@ -44,5 +52,6 @@ export async function createConfiguredProvider(
 		authorizeCopilot: deps.authorizeCopilot ?? defaultAuthorizeCopilot,
 		createCopilotProvider: deps.createCopilotProvider ?? defaultCreateCopilotProvider,
 		createOpenRouterProvider: deps.createOpenRouterProvider ?? defaultCreateOpenRouterProvider,
+		createOpenCodeGoProvider: deps.createOpenCodeGoProvider ?? defaultCreateOpenCodeGoProvider,
 	});
 }

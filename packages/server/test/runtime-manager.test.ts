@@ -50,4 +50,28 @@ describe("provider runtime manager", () => {
 		expect(a).toBe(b);
 		expect(calls).toBe(1);
 	});
+
+	test("caches opencode-go runtime instance separately", async () => {
+		let calls = 0;
+		const fakeProvider: Provider = {
+			id: "opencode-go",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+		const manager = createProviderRuntimeManager(
+			{ configDir: "/cfg" },
+			{
+				createProvider: async () => {
+					calls++;
+					return fakeProvider;
+				},
+			},
+		);
+
+		const a = await manager.get("opencode-go");
+		const b = await manager.get("opencode-go");
+		expect(a).toBe(b);
+		expect(calls).toBe(1);
+	});
 });

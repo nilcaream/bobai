@@ -21,6 +21,10 @@ describe("backend policy", () => {
 		expect(getApiFamilyForModel("github-copilot", "gpt-5-mini")).toBe("openai-chat-completions");
 	});
 
+	test("maps opencode-go chat-completions models to the chat completions family", () => {
+		expect(getApiFamilyForModel("opencode-go", "kimi-k2.6")).toBe("openai-chat-completions");
+	});
+
 	test("allows provider switch on empty session when runtime is supported", () => {
 		const result = validateProviderSwitch({
 			hasMessages: false,

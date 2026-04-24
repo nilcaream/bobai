@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { authorizeCopilot, authorizeOpenRouter } from "../src/auth/authorize";
+import { authorizeCopilot, authorizeOpenCodeGo, authorizeOpenRouter } from "../src/auth/authorize";
 import type { AuthStore } from "../src/auth/store";
 
 const SESSION_TOKEN = "tid=session;proxy-ep=proxy.individual.githubcopilot.com";
@@ -101,6 +101,29 @@ describe("authorizeCopilot", () => {
 			authorizeOpenRouter(tmpDir, {
 				promptSecret: async () => "bad-key",
 				validateOpenRouterKey: async () => {
+					throw new Error("Unauthorized");
+				},
+			}),
+		).rejects.toThrow(/Unauthorized/);
+
+		expect(fs.existsSync(path.join(tmpDir, "auth.json"))).toBe(false);
+	});
+
+	test("saves validated OpenCode Go key into auth store", async () => {
+		await authorizeOpenCodeGo(tmpDir, {
+			promptSecret: async () => "go-key-123",
+			validateOpenCodeGoKey: async () => {},
+		});
+
+		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
+		expect(raw.providers["opencode-go"]).toEqual({ apiKey: "go-key-123" });
+	});
+
+	test("does not save OpenCode Go key when validation fails", async () => {
+		await expect(
+			authorizeOpenCodeGo(tmpDir, {
+				promptSecret: async () => "bad-go-key",
+				validateOpenCodeGoKey: async () => {
 					throw new Error("Unauthorized");
 				},
 			}),

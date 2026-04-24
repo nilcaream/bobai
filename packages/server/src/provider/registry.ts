@@ -1,4 +1,4 @@
-import type { AuthStore, CopilotAuth, OpenRouterAuth } from "../auth/store";
+import type { AuthStore, CopilotAuth, OpenCodeGoAuth, OpenRouterAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import {
 	buildSortedModelList,
@@ -7,11 +7,12 @@ import {
 	modelsConfigExists,
 	type SortedModelListItem,
 } from "./copilot-models";
+import { loadOpenCodeGoModelsConfig } from "./opencode-go-models";
 import { loadOpenRouterModelsConfig } from "./openrouter-models";
 import type { Provider } from "./provider";
 
-export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter"] as const;
-export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter"] as const;
+export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go"] as const;
+export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go"] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
 export type ProviderId = (typeof SUPPORTED_RUNTIME_PROVIDER_IDS)[number];
@@ -59,6 +60,7 @@ export interface ProviderDescriptor {
 		authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
 		createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger) => Provider;
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger) => Provider;
+		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -165,9 +167,52 @@ const openRouterDescriptor: ProviderDescriptor = {
 	},
 };
 
+const openCodeGoDescriptor: ProviderDescriptor = {
+	id: "opencode-go",
+	authSupported: true,
+	runtimeSupported: true,
+	defaultModel: "kimi-k2.6",
+	getApiFamily(): ApiFamily {
+		return "openai-chat-completions";
+	},
+	modelsConfigExists(): boolean {
+		return true;
+	},
+	loadModels(): ProviderModelConfig[] {
+		return loadOpenCodeGoModelsConfig();
+	},
+	buildSortedModels(): SortedProviderModelListItem[] {
+		return loadOpenCodeGoModelsConfig()
+			.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
+			.sort((a, b) => a.id.localeCompare(b.id));
+	},
+	formatModelDisplay(modelId: string, promptTokens: number): string {
+		return formatGenericProviderModelDisplay(
+			this.id,
+			this.loadModels().find((model) => model.id === modelId),
+			promptTokens,
+		);
+	},
+	buildTurnSummaryParts(options): ProviderSummaryParts {
+		return {
+			modelName: options.modelId.includes("/") ? (options.modelId.split("/").at(-1) ?? options.modelId) : options.modelId,
+		};
+	},
+	async createConfiguredProvider(options): Promise<Provider> {
+		const auth = options.store?.providers["opencode-go"];
+		if (!auth) {
+			throw new Error("OpenCode Go authentication not found. Please run: bobai auth opencode-go");
+		}
+		const openCodeGoModule = await import("./opencode-go");
+		const createOpenCodeGoProvider = options.createOpenCodeGoProvider ?? openCodeGoModule.createOpenCodeGoProvider;
+		return createOpenCodeGoProvider(auth, options.logger);
+	},
+};
+
 const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 	"github-copilot": githubCopilotDescriptor,
 	openrouter: openRouterDescriptor,
+	"opencode-go": openCodeGoDescriptor,
 };
 
 export function getProviderDescriptor(providerId: ProviderId): ProviderDescriptor;

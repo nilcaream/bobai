@@ -127,6 +127,23 @@ describe("provider model facade", () => {
 		);
 	});
 
+	test("loads curated opencode-go model metadata through the provider facade", () => {
+		const models = loadProviderModelsConfig("opencode-go");
+		expect(models.find((model) => model.id === "kimi-k2.6")).toMatchObject({
+			contextWindow: 131072,
+			maxOutput: expect.any(Number),
+			label: "beta",
+		});
+		expect(buildSortedProviderModelList("opencode-go")).toContainEqual({
+			id: "kimi-k2.6",
+			cost: "beta",
+			contextWindow: 131072,
+		});
+		expect(formatProviderModelDisplay("opencode-go", "kimi-k2.6", 12800)).toBe(
+			"opencode-go | kimi-k2.6 | beta | 12800 / 131072 | 10%",
+		);
+	});
+
 	test("throws a clear error for unsupported providers", () => {
 		withTempDir((tmpDir) => {
 			expect(() => loadProviderModelsConfig("not-real" as never, tmpDir)).toThrow(/Unsupported provider/);
