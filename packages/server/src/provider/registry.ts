@@ -172,8 +172,8 @@ const openCodeGoDescriptor: ProviderDescriptor = {
 	authSupported: true,
 	runtimeSupported: true,
 	defaultModel: "kimi-k2.6",
-	getApiFamily(): ApiFamily {
-		return "openai-chat-completions";
+	getApiFamily(modelId: string): ApiFamily {
+		return modelId.startsWith("minimax-") ? "anthropic-messages" : "openai-chat-completions";
 	},
 	modelsConfigExists(): boolean {
 		return true;

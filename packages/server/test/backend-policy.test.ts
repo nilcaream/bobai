@@ -25,6 +25,10 @@ describe("backend policy", () => {
 		expect(getApiFamilyForModel("opencode-go", "kimi-k2.6")).toBe("openai-chat-completions");
 	});
 
+	test("maps opencode-go minimax models to the anthropic messages family", () => {
+		expect(getApiFamilyForModel("opencode-go", "minimax-m2.7")).toBe("anthropic-messages");
+	});
+
 	test("allows provider switch on empty session when runtime is supported", () => {
 		const result = validateProviderSwitch({
 			hasMessages: false,

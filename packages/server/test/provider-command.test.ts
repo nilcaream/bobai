@@ -74,4 +74,27 @@ describe("provider command", () => {
 			db.close();
 		}
 	});
+
+	test("opencode-go cross-family model switch on non-empty session returns not supported error", () => {
+		const db = createTestDb();
+		try {
+			const session = createSession(db, {
+				provider: "opencode-go",
+				model: "kimi-k2.6",
+				apiFamily: "openai-chat-completions",
+			});
+			appendMessage(db, session.id, "user", "hello");
+			const models = buildSortedProviderModelList("opencode-go");
+			const minimaxIndex = models.findIndex((model) => model.id === "minimax-m2.7") + 1;
+			expect(minimaxIndex).toBeGreaterThan(0);
+			const result = handleCommand(
+				db,
+				{ command: "model", args: String(minimaxIndex), sessionId: session.id },
+				{ defaultProviderId: "github-copilot", configDir: "/tmp" },
+			);
+			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
+		} finally {
+			db.close();
+		}
+	});
 });

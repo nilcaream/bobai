@@ -26,5 +26,6 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("github-copilot")?.getApiFamily("gpt-5.2")).toBe("openai-responses");
 		expect(registry.getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("kimi-k2.6")).toBe("openai-chat-completions");
+		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("minimax-m2.7")).toBe("anthropic-messages");
 	});
 });
