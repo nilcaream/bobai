@@ -86,9 +86,9 @@ function metricsProvider(
 	};
 }
 
-function authFailingProvider(status: number, body: string, permanent: boolean): Provider {
+function authFailingProvider(status: number, body: string, permanent: boolean, providerId: Provider["id"] = "mock"): Provider {
 	return {
-		id: "mock",
+		id: providerId,
 		stream() {
 			async function* gen(): AsyncGenerator<StreamEvent> {
 				yield* [];
@@ -916,7 +916,7 @@ describe("handlePrompt", () => {
 
 	test("sends actionable auth error for permanent AuthError (401)", async () => {
 		const ws = mockWs();
-		const provider = authFailingProvider(401, "Unauthorized", true);
+		const provider = authFailingProvider(401, "Unauthorized", true, "github-copilot");
 		await handlePrompt({
 			ws,
 			db,
@@ -931,7 +931,28 @@ describe("handlePrompt", () => {
 		const msgs = ws.messages();
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
 		expect(errors).toHaveLength(1);
-		expect(errors[0].message).toContain("bobai auth");
+		expect(errors[0].message).toContain("bobai auth github-copilot");
+	});
+
+	test("uses the active provider id in permanent auth error guidance", async () => {
+		const ws = mockWs();
+		const provider = authFailingProvider(401, "Unauthorized", true, "opencode-go");
+		await handlePrompt({
+			ws,
+			db,
+			provider,
+			model: "kimi-k2.6",
+			text: "hi",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const msgs = ws.messages();
+		const errors = msgs.filter((m: { type: string }) => m.type === "error");
+		expect(errors).toHaveLength(1);
+		expect(errors[0].message).toContain("bobai auth opencode-go");
+		expect(errors[0].message).not.toContain("bobai auth github-copilot");
 	});
 
 	test("sends network error message for transient AuthError", async () => {
@@ -958,12 +979,12 @@ describe("handlePrompt", () => {
 
 	test("persists actionable auth error message to DB", async () => {
 		const ws = mockWs();
-		const provider = authFailingProvider(401, "Unauthorized", true);
+		const provider = authFailingProvider(401, "Unauthorized", true, "opencode-go");
 		await handlePrompt({
 			ws,
 			db,
 			provider,
-			model: "test-model",
+			model: "kimi-k2.6",
 			text: "hi",
 			projectRoot: "/tmp",
 			configDir: "/tmp",
@@ -976,7 +997,8 @@ describe("handlePrompt", () => {
 			(m: { role: string; content: string }) => m.role === "assistant" && m.content.startsWith("[Error:"),
 		);
 		expect(errorMsg).toBeTruthy();
-		expect(errorMsg?.content).toContain("bobai auth");
+		expect(errorMsg?.content).toContain("bobai auth opencode-go");
+		expect(errorMsg?.content).not.toContain("bobai auth github-copilot");
 	});
 
 	test("staged skill llmContent includes base directory hint when skill is in registry", async () => {

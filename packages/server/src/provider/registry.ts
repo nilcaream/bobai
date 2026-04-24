@@ -37,11 +37,18 @@ export interface ProviderSummaryParts {
 	costEstimate?: string;
 }
 
+export interface ProviderAuthMetadata {
+	cliCommand: string;
+	missingAuthMessage: string;
+	permanentAuthErrorMessage: string;
+}
+
 export interface ProviderDescriptor {
 	id: ProviderId;
 	authSupported: boolean;
 	runtimeSupported: boolean;
 	defaultModel: string;
+	auth: ProviderAuthMetadata;
 	getApiFamily(modelId: string): ApiFamily;
 	modelsConfigExists(configDir?: string): boolean;
 	loadModels(configDir?: string): ProviderModelConfig[];
@@ -80,6 +87,11 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 	authSupported: true,
 	runtimeSupported: true,
 	defaultModel: "gpt-5-mini",
+	auth: {
+		cliCommand: "bobai auth github-copilot",
+		missingAuthMessage: "No auth found. Run `bobai auth github-copilot` first.",
+		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth github-copilot` to re-authenticate.",
+	},
 	getApiFamily(modelId: string): ApiFamily {
 		if (/^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId)) return "anthropic-messages";
 		const match = /^gpt-(\d+)/.exec(modelId);
@@ -123,6 +135,11 @@ const openRouterDescriptor: ProviderDescriptor = {
 	authSupported: true,
 	runtimeSupported: true,
 	defaultModel: "openrouter/free",
+	auth: {
+		cliCommand: "bobai auth openrouter",
+		missingAuthMessage: "OpenRouter authentication not found. Please run: bobai auth openrouter",
+		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth openrouter` to re-authenticate.",
+	},
 	getApiFamily(): ApiFamily {
 		return "openai-chat-completions";
 	},
@@ -172,6 +189,11 @@ const openCodeGoDescriptor: ProviderDescriptor = {
 	authSupported: true,
 	runtimeSupported: true,
 	defaultModel: "kimi-k2.6",
+	auth: {
+		cliCommand: "bobai auth opencode-go",
+		missingAuthMessage: "OpenCode Go authentication not found. Please run: bobai auth opencode-go",
+		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth opencode-go` to re-authenticate.",
+	},
 	getApiFamily(modelId: string): ApiFamily {
 		return modelId.startsWith("minimax-") ? "anthropic-messages" : "openai-chat-completions";
 	},
@@ -227,4 +249,8 @@ export function listRuntimeProviders(): ProviderDescriptor[] {
 
 export function listAuthProviders(): ProviderDescriptor[] {
 	return SUPPORTED_AUTH_PROVIDER_IDS.map((providerId) => PROVIDER_DESCRIPTORS[providerId]);
+}
+
+export function getProviderAuthMetadata(providerId: string): ProviderAuthMetadata | undefined {
+	return getProviderDescriptor(providerId)?.auth;
 }

@@ -22,6 +22,7 @@ import { getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider/provider";
 import { isSupportedProvider, type ProviderId } from "./provider/providers";
+import { getProviderAuthMetadata } from "./provider/registry";
 import type { ProviderRuntimeManager } from "./provider/runtime-manager";
 import {
 	appendMessage,
@@ -440,12 +441,17 @@ export async function handlePrompt(req: PromptRequest) {
 		const isAbort = req.signal?.aborted || (err instanceof DOMException && err.name === "AbortError");
 
 		if (!isAbort) {
+			const authProviderId = activeProvider?.id ?? effectiveProviderId;
+			const authMetadata = getProviderAuthMetadata(authProviderId);
+			const permanentAuthMessage =
+				authMetadata?.permanentAuthErrorMessage ??
+				"Authentication expired. Run `bobai auth github-copilot` to re-authenticate.";
 			// Persist error as assistant message so agent can resume with context
 			if (currentSessionId) {
 				let errorText: string;
 				if (err instanceof AuthError) {
 					errorText = err.permanent
-						? `[Error: Authentication failed (${err.status}). Run \`bobai auth github-copilot\` to re-authenticate.]`
+						? `[Error: Authentication failed (${err.status}). ${permanentAuthMessage}]`
 						: `[Error: Token refresh failed: ${err.body}. Check your network connection and try again.]`;
 				} else if (err instanceof TimeoutError) {
 					errorText = `[Error: ${err.body}]`;
@@ -460,7 +466,7 @@ export async function handlePrompt(req: PromptRequest) {
 
 			if (err instanceof AuthError) {
 				if (err.permanent) {
-					send(ws, { type: "error", message: `Authentication expired. Run \`bobai auth github-copilot\` to re-authenticate.` });
+					send(ws, { type: "error", message: permanentAuthMessage });
 				} else {
 					send(ws, { type: "error", message: `Token refresh failed: ${err.body}` });
 				}
