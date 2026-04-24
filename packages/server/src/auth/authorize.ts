@@ -1,6 +1,7 @@
 import { exchangeToken } from "../provider/copilot";
 import { pollForToken, requestDeviceCode } from "./device-flow";
 import { validateOpenCodeGoKey } from "./opencode-go";
+import { validateOpenCodeZenKey } from "./opencode-zen";
 import { validateOpenRouterKey } from "./openrouter";
 import { promptSecret } from "./prompt-secret";
 import {
@@ -11,6 +12,7 @@ import {
 	saveAuthStore,
 	setCopilotAuth,
 	setOpenCodeGoAuth,
+	setOpenCodeZenAuth,
 	setOpenRouterAuth,
 } from "./store";
 
@@ -73,6 +75,22 @@ export async function authorizeOpenCodeGo(
 	console.log("OpenCode Go key saved");
 }
 
+export async function authorizeOpenCodeZen(
+	configDir: string,
+	deps: {
+		promptSecret?: (prompt: string) => Promise<string>;
+		validateOpenCodeZenKey?: (apiKey: string) => Promise<void>;
+	} = {},
+): Promise<void> {
+	const readSecret = deps.promptSecret ?? promptSecret;
+	const checkKey = deps.validateOpenCodeZenKey ?? validateOpenCodeZenKey;
+	const apiKey = await readSecret("Paste OpenCode Zen API key: ");
+	await checkKey(apiKey);
+	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
+	saveAuthStore(configDir, setOpenCodeZenAuth(store, { apiKey }));
+	console.log("OpenCode Zen key saved");
+}
+
 export interface AuthProviderEntry {
 	id: AuthProviderId;
 	authorize(configDir: string): Promise<void>;
@@ -95,6 +113,12 @@ const AUTH_PROVIDERS: AuthProviderEntry[] = [
 		id: "opencode-go",
 		authorize: async (configDir: string) => {
 			await authorizeOpenCodeGo(configDir);
+		},
+	},
+	{
+		id: "opencode-zen",
+		authorize: async (configDir: string) => {
+			await authorizeOpenCodeZen(configDir);
 		},
 	},
 ];

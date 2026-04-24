@@ -325,6 +325,26 @@ describe("HTTP endpoints", () => {
 		expect(body.defaultStatus).toBe("opencode-go | kimi-k2.6 | beta | 0 / 131072 | 0%");
 	});
 
+	test("GET /bobai/models returns curated opencode-zen rows", async () => {
+		const res = await fetch(`${baseUrl}/bobai/models?provider=opencode-zen`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			providerId: string;
+			models: { index: number; id: string; cost: string; contextWindow: number }[];
+			defaultModel: string;
+			defaultStatus: string;
+		};
+		expect(body.providerId).toBe("opencode-zen");
+		expect(body.models).toContainEqual({
+			index: expect.any(Number),
+			id: "claude-sonnet-4-6",
+			cost: "beta",
+			contextWindow: 200000,
+		});
+		expect(body.defaultModel).toBe("claude-sonnet-4-6");
+		expect(body.defaultStatus).toBe("opencode-zen | claude-sonnet-4-6 | beta | 0 / 200000 | 0%");
+	});
+
 	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {
 		const session = createSession(db, {
 			provider: "github-copilot",

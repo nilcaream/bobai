@@ -8,15 +8,18 @@ describe("provider descriptor registry", () => {
 			"github-copilot",
 			"openrouter",
 			"opencode-go",
+			"opencode-zen",
 		]);
 		expect(registry.listAuthProviders().map((provider) => provider.id)).toEqual([
 			"github-copilot",
 			"openrouter",
 			"opencode-go",
+			"opencode-zen",
 		]);
 		expect(registry.getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
 		expect(registry.getProviderDescriptor("openrouter")?.defaultModel).toBe("openrouter/free");
 		expect(registry.getProviderDescriptor("opencode-go")?.defaultModel).toBe("kimi-k2.6");
+		expect(registry.getProviderDescriptor("opencode-zen")?.defaultModel).toBe("claude-sonnet-4-6");
 	});
 
 	test("exposes provider-specific API-family resolution through descriptors", async () => {
@@ -27,5 +30,7 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("kimi-k2.6")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("minimax-m2.7")).toBe("anthropic-messages");
+		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
+		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
 	});
 });

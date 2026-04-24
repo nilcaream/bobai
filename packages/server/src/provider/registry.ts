@@ -1,4 +1,4 @@
-import type { AuthStore, CopilotAuth, OpenCodeGoAuth, OpenRouterAuth } from "../auth/store";
+import type { AuthStore, CopilotAuth, OpenCodeGoAuth, OpenCodeZenAuth, OpenRouterAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import {
 	buildSortedModelList,
@@ -8,11 +8,12 @@ import {
 	type SortedModelListItem,
 } from "./copilot-models";
 import { loadOpenCodeGoModelsConfig } from "./opencode-go-models";
+import { loadOpenCodeZenModelsConfig } from "./opencode-zen-models";
 import { loadOpenRouterModelsConfig } from "./openrouter-models";
 import type { Provider } from "./provider";
 
-export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go"] as const;
-export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go"] as const;
+export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen"] as const;
+export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen"] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
 export type ProviderId = (typeof SUPPORTED_RUNTIME_PROVIDER_IDS)[number];
@@ -68,6 +69,7 @@ export interface ProviderDescriptor {
 		createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger) => Provider;
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger) => Provider;
 		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger) => Provider;
+		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -231,10 +233,58 @@ const openCodeGoDescriptor: ProviderDescriptor = {
 	},
 };
 
+const openCodeZenDescriptor: ProviderDescriptor = {
+	id: "opencode-zen",
+	authSupported: true,
+	runtimeSupported: true,
+	defaultModel: "claude-sonnet-4-6",
+	auth: {
+		cliCommand: "bobai auth opencode-zen",
+		missingAuthMessage: "OpenCode Zen authentication not found. Please run: bobai auth opencode-zen",
+		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth opencode-zen` to re-authenticate.",
+	},
+	getApiFamily(modelId: string): ApiFamily {
+		return modelId.startsWith("claude-") ? "anthropic-messages" : "openai-chat-completions";
+	},
+	modelsConfigExists(): boolean {
+		return true;
+	},
+	loadModels(): ProviderModelConfig[] {
+		return loadOpenCodeZenModelsConfig();
+	},
+	buildSortedModels(): SortedProviderModelListItem[] {
+		return loadOpenCodeZenModelsConfig()
+			.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
+			.sort((a, b) => a.id.localeCompare(b.id));
+	},
+	formatModelDisplay(modelId: string, promptTokens: number): string {
+		return formatGenericProviderModelDisplay(
+			this.id,
+			this.loadModels().find((model) => model.id === modelId),
+			promptTokens,
+		);
+	},
+	buildTurnSummaryParts(options): ProviderSummaryParts {
+		return {
+			modelName: options.modelId.includes("/") ? (options.modelId.split("/").at(-1) ?? options.modelId) : options.modelId,
+		};
+	},
+	async createConfiguredProvider(options): Promise<Provider> {
+		const auth = options.store?.providers["opencode-zen"];
+		if (!auth) {
+			throw new Error("OpenCode Zen authentication not found. Please run: bobai auth opencode-zen");
+		}
+		const openCodeZenModule = await import("./opencode-zen");
+		const createOpenCodeZenProvider = options.createOpenCodeZenProvider ?? openCodeZenModule.createOpenCodeZenProvider;
+		return createOpenCodeZenProvider(auth, options.logger);
+	},
+};
+
 const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 	"github-copilot": githubCopilotDescriptor,
 	openrouter: openRouterDescriptor,
 	"opencode-go": openCodeGoDescriptor,
+	"opencode-zen": openCodeZenDescriptor,
 };
 
 export function getProviderDescriptor(providerId: ProviderId): ProviderDescriptor;

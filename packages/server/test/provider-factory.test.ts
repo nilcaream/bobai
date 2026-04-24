@@ -102,4 +102,33 @@ describe("provider factory", () => {
 
 		expect(result).toBe(provider);
 	});
+
+	test("creates opencode-zen provider from auth store entry", async () => {
+		const store = {
+			version: 1,
+			providers: {
+				"opencode-zen": { apiKey: "zen-key" },
+			},
+		} as AuthStore;
+		const provider: Provider = {
+			id: "opencode-zen",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+
+		const result = await createConfiguredProvider(
+			{ providerId: "opencode-zen", configDir: "/cfg" },
+			{
+				providerModelsConfigExists: () => true,
+				loadAuthStore: () => store,
+				createOpenCodeZenProvider: (auth) => {
+					expect(auth).toEqual({ apiKey: "zen-key" });
+					return provider;
+				},
+			},
+		);
+
+		expect(result).toBe(provider);
+	});
 });

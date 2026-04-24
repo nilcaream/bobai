@@ -15,8 +15,8 @@ describe("provider registry", () => {
 	});
 
 	test("lists supported auth providers separately from runtime providers", () => {
-		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go"]);
-		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go"]);
+		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen"]);
+		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen"]);
 	});
 
 	test("returns the default model for github-copilot", () => {
@@ -27,6 +27,7 @@ describe("provider registry", () => {
 		expect(isSupportedProvider("github-copilot")).toBe(true);
 		expect(isSupportedProvider("openrouter")).toBe(true);
 		expect(isSupportedProvider("opencode-go")).toBe(true);
+		expect(isSupportedProvider("opencode-zen")).toBe(true);
 		expect(isSupportedProvider("anything-else")).toBe(false);
 	});
 
@@ -34,6 +35,7 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("github-copilot")).toBe(true);
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
 		expect(isSupportedAuthProvider("opencode-go")).toBe(true);
+		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
 		expect(isSupportedAuthProvider("anything-else")).toBe(false);
 	});
 
@@ -49,6 +51,12 @@ describe("provider registry", () => {
 		expect(getDefaultModelForProvider("opencode-go")).toBe("kimi-k2.6");
 	});
 
+	test("recognizes opencode-zen as a runtime provider", () => {
+		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
+		expect(isSupportedProvider("opencode-zen")).toBe(true);
+		expect(getDefaultModelForProvider("opencode-zen")).toBe("claude-sonnet-4-6");
+	});
+
 	test("exposes provider descriptor metadata through the registry", () => {
 		expect(getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
 		expect(getProviderDescriptor("github-copilot")?.getApiFamily("claude-haiku-4.5")).toBe("anthropic-messages");
@@ -56,5 +64,8 @@ describe("provider registry", () => {
 		expect(getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-go")?.defaultModel).toBe("kimi-k2.6");
 		expect(getProviderDescriptor("opencode-go")?.getApiFamily("kimi-k2.6")).toBe("openai-chat-completions");
+		expect(getProviderDescriptor("opencode-zen")?.defaultModel).toBe("claude-sonnet-4-6");
+		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
+		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
 	});
 });

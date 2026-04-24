@@ -18,12 +18,17 @@ export interface OpenCodeGoAuth {
 	apiKey: string;
 }
 
+export interface OpenCodeZenAuth {
+	apiKey: string;
+}
+
 export interface AuthStore {
 	version: 1;
 	providers: {
 		"github-copilot"?: CopilotAuth;
 		openrouter?: OpenRouterAuth;
 		"opencode-go"?: OpenCodeGoAuth;
+		"opencode-zen"?: OpenCodeZenAuth;
 	};
 }
 
@@ -60,6 +65,10 @@ export function getOpenCodeGoAuth(store: AuthStore): OpenCodeGoAuth | undefined 
 	return store.providers["opencode-go"];
 }
 
+export function getOpenCodeZenAuth(store: AuthStore): OpenCodeZenAuth | undefined {
+	return store.providers["opencode-zen"];
+}
+
 export function setCopilotAuth(store: AuthStore, auth: CopilotAuth): AuthStore {
 	return {
 		...store,
@@ -86,6 +95,16 @@ export function setOpenCodeGoAuth(store: AuthStore, auth: OpenCodeGoAuth): AuthS
 		providers: {
 			...store.providers,
 			"opencode-go": auth,
+		},
+	};
+}
+
+export function setOpenCodeZenAuth(store: AuthStore, auth: OpenCodeZenAuth): AuthStore {
+	return {
+		...store,
+		providers: {
+			...store.providers,
+			"opencode-zen": auth,
 		},
 	};
 }

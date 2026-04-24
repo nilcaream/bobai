@@ -7,6 +7,7 @@ describe("auth provider registry", () => {
 			"github-copilot",
 			"openrouter",
 			"opencode-go",
+			"opencode-zen",
 		]);
 	});
 });

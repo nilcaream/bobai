@@ -1,0 +1,40 @@
+import type { Logger } from "../log/logger";
+import { createAnthropicCompatibleProvider } from "./anthropic-compatible";
+import { createOpenAIChatCompatibleProvider } from "./openai-chat-compatible";
+import type { Provider, ProviderOptions, StreamEvent } from "./provider";
+
+export interface OpenCodeZenAuth {
+	apiKey: string;
+}
+
+function isOpenCodeZenClaudeModel(modelId: string): boolean {
+	return modelId.startsWith("claude-");
+}
+
+export function createOpenCodeZenProvider(auth: OpenCodeZenAuth, logger?: Logger): Provider {
+	const chatProvider = createOpenAIChatCompatibleProvider(
+		{
+			providerId: "opencode-zen",
+			baseUrl: "https://opencode.ai/zen/v1/chat/completions",
+			apiKey: auth.apiKey,
+		},
+		logger,
+	);
+	const messagesProvider = createAnthropicCompatibleProvider(
+		{
+			providerId: "opencode-zen",
+			baseUrl: "https://opencode.ai/zen/v1/messages",
+			apiKey: auth.apiKey,
+			anthropicVersion: "2023-06-01",
+		},
+		logger,
+	);
+
+	return {
+		id: "opencode-zen",
+		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
+			const provider = isOpenCodeZenClaudeModel(options.model) ? messagesProvider : chatProvider;
+			yield* provider.stream(options);
+		},
+	};
+}

@@ -144,6 +144,23 @@ describe("provider model facade", () => {
 		);
 	});
 
+	test("loads curated opencode-zen model metadata through the provider facade", () => {
+		const models = loadProviderModelsConfig("opencode-zen");
+		expect(models.find((model) => model.id === "claude-sonnet-4-6")).toMatchObject({
+			contextWindow: 200000,
+			maxOutput: expect.any(Number),
+			label: "beta",
+		});
+		expect(buildSortedProviderModelList("opencode-zen")).toContainEqual({
+			id: "claude-sonnet-4-6",
+			cost: "beta",
+			contextWindow: 200000,
+		});
+		expect(formatProviderModelDisplay("opencode-zen", "claude-sonnet-4-6", 12800)).toBe(
+			"opencode-zen | claude-sonnet-4-6 | beta | 12800 / 200000 | 6%",
+		);
+	});
+
 	test("throws a clear error for unsupported providers", () => {
 		withTempDir((tmpDir) => {
 			expect(() => loadProviderModelsConfig("not-real" as never, tmpDir)).toThrow(/Unsupported provider/);

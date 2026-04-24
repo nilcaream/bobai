@@ -18,6 +18,7 @@ describe("GET /bobai/providers", () => {
 				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "key" },
 				"opencode-go": { apiKey: "go-key" },
+				"opencode-zen": { apiKey: "zen-key" },
 			},
 		});
 		server = createServer({ port: 0, configDir: tmpDir, providerId: "github-copilot" });
@@ -40,6 +41,7 @@ describe("GET /bobai/providers", () => {
 			{ index: 1, id: "github-copilot", runtimeSupported: true },
 			{ index: 2, id: "openrouter", runtimeSupported: true },
 			{ index: 3, id: "opencode-go", runtimeSupported: true },
+			{ index: 4, id: "opencode-zen", runtimeSupported: true },
 		]);
 		expect(body.defaultProvider).toBe("github-copilot");
 	});

@@ -29,6 +29,11 @@ describe("backend policy", () => {
 		expect(getApiFamilyForModel("opencode-go", "minimax-m2.7")).toBe("anthropic-messages");
 	});
 
+	test("maps opencode-zen claude models to anthropic messages and qwen models to chat completions", () => {
+		expect(getApiFamilyForModel("opencode-zen", "claude-sonnet-4-6")).toBe("anthropic-messages");
+		expect(getApiFamilyForModel("opencode-zen", "qwen3.6-plus")).toBe("openai-chat-completions");
+	});
+
 	test("allows provider switch on empty session when runtime is supported", () => {
 		const result = validateProviderSwitch({
 			hasMessages: false,

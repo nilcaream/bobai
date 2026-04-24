@@ -74,4 +74,28 @@ describe("provider runtime manager", () => {
 		expect(a).toBe(b);
 		expect(calls).toBe(1);
 	});
+
+	test("caches opencode-zen runtime instance separately", async () => {
+		let calls = 0;
+		const fakeProvider: Provider = {
+			id: "opencode-zen",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+		const manager = createProviderRuntimeManager(
+			{ configDir: "/cfg" },
+			{
+				createProvider: async () => {
+					calls++;
+					return fakeProvider;
+				},
+			},
+		);
+
+		const a = await manager.get("opencode-zen");
+		const b = await manager.get("opencode-zen");
+		expect(a).toBe(b);
+		expect(calls).toBe(1);
+	});
 });
