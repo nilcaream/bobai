@@ -37,6 +37,7 @@ describe("OpenCode Zen session flow", () => {
 				return {
 					id: providerId,
 					async *stream(opts: {
+						model: string;
 						initiator?: "user" | "agent";
 						onMetrics?: (metrics: {
 							model: string;
@@ -47,9 +48,9 @@ describe("OpenCode Zen session flow", () => {
 							initiator: "user" | "agent";
 						}) => void;
 					}) {
-						yield { type: "text" as const, text: "opencode zen response" };
+						yield { type: "text" as const, text: `opencode zen response for ${opts.model}` };
 						opts.onMetrics?.({
-							model: "claude-sonnet-4-6",
+							model: opts.model,
 							promptTokens: 7473,
 							outputTokens: 3123,
 							promptChars: 100,
@@ -130,7 +131,7 @@ describe("OpenCode Zen session flow", () => {
 		});
 
 		expect(seenProviderIds).toContain("opencode-zen");
-		expect(messages.some((m) => m.type === "token" && m.text === "opencode zen response")).toBe(true);
+		expect(messages.some((m) => m.type === "token" && m.text === "opencode zen response for claude-sonnet-4-6")).toBe(true);
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("opencode-zen");
 		expect(done?.model).toBe("claude-sonnet-4-6");
@@ -139,6 +140,55 @@ describe("OpenCode Zen session flow", () => {
 		expect(stored.at(-1)?.metadata?.turn_model).toBe("claude-sonnet-4-6");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
 			/^ \| claude-sonnet-4-6 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
+		);
+	});
+
+	test("websocket prompt uses the OpenCode Zen runtime after switching to a GPT responses model", async () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "gpt-5-mini",
+			apiFamily: "openai-chat-completions",
+		});
+
+		await fetch(`${baseUrl}/bobai/command`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "provider", args: "4", sessionId: session.id }),
+		});
+		const modelsRes = await fetch(`${baseUrl}/bobai/models?provider=opencode-zen`);
+		const modelsBody = (await modelsRes.json()) as { models: { index: number; id: string }[] };
+		const gptIndex = modelsBody.models.find((model) => model.id === "gpt-5.4")?.index;
+		expect(gptIndex).toBeDefined();
+		await fetch(`${baseUrl}/bobai/command`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "model", args: String(gptIndex), sessionId: session.id }),
+		});
+
+		const ws = await openWs(wsUrl);
+		const messages: Array<Record<string, unknown>> = [];
+		await new Promise<void>((resolve, reject) => {
+			ws.onmessage = (event) => {
+				const parsed = JSON.parse(event.data as string) as Record<string, unknown>;
+				messages.push(parsed);
+				if (parsed.type === "done") {
+					ws.close();
+				}
+			};
+			ws.onclose = () => resolve();
+			ws.onerror = (event) => reject(event);
+			ws.send(JSON.stringify({ type: "prompt", text: "hello", sessionId: session.id }));
+		});
+
+		expect(messages.some((m) => m.type === "token" && m.text === "opencode zen response for gpt-5.4")).toBe(true);
+		const done = messages.find((m) => m.type === "done");
+		expect(done?.provider).toBe("opencode-zen");
+		expect(done?.model).toBe("gpt-5.4");
+		expect(done?.summary).toMatch(/^ \| gpt-5.4 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/);
+		const stored = getMessages(db, session.id);
+		expect(stored.at(-1)?.metadata?.turn_model).toBe("gpt-5.4");
+		expect(stored.at(-1)?.metadata?.summary).toMatch(
+			/^ \| gpt-5.4 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 });

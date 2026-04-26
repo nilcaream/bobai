@@ -244,7 +244,9 @@ const openCodeZenDescriptor: ProviderDescriptor = {
 		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth opencode-zen` to re-authenticate.",
 	},
 	getApiFamily(modelId: string): ApiFamily {
-		return modelId.startsWith("claude-") ? "anthropic-messages" : "openai-chat-completions";
+		if (modelId.startsWith("claude-")) return "anthropic-messages";
+		if (modelId.startsWith("gpt-")) return "openai-responses";
+		return "openai-chat-completions";
 	},
 	modelsConfigExists(): boolean {
 		return true;

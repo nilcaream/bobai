@@ -341,6 +341,12 @@ describe("HTTP endpoints", () => {
 			cost: "beta",
 			contextWindow: 200000,
 		});
+		expect(body.models).toContainEqual({
+			index: expect.any(Number),
+			id: "gpt-5.4",
+			cost: "beta",
+			contextWindow: 272000,
+		});
 		expect(body.defaultModel).toBe("claude-sonnet-4-6");
 		expect(body.defaultStatus).toBe("opencode-zen | claude-sonnet-4-6 | beta | 0 / 200000 | 0%");
 	});

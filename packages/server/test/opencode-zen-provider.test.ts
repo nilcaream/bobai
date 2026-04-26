@@ -93,6 +93,38 @@ describe("opencode-zen provider", () => {
 		expect(headers.Authorization).toBe("Bearer zen-key");
 	});
 
+	test("routes GPT models to the OpenCode Zen responses API", async () => {
+		let capturedUrl = "";
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+			capturedUrl = url.toString();
+			capturedInit = init;
+			return new Response(
+				sseStream([
+					{ type: "response.output_text.delta", delta: "hi" },
+					{ type: "response.completed", response: { usage: { input_tokens: 12, output_tokens: 3, total_tokens: 15 } } },
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeZenProvider({ apiKey: "zen-key" });
+		await collect(
+			provider.stream({
+				model: "gpt-5.4",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(capturedUrl).toBe("https://opencode.ai/zen/v1/responses");
+		expect(capturedInit?.method).toBe("POST");
+		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers.Authorization).toBe("Bearer zen-key");
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.input).toBeDefined();
+		expect(body.messages).toBeUndefined();
+	});
+
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenCodeZenProvider({ apiKey: "bad" });

@@ -1,11 +1,18 @@
 import { formatModelDisplay, loadModelsConfig } from "./copilot-models";
 import type { StreamEvent } from "./provider";
 
+export interface ResponsesStreamOptions {
+	tokenLimit?: number;
+	display?: string;
+	onCompletedUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
+}
+
 export async function* parseResponsesSSE(
 	stream: ReadableStream<Uint8Array>,
 	model: string,
 	_initiator: "user" | "agent",
 	configDir: string,
+	options: ResponsesStreamOptions = {},
 ): AsyncGenerator<StreamEvent> {
 	const decoder = new TextDecoder();
 	let buffer = "";
@@ -76,10 +83,14 @@ export async function* parseResponsesSSE(
 					  }
 					| undefined;
 				const inputTokens = usage?.input_tokens ?? 0;
+				const outputTokens = usage?.output_tokens ?? 0;
+				const totalTokens = usage?.total_tokens ?? inputTokens + outputTokens;
+				options.onCompletedUsage?.({ inputTokens, outputTokens, totalTokens });
 
-				const configs = loadModelsConfig(configDir);
-				const contextWindow = configs.find((m) => m.id === model)?.contextWindow ?? 0;
-				const display = formatModelDisplay(model, inputTokens, configDir);
+				const configs =
+					options.tokenLimit !== undefined && options.display !== undefined ? undefined : loadModelsConfig(configDir);
+				const contextWindow = options.tokenLimit ?? configs?.find((m) => m.id === model)?.contextWindow ?? 0;
+				const display = options.display ?? formatModelDisplay(model, inputTokens, configDir);
 
 				yield {
 					type: "usage",

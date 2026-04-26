@@ -31,6 +31,7 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("kimi-k2.6")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("minimax-m2.7")).toBe("anthropic-messages");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
+		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
 	});
 });

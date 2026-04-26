@@ -120,4 +120,27 @@ describe("provider command", () => {
 			db.close();
 		}
 	});
+
+	test("opencode-zen gpt-to-chat cross-family model switch on non-empty session returns not supported error", () => {
+		const db = createTestDb();
+		try {
+			const session = createSession(db, {
+				provider: "opencode-zen",
+				model: "gpt-5.4",
+				apiFamily: "openai-responses",
+			});
+			appendMessage(db, session.id, "user", "hello");
+			const models = buildSortedProviderModelList("opencode-zen");
+			const qwenIndex = models.findIndex((model) => model.id === "qwen3.6-plus") + 1;
+			expect(qwenIndex).toBeGreaterThan(0);
+			const result = handleCommand(
+				db,
+				{ command: "model", args: String(qwenIndex), sessionId: session.id },
+				{ defaultProviderId: "github-copilot", configDir: "/tmp" },
+			);
+			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
+		} finally {
+			db.close();
+		}
+	});
 });

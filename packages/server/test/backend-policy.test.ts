@@ -29,8 +29,9 @@ describe("backend policy", () => {
 		expect(getApiFamilyForModel("opencode-go", "minimax-m2.7")).toBe("anthropic-messages");
 	});
 
-	test("maps opencode-zen claude models to anthropic messages and qwen models to chat completions", () => {
+	test("maps opencode-zen claude models to anthropic messages, gpt models to responses, and qwen models to chat completions", () => {
 		expect(getApiFamilyForModel("opencode-zen", "claude-sonnet-4-6")).toBe("anthropic-messages");
+		expect(getApiFamilyForModel("opencode-zen", "gpt-5.4")).toBe("openai-responses");
 		expect(getApiFamilyForModel("opencode-zen", "qwen3.6-plus")).toBe("openai-chat-completions");
 	});
 

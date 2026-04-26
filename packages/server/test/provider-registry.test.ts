@@ -66,6 +66,7 @@ describe("provider registry", () => {
 		expect(getProviderDescriptor("opencode-go")?.getApiFamily("kimi-k2.6")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-zen")?.defaultModel).toBe("claude-sonnet-4-6");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
+		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
 	});
 });

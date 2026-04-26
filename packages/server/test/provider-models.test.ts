@@ -151,13 +151,26 @@ describe("provider model facade", () => {
 			maxOutput: expect.any(Number),
 			label: "beta",
 		});
+		expect(models.find((model) => model.id === "gpt-5.4")).toMatchObject({
+			contextWindow: 272000,
+			maxOutput: 64000,
+			label: "beta",
+		});
 		expect(buildSortedProviderModelList("opencode-zen")).toContainEqual({
 			id: "claude-sonnet-4-6",
 			cost: "beta",
 			contextWindow: 200000,
 		});
+		expect(buildSortedProviderModelList("opencode-zen")).toContainEqual({
+			id: "gpt-5.4",
+			cost: "beta",
+			contextWindow: 272000,
+		});
 		expect(formatProviderModelDisplay("opencode-zen", "claude-sonnet-4-6", 12800)).toBe(
 			"opencode-zen | claude-sonnet-4-6 | beta | 12800 / 200000 | 6%",
+		);
+		expect(formatProviderModelDisplay("opencode-zen", "gpt-5.4", 12800)).toBe(
+			"opencode-zen | gpt-5.4 | beta | 12800 / 272000 | 5%",
 		);
 	});
 
