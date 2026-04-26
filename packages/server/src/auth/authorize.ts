@@ -43,6 +43,23 @@ export async function authorizeCopilot(configDir: string): Promise<CopilotAuth> 
 	return auth;
 }
 
+async function authorizeApiKeyProvider(
+	configDir: string,
+	options: {
+		prompt: string;
+		readSecret: (prompt: string) => Promise<string>;
+		validateKey: (apiKey: string) => Promise<void>;
+		setAuth: (store: AuthStore, auth: { apiKey: string }) => AuthStore;
+		successMessage: string;
+	},
+): Promise<void> {
+	const apiKey = await options.readSecret(options.prompt);
+	await options.validateKey(apiKey);
+	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
+	saveAuthStore(configDir, options.setAuth(store, { apiKey }));
+	console.log(options.successMessage);
+}
+
 export async function authorizeOpenRouter(
 	configDir: string,
 	deps: {
@@ -50,13 +67,13 @@ export async function authorizeOpenRouter(
 		validateOpenRouterKey?: (apiKey: string) => Promise<void>;
 	} = {},
 ): Promise<void> {
-	const readSecret = deps.promptSecret ?? promptSecret;
-	const checkKey = deps.validateOpenRouterKey ?? validateOpenRouterKey;
-	const apiKey = await readSecret("Paste OpenRouter API key: ");
-	await checkKey(apiKey);
-	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
-	saveAuthStore(configDir, setOpenRouterAuth(store, { apiKey }));
-	console.log("OpenRouter key saved");
+	await authorizeApiKeyProvider(configDir, {
+		prompt: "Paste OpenRouter API key: ",
+		readSecret: deps.promptSecret ?? promptSecret,
+		validateKey: deps.validateOpenRouterKey ?? validateOpenRouterKey,
+		setAuth: setOpenRouterAuth,
+		successMessage: "OpenRouter key saved",
+	});
 }
 
 export async function authorizeOpenCodeGo(
@@ -66,13 +83,13 @@ export async function authorizeOpenCodeGo(
 		validateOpenCodeGoKey?: (apiKey: string) => Promise<void>;
 	} = {},
 ): Promise<void> {
-	const readSecret = deps.promptSecret ?? promptSecret;
-	const checkKey = deps.validateOpenCodeGoKey ?? validateOpenCodeGoKey;
-	const apiKey = await readSecret("Paste OpenCode Go API key: ");
-	await checkKey(apiKey);
-	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
-	saveAuthStore(configDir, setOpenCodeGoAuth(store, { apiKey }));
-	console.log("OpenCode Go key saved");
+	await authorizeApiKeyProvider(configDir, {
+		prompt: "Paste OpenCode Go API key: ",
+		readSecret: deps.promptSecret ?? promptSecret,
+		validateKey: deps.validateOpenCodeGoKey ?? validateOpenCodeGoKey,
+		setAuth: setOpenCodeGoAuth,
+		successMessage: "OpenCode Go key saved",
+	});
 }
 
 export async function authorizeOpenCodeZen(
@@ -82,13 +99,13 @@ export async function authorizeOpenCodeZen(
 		validateOpenCodeZenKey?: (apiKey: string) => Promise<void>;
 	} = {},
 ): Promise<void> {
-	const readSecret = deps.promptSecret ?? promptSecret;
-	const checkKey = deps.validateOpenCodeZenKey ?? validateOpenCodeZenKey;
-	const apiKey = await readSecret("Paste OpenCode Zen API key: ");
-	await checkKey(apiKey);
-	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
-	saveAuthStore(configDir, setOpenCodeZenAuth(store, { apiKey }));
-	console.log("OpenCode Zen key saved");
+	await authorizeApiKeyProvider(configDir, {
+		prompt: "Paste OpenCode Zen API key: ",
+		readSecret: deps.promptSecret ?? promptSecret,
+		validateKey: deps.validateOpenCodeZenKey ?? validateOpenCodeZenKey,
+		setAuth: setOpenCodeZenAuth,
+		successMessage: "OpenCode Zen key saved",
+	});
 }
 
 export interface AuthProviderEntry {

@@ -84,6 +84,79 @@ function formatGenericProviderModelDisplay(
 	return `${providerId} | ${modelConfig?.id ?? "unknown-model"}${label} | ${promptTokens} / ${contextWindow} | ${percent}%`;
 }
 
+function defaultModelName(modelId: string): string {
+	return modelId.includes("/") ? (modelId.split("/").at(-1) ?? modelId) : modelId;
+}
+
+interface ApiKeyProviderDescriptorOptions<Auth> {
+	id: Exclude<ProviderId, "github-copilot">;
+	defaultModel: string;
+	auth: ProviderAuthMetadata;
+	getApiFamily(modelId: string): ApiFamily;
+	loadModels(): ProviderModelConfig[];
+	buildTurnSummaryParts?: (options: {
+		modelId: string;
+		inputTokens: number;
+		outputTokens: number;
+		configDir?: string;
+	}) => ProviderSummaryParts;
+	getAuth(store: AuthStore | undefined): Auth | undefined;
+	missingAuthMessage: string;
+	createProvider(options: {
+		auth: Auth;
+		logger?: Logger;
+		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger) => Provider;
+		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger) => Provider;
+		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger) => Provider;
+	}): Promise<Provider>;
+}
+
+function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorOptions<Auth>): ProviderDescriptor {
+	return {
+		id: options.id,
+		authSupported: true,
+		runtimeSupported: true,
+		defaultModel: options.defaultModel,
+		auth: options.auth,
+		getApiFamily: options.getApiFamily,
+		modelsConfigExists(): boolean {
+			return true;
+		},
+		loadModels(): ProviderModelConfig[] {
+			return options.loadModels();
+		},
+		buildSortedModels(): SortedProviderModelListItem[] {
+			return options
+				.loadModels()
+				.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
+				.sort((a, b) => a.id.localeCompare(b.id));
+		},
+		formatModelDisplay(modelId: string, promptTokens: number): string {
+			return formatGenericProviderModelDisplay(
+				options.id,
+				options.loadModels().find((model) => model.id === modelId),
+				promptTokens,
+			);
+		},
+		buildTurnSummaryParts(summaryOptions): ProviderSummaryParts {
+			return options.buildTurnSummaryParts?.(summaryOptions) ?? { modelName: defaultModelName(summaryOptions.modelId) };
+		},
+		async createConfiguredProvider(providerOptions): Promise<Provider> {
+			const auth = options.getAuth(providerOptions.store);
+			if (!auth) {
+				throw new Error(options.missingAuthMessage);
+			}
+			return options.createProvider({
+				auth,
+				logger: providerOptions.logger,
+				createOpenRouterProvider: providerOptions.createOpenRouterProvider,
+				createOpenCodeGoProvider: providerOptions.createOpenCodeGoProvider,
+				createOpenCodeZenProvider: providerOptions.createOpenCodeZenProvider,
+			});
+		},
+	};
+}
+
 const githubCopilotDescriptor: ProviderDescriptor = {
 	id: "github-copilot",
 	authSupported: true,
@@ -132,10 +205,8 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 	},
 };
 
-const openRouterDescriptor: ProviderDescriptor = {
+const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 	id: "openrouter",
-	authSupported: true,
-	runtimeSupported: true,
 	defaultModel: "openrouter/free",
 	auth: {
 		cliCommand: "bobai auth openrouter",
@@ -145,27 +216,10 @@ const openRouterDescriptor: ProviderDescriptor = {
 	getApiFamily(): ApiFamily {
 		return "openai-chat-completions";
 	},
-	modelsConfigExists(): boolean {
-		return true;
-	},
-	loadModels(): ProviderModelConfig[] {
-		return loadOpenRouterModelsConfig();
-	},
-	buildSortedModels(): SortedProviderModelListItem[] {
-		return loadOpenRouterModelsConfig()
-			.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
-			.sort((a, b) => a.id.localeCompare(b.id));
-	},
-	formatModelDisplay(modelId: string, promptTokens: number): string {
-		return formatGenericProviderModelDisplay(
-			this.id,
-			this.loadModels().find((model) => model.id === modelId),
-			promptTokens,
-		);
-	},
+	loadModels: loadOpenRouterModelsConfig,
 	buildTurnSummaryParts(options): ProviderSummaryParts {
-		const modelConfig = this.loadModels(options.configDir).find((model) => model.id === options.modelId);
-		const modelName = options.modelId.includes("/") ? (options.modelId.split("/").at(-1) ?? options.modelId) : options.modelId;
+		const modelConfig = loadOpenRouterModelsConfig().find((model) => model.id === options.modelId);
+		const modelName = defaultModelName(options.modelId);
 		if (modelConfig?.label === "free") {
 			return { modelName, costEstimate: "free" };
 		}
@@ -175,21 +229,19 @@ const openRouterDescriptor: ProviderDescriptor = {
 		}
 		return { modelName };
 	},
-	async createConfiguredProvider(options): Promise<Provider> {
-		const auth = options.store?.providers.openrouter;
-		if (!auth) {
-			throw new Error("OpenRouter authentication not found. Please run: bobai auth openrouter");
-		}
+	getAuth(store) {
+		return store?.providers.openrouter;
+	},
+	missingAuthMessage: "OpenRouter authentication not found. Please run: bobai auth openrouter",
+	async createProvider(options): Promise<Provider> {
 		const openRouterModule = await import("./openrouter");
 		const createOpenRouterProvider = options.createOpenRouterProvider ?? openRouterModule.createOpenRouterProvider;
-		return createOpenRouterProvider(auth, options.logger);
+		return createOpenRouterProvider(options.auth, options.logger);
 	},
-};
+});
 
-const openCodeGoDescriptor: ProviderDescriptor = {
+const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 	id: "opencode-go",
-	authSupported: true,
-	runtimeSupported: true,
 	defaultModel: "kimi-k2.6",
 	auth: {
 		cliCommand: "bobai auth opencode-go",
@@ -199,44 +251,20 @@ const openCodeGoDescriptor: ProviderDescriptor = {
 	getApiFamily(modelId: string): ApiFamily {
 		return modelId.startsWith("minimax-") ? "anthropic-messages" : "openai-chat-completions";
 	},
-	modelsConfigExists(): boolean {
-		return true;
+	loadModels: loadOpenCodeGoModelsConfig,
+	getAuth(store) {
+		return store?.providers["opencode-go"];
 	},
-	loadModels(): ProviderModelConfig[] {
-		return loadOpenCodeGoModelsConfig();
-	},
-	buildSortedModels(): SortedProviderModelListItem[] {
-		return loadOpenCodeGoModelsConfig()
-			.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
-			.sort((a, b) => a.id.localeCompare(b.id));
-	},
-	formatModelDisplay(modelId: string, promptTokens: number): string {
-		return formatGenericProviderModelDisplay(
-			this.id,
-			this.loadModels().find((model) => model.id === modelId),
-			promptTokens,
-		);
-	},
-	buildTurnSummaryParts(options): ProviderSummaryParts {
-		return {
-			modelName: options.modelId.includes("/") ? (options.modelId.split("/").at(-1) ?? options.modelId) : options.modelId,
-		};
-	},
-	async createConfiguredProvider(options): Promise<Provider> {
-		const auth = options.store?.providers["opencode-go"];
-		if (!auth) {
-			throw new Error("OpenCode Go authentication not found. Please run: bobai auth opencode-go");
-		}
+	missingAuthMessage: "OpenCode Go authentication not found. Please run: bobai auth opencode-go",
+	async createProvider(options): Promise<Provider> {
 		const openCodeGoModule = await import("./opencode-go");
 		const createOpenCodeGoProvider = options.createOpenCodeGoProvider ?? openCodeGoModule.createOpenCodeGoProvider;
-		return createOpenCodeGoProvider(auth, options.logger);
+		return createOpenCodeGoProvider(options.auth, options.logger);
 	},
-};
+});
 
-const openCodeZenDescriptor: ProviderDescriptor = {
+const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 	id: "opencode-zen",
-	authSupported: true,
-	runtimeSupported: true,
 	defaultModel: "claude-sonnet-4-6",
 	auth: {
 		cliCommand: "bobai auth opencode-zen",
@@ -248,39 +276,17 @@ const openCodeZenDescriptor: ProviderDescriptor = {
 		if (modelId.startsWith("gpt-")) return "openai-responses";
 		return "openai-chat-completions";
 	},
-	modelsConfigExists(): boolean {
-		return true;
+	loadModels: loadOpenCodeZenModelsConfig,
+	getAuth(store) {
+		return store?.providers["opencode-zen"];
 	},
-	loadModels(): ProviderModelConfig[] {
-		return loadOpenCodeZenModelsConfig();
-	},
-	buildSortedModels(): SortedProviderModelListItem[] {
-		return loadOpenCodeZenModelsConfig()
-			.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
-			.sort((a, b) => a.id.localeCompare(b.id));
-	},
-	formatModelDisplay(modelId: string, promptTokens: number): string {
-		return formatGenericProviderModelDisplay(
-			this.id,
-			this.loadModels().find((model) => model.id === modelId),
-			promptTokens,
-		);
-	},
-	buildTurnSummaryParts(options): ProviderSummaryParts {
-		return {
-			modelName: options.modelId.includes("/") ? (options.modelId.split("/").at(-1) ?? options.modelId) : options.modelId,
-		};
-	},
-	async createConfiguredProvider(options): Promise<Provider> {
-		const auth = options.store?.providers["opencode-zen"];
-		if (!auth) {
-			throw new Error("OpenCode Zen authentication not found. Please run: bobai auth opencode-zen");
-		}
+	missingAuthMessage: "OpenCode Zen authentication not found. Please run: bobai auth opencode-zen",
+	async createProvider(options): Promise<Provider> {
 		const openCodeZenModule = await import("./opencode-zen");
 		const createOpenCodeZenProvider = options.createOpenCodeZenProvider ?? openCodeZenModule.createOpenCodeZenProvider;
-		return createOpenCodeZenProvider(auth, options.logger);
+		return createOpenCodeZenProvider(options.auth, options.logger);
 	},
-};
+});
 
 const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 	"github-copilot": githubCopilotDescriptor,
