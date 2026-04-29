@@ -249,7 +249,7 @@ describe("CopilotProvider", () => {
 			{ type: "tool_call_start", index: 0, id: "call_abc123", name: "read_file" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path"' },
 			{ type: "tool_call_delta", index: 0, arguments: ':"src/index.ts"}' },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "gpt-4o | 0x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | 0x | 0 / 0 | 0%" },
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -275,7 +275,7 @@ describe("CopilotProvider", () => {
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "gpt-4o | 0x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | 0x | 0 / 0 | 0%" },
 			{ type: "finish", reason: "stop" },
 		]);
 	});
@@ -336,7 +336,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hello" },
-				{ type: "usage", tokenCount: 895, tokenLimit: 64000, display: "gpt-4o | 0x | 895 / 64000 | 1%" },
+				{ type: "usage", tokenCount: 895, tokenLimit: 64000, display: "github-copilot | gpt-4o | 0x | 895 / 64000 | 1%" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -374,7 +374,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hi" },
-				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "gpt-4o | 0x | 100 / 0 | 0%" },
+				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "github-copilot | gpt-4o | 0x | 100 / 0 | 0%" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -2214,6 +2214,77 @@ describe("Anthropic routing for Claude models", () => {
 		}
 	});
 
+	test("includes provider prefix in usage display for Claude models", async () => {
+		globalThis.fetch = mock(async (_input: string | URL | Request) => {
+			return new Response(anthropicTextResponse("Hello", 42), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(e);
+		}
+
+		const usage = events.find((e) => e.type === "usage");
+		expect(usage).toEqual({
+			type: "usage",
+			tokenCount: 42,
+			tokenLimit: 200000,
+			display: "github-copilot | claude-sonnet-4.6 | 1x | 42 / 200000 | 0%",
+			outputTokens: 5,
+			totalTokens: 47,
+		});
+	});
+
+	test("reports output tokens through onMetrics for Claude models", async () => {
+		globalThis.fetch = mock(async (_input: string | URL | Request) => {
+			return new Response(anthropicTextResponse("Hello", 42), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const metrics: Array<{
+			model: string;
+			promptTokens: number;
+			outputTokens: number;
+			totalTokens: number;
+			initiator: "user" | "agent";
+		}> = [];
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+			onMetrics(metric) {
+				metrics.push({
+					model: metric.model,
+					promptTokens: metric.promptTokens,
+					outputTokens: metric.outputTokens,
+					totalTokens: metric.totalTokens,
+					initiator: metric.initiator,
+				});
+			},
+		})) {
+			/* drain */
+		}
+
+		expect(metrics).toEqual([
+			{
+				model: "claude-sonnet-4.6",
+				promptTokens: 42,
+				outputTokens: 5,
+				totalTokens: 47,
+				initiator: "user",
+			},
+		]);
+	});
+
 	test("uses max_tokens from model config", async () => {
 		let capturedBody: Record<string, unknown>;
 
@@ -2480,6 +2551,91 @@ describe("Responses API routing for GPT-5+ models", () => {
 		expect(events.some((e) => e.type === "tool_call_delta")).toBe(true);
 		expect(events.some((e) => e.type === "usage")).toBe(true);
 		expect(events.some((e) => e.type === "finish" && e.reason === "tool_calls")).toBe(true);
+	});
+
+	test("includes provider prefix in usage display for Responses API models", async () => {
+		fs.writeFileSync(
+			path.join(configDir, "copilot-models.json"),
+			JSON.stringify([
+				{
+					id: "gpt-5.4",
+					name: "GPT-5.4",
+					contextWindow: 400000,
+					maxOutput: 128000,
+					premiumRequestMultiplier: 1,
+					label: "1x",
+					enabled: true,
+				},
+			]),
+		);
+		globalThis.fetch = mock(async () => {
+			return new Response(responsesTextStream("Hi from GPT-5.4", 42), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(e);
+		}
+
+		const usage = events.find((e) => e.type === "usage");
+		expect(usage).toEqual({
+			type: "usage",
+			tokenCount: 42,
+			tokenLimit: 400000,
+			display: "github-copilot | gpt-5.4 | 1x | 42 / 400000 | 0%",
+			outputTokens: 5,
+			totalTokens: 47,
+		});
+	});
+
+	test("reports output tokens through onMetrics for Responses API models", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(responsesTextStream("Hi from GPT-5.4", 42), {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		const metrics: Array<{
+			model: string;
+			promptTokens: number;
+			outputTokens: number;
+			totalTokens: number;
+			initiator: "user" | "agent";
+		}> = [];
+		for await (const _ of provider.stream({
+			model: "gpt-5.4",
+			messages: [{ role: "user", content: "hello" }],
+			onMetrics(metric) {
+				metrics.push({
+					model: metric.model,
+					promptTokens: metric.promptTokens,
+					outputTokens: metric.outputTokens,
+					totalTokens: metric.totalTokens,
+					initiator: metric.initiator,
+				});
+			},
+		})) {
+			/* drain */
+		}
+
+		expect(metrics).toEqual([
+			{
+				model: "gpt-5.4",
+				promptTokens: 42,
+				outputTokens: 5,
+				totalTokens: 47,
+				initiator: "user",
+			},
+		]);
 	});
 
 	test("yields text events from Responses API stream", async () => {

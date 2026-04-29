@@ -42,7 +42,14 @@ describe("parseAnthropicStream", () => {
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
 			{ type: "text", text: " world" },
-			{ type: "usage", tokenCount: 10, tokenLimit: 0, display: "test-model | ?x | 10 / 0 | 0%" },
+			{
+				type: "usage",
+				tokenCount: 10,
+				tokenLimit: 0,
+				display: "test-model | ?x | 10 / 0 | 0%",
+				outputTokens: 5,
+				totalTokens: 15,
+			},
 			{ type: "finish", reason: "stop" },
 		]);
 	});
@@ -64,7 +71,14 @@ describe("parseAnthropicStream", () => {
 			{ type: "tool_call_start", index: 0, id: "tc_1", name: "read_file" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path":' },
 			{ type: "tool_call_delta", index: 0, arguments: '"foo.ts"}' },
-			{ type: "usage", tokenCount: 20, tokenLimit: 0, display: "test-model | ?x | 20 / 0 | 0%" },
+			{
+				type: "usage",
+				tokenCount: 20,
+				tokenLimit: 0,
+				display: "test-model | ?x | 20 / 0 | 0%",
+				outputTokens: 8,
+				totalTokens: 28,
+			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -90,7 +104,14 @@ describe("parseAnthropicStream", () => {
 			{ type: "text", text: "Let me read that." },
 			{ type: "tool_call_start", index: 1, id: "tc_2", name: "bash" },
 			{ type: "tool_call_delta", index: 1, arguments: '{"command":"ls"}' },
-			{ type: "usage", tokenCount: 15, tokenLimit: 0, display: "test-model | ?x | 15 / 0 | 0%" },
+			{
+				type: "usage",
+				tokenCount: 15,
+				tokenLimit: 0,
+				display: "test-model | ?x | 15 / 0 | 0%",
+				outputTokens: 12,
+				totalTokens: 27,
+			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -148,7 +169,14 @@ describe("parseAnthropicStream", () => {
 
 		expect(events).toEqual([
 			{ type: "text", text: "Answer" },
-			{ type: "usage", tokenCount: 10, tokenLimit: 0, display: "test-model | ?x | 10 / 0 | 0%" },
+			{
+				type: "usage",
+				tokenCount: 10,
+				tokenLimit: 0,
+				display: "test-model | ?x | 10 / 0 | 0%",
+				outputTokens: 3,
+				totalTokens: 13,
+			},
 			{ type: "finish", reason: "stop" },
 		]);
 	});

@@ -70,12 +70,15 @@ export async function* parseAnthropicStream(
 				const modelConfig = configs.find((m) => m.id === model);
 				const tokenLimit = modelConfig?.contextWindow ?? 0;
 				const display = formatModelDisplay(model, inputTokens, configDir);
+				const totalTokens = inputTokens + outputTokens;
 
 				yield {
 					type: "usage",
 					tokenCount: inputTokens,
 					tokenLimit,
 					display,
+					outputTokens,
+					totalTokens,
 				};
 
 				// Emit finish event

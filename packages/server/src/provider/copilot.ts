@@ -7,7 +7,8 @@ import type { Logger } from "../log/logger";
 import { fetchCatalog } from "../models-catalog";
 import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
 import { parseAnthropicStream } from "./anthropic-stream";
-import { buildModelConfigs, formatModelDisplay, getPremiumRequestMultiplier, loadModelsConfig } from "./copilot-models";
+import { buildModelConfigs, getPremiumRequestMultiplier, loadModelsConfig } from "./copilot-models";
+import { formatProviderModelDisplay } from "./models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider";
 import { convertMessagesToResponses, convertToolsToResponses } from "./responses-convert";
@@ -307,25 +308,31 @@ export function createCopilotProvider(
 				for await (const event of parseAnthropicStream(anthropicStream, options.model, effectiveInitiator, resolvedConfigDir)) {
 					timer.reset(BODY_TIMEOUT_MS);
 					if (event.type === "usage") {
+						const usageEvent = {
+							...event,
+							display: formatProviderModelDisplay("github-copilot", options.model, event.tokenCount, resolvedConfigDir),
+						};
 						if (options.onMetrics) {
 							options.onMetrics({
 								model: options.model,
-								promptTokens: event.tokenCount,
-								outputTokens: 0,
+								promptTokens: usageEvent.tokenCount,
+								outputTokens: usageEvent.outputTokens ?? 0,
 								promptChars: callChars,
-								totalTokens: event.tokenCount,
+								totalTokens: usageEvent.totalTokens ?? usageEvent.tokenCount,
 								initiator: effectiveInitiator,
 							});
 						} else {
 							turnModel = options.model;
-							turnTokens += event.tokenCount;
-							turnLastCallTokens = event.tokenCount;
+							turnTokens += usageEvent.tokenCount;
+							turnLastCallTokens = usageEvent.tokenCount;
 							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
 							const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
 							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
+						yield usageEvent;
+						continue;
 					}
 					yield event;
 				}
@@ -493,25 +500,31 @@ export function createCopilotProvider(
 				for await (const event of parseResponsesSSE(response.body, options.model, effectiveInitiator, resolvedConfigDir)) {
 					timer.reset(BODY_TIMEOUT_MS);
 					if (event.type === "usage") {
+						const usageEvent = {
+							...event,
+							display: formatProviderModelDisplay("github-copilot", options.model, event.tokenCount, resolvedConfigDir),
+						};
 						if (options.onMetrics) {
 							options.onMetrics({
 								model: options.model,
-								promptTokens: event.tokenCount,
-								outputTokens: 0,
+								promptTokens: usageEvent.tokenCount,
+								outputTokens: usageEvent.outputTokens ?? 0,
 								promptChars: callChars,
-								totalTokens: event.tokenCount,
+								totalTokens: usageEvent.totalTokens ?? usageEvent.tokenCount,
 								initiator: effectiveInitiator,
 							});
 						} else {
 							turnModel = options.model;
-							turnTokens += event.tokenCount;
-							turnLastCallTokens = event.tokenCount;
+							turnTokens += usageEvent.tokenCount;
+							turnLastCallTokens = usageEvent.tokenCount;
 							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
 							const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
 							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
+						yield usageEvent;
+						continue;
 					}
 					yield event;
 				}
@@ -796,7 +809,7 @@ export function createCopilotProvider(
 								warnedContextWindow.add(options.model);
 								console.warn(`[WARN] No contextWindow for model "${options.model}"; context tracking degraded`);
 							}
-							const display = formatModelDisplay(options.model, promptTokens, resolvedConfigDir);
+							const display = formatProviderModelDisplay("github-copilot", options.model, promptTokens, resolvedConfigDir);
 
 							yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };
 

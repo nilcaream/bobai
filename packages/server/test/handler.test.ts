@@ -396,6 +396,90 @@ describe("handlePrompt", () => {
 		);
 	});
 
+	test("persists non-zero output tokens for Copilot responses models", async () => {
+		const ws = mockWs();
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-copilot-responses-"));
+		try {
+			fs.writeFileSync(
+				path.join(tmpDir, "copilot-models.json"),
+				JSON.stringify([
+					{
+						id: "gpt-5.4",
+						name: "GPT-5.4",
+						contextWindow: 400000,
+						maxOutput: 128000,
+						premiumRequestMultiplier: 1,
+						label: "1x",
+						enabled: true,
+					},
+				]),
+			);
+			await handlePrompt({
+				ws,
+				db,
+				provider: metricsProvider("github-copilot", "gpt-5.4", 27478, 3123),
+				defaultProviderId: "github-copilot",
+				model: "gpt-5.4",
+				text: "hello",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
+
+			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+			expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| 1x \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/);
+			const stored = getMessages(db, done?.sessionId as string);
+			expect(stored.at(-1)?.metadata?.summary).toMatch(
+				/^ \| gpt-5\.4 \| 1x \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/,
+			);
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	test("persists non-zero output tokens for Copilot anthropic models", async () => {
+		const ws = mockWs();
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-copilot-anthropic-"));
+		try {
+			fs.writeFileSync(
+				path.join(tmpDir, "copilot-models.json"),
+				JSON.stringify([
+					{
+						id: "claude-haiku-4.5",
+						name: "Claude Haiku 4.5",
+						contextWindow: 128000,
+						maxOutput: 64000,
+						premiumRequestMultiplier: 0.33,
+						label: "0.33x",
+						enabled: true,
+					},
+				]),
+			);
+			await handlePrompt({
+				ws,
+				db,
+				provider: metricsProvider("github-copilot", "claude-haiku-4.5", 5948, 731),
+				defaultProviderId: "github-copilot",
+				model: "claude-haiku-4.5",
+				text: "hello",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
+
+			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+			expect(done?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
+			);
+			const stored = getMessages(db, done?.sessionId as string);
+			expect(stored.at(-1)?.metadata?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
+			);
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	test("resumes existing session with sessionId", async () => {
 		const ws1 = mockWs();
 		const provider1 = mockProvider(["first response"]);

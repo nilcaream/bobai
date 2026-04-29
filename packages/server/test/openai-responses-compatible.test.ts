@@ -124,6 +124,8 @@ describe("openai responses compatible provider", () => {
 				tokenCount: 42,
 				tokenLimit: 272000,
 				display: "opencode-zen | gpt-5.4 | beta | 42 / 272000 | 0%",
+				outputTokens: 10,
+				totalTokens: 52,
 			},
 			{ type: "finish", reason: "stop" },
 		]);
@@ -168,6 +170,8 @@ describe("openai responses compatible provider", () => {
 				tokenCount: 20,
 				tokenLimit: 272000,
 				display: "opencode-zen | gpt-5.4 | beta | 20 / 272000 | 0%",
+				outputTokens: 5,
+				totalTokens: 25,
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
