@@ -3,7 +3,7 @@ import type { Logger } from "../log/logger";
 import { createOpenAIChatCompatibleProvider } from "./openai-chat-compatible";
 import type { Provider } from "./provider";
 
-export function createOpenRouterProvider(auth: OpenRouterAuth, logger?: Logger): Provider {
+export function createOpenRouterProvider(auth: OpenRouterAuth, logger?: Logger, fetchFn: typeof fetch = fetch): Provider {
 	return createOpenAIChatCompatibleProvider(
 		{
 			providerId: "openrouter",
@@ -11,5 +11,6 @@ export function createOpenRouterProvider(auth: OpenRouterAuth, logger?: Logger):
 			apiKey: auth.apiKey,
 		},
 		logger,
+		fetchFn,
 	);
 }

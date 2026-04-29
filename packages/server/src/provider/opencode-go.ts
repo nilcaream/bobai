@@ -11,7 +11,7 @@ function isOpenCodeGoMessagesModel(modelId: string): boolean {
 	return modelId.startsWith("minimax-");
 }
 
-export function createOpenCodeGoProvider(auth: OpenCodeGoAuth, logger?: Logger): Provider {
+export function createOpenCodeGoProvider(auth: OpenCodeGoAuth, logger?: Logger, fetchFn: typeof fetch = fetch): Provider {
 	const chatProvider = createOpenAIChatCompatibleProvider(
 		{
 			providerId: "opencode-go",
@@ -19,6 +19,7 @@ export function createOpenCodeGoProvider(auth: OpenCodeGoAuth, logger?: Logger):
 			apiKey: auth.apiKey,
 		},
 		logger,
+		fetchFn,
 	);
 	const messagesProvider = createAnthropicCompatibleProvider(
 		{
@@ -28,6 +29,7 @@ export function createOpenCodeGoProvider(auth: OpenCodeGoAuth, logger?: Logger):
 			anthropicVersion: "2023-06-01",
 		},
 		logger,
+		fetchFn,
 	);
 
 	return {

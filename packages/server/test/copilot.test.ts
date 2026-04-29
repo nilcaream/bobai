@@ -623,29 +623,31 @@ describe("Turn tracking", () => {
 	test("beginTurn resets turnLastCallTokens so prior parent state does not leak", async () => {
 		// Simulate the original bug: parent accumulates tokens, then subagent starts
 		mockFetchWithUsage(41965, 500);
-		const provider = createCopilotProvider(makeAuth(), configDir);
+		const parentProvider = createCopilotProvider(makeAuth(), configDir);
 
 		// Parent turn
-		provider.beginTurn?.(30000);
-		await drain(provider);
-		expect(provider.getTurnPromptTokens?.()).toBe(41965);
+		parentProvider.beginTurn?.(30000);
+		await drain(parentProvider);
+		expect(parentProvider.getTurnPromptTokens?.()).toBe(41965);
 
 		// Now a subagent starts — save parent, begin subagent turn
-		const saved = provider.saveTurnState?.();
-		provider.beginTurn?.(0);
+		const saved = parentProvider.saveTurnState?.();
 
-		// Subagent makes a call
+		// Subagent uses a new provider instance (mirrors real runtime behaviour)
 		mockFetchWithUsage(3500, 200);
-		await drain(provider);
+		const subProvider = createCopilotProvider(makeAuth(), configDir);
+		subProvider.restoreTurnState?.(saved);
+		subProvider.beginTurn?.(0);
+		await drain(subProvider);
 
-		const subSummary = provider.getTurnSummary?.();
+		const subSummary = subProvider.getTurnSummary?.();
 		// Subagent should show absolute "context: 3500", NOT "context: -38465"
 		expect(subSummary).toContain("context: 3500");
 		expect(subSummary).not.toMatch(/context: [+-]/);
 
 		// Restore parent state
-		provider.restoreTurnState?.(saved);
-		const parentSummary = provider.getTurnSummary?.();
+		parentProvider.restoreTurnState?.(saved);
+		const parentSummary = parentProvider.getTurnSummary?.();
 		// Parent should still show its own delta: 41965 - 30000 = +11965
 		expect(parentSummary).toContain("context: +11965");
 	});

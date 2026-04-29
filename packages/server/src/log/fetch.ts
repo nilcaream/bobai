@@ -1,7 +1,7 @@
 import { maskAuthHeader, writeDump } from "./dump";
 import type { Logger } from "./logger";
 
-export interface FetchInterceptorOptions {
+export interface TrackingFetchOptions {
 	logger: Logger;
 	logDir: string;
 	debug: boolean;
@@ -86,13 +86,9 @@ function createRecordingStream(
 	});
 }
 
-export function createFetchInterceptor(originalFetch: typeof fetch, options: FetchInterceptorOptions): typeof fetch {
+export function createTrackingFetch(originalFetch: typeof fetch, options: TrackingFetchOptions): typeof fetch {
 	return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
 		const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-
-		if (!url.includes("githubcopilot.com") && !url.includes("github.com")) {
-			return originalFetch(input, init);
-		}
 
 		// When a wrapper collapses fetch(url, opts) into fetch(new Request(...)),
 		// init is undefined. Fall back to extracting from the Request object.
@@ -171,8 +167,4 @@ export function createFetchInterceptor(originalFetch: typeof fetch, options: Fet
 
 		return response;
 	};
-}
-
-export function installFetchInterceptor(options: FetchInterceptorOptions): void {
-	globalThis.fetch = createFetchInterceptor(globalThis.fetch, options);
 }

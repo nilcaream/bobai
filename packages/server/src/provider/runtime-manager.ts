@@ -10,6 +10,7 @@ export interface ProviderRuntimeManager {
 export interface CreateProviderRuntimeManagerOptions {
 	configDir: string;
 	logger?: Logger;
+	fetch?: typeof fetch;
 }
 
 export interface CreateProviderRuntimeManagerDeps {
@@ -28,6 +29,7 @@ export function createProviderRuntimeManager(
 				providerId,
 				configDir: options.configDir,
 				logger: options.logger,
+				fetch: options.fetch,
 			}));
 
 	return {

@@ -16,7 +16,7 @@ function isOpenCodeZenResponsesModel(modelId: string): boolean {
 	return modelId.startsWith("gpt-");
 }
 
-export function createOpenCodeZenProvider(auth: OpenCodeZenAuth, logger?: Logger): Provider {
+export function createOpenCodeZenProvider(auth: OpenCodeZenAuth, logger?: Logger, fetchFn: typeof fetch = fetch): Provider {
 	const chatProvider = createOpenAIChatCompatibleProvider(
 		{
 			providerId: "opencode-zen",
@@ -24,6 +24,7 @@ export function createOpenCodeZenProvider(auth: OpenCodeZenAuth, logger?: Logger
 			apiKey: auth.apiKey,
 		},
 		logger,
+		fetchFn,
 	);
 	const messagesProvider = createAnthropicCompatibleProvider(
 		{
@@ -33,6 +34,7 @@ export function createOpenCodeZenProvider(auth: OpenCodeZenAuth, logger?: Logger
 			anthropicVersion: "2023-06-01",
 		},
 		logger,
+		fetchFn,
 	);
 	const responsesProvider = createOpenAIResponsesCompatibleProvider(
 		{
@@ -41,6 +43,7 @@ export function createOpenCodeZenProvider(auth: OpenCodeZenAuth, logger?: Logger
 			apiKey: auth.apiKey,
 		},
 		logger,
+		fetchFn,
 	);
 
 	return {

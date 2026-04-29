@@ -21,7 +21,11 @@ export interface AnthropicCompatibleProviderOptions {
 	anthropicVersion?: string;
 }
 
-export function createAnthropicCompatibleProvider(config: AnthropicCompatibleProviderOptions, _logger?: Logger): Provider {
+export function createAnthropicCompatibleProvider(
+	config: AnthropicCompatibleProviderOptions,
+	_logger?: Logger,
+	fetchFn: typeof fetch = fetch,
+): Provider {
 	return {
 		id: config.providerId,
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
@@ -30,7 +34,7 @@ export function createAnthropicCompatibleProvider(config: AnthropicCompatiblePro
 			const maxTokens = getProviderModelConfig(config.providerId, options.model)?.maxOutput ?? 16384;
 			const apiKeyHeader = config.apiKeyHeader ?? "x-api-key";
 
-			const response = await fetch(config.baseUrl, {
+			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",

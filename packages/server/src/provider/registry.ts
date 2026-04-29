@@ -65,11 +65,12 @@ export interface ProviderDescriptor {
 		configDir: string;
 		logger?: Logger;
 		store?: AuthStore;
+		fetch?: typeof fetch;
 		authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
-		createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger) => Provider;
-		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger) => Provider;
-		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger) => Provider;
-		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger) => Provider;
+		createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -105,9 +106,10 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 	createProvider(options: {
 		auth: Auth;
 		logger?: Logger;
-		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger) => Provider;
-		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger) => Provider;
-		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger) => Provider;
+		fetch?: typeof fetch;
+		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -149,6 +151,7 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 			return options.createProvider({
 				auth,
 				logger: providerOptions.logger,
+				fetch: providerOptions.fetch,
 				createOpenRouterProvider: providerOptions.createOpenRouterProvider,
 				createOpenCodeGoProvider: providerOptions.createOpenCodeGoProvider,
 				createOpenCodeZenProvider: providerOptions.createOpenCodeZenProvider,
@@ -201,7 +204,7 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 		}
 		const copilotModule = await import("./copilot");
 		const createCopilotProvider = options.createCopilotProvider ?? copilotModule.createCopilotProvider;
-		return createCopilotProvider(auth, options.configDir, options.logger);
+		return createCopilotProvider(auth, options.configDir, options.logger, undefined, options.fetch);
 	},
 };
 
@@ -236,7 +239,7 @@ const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 	async createProvider(options): Promise<Provider> {
 		const openRouterModule = await import("./openrouter");
 		const createOpenRouterProvider = options.createOpenRouterProvider ?? openRouterModule.createOpenRouterProvider;
-		return createOpenRouterProvider(options.auth, options.logger);
+		return createOpenRouterProvider(options.auth, options.logger, options.fetch);
 	},
 });
 
@@ -259,7 +262,7 @@ const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 	async createProvider(options): Promise<Provider> {
 		const openCodeGoModule = await import("./opencode-go");
 		const createOpenCodeGoProvider = options.createOpenCodeGoProvider ?? openCodeGoModule.createOpenCodeGoProvider;
-		return createOpenCodeGoProvider(options.auth, options.logger);
+		return createOpenCodeGoProvider(options.auth, options.logger, options.fetch);
 	},
 });
 
@@ -284,7 +287,7 @@ const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 	async createProvider(options): Promise<Provider> {
 		const openCodeZenModule = await import("./opencode-zen");
 		const createOpenCodeZenProvider = options.createOpenCodeZenProvider ?? openCodeZenModule.createOpenCodeZenProvider;
-		return createOpenCodeZenProvider(options.auth, options.logger);
+		return createOpenCodeZenProvider(options.auth, options.logger, options.fetch);
 	},
 });
 

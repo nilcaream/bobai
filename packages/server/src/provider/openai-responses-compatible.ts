@@ -23,6 +23,7 @@ export interface OpenAIResponsesCompatibleProviderOptions {
 export function createOpenAIResponsesCompatibleProvider(
 	config: OpenAIResponsesCompatibleProviderOptions,
 	_logger?: Logger,
+	fetchFn: typeof fetch = fetch,
 ): Provider {
 	return {
 		id: config.providerId,
@@ -33,7 +34,7 @@ export function createOpenAIResponsesCompatibleProvider(
 			const tokenLimit = getProviderModelConfig(config.providerId, options.model)?.contextWindow ?? 0;
 			let completedUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-			const response = await fetch(config.baseUrl, {
+			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
 				headers: {
 					Authorization: `Bearer ${config.apiKey}`,

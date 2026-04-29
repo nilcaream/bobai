@@ -18,11 +18,15 @@ export interface OpenAIChatCompatibleProviderOptions {
 	apiKey: string;
 }
 
-export function createOpenAIChatCompatibleProvider(config: OpenAIChatCompatibleProviderOptions, _logger?: Logger): Provider {
+export function createOpenAIChatCompatibleProvider(
+	config: OpenAIChatCompatibleProviderOptions,
+	_logger?: Logger,
+	fetchFn: typeof fetch = fetch,
+): Provider {
 	return {
 		id: config.providerId,
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
-			const response = await fetch(config.baseUrl, {
+			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",

@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createFetchInterceptor } from "../src/log/fetch";
+import { createTrackingFetch } from "../src/log/fetch";
 import { createLogger } from "../src/log/logger";
 
-describe("fetch interceptor", () => {
+describe("tracking fetch", () => {
 	let tmpDir: string;
 
 	beforeEach(() => {
@@ -22,7 +22,7 @@ describe("fetch interceptor", () => {
 			return new Response('{"ok":true}', { status: 200, statusText: "OK" });
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: false });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: false });
 		await intercepted("https://api.githubcopilot.com/chat/completions", {
 			method: "POST",
 			headers: { Authorization: "Bearer gho_test1234" },
@@ -36,18 +36,33 @@ describe("fetch interceptor", () => {
 		expect(logContent).toContain("githubcopilot.com");
 	});
 
-	test("passes through non-GitHub URLs without logging", async () => {
+	test("tracks non-GitHub URLs and dumps them in debug mode", async () => {
 		const logger = createLogger({ level: "debug", logDir: tmpDir });
 		const mockFetch = mock(async () => {
-			return new Response("ok", { status: 200 });
+			return new Response('{"result":"ok"}', { status: 200, statusText: "OK" });
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: false });
-		await intercepted("https://example.com/api", { method: "GET" });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const response = await intercepted("https://opencode.ai/api", {
+			method: "POST",
+			body: '{"query":"hello"}',
+		});
 
 		expect(mockFetch).toHaveBeenCalledTimes(1);
+		await response.text();
+		await Bun.sleep(50);
+
 		const logFiles = fs.readdirSync(tmpDir).filter((f) => f.endsWith(".log"));
-		expect(logFiles.length).toBe(0);
+		expect(logFiles.length).toBe(1);
+		const logContent = fs.readFileSync(path.join(tmpDir, logFiles[0]), "utf8");
+		expect(logContent).toContain("opencode.ai");
+
+		const dumpFiles = fs.readdirSync(tmpDir).filter((f) => f.startsWith("debug-") && f.endsWith("-http.txt"));
+		expect(dumpFiles.length).toBe(1);
+		const dumpContent = fs.readFileSync(path.join(tmpDir, dumpFiles[0]), "utf8");
+		expect(dumpContent).toContain("opencode.ai");
+		expect(dumpContent).toContain(">>> POST");
+		expect(dumpContent).toContain("<<< 200");
 	});
 
 	test("creates dump file in debug mode", async () => {
@@ -61,7 +76,7 @@ describe("fetch interceptor", () => {
 			});
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
 		const response = await intercepted("https://api.githubcopilot.com/chat/completions", {
 			method: "POST",
 			headers: { Authorization: "Bearer gho_abcdefghijkl", "Content-Type": "application/json" },
@@ -87,7 +102,7 @@ describe("fetch interceptor", () => {
 			return new Response('{"ok":true}', { status: 200, statusText: "OK" });
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: false });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: false });
 		const response = await intercepted("https://api.githubcopilot.com/test", {
 			method: "POST",
 			body: "{}",
@@ -105,7 +120,7 @@ describe("fetch interceptor", () => {
 			return new Response('{"ok":true}', { status: 200, statusText: "OK" });
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
 
 		// Simulate what copilot-converter does: fetch(new Request(url, opts))
 		const request = new Request("https://api.githubcopilot.com/chat/completions", {
@@ -132,7 +147,7 @@ describe("fetch interceptor", () => {
 			return new Response(original, { status: 200, statusText: "OK" });
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
 		const response = await intercepted("https://api.githubcopilot.com/test", {
 			method: "POST",
 			body: "{}",
@@ -155,7 +170,7 @@ describe("fetch interceptor", () => {
 			return new Response(failingStream, { status: 200, statusText: "OK" });
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
 		const response = await intercepted("https://api.githubcopilot.com/chat/completions", {
 			method: "POST",
 			body: "{}",
@@ -197,7 +212,7 @@ describe("fetch interceptor", () => {
 			});
 		}) as unknown as typeof fetch;
 
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
 		const response = await intercepted("https://api.githubcopilot.com/chat/completions", {
 			method: "POST",
 			body: "{}",
@@ -227,7 +242,7 @@ describe("fetch interceptor", () => {
 			},
 		});
 		const mockFetch = mock(async () => new Response(stream, { status: 200 })) as unknown as typeof fetch;
-		const intercepted = createFetchInterceptor(mockFetch, { logger, logDir: tmpDir, debug: true });
+		const intercepted = createTrackingFetch(mockFetch, { logger, logDir: tmpDir, debug: true });
 
 		const response = await intercepted("https://api.githubcopilot.com/chat/completions", {
 			method: "POST",

@@ -6,7 +6,7 @@ import { getCopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "./
 import { parseCLI } from "./cli";
 import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
-import { installFetchInterceptor } from "./log/fetch";
+import { createTrackingFetch } from "./log/fetch";
 import { createLogger } from "./log/logger";
 import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
@@ -27,7 +27,6 @@ const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
 
 if (cli.command === "auth") {
 	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
-	installFetchInterceptor({ logger, logDir, debug: cli.debug });
 
 	if (!cli.provider) {
 		for (const provider of listSupportedAuthProviders()) {
@@ -58,9 +57,6 @@ if (cli.command === "auth") {
 }
 
 if (cli.command === "refresh") {
-	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
-	installFetchInterceptor({ logger, logDir, debug: cli.debug });
-
 	if (!cli.verify) {
 		await refreshModels("", "", globalConfigDir, { verify: false });
 		process.exit(0);
@@ -95,7 +91,7 @@ const project = await initProject(process.cwd());
 // Merge debug: CLI flag OR global config OR project config
 const debug = cli.debug || globalConfig.preferences.debug === true || project.debug === true;
 const logger = createLogger({ level: debug ? "debug" : "info", logDir });
-installFetchInterceptor({ logger, logDir, debug });
+const trackingFetch = createTrackingFetch(fetch, { logger, logDir, debug });
 
 logger.info("SERVER", `Starting bobai (debug=${debug})`);
 
@@ -124,6 +120,7 @@ if (!providerModelsConfigExists(config.provider, globalConfigDir)) {
 const runtimeManager = createProviderRuntimeManager({
 	configDir: globalConfigDir,
 	logger,
+	fetch: trackingFetch,
 });
 const port = resolvePort(process.argv.slice(2), { port: project.port });
 // Bundled layout: server.js + ui/ live side-by-side in dist/.

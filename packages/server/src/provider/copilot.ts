@@ -93,6 +93,7 @@ export function createCopilotProvider(
 	logger?: Logger,
 	/** @internal — exposed for unit tests to avoid multi-second backoff waits */
 	testOverrides?: { backoffBaseMs?: number; bodyTimeoutMs?: number },
+	fetchFn: typeof fetch = fetch,
 ): Provider {
 	const resolvedConfigDir = configDir ?? path.join(os.homedir(), ".config", "bobai");
 
@@ -292,6 +293,7 @@ export function createCopilotProvider(
 					// retries would bypass all of that and send duplicate requests
 					// with the original headers.
 					maxRetries: 0,
+					fetch: fetchFn,
 					defaultHeaders: {
 						...copilotConfig.headers,
 						"Openai-Intent": "conversation-edits",
@@ -405,7 +407,7 @@ export function createCopilotProvider(
 			let response: Response | undefined;
 
 			try {
-				response = await fetch(`${baseUrl}/responses`, {
+				response = await fetchFn(`${baseUrl}/responses`, {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
@@ -678,7 +680,7 @@ export function createCopilotProvider(
 				let response: Response | undefined;
 
 				try {
-					response = await fetch(`${baseUrl}/chat/completions`, {
+					response = await fetchFn(`${baseUrl}/chat/completions`, {
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",
