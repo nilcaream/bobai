@@ -97,6 +97,8 @@ export async function* parseResponsesSSE(
 					tokenCount: inputTokens,
 					tokenLimit: contextWindow,
 					display,
+					outputTokens,
+					totalTokens,
 				};
 				yield {
 					type: "finish",

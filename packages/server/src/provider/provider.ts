@@ -47,7 +47,7 @@ export type StreamEvent =
 	| { type: "text"; text: string }
 	| { type: "tool_call_start"; index: number; id: string; name: string }
 	| { type: "tool_call_delta"; index: number; arguments: string }
-	| { type: "usage"; tokenCount: number; tokenLimit: number; display: string }
+	| { type: "usage"; tokenCount: number; tokenLimit: number; display: string; outputTokens?: number; totalTokens?: number }
 	| { type: "finish"; reason: "stop" | "tool_calls" };
 
 // --- Provider interface ---
