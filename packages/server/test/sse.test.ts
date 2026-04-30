@@ -65,4 +65,25 @@ describe("parseSSE", () => {
 		}
 		expect(chunks).toHaveLength(1);
 	});
+
+	test("parses standard SSE blocks with event and data lines", async () => {
+		const stream = toStream(
+			'event: message_start\ndata: {"type":"message_start","message":{"id":"m1"}}\n\n' +
+				'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+		);
+		const chunks: unknown[] = [];
+		for await (const chunk of parseSSE(stream)) {
+			chunks.push(chunk);
+		}
+		expect(chunks).toEqual([{ type: "message_start", message: { id: "m1" } }, { type: "message_stop" }]);
+	});
+
+	test("joins multiple data lines within one SSE event", async () => {
+		const stream = toStream('event: x\ndata: {"a":\ndata: 1}\n\n');
+		const chunks: unknown[] = [];
+		for await (const chunk of parseSSE(stream)) {
+			chunks.push(chunk);
+		}
+		expect(chunks).toEqual([{ a: 1 }]);
+	});
 });

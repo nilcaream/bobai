@@ -8,10 +8,17 @@ export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenera
 		buffer = parts.pop() ?? "";
 
 		for (const part of parts) {
-			const line = part.trim();
-			if (!line.startsWith("data: ")) continue;
+			const dataLines: string[] = [];
+			for (const rawLine of part.split("\n")) {
+				const line = rawLine.trim();
+				if (!line || line.startsWith(":")) continue;
+				if (line.startsWith("data:")) {
+					dataLines.push(line.slice("data:".length).trimStart());
+				}
+			}
+			if (dataLines.length === 0) continue;
 
-			const data = line.slice("data: ".length);
+			const data = dataLines.join("\n");
 			if (data === "[DONE]") return;
 
 			yield JSON.parse(data);
