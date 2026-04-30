@@ -49,6 +49,32 @@ function mockProvider(): Provider {
 	};
 }
 
+function accumulatingMockProvider(): Provider {
+	return {
+		id: "mock",
+		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+			yield { type: "text", text: "tool roundtrip" };
+			opts.onMetrics?.({
+				model: opts.model,
+				promptTokens: 100,
+				outputTokens: 40,
+				promptChars: 300,
+				totalTokens: 140,
+				initiator: opts.initiator ?? "agent",
+			});
+			opts.onMetrics?.({
+				model: opts.model,
+				promptTokens: 250,
+				outputTokens: 10,
+				promptChars: 900,
+				totalTokens: 260,
+				initiator: opts.initiator ?? "agent",
+			});
+			yield { type: "finish", reason: "stop" };
+		},
+	};
+}
+
 describe("createIsolatedTurnProvider", () => {
 	test("delegates stream to the original provider and yields all events", async () => {
 		const original = mockProvider();
@@ -206,5 +232,37 @@ describe("createIsolatedTurnProvider", () => {
 		for await (const _e of isolated.stream({ model: "m", messages: [], initiator: "agent" })) {
 		}
 		expect(isolated.getTurnPromptChars?.()).toBe(1200);
+	});
+
+	test("summary uses total in/out across multiple provider calls but keeps context from last call", async () => {
+		const isolated = createIsolatedTurnProvider(accumulatingMockProvider());
+		isolated.beginTurn?.(80);
+		for await (const _e of isolated.stream({ model: "total-model", messages: [], initiator: "agent" })) {
+		}
+		const summary = isolated.getTurnSummary?.();
+		expect(summary).toContain("in: 350");
+		expect(summary).toContain("out: 50");
+		expect(summary).toContain("context: +170");
+	});
+
+	test("restoreTurnState preserves total and last-call counters independently", () => {
+		const isolated = createIsolatedTurnProvider(accumulatingMockProvider());
+		const customState = {
+			turnStartTime: 1000,
+			turnModel: "gpt-4o",
+			turnInputTokens: 250,
+			turnOutputTokens: 10,
+			turnTotalInputTokens: 350,
+			turnTotalOutputTokens: 50,
+			turnLastCallChars: 900,
+			baselineTokens: 80,
+		};
+		isolated.restoreTurnState?.(customState);
+		expect(isolated.getTurnPromptTokens?.()).toBe(250);
+		expect(isolated.getTurnPromptChars?.()).toBe(900);
+		const summary = isolated.getTurnSummary?.();
+		expect(summary).toContain("in: 350");
+		expect(summary).toContain("out: 50");
+		expect(summary).toContain("context: +170");
 	});
 });

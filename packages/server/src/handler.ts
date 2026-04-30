@@ -414,6 +414,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const summary = turnProvider?.getTurnSummary?.();
 		const promptTokens = turnProvider?.getTurnPromptTokens?.() ?? 0;
 		const promptChars = turnProvider?.getTurnPromptChars?.() ?? 0;
+		const turnMetrics = turnProvider?.getTurnMetrics?.();
 		if (currentSessionId && promptTokens > 0) {
 			updateSessionPromptTokens(db, currentSessionId, promptTokens, promptChars);
 		}
@@ -421,6 +422,17 @@ export async function handlePrompt(req: PromptRequest) {
 			updateMessageMetadata(db, lastAssistantMessageId, {
 				...(summary ? { summary } : {}),
 				turn_model: effectiveModel,
+				...(turnMetrics
+					? {
+							turn_metrics: {
+								input_tokens_total: turnMetrics.inputTokensTotal,
+								output_tokens_total: turnMetrics.outputTokensTotal,
+								input_tokens_last: turnMetrics.inputTokensLast,
+								output_tokens_last: turnMetrics.outputTokensLast,
+								context_delta: turnMetrics.contextDelta,
+							},
+						}
+					: {}),
 			});
 		}
 		send(ws, {

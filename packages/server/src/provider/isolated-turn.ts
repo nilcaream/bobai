@@ -15,6 +15,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 	let turnModel = "";
 	let turnInputTokens = 0;
 	let turnOutputTokens = 0;
+	let turnTotalInputTokens = 0;
+	let turnTotalOutputTokens = 0;
 	let turnLastCallChars = 0;
 	let baselineTokens = 0;
 
@@ -28,6 +30,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 					turnModel = metrics.model;
 					turnInputTokens = metrics.promptTokens;
 					turnOutputTokens = metrics.outputTokens;
+					turnTotalInputTokens += metrics.promptTokens;
+					turnTotalOutputTokens += metrics.outputTokens;
 					turnLastCallChars = metrics.promptChars;
 				},
 			});
@@ -38,6 +42,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			turnModel = "";
 			turnInputTokens = 0;
 			turnOutputTokens = 0;
+			turnTotalInputTokens = 0;
+			turnTotalOutputTokens = 0;
 			turnLastCallChars = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
@@ -50,8 +56,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			const contextSign = contextDelta > 0 ? "+" : "";
 			const summaryParts = descriptor?.buildTurnSummaryParts?.({
 				modelId: turnModel,
-				inputTokens: turnInputTokens,
-				outputTokens: turnOutputTokens,
+				inputTokens: turnTotalInputTokens,
+				outputTokens: turnTotalOutputTokens,
 			}) ?? {
 				modelName: turnModel.includes("/") ? (turnModel.split("/").at(-1) ?? turnModel) : turnModel,
 			};
@@ -59,8 +65,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			if (summaryParts.pricingLabel) {
 				parts.push(summaryParts.pricingLabel);
 			}
-			parts.push(`in: ${turnInputTokens}`);
-			parts.push(`out: ${turnOutputTokens}`);
+			parts.push(`in: ${turnTotalInputTokens}`);
+			parts.push(`out: ${turnTotalOutputTokens}`);
 			if (summaryParts.costEstimate) {
 				parts.push(summaryParts.costEstimate === "free" ? "free" : `estimate: ${summaryParts.costEstimate}`);
 			}
@@ -77,12 +83,24 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			return turnLastCallChars;
 		},
 
+		getTurnMetrics() {
+			return {
+				inputTokensTotal: turnTotalInputTokens,
+				outputTokensTotal: turnTotalOutputTokens,
+				inputTokensLast: turnInputTokens,
+				outputTokensLast: turnOutputTokens,
+				contextDelta: turnInputTokens - baselineTokens,
+			};
+		},
+
 		saveTurnState(): unknown {
 			return {
 				turnStartTime,
 				turnModel,
 				turnInputTokens,
 				turnOutputTokens,
+				turnTotalInputTokens,
+				turnTotalOutputTokens,
 				turnLastCallChars,
 				baselineTokens,
 			};
@@ -94,6 +112,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 				turnModel: string;
 				turnInputTokens: number;
 				turnOutputTokens: number;
+				turnTotalInputTokens?: number;
+				turnTotalOutputTokens?: number;
 				turnLastCallChars?: number;
 				baselineTokens: number;
 			};
@@ -101,6 +121,8 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 			turnModel = s.turnModel;
 			turnInputTokens = s.turnInputTokens;
 			turnOutputTokens = s.turnOutputTokens;
+			turnTotalInputTokens = s.turnTotalInputTokens ?? s.turnInputTokens;
+			turnTotalOutputTokens = s.turnTotalOutputTokens ?? s.turnOutputTokens;
 			turnLastCallChars = s.turnLastCallChars ?? 0;
 			baselineTokens = s.baselineTokens;
 		},

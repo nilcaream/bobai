@@ -373,6 +373,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			} catch (err) {
 				subagentStatus.set(childSessionId, "error");
 				const turnSummary = activeProvider.getTurnSummary?.() ?? "";
+				const turnMetrics = activeProvider.getTurnMetrics?.();
 				sendWs?.({ type: "subagent_done", sessionId: childSessionId, model, summary: turnSummary });
 				const errChildTokens = activeProvider.getTurnPromptTokens?.() ?? 0;
 				const errChildChars = activeProvider.getTurnPromptChars?.() ?? 0;
@@ -383,7 +384,21 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				}
 				// Persist turn summary on last assistant message for reconstruction
 				if (lastAssistantMessageId && turnSummary) {
-					updateMessageMetadata(db, lastAssistantMessageId, { summary: turnSummary, turn_model: model });
+					updateMessageMetadata(db, lastAssistantMessageId, {
+						summary: turnSummary,
+						turn_model: model,
+						...(turnMetrics
+							? {
+									turn_metrics: {
+										input_tokens_total: turnMetrics.inputTokensTotal,
+										output_tokens_total: turnMetrics.outputTokensTotal,
+										input_tokens_last: turnMetrics.inputTokensLast,
+										output_tokens_last: turnMetrics.outputTokensLast,
+										context_delta: turnMetrics.contextDelta,
+									},
+								}
+							: {}),
+					});
 				}
 				const ts = formatTimestamp();
 				return {
@@ -396,6 +411,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			}
 
 			const turnSummary = activeProvider.getTurnSummary?.();
+			const turnMetrics = activeProvider.getTurnMetrics?.();
 			const childPromptTokensFinal = activeProvider.getTurnPromptTokens?.() ?? 0;
 			const childPromptCharsFinal = activeProvider.getTurnPromptChars?.() ?? 0;
 			if (parentState !== undefined) activeProvider.restoreTurnState?.(parentState);
@@ -410,6 +426,17 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				updateMessageMetadata(db, lastAssistantMessageId, {
 					...(turnSummary ? { summary: turnSummary } : {}),
 					turn_model: model,
+					...(turnMetrics
+						? {
+								turn_metrics: {
+									input_tokens_total: turnMetrics.inputTokensTotal,
+									output_tokens_total: turnMetrics.outputTokensTotal,
+									input_tokens_last: turnMetrics.inputTokensLast,
+									output_tokens_last: turnMetrics.outputTokensLast,
+									context_delta: turnMetrics.contextDelta,
+								},
+							}
+						: {}),
 				});
 			}
 

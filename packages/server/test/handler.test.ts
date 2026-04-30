@@ -86,6 +86,31 @@ function metricsProvider(
 	};
 }
 
+function multiMetricsProvider(
+	providerId: Provider["id"],
+	model: string,
+	calls: Array<{ promptTokens: number; outputTokens: number; promptChars?: number }>,
+	text = "summary text",
+): Provider {
+	return {
+		id: providerId,
+		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+			yield { type: "text", text };
+			for (const call of calls) {
+				opts.onMetrics?.({
+					model,
+					promptTokens: call.promptTokens,
+					outputTokens: call.outputTokens,
+					promptChars: call.promptChars ?? 100,
+					totalTokens: call.promptTokens + call.outputTokens,
+					initiator: opts.initiator ?? "user",
+				});
+			}
+			yield { type: "finish", reason: "stop" };
+		},
+	};
+}
+
 function authFailingProvider(status: number, body: string, permanent: boolean, providerId: Provider["id"] = "mock"): Provider {
 	return {
 		id: providerId,
@@ -475,6 +500,59 @@ describe("handlePrompt", () => {
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
 				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
 			);
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	test("persists total turn metrics in summary and structured metadata without schema changes", async () => {
+		const ws = mockWs();
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-turn-metrics-"));
+		try {
+			fs.writeFileSync(
+				path.join(tmpDir, "copilot-models.json"),
+				JSON.stringify([
+					{
+						id: "claude-haiku-4.5",
+						name: "Claude Haiku 4.5",
+						contextWindow: 128000,
+						maxOutput: 64000,
+						premiumRequestMultiplier: 0.33,
+						label: "0.33x",
+						enabled: true,
+					},
+				]),
+			);
+			await handlePrompt({
+				ws,
+				db,
+				provider: multiMetricsProvider("github-copilot", "claude-haiku-4.5", [
+					{ promptTokens: 5000, outputTokens: 400, promptChars: 700 },
+					{ promptTokens: 5948, outputTokens: 731, promptChars: 900 },
+				]),
+				defaultProviderId: "github-copilot",
+				model: "claude-haiku-4.5",
+				text: "hello",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
+
+			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+			expect(done?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
+			);
+			const stored = getMessages(db, done?.sessionId as string);
+			expect(stored.at(-1)?.metadata?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
+			);
+			expect(stored.at(-1)?.metadata?.turn_metrics).toEqual({
+				input_tokens_total: 10948,
+				output_tokens_total: 1131,
+				input_tokens_last: 5948,
+				output_tokens_last: 731,
+				context_delta: 5948,
+			});
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
 		}

@@ -85,6 +85,14 @@ export interface Provider {
 	getTurnPromptTokens?(): number;
 	/** Return the total content character count from the last LLM call in this turn. */
 	getTurnPromptChars?(): number;
+	/** Return structured token metrics for this turn. */
+	getTurnMetrics?(): {
+		inputTokensTotal: number;
+		outputTokensTotal: number;
+		inputTokensLast: number;
+		outputTokensLast: number;
+		contextDelta: number;
+	};
 	/** Save current turn tracking state (so it can be restored after a subagent run). */
 	saveTurnState?(): unknown;
 	/** Restore previously saved turn tracking state. */

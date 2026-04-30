@@ -58,14 +58,14 @@ describe("handler-level session isolation", () => {
 		]);
 
 		// Session A: new session (baseline=0)
-		expect(sessionA.summary).toContain("in: 500");
-		expect(sessionA.summary).toContain("out: 250");
+		expect(sessionA.summary).toContain("in: 1500");
+		expect(sessionA.summary).toContain("out: 750");
 		expect(sessionA.summary).toContain("context: +500");
 		expect(sessionA.promptTokens).toBe(500);
 
 		// Session B: existing session (baseline=10000)
-		expect(sessionB.summary).toContain("in: 500");
-		expect(sessionB.summary).toContain("out: 250");
+		expect(sessionB.summary).toContain("in: 1000");
+		expect(sessionB.summary).toContain("out: 500");
 		expect(sessionB.summary).toContain("context: -9500");
 		expect(sessionB.promptTokens).toBe(500);
 	});
