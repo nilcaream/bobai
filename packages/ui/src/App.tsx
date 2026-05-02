@@ -306,6 +306,7 @@ export function App() {
 					setStatus,
 					addVolatileMessage,
 					modelList,
+					providerList,
 				});
 			}
 			clearInput();

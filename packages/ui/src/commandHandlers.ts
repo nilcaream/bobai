@@ -22,6 +22,20 @@ function resolveVisibleModel(modelList: ModelListItem[], arg: string): ModelList
 	return fuzzyFilterAndSort(modelList, trimmed, (m) => m.id)[0];
 }
 
+function resolveVisibleProvider(
+	providerList: { index: number; id: string; runtimeSupported: boolean }[],
+	arg: string,
+): { index: number; id: string; runtimeSupported: boolean } | undefined {
+	const trimmed = arg.trim();
+	const firstToken = trimmed.split(/\s+/)[0] ?? "";
+	if (!trimmed) return undefined;
+	if (/^\d+$/.test(firstToken)) {
+		const idx = Number.parseInt(firstToken, 10);
+		return providerList.find((provider) => provider.index === idx);
+	}
+	return fuzzyFilterAndSort(providerList, trimmed, (provider) => provider.id)[0];
+}
+
 // ---------------------------------------------------------------------------
 // handleStopCommand
 // ---------------------------------------------------------------------------
@@ -260,15 +274,34 @@ export function handleGenericCommand(params: {
 	setStatus: (status: string) => void;
 	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
 	modelList: ModelListItem[] | null;
+	providerList: { index: number; id: string; runtimeSupported: boolean }[] | null;
 }): void {
 	const sid = params.getSessionId();
 	const resolvedModel =
 		params.command === "model" && params.modelList ? resolveVisibleModel(params.modelList, params.args) : undefined;
-	const submittedArgs = params.command === "model" && resolvedModel ? String(resolvedModel.index) : params.args;
+	const resolvedProvider =
+		params.command === "provider" && params.providerList ? resolveVisibleProvider(params.providerList, params.args) : undefined;
+	const submittedArgs =
+		params.command === "model" && resolvedModel
+			? String(resolvedModel.index)
+			: params.command === "provider" && resolvedProvider
+				? String(resolvedProvider.index)
+				: params.args;
 	const firstToken = params.args.trim().split(/\s+/)[0] ?? "";
 	const isNumericModelArg = params.command === "model" && /^\d+$/.test(firstToken);
+	const isNumericProviderArg = params.command === "provider" && /^\d+$/.test(firstToken);
 	if (params.command === "model" && params.modelList && params.args.trim() && !resolvedModel && !isNumericModelArg) {
 		params.addVolatileMessage(`No model matching "${params.args}"`, "error");
+		return;
+	}
+	if (
+		params.command === "provider" &&
+		params.providerList &&
+		params.args.trim() &&
+		!resolvedProvider &&
+		!isNumericProviderArg
+	) {
+		params.addVolatileMessage(`No provider matching "${params.args}"`, "error");
 		return;
 	}
 	fetch("/bobai/command", {

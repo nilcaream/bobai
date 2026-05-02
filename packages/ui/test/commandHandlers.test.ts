@@ -15,6 +15,10 @@ function makeModel(index: number, id: string, cost: string, contextWindow = 0) {
 	return { index, id, cost, contextWindow };
 }
 
+function makeProvider(index: number, id: string, runtimeSupported = true) {
+	return { index, id, runtimeSupported };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -619,6 +623,7 @@ describe("handleGenericCommand", () => {
 			setStatus: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
 			modelList: null as { index: number; id: string; cost: string; contextWindow: number }[] | null,
+			providerList: null as { index: number; id: string; runtimeSupported: boolean }[] | null,
 			...overrides,
 		};
 	}
@@ -829,6 +834,31 @@ describe("handleGenericCommand", () => {
 		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
 		expect(params.setModel).toHaveBeenCalledWith("gpt-5-mini");
 		expect(params.setStatus).toHaveBeenCalledWith("gpt-5-mini | 0x | 0 tokens");
+	});
+
+	test("provider text submit posts the resolved numeric index, not the raw query", () => {
+		const params = makeParams({
+			command: "provider",
+			args: "git",
+			providerList: [makeProvider(1, "github-copilot"), makeProvider(2, "openrouter")],
+		});
+		handleGenericCommand(params);
+		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "provider", args: "1", sessionId: "sid-123" }),
+		});
+	});
+
+	test("provider text submit with no match does not post raw text and shows a provider-specific error", () => {
+		const params = makeParams({
+			command: "provider",
+			args: "zzz",
+			providerList: [makeProvider(1, "github-copilot"), makeProvider(2, "openrouter")],
+		});
+		handleGenericCommand(params);
+		expect(globalThis.fetch).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No provider matching "zzz"', "error");
 	});
 });
 
