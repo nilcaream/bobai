@@ -779,6 +779,7 @@ export function createCopilotProvider(
 				}
 
 				try {
+					let sawAnyToolCalls = false;
 					for await (const event of parseSSE(response.body)) {
 						timer.reset(BODY_TIMEOUT_MS);
 
@@ -835,7 +836,7 @@ export function createCopilotProvider(
 								if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 							}
 
-							const reason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
+							const reason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
 							yield { type: "finish" as const, reason } as StreamEvent;
 							timer.clear();
 							return;
@@ -848,6 +849,7 @@ export function createCopilotProvider(
 
 						const toolCalls = choice?.delta?.tool_calls;
 						if (toolCalls) {
+							sawAnyToolCalls = true;
 							for (const tc of toolCalls) {
 								if (tc.id && tc.function?.name) {
 									yield { type: "tool_call_start" as const, index: tc.index, id: tc.id, name: tc.function.name };

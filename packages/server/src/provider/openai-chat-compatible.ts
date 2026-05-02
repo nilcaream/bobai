@@ -55,6 +55,7 @@ export function createOpenAIChatCompatibleProvider(
 			let totalTokens = 0;
 			let finishReason: "stop" | "tool_calls" = "stop";
 			let sawFinish = false;
+			let sawAnyToolCalls = false;
 
 			for await (const event of parseSSE(response.body)) {
 				const data = event as {
@@ -81,6 +82,7 @@ export function createOpenAIChatCompatibleProvider(
 				}
 
 				for (const toolCall of delta?.tool_calls ?? []) {
+					sawAnyToolCalls = true;
 					if (toolCall.id && toolCall.function?.name) {
 						yield {
 							type: "tool_call_start",
@@ -101,7 +103,7 @@ export function createOpenAIChatCompatibleProvider(
 				if (choice?.finish_reason) {
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
-					finishReason = choice.finish_reason === "tool_calls" ? "tool_calls" : "stop";
+					finishReason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
 					const tokenLimit = getProviderModelConfig(config.providerId, options.model)?.contextWindow ?? 0;
 					const display = formatProviderModelDisplay(config.providerId, options.model, promptTokens);
 					yield { type: "usage", tokenCount: promptTokens, tokenLimit, display };

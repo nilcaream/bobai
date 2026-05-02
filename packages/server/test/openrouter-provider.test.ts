@@ -120,6 +120,53 @@ describe("openrouter provider", () => {
 		]);
 	});
 
+	test("treats chat-compatible tool calls as tool_calls even when finish_reason is stop", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{
+						choices: [
+							{
+								delta: {
+									tool_calls: [
+										{ index: 0, id: "call_1", type: "function", function: { name: "list_directory", arguments: "" } },
+									],
+								},
+							},
+						],
+					},
+					{ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"path":"."}' } }] } }] },
+					{
+						choices: [{ finish_reason: "stop" }],
+						usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+					},
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" });
+		const events = await collect(
+			provider.stream({
+				model: "openrouter/free",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(events).toEqual([
+			{ type: "tool_call_start", index: 0, id: "call_1", name: "list_directory" },
+			{ type: "tool_call_delta", index: 0, arguments: '{"path":"."}' },
+			{
+				type: "usage",
+				tokenCount: 10,
+				tokenLimit: 200000,
+				display: "openrouter | openrouter/free | free | 10 / 200000 | 0%",
+			},
+			{ type: "finish", reason: "tool_calls" },
+		]);
+	});
+
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenRouterProvider({ apiKey: "bad" });

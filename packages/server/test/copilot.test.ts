@@ -254,6 +254,47 @@ describe("CopilotProvider", () => {
 		]);
 	});
 
+	test("treats chat completions tool calls as tool_calls even when finish_reason is stop", async () => {
+		const chunks = [
+			JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [
+								{ index: 0, id: "call_gemini", type: "function", function: { name: "list_directory", arguments: "" } },
+							],
+						},
+					},
+				],
+			}),
+			JSON.stringify({
+				choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"path":"."}' } }] } }],
+			}),
+			JSON.stringify({
+				choices: [{ finish_reason: "stop", delta: {} }],
+			}),
+			"[DONE]",
+		];
+
+		globalThis.fetch = mock(async () => new Response(sseStream(chunks), { status: 200 })) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), emptyConfigDir);
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "gemini-3-flash-preview",
+			messages: [{ role: "user", content: "hi" }],
+		})) {
+			events.push(t);
+		}
+
+		expect(events).toEqual([
+			{ type: "tool_call_start", index: 0, id: "call_gemini", name: "list_directory" },
+			{ type: "tool_call_delta", index: 0, arguments: '{"path":"."}' },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gemini-3-flash-preview | 0.33x | 0 / 0 | 0%" },
+			{ type: "finish", reason: "tool_calls" },
+		]);
+	});
+
 	test("yields finish with reason 'stop' for normal text completion", async () => {
 		globalThis.fetch = mock(async () => {
 			const chunks = [
