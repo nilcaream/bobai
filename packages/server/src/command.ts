@@ -7,7 +7,7 @@ import {
 	validateProviderSwitch,
 } from "./provider/backend-policy";
 import { buildSortedProviderModelList, formatProviderModelDisplay } from "./provider/models";
-import { type AuthProviderId, DEFAULT_PROVIDER_ID, type ProviderId } from "./provider/providers";
+import type { AuthProviderId, ProviderId } from "./provider/providers";
 import {
 	countSessionMessages,
 	createSession,
@@ -24,7 +24,8 @@ export interface CommandRequest {
 }
 
 export interface CommandOptions {
-	defaultProviderId?: ProviderId;
+	defaultProviderId?: ProviderId | null;
+	defaultModel?: string | null;
 	configDir?: string;
 	listAuthenticatedProviders?: () => { index: number; id: AuthProviderId; runtimeSupported: boolean }[];
 }
@@ -36,16 +37,22 @@ export type CommandResult =
 export function handleCommand(db: Database, req: CommandRequest, options: CommandOptions = {}): CommandResult {
 	const { command, args } = req;
 	let { sessionId } = req;
-	const defaultProviderId = options.defaultProviderId ?? DEFAULT_PROVIDER_ID;
+	const defaultProviderId = options.defaultProviderId ?? null;
+	const defaultModel = options.defaultModel ?? null;
 
 	// Create a session on the fly if none exists yet
 	if (!sessionId) {
-		const backend = getDefaultSessionBackend(defaultProviderId);
-		const session = createSession(db, {
-			provider: backend.provider,
-			model: backend.model,
-			apiFamily: backend.apiFamily,
-		});
+		const backend = defaultProviderId ? getDefaultSessionBackend(defaultProviderId) : null;
+		const session = createSession(
+			db,
+			backend
+				? {
+						provider: backend.provider,
+						model: backend.model,
+						apiFamily: backend.apiFamily,
+					}
+				: undefined,
+		);
 		sessionId = session.id;
 	} else {
 		const session = getSession(db, sessionId);
@@ -57,13 +64,14 @@ export function handleCommand(db: Database, req: CommandRequest, options: Comman
 	switch (command) {
 		case "model":
 			return withSessionId(
-				handleModelCommand(db, sessionId, args, { defaultProviderId, configDir: options.configDir }),
+				handleModelCommand(db, sessionId, args, { defaultProviderId, defaultModel, configDir: options.configDir }),
 				sessionId,
 			);
 		case "provider":
 			return withSessionId(
 				handleProviderCommand(db, sessionId, args, {
 					defaultProviderId,
+					defaultModel,
 					configDir: options.configDir,
 					listAuthenticatedProviders: options.listAuthenticatedProviders,
 				}),
@@ -87,11 +95,17 @@ function withSessionId(result: CommandResult, sessionId: string): CommandResult 
 	return result;
 }
 
-function resolveSessionBackend(db: Database, sessionId: string, defaultProviderId: ProviderId): SessionBackendState | null {
+function resolveSessionBackend(
+	db: Database,
+	sessionId: string,
+	defaultProviderId: ProviderId | null,
+	defaultModel: string | null,
+): SessionBackendState | null {
 	const session = getSession(db, sessionId);
 	if (!session) return null;
 	const provider = (session.provider as ProviderId | null) ?? defaultProviderId;
-	const model = session.model ?? getDefaultSessionBackend(provider).model;
+	const model = session.model ?? defaultModel;
+	if (!provider || !model) return null;
 	const apiFamily = session.apiFamily ?? getApiFamilyForModel(provider, model);
 	return { provider, model, apiFamily };
 }
@@ -100,10 +114,15 @@ function handleModelCommand(
 	db: Database,
 	sessionId: string,
 	args: string,
-	options: { defaultProviderId: ProviderId; configDir?: string },
+	options: { defaultProviderId: ProviderId | null; defaultModel: string | null; configDir?: string },
 ): CommandResult {
-	const current = resolveSessionBackend(db, sessionId, options.defaultProviderId);
-	if (!current) return { ok: false, error: "Session not found" };
+	const existingSession = getSession(db, sessionId);
+	if (!existingSession) return { ok: false, error: "Session not found" };
+	if (!existingSession.provider && !options.defaultProviderId) {
+		return { ok: false, error: "Select a provider before selecting a model" };
+	}
+	const current = resolveSessionBackend(db, sessionId, options.defaultProviderId, options.defaultModel);
+	if (!current) return { ok: false, error: "Provider or model not selected" };
 
 	const sortedModels = buildSortedProviderModelList(current.provider, options.configDir);
 	const index = Number.parseInt(args, 10);
@@ -140,7 +159,8 @@ function handleProviderCommand(
 	sessionId: string,
 	args: string,
 	options: {
-		defaultProviderId: ProviderId;
+		defaultProviderId: ProviderId | null;
+		defaultModel: string | null;
 		configDir?: string;
 		listAuthenticatedProviders?: () => { index: number; id: AuthProviderId; runtimeSupported: boolean }[];
 	},
@@ -158,14 +178,17 @@ function handleProviderCommand(
 		return { ok: false, error: `Provider runtime is not supported yet: ${selected.id}` };
 	}
 
-	const current = resolveSessionBackend(db, sessionId, options.defaultProviderId);
-	if (!current) return { ok: false, error: "Session not found" };
-
-	const transition = validateProviderSwitch({
-		hasMessages: countSessionMessages(db, sessionId) > 0,
-		current,
-		nextProvider: selected.id as ProviderId,
-	});
+	const hasMessages = countSessionMessages(db, sessionId) > 0;
+	const current = resolveSessionBackend(db, sessionId, options.defaultProviderId, options.defaultModel);
+	const transition = current
+		? validateProviderSwitch({
+				hasMessages,
+				current,
+				nextProvider: selected.id as ProviderId,
+			})
+		: hasMessages
+			? { ok: false, error: "Changing provider for a session with messages is not yet supported." }
+			: { ok: true, next: getDefaultSessionBackend(selected.id as ProviderId) };
 	if (!transition.ok) {
 		return transition;
 	}

@@ -18,8 +18,8 @@ describe("provider descriptor registry", () => {
 		]);
 		expect(registry.getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
 		expect(registry.getProviderDescriptor("openrouter")?.defaultModel).toBe("openrouter/free");
-		expect(registry.getProviderDescriptor("opencode-go")?.defaultModel).toBe("kimi-k2.6");
-		expect(registry.getProviderDescriptor("opencode-zen")?.defaultModel).toBe("claude-sonnet-4-6");
+		expect(registry.getProviderDescriptor("opencode-go")?.defaultModel).toBe("deepseek-v4-flash");
+		expect(registry.getProviderDescriptor("opencode-zen")?.defaultModel).toBe("minimax-m2.5-free");
 	});
 
 	test("exposes provider-specific API-family resolution through descriptors", async () => {

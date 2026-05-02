@@ -116,14 +116,28 @@ describe("handleCommand", () => {
 		const result = handleCommand(
 			db,
 			{ command: "model", args: "99", sessionId: session.id },
-			{ defaultProviderId: providerId, configDir: tmpDir },
+			{ defaultProviderId: providerId, defaultModel: "gpt-5-mini", configDir: tmpDir },
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Invalid model index");
 	});
 
+	test("model command requires selecting a provider first when no provider/model defaults exist", () => {
+		const session = createSession(db);
+		const result = handleCommand(
+			db,
+			{ command: "model", args: "1", sessionId: session.id },
+			{ defaultProviderId: null, defaultModel: null, configDir: tmpDir },
+		);
+		expect(result).toEqual({ ok: false, error: "Select a provider before selecting a model" });
+	});
+
 	test("model command creates session when none provided", () => {
-		const result = handleCommand(db, { command: "model", args: "1" }, { defaultProviderId: providerId, configDir: tmpDir });
+		const result = handleCommand(
+			db,
+			{ command: "model", args: "1" },
+			{ defaultProviderId: providerId, defaultModel: "gpt-5-mini", configDir: tmpDir },
+		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
@@ -317,12 +331,12 @@ describe("HTTP endpoints", () => {
 		expect(body.providerId).toBe("opencode-go");
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
-			id: "kimi-k2.6",
+			id: "deepseek-v4-flash",
 			cost: "beta",
 			contextWindow: 131072,
 		});
-		expect(body.defaultModel).toBe("kimi-k2.6");
-		expect(body.defaultStatus).toBe("opencode-go | kimi-k2.6 | beta | 0 / 131072 | 0%");
+		expect(body.defaultModel).toBe("deepseek-v4-flash");
+		expect(body.defaultStatus).toBe("opencode-go | deepseek-v4-flash | beta | 0 / 131072 | 0%");
 	});
 
 	test("GET /bobai/models returns curated opencode-zen rows", async () => {
@@ -337,9 +351,9 @@ describe("HTTP endpoints", () => {
 		expect(body.providerId).toBe("opencode-zen");
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
-			id: "claude-sonnet-4-6",
-			cost: "beta",
-			contextWindow: 200000,
+			id: "minimax-m2.5-free",
+			cost: "free",
+			contextWindow: 131072,
 		});
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
@@ -347,8 +361,28 @@ describe("HTTP endpoints", () => {
 			cost: "beta",
 			contextWindow: 272000,
 		});
-		expect(body.defaultModel).toBe("claude-sonnet-4-6");
-		expect(body.defaultStatus).toBe("opencode-zen | claude-sonnet-4-6 | beta | 0 / 200000 | 0%");
+		expect(body.defaultModel).toBe("minimax-m2.5-free");
+		expect(body.defaultStatus).toBe("opencode-zen | minimax-m2.5-free | free | 0 / 131072 | 0%");
+	});
+
+	test("GET /bobai/models without a configured default backend returns select-provider status", async () => {
+		const freshDb = createTestDb();
+		const s = createServer({ port: 0, db: freshDb, defaultStatus: "select provider and model" });
+		const base = `http://localhost:${s.port}`;
+		const res = await fetch(`${base}/bobai/models`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			providerId: string | null;
+			models: { index: number; id: string; cost: string; contextWindow: number }[];
+			defaultModel: string | null;
+			defaultStatus: string;
+		};
+		expect(body.providerId).toBeNull();
+		expect(body.models).toEqual([]);
+		expect(body.defaultModel).toBeNull();
+		expect(body.defaultStatus).toBe("select provider and model");
+		s.stop(true);
+		freshDb.close();
 	});
 
 	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {
@@ -561,6 +595,7 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
+			defaultProviderId: "github-copilot",
 			model: "gpt-5-mini",
 			text: "hello",
 			sessionId: session.id,
@@ -596,6 +631,7 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
+			defaultProviderId: "github-copilot",
 			model: "gpt-5-mini",
 			text: "hello",
 			sessionId: session.id,
@@ -630,6 +666,7 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
+			defaultProviderId: "github-copilot",
 			model: "gpt-5-mini",
 			text: "hello",
 			sessionId: session.id,
@@ -666,6 +703,7 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
+			defaultProviderId: "github-copilot",
 			model: "gpt-5-mini",
 			text: "hello",
 			sessionId: session.id,

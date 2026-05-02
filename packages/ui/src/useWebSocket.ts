@@ -7,6 +7,16 @@ import { appendPart, appendText } from "./messageBuilder";
 import type { Message, MessagePart, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo, VolatileMessage } from "./protocol";
 import { buildSessionUrl } from "./urlUtils";
 
+const SESSION_LOCKED_MESSAGE = "Session is active in another tab";
+
+export function shouldSubscribeToSession(currentSessionId: string | null, nextSessionId: string): boolean {
+	return currentSessionId !== nextSessionId;
+}
+
+export function filterVolatileMessagesOnSessionSubscribed(messages: VolatileMessage[]): VolatileMessage[] {
+	return messages.filter((message) => message.text !== SESSION_LOCKED_MESSAGE);
+}
+
 export function useWebSocket() {
 	const ws = useRef<WebSocket | null>(null);
 	const [messages, setMessages] = useState<Message[]>([]);
@@ -94,13 +104,13 @@ export function useWebSocket() {
 
 			if (msg.type === "session_locked") {
 				setSessionLocked(true);
-				addVolatileMessage("Session is active in another tab", "error");
+				addVolatileMessage(SESSION_LOCKED_MESSAGE, "error");
 				return;
 			}
 
 			if (msg.type === "session_subscribed") {
 				setSessionLocked(false);
-				clearVolatileMessages();
+				setVolatileMessages((prev) => filterVolatileMessagesOnSessionSubscribed(prev));
 				return;
 			}
 
@@ -408,9 +418,12 @@ export function useWebSocket() {
 		loadSession,
 		getSessionId: () => sessionId.current,
 		setSessionId: (id: string) => {
+			const shouldSubscribe = shouldSubscribeToSession(sessionId.current, id);
 			sessionId.current = id;
 			history.replaceState(null, "", buildSessionUrl(id));
-			sendSubscribe(id);
+			if (shouldSubscribe) {
+				sendSubscribe(id);
+			}
 		},
 		volatileMessages,
 		addVolatileMessage,

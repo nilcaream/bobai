@@ -20,7 +20,6 @@ import { isRuntimeSupportedProvider } from "./provider/backend-policy";
 import { buildSortedProviderModelList, formatProviderModelDisplay, getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Provider } from "./provider/provider";
 import {
-	DEFAULT_PROVIDER_ID,
 	getDefaultModelForProvider,
 	isSupportedAuthProvider,
 	isSupportedProvider,
@@ -49,6 +48,7 @@ export interface ServerOptions {
 	runtimeManager?: ProviderRuntimeManager;
 	providerId?: ProviderId;
 	model?: string;
+	defaultStatus?: string;
 	maxIterations?: number;
 	projectRoot?: string;
 	configDir?: string;
@@ -60,14 +60,18 @@ export interface ServerOptions {
 	startedAt?: number;
 }
 
-function resolveConfiguredProviderId(providerId?: ProviderId, runtimeProviderId?: string): ProviderId {
+function resolveConfiguredProviderId(providerId?: ProviderId, runtimeProviderId?: string): ProviderId | null {
 	if (providerId) return providerId;
 	if (runtimeProviderId && isSupportedProvider(runtimeProviderId)) return runtimeProviderId;
-	return DEFAULT_PROVIDER_ID;
+	return null;
 }
 
-function resolveSessionProviderId(sessionProvider: string | null | undefined, configuredProviderId: ProviderId): ProviderId {
-	return sessionProvider && isSupportedProvider(sessionProvider) ? sessionProvider : configuredProviderId;
+function resolveSessionProviderId(
+	sessionProvider: string | null | undefined,
+	configuredProviderId: ProviderId | null,
+): ProviderId | null {
+	if (sessionProvider && isSupportedProvider(sessionProvider)) return sessionProvider;
+	return configuredProviderId;
 }
 
 export function createServer(options: ServerOptions) {
@@ -214,7 +218,10 @@ export function createServer(options: ServerOptions) {
 				const storedPromptTokens = session?.promptTokens ?? 0;
 				const storedPromptChars = session?.promptChars ?? 0;
 				const modelId = session?.model ?? options.model ?? "";
-				const modelConfig = getProviderModelConfig(configuredProviderId, modelId, options.configDir);
+				const providerForContext = resolveSessionProviderId(session?.provider, configuredProviderId);
+				const modelConfig = providerForContext
+					? getProviderModelConfig(providerForContext, modelId, options.configDir)
+					: undefined;
 				const contextWindow = modelConfig?.contextWindow ?? 0;
 				if (contextWindow <= 0) {
 					options.logger
@@ -391,6 +398,14 @@ export function createServer(options: ServerOptions) {
 			if (url.pathname === "/bobai/models") {
 				const providerParam = url.searchParams.get("provider");
 				const requestedProvider = providerParam ?? configuredProviderId;
+				if (!requestedProvider) {
+					return Response.json({
+						providerId: null,
+						models: [],
+						defaultModel: null,
+						defaultStatus: options.defaultStatus ?? "select provider and model",
+					});
+				}
 				if (!isSupportedAuthProvider(requestedProvider)) {
 					return new Response(`Unsupported provider: ${requestedProvider}`, { status: 400 });
 				}
@@ -424,6 +439,7 @@ export function createServer(options: ServerOptions) {
 					}));
 					const result = handleCommand(options.db, body, {
 						defaultProviderId: configuredProviderId,
+						defaultModel: options.model ?? null,
 						configDir: options.configDir,
 						listAuthenticatedProviders: () => authenticatedProviders,
 					});
@@ -462,9 +478,10 @@ export function createServer(options: ServerOptions) {
 				const session = getMostRecentParentSession(options.db);
 				if (!session) return Response.json(null);
 				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
-				const status = session.model
-					? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
-					: null;
+				const status =
+					sessionProviderId && session.model
+						? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
+						: (options.defaultStatus ?? "select provider and model");
 				return Response.json({
 					id: session.id,
 					title: session.title,
@@ -507,9 +524,10 @@ export function createServer(options: ServerOptions) {
 					// once all legacy sessions are gone.
 					.filter((m) => m.role !== "system");
 				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
-				const status = session.model
-					? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
-					: null;
+				const status =
+					sessionProviderId && session.model
+						? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
+						: (options.defaultStatus ?? "select provider and model");
 				return Response.json({
 					session: {
 						id: session.id,
@@ -613,7 +631,7 @@ export function createServer(options: ServerOptions) {
 
 				if (msg.type === "prompt") {
 					const { db, provider, runtimeManager, model } = options;
-					if ((provider || runtimeManager) && model && db) {
+					if (db) {
 						// Create abort controller for this prompt — aborted on WebSocket close
 						const controller = new AbortController();
 						wsAbortControllers.set(ws, controller);
@@ -669,7 +687,7 @@ export function createServer(options: ServerOptions) {
 							}
 						});
 					} else {
-						send(ws, { type: "error", message: "No provider configured" });
+						send(ws, { type: "error", message: "Database not available" });
 					}
 					return;
 				}

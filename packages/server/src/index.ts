@@ -4,6 +4,7 @@ import path from "node:path";
 import { authorizeCopilot, getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
 import { getCopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "./auth/store";
 import { parseCLI } from "./cli";
+import { resolveValidatedDefaultBackend } from "./config/default-backend";
 import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
 import { createTrackingFetch } from "./log/fetch";
@@ -99,6 +100,18 @@ const config = resolveConfig(
 	{ provider: project.provider, model: project.model, maxIterations: project.maxIterations },
 	globalConfig.preferences,
 );
+const defaultBackend = resolveValidatedDefaultBackend(
+	{
+		project: { filePath: project.configFilePath, provider: project.provider, model: project.model },
+		global: {
+			filePath: globalConfig.filePath,
+			provider: globalConfig.preferences.provider,
+			model: globalConfig.preferences.model,
+		},
+		configDir: globalConfigDir,
+	},
+	logger,
+);
 
 const skillDirectories = [path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")];
 const skills = discoverSkills(skillDirectories, { debug, builtinSkills });
@@ -107,12 +120,12 @@ for (const skill of skills.list()) {
 	logger.info("SKILL", `${skill.name}: ${skill.filePath}`);
 }
 
-if (!isSupportedProvider(config.provider)) {
-	console.error(`Unsupported provider: ${config.provider}`);
+if (defaultBackend?.provider && !isSupportedProvider(defaultBackend.provider)) {
+	console.error(`Unsupported provider: ${defaultBackend.provider}`);
 	process.exit(1);
 }
 
-if (!providerModelsConfigExists(config.provider, globalConfigDir)) {
+if (defaultBackend?.provider && !providerModelsConfigExists(defaultBackend.provider, globalConfigDir)) {
 	console.error("Model configuration not found. Please run: bobai refresh");
 	process.exit(1);
 }
@@ -135,8 +148,9 @@ const server = createServer({
 	db: project.db,
 	dbGuard: project.dbGuard,
 	runtimeManager,
-	providerId: config.provider,
-	model: config.model,
+	providerId: defaultBackend?.provider,
+	model: defaultBackend?.model ?? undefined,
+	defaultStatus: defaultBackend ? undefined : "select provider and model",
 	maxIterations: config.maxIterations,
 	projectRoot: process.cwd(),
 	configDir: globalConfigDir,
@@ -149,11 +163,11 @@ const server = createServer({
 });
 
 logger.info("SERVER", `Project: ${project.id}`);
-logger.info("SERVER", `Provider: ${config.provider} / ${config.model}`);
+logger.info("SERVER", `Provider: ${defaultBackend ? `${defaultBackend.provider} / ${defaultBackend.model}` : "(none)"}`);
 logger.info("SERVER", `Listening at http://localhost:${server.port}/bobai`);
 
 console.log(`Project: ${project.id}`);
-console.log(`Provider: ${config.provider} / ${config.model}`);
+console.log(`Provider: ${defaultBackend ? `${defaultBackend.provider} / ${defaultBackend.model}` : "(none)"}`);
 console.log(`http://localhost:${server.port}/bobai`);
 
 await loadPlugins(globalConfigDir, logger);

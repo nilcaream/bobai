@@ -1,36 +1,32 @@
 import { describe, expect, test } from "bun:test";
 import { resolveConfig } from "../src/config/resolve";
-import { DEFAULT_PROVIDER_ID, getDefaultModelForProvider } from "../src/provider/providers";
 
 describe("resolveConfig", () => {
-	test("returns defaults when no overrides provided", () => {
-		const config = resolveConfig({}, {});
-		expect(config.provider).toBe("github-copilot");
-		expect(config.model).toBe("gpt-5-mini");
-	});
-
-	test("returns shared provider defaults when no overrides provided", () => {
-		const config = resolveConfig({}, {});
-		expect(config.provider).toBe(DEFAULT_PROVIDER_ID);
-		expect(config.model).toBe(getDefaultModelForProvider(DEFAULT_PROVIDER_ID));
-	});
-
-	test("global preferences override defaults", () => {
-		const config = resolveConfig({}, { provider: "zen", model: "zen-1" });
-		expect(config.provider).toBe("zen");
-		expect(config.model).toBe("zen-1");
-	});
-
-	test("project config overrides global preferences", () => {
-		const config = resolveConfig({ provider: "github-copilot", model: "claude-sonnet-4" }, { provider: "zen", model: "zen-1" });
+	test("prefers project provider/model when both are configured", () => {
+		const config = resolveConfig(
+			{ provider: "github-copilot", model: "claude-sonnet-4" },
+			{ provider: "openrouter", model: "openrouter/free" },
+		);
 		expect(config.provider).toBe("github-copilot");
 		expect(config.model).toBe("claude-sonnet-4");
 	});
 
-	test("partial project config merges with global", () => {
+	test("falls back to global provider/model when project does not configure both", () => {
 		const config = resolveConfig({ model: "gpt-4o" }, { provider: "github-copilot", model: "gpt-5-mini" });
 		expect(config.provider).toBe("github-copilot");
-		expect(config.model).toBe("gpt-4o");
+		expect(config.model).toBe("gpt-5-mini");
+	});
+
+	test("returns null provider/model when neither project nor global config provides both", () => {
+		const config = resolveConfig({}, {});
+		expect(config.provider).toBeNull();
+		expect(config.model).toBeNull();
+	});
+
+	test("uses global provider/model when both are configured", () => {
+		const config = resolveConfig({}, { provider: "openrouter", model: "openrouter/free" });
+		expect(config.provider).toBe("openrouter");
+		expect(config.model).toBe("openrouter/free");
 	});
 
 	test("maxIterations from global preferences", () => {

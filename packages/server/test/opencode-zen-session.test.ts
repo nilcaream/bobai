@@ -98,8 +98,8 @@ describe("OpenCode Zen session flow", () => {
 
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("opencode-zen");
-		expect(body.model).toBe("claude-sonnet-4-6");
-		expect(body.status).toBe("opencode-zen | claude-sonnet-4-6 | beta | 0 / 200000 | 0%");
+		expect(body.model).toBe("minimax-m2.5-free");
+		expect(body.status).toBe("opencode-zen | minimax-m2.5-free | free | 0 / 131072 | 0%");
 	});
 
 	test("websocket prompt uses the OpenCode Zen runtime after provider switch", async () => {
@@ -131,15 +131,15 @@ describe("OpenCode Zen session flow", () => {
 		});
 
 		expect(seenProviderIds).toContain("opencode-zen");
-		expect(messages.some((m) => m.type === "token" && m.text === "opencode zen response for claude-sonnet-4-6")).toBe(true);
+		expect(messages.some((m) => m.type === "token" && m.text === "opencode zen response for minimax-m2.5-free")).toBe(true);
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("opencode-zen");
-		expect(done?.model).toBe("claude-sonnet-4-6");
-		expect(done?.summary).toMatch(/^ \| claude-sonnet-4-6 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/);
+		expect(done?.model).toBe("minimax-m2.5-free");
+		expect(done?.summary).toMatch(/^ \| minimax-m2\.5-free \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/);
 		const stored = getMessages(db, session.id);
-		expect(stored.at(-1)?.metadata?.turn_model).toBe("claude-sonnet-4-6");
+		expect(stored.at(-1)?.metadata?.turn_model).toBe("minimax-m2.5-free");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| claude-sonnet-4-6 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| minimax-m2\.5-free \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 

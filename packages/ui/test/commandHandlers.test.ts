@@ -111,6 +111,14 @@ describe("handleNewCommand", () => {
 		expect(result).toEqual({ mode: "chat", lineLimit: 48 });
 	});
 
+	test("when no backend defaults exist, resets provider/model to null and keeps select-provider status", () => {
+		const params = makeParams({ defaultStatus: "select provider and model", defaultProvider: null, defaultModel: null });
+		handleNewCommand(params);
+		expect(params.setStatus).toHaveBeenCalledWith("select provider and model");
+		expect(params.setProvider).toHaveBeenCalledWith(null);
+		expect(params.setModel).toHaveBeenCalledWith(null);
+	});
+
 	test("when newTitle is non-empty, sets title and pendingNewTitle", () => {
 		const params = makeParams({ newTitle: "My Session" });
 		handleNewCommand(params);
@@ -628,6 +636,7 @@ describe("handleGenericCommand", () => {
 			setTitle: mock(() => {}),
 			setStatus: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
+			clearVolatileMessages: mock(() => {}),
 			currentProvider: "github-copilot" as string | null,
 			modelListProvider: "github-copilot" as string | null,
 			modelList: null as { index: number; id: string; cost: string; contextWindow: number }[] | null,
@@ -659,6 +668,13 @@ describe("handleGenericCommand", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ command: "model", args: "2", sessionId: "sid-123" }),
 		});
+	});
+
+	test("model command requires selecting a provider first", () => {
+		const params = makeParams({ command: "model", args: "1", currentProvider: null, modelListProvider: null });
+		handleGenericCommand(params);
+		expect(globalThis.fetch).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Select a provider before selecting a model", "error");
 	});
 
 	test("model submit skips stale model list from the previous provider and posts the numeric index unchanged", () => {
@@ -837,6 +853,7 @@ describe("handleGenericCommand", () => {
 		expect(params.setSessionId).toHaveBeenCalledWith("new-sid");
 		expect(params.setModel).toHaveBeenCalledWith("gpt-4");
 		expect(params.setStatus).toHaveBeenCalledWith("ready");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-4 model", "info");
 	});
 
 	test("provider command updates provider, model, and status from server result", async () => {
@@ -859,6 +876,7 @@ describe("handleGenericCommand", () => {
 		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
 		expect(params.setModel).toHaveBeenCalledWith("gpt-5-mini");
 		expect(params.setStatus).toHaveBeenCalledWith("gpt-5-mini | 0x | 0 tokens");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-5-mini model", "info");
 	});
 
 	test("provider text submit posts the resolved numeric index, not the raw query", () => {
@@ -884,6 +902,23 @@ describe("handleGenericCommand", () => {
 		handleGenericCommand(params);
 		expect(globalThis.fetch).not.toHaveBeenCalled();
 		expect(params.addVolatileMessage).toHaveBeenCalledWith('No provider matching "zzz"', "error");
+	});
+
+	test("provider command can be submitted when no provider/model is selected yet", () => {
+		const params = makeParams({
+			command: "provider",
+			args: "1",
+			currentProvider: null,
+			modelListProvider: null,
+			providerList: [makeProvider(1, "openrouter")],
+		});
+		handleGenericCommand(params);
+		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "provider", args: "1", sessionId: "sid-123" }),
+		});
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 });
 

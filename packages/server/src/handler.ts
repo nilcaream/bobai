@@ -59,8 +59,8 @@ export interface PromptRequest {
 	db: Database;
 	provider?: Provider;
 	runtimeManager?: ProviderRuntimeManager;
-	defaultProviderId?: ProviderId;
-	model: string;
+	defaultProviderId?: ProviderId | null;
+	model?: string;
 	text: string;
 	sessionId?: string;
 	projectRoot: string;
@@ -113,12 +113,12 @@ export async function handlePrompt(req: PromptRequest) {
 	} = req;
 
 	const instructions = loadInstructions(configDir, projectRoot);
-	const defaultProviderId = req.defaultProviderId ?? "github-copilot";
+	const defaultProviderId = req.defaultProviderId ?? null;
 	let currentSessionId: string | undefined;
 	let sessionObj: ReturnType<typeof getSession> | null = null;
-	let effectiveProviderId: ProviderId = defaultProviderId;
+	let effectiveProviderId: ProviderId | null = defaultProviderId;
 	let activeProvider: Provider | undefined;
-	let effectiveModel = model;
+	let effectiveModel = model ?? null;
 	let lastAssistantMessageId: string | null = null;
 	let turnProvider: ReturnType<typeof createIsolatedTurnProvider> | undefined;
 
@@ -133,12 +133,17 @@ export async function handlePrompt(req: PromptRequest) {
 			currentSessionId = sessionId;
 			sessionObj = session;
 		} else {
-			const backend = getDefaultSessionBackend(defaultProviderId);
-			const session = createSession(db, {
-				provider: backend.provider,
-				model: backend.model,
-				apiFamily: backend.apiFamily,
-			});
+			const backend = defaultProviderId ? getDefaultSessionBackend(defaultProviderId) : null;
+			const session = createSession(
+				db,
+				backend
+					? {
+							provider: backend.provider,
+							model: backend.model,
+							apiFamily: backend.apiFamily,
+						}
+					: undefined,
+			);
 			currentSessionId = session.id;
 			sessionObj = session;
 			send(ws, { type: "session_created", sessionId: currentSessionId });
@@ -147,10 +152,14 @@ export async function handlePrompt(req: PromptRequest) {
 		effectiveProviderId = isSupportedProvider(sessionObj?.provider ?? "")
 			? (sessionObj?.provider as ProviderId)
 			: defaultProviderId;
-		effectiveModel = sessionObj?.model ?? model;
-		activeProvider = runtimeManager ? await runtimeManager.get(effectiveProviderId) : provider;
+		effectiveModel = sessionObj?.model ?? model ?? null;
+		if (!effectiveModel || (!effectiveProviderId && !provider)) {
+			send(ws, { type: "error", message: "Provider or model not selected" });
+			return;
+		}
+		activeProvider = runtimeManager && effectiveProviderId ? await runtimeManager.get(effectiveProviderId) : provider;
 		if (!activeProvider) {
-			send(ws, { type: "error", message: "No provider configured" });
+			send(ws, { type: "error", message: "Provider or model not selected" });
 			return;
 		}
 

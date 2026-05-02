@@ -29,6 +29,28 @@ describe("provider command", () => {
 		db.close();
 	});
 
+	test("provider command can select a provider for an empty session with no preselected backend", () => {
+		const db = createTestDb();
+		const session = createSession(db);
+		const result = handleCommand(
+			db,
+			{ command: "provider", args: "1", sessionId: session.id },
+			{
+				defaultProviderId: null,
+				defaultModel: null,
+				configDir: "/tmp",
+				listAuthenticatedProviders: () => [{ index: 1, id: "openrouter", runtimeSupported: true }],
+			},
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			const updated = getSession(db, session.id);
+			expect(updated?.provider).toBe("openrouter");
+			expect(updated?.model).toBe("openrouter/free");
+		}
+		db.close();
+	});
+
 	test("provider switch on non-empty session returns not supported error", () => {
 		const db = createTestDb();
 		const session = createSession(db, {

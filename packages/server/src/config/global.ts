@@ -10,11 +10,13 @@ export interface GlobalPreferences {
 
 export interface GlobalConfig {
 	preferences: GlobalPreferences;
+	filePath: string;
 }
 
 export function loadGlobalConfig(configDir: string): GlobalConfig {
-	const preferences = readJson<GlobalPreferences>(path.join(configDir, "bobai.json")) ?? {};
-	return { preferences };
+	const filePath = path.join(configDir, "bobai.json");
+	const preferences = readJson<GlobalPreferences>(filePath) ?? {};
+	return { preferences, filePath };
 }
 
 function readJson<T>(filePath: string): T | undefined {

@@ -71,6 +71,8 @@ export function App() {
 	const [modelList, setModelList] = useState<ModelListItem[] | null>(null);
 	const [modelListProvider, setModelListProvider] = useState<string | null>(null);
 	const [providerList, setProviderList] = useState<ProviderListItem[] | null>(null);
+	const [resolvedDefaultProvider, setResolvedDefaultProvider] = useState<string | null>(null);
+	const [resolvedDefaultModel, setResolvedDefaultModel] = useState<string | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
 	const defaultStatus = useRef("");
@@ -165,30 +167,51 @@ export function App() {
 	useEffect(() => {
 		fetch("/bobai/providers")
 			.then((res) => res.json())
-			.then((data: { providers: ProviderListItem[]; defaultProvider: string }) => {
+			.then((data: { providers: ProviderListItem[]; defaultProvider: string | null }) => {
 				setProviderList(data.providers);
-				setProvider((prev) => prev ?? data.defaultProvider);
+				setResolvedDefaultProvider(data.defaultProvider);
+				setProvider((prev) => prev ?? data.defaultProvider ?? null);
 			})
 			.catch(() => setProviderList(null));
 	}, [setProvider]);
 
+	// Fetch server-resolved default backend for empty-state startup and .new resets
+	useEffect(() => {
+		fetch("/bobai/models")
+			.then((res) => res.json())
+			.then(
+				(data: { providerId: string | null; models: ModelListItem[]; defaultModel: string | null; defaultStatus: string }) => {
+					setResolvedDefaultProvider(data.providerId);
+					setResolvedDefaultModel(data.defaultModel);
+					defaultStatus.current = data.defaultStatus;
+					setProvider((prev) => prev ?? data.providerId);
+					setModel((prev) => prev ?? data.defaultModel);
+					setStatus((prev) => prev || data.defaultStatus);
+				},
+			)
+			.catch(() => {});
+	}, [setModel, setProvider, setStatus]);
+
 	// Fetch models for the active provider — needed for status bar and dot panel
 	useEffect(() => {
-		if (!provider) return;
+		const url = provider ? `/bobai/models?provider=${encodeURIComponent(provider)}` : "/bobai/models";
 		setModelListProvider(null);
-		fetch(`/bobai/models?provider=${encodeURIComponent(provider)}`)
+		fetch(url)
 			.then((res) => res.json())
-			.then((data: { models: ModelListItem[]; defaultModel: string; defaultStatus: string }) => {
-				setModelList(data.models);
-				setModelListProvider(provider);
-				defaultStatus.current = data.defaultStatus;
-				setModel((prev) => prev ?? data.defaultModel);
-				setStatus((prev) => prev || data.defaultStatus);
-			})
+			.then(
+				(data: { providerId: string | null; models: ModelListItem[]; defaultModel: string | null; defaultStatus: string }) => {
+					setModelList(data.models);
+					setModelListProvider(data.providerId);
+					if (!provider) {
+						defaultStatus.current = data.defaultStatus;
+						setStatus((prev) => prev || data.defaultStatus);
+					}
+				},
+			)
 			.catch(() => {
 				setModelListProvider(null);
 			});
-	}, [provider, setModel, setStatus]);
+	}, [provider, setStatus]);
 
 	// Fetch skills eagerly on mount — needed for slash command panel
 	useEffect(() => {
@@ -264,9 +287,9 @@ export function App() {
 					setStatus,
 					defaultStatus: defaultStatus.current,
 					setProvider,
-					defaultProvider: provider,
+					defaultProvider: resolvedDefaultProvider,
 					setModel,
-					defaultModel: model,
+					defaultModel: resolvedDefaultModel,
 					setView,
 					setTitle,
 					pendingNewTitle,
@@ -315,6 +338,7 @@ export function App() {
 					setTitle,
 					setStatus,
 					addVolatileMessage,
+					clearVolatileMessages,
 					currentProvider: provider,
 					modelListProvider,
 					modelList,
@@ -346,9 +370,9 @@ export function App() {
 					setStatus,
 					defaultStatus: defaultStatus.current,
 					setProvider,
-					defaultProvider: provider,
+					defaultProvider: resolvedDefaultProvider,
 					setModel,
-					defaultModel: model,
+					defaultModel: resolvedDefaultModel,
 					setView,
 					setTitle,
 					pendingNewTitle,
@@ -384,6 +408,12 @@ export function App() {
 
 		if (view.mode === "context" || view.mode === "compaction") {
 			addVolatileMessage("Read-only view", "error");
+			clearInput();
+			return;
+		}
+
+		if (!provider || !model) {
+			addVolatileMessage("Provider or model not selected", "error");
 			clearInput();
 			return;
 		}

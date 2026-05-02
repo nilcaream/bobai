@@ -36,6 +36,7 @@ describe("OpenCode Go session flow", () => {
 				return {
 					id: providerId,
 					async *stream(opts: {
+						model: string;
 						initiator?: "user" | "agent";
 						onMetrics?: (metrics: {
 							model: string;
@@ -48,7 +49,7 @@ describe("OpenCode Go session flow", () => {
 					}) {
 						yield { type: "text" as const, text: "opencode go response" };
 						opts.onMetrics?.({
-							model: "kimi-k2.6",
+							model: opts.model,
 							promptTokens: 7473,
 							outputTokens: 3123,
 							promptChars: 100,
@@ -96,8 +97,8 @@ describe("OpenCode Go session flow", () => {
 
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("opencode-go");
-		expect(body.model).toBe("kimi-k2.6");
-		expect(body.status).toBe("opencode-go | kimi-k2.6 | beta | 0 / 131072 | 0%");
+		expect(body.model).toBe("deepseek-v4-flash");
+		expect(body.status).toBe("opencode-go | deepseek-v4-flash | beta | 0 / 131072 | 0%");
 	});
 
 	test("websocket prompt uses the OpenCode Go runtime after provider switch", async () => {
@@ -132,12 +133,12 @@ describe("OpenCode Go session flow", () => {
 		expect(messages.some((m) => m.type === "token" && m.text === "opencode go response")).toBe(true);
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("opencode-go");
-		expect(done?.model).toBe("kimi-k2.6");
-		expect(done?.summary).toMatch(/^ \| kimi-k2\.6 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/);
+		expect(done?.model).toBe("deepseek-v4-flash");
+		expect(done?.summary).toMatch(/^ \| deepseek-v4-flash \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/);
 		const stored = getMessages(db, session.id);
-		expect(stored.at(-1)?.metadata?.turn_model).toBe("kimi-k2.6");
+		expect(stored.at(-1)?.metadata?.turn_model).toBe("deepseek-v4-flash");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| kimi-k2\.6 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| deepseek-v4-flash \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 });

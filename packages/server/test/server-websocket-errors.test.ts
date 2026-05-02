@@ -57,14 +57,14 @@ describe("server WebSocket error branches", () => {
 		expect(await response).toEqual({ type: "error", message: "Unknown message type: mystery" });
 	});
 
-	test("prompt without provider configuration returns an error", async () => {
-		const started = trackServer(startTestServer({ port: 0 }));
+	test("prompt without selected provider/model returns an error", async () => {
+		const started = trackServer(startTestServer({ port: 0, db: trackDb(createTestDb()) }));
 		const ws = trackSocket(await openWs(started.wsUrl));
 		const response = waitForWsMessage(ws, (message) => message.type === "error");
 
 		ws.send(JSON.stringify({ type: "prompt", text: "hello" }));
 
-		expect(await response).toEqual({ type: "error", message: "No provider configured" });
+		expect(await response).toEqual({ type: "error", message: "Provider or model not selected" });
 	});
 
 	test("cancel without an active prompt is a no-op and keeps the socket open", async () => {
@@ -84,6 +84,7 @@ describe("server WebSocket error branches", () => {
 			startTestServer({
 				port: 0,
 				db,
+				providerId: "github-copilot",
 				model: "test-model",
 				provider: {
 					id: "slow",

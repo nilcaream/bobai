@@ -20,6 +20,7 @@ export interface Project {
 	maxIterations?: number;
 	debug?: boolean;
 	dir: string;
+	configFilePath: string;
 	db: Database;
 	dbGuard: DbGuard;
 }
@@ -116,6 +117,7 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		maxIterations: config.maxIterations,
 		debug: config.debug,
 		dir: bobaiDir,
+		configFilePath: projectFile,
 		db,
 		dbGuard,
 	};

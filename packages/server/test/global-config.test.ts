@@ -16,22 +16,26 @@ describe("loadGlobalConfig", () => {
 	});
 
 	test("returns empty config when directory does not exist", () => {
-		const config = loadGlobalConfig(path.join(tmpDir, "nonexistent"));
-		expect(config).toEqual({ preferences: {} });
+		const missingDir = path.join(tmpDir, "nonexistent");
+		const config = loadGlobalConfig(missingDir);
+		expect(config).toEqual({ preferences: {}, filePath: path.join(missingDir, "bobai.json") });
 	});
 
 	test("reads bobai.json preferences", () => {
+		const filePath = path.join(tmpDir, "bobai.json");
 		fs.mkdirSync(tmpDir, { recursive: true });
-		fs.writeFileSync(path.join(tmpDir, "bobai.json"), JSON.stringify({ provider: "github-copilot", model: "gpt-5-mini" }));
+		fs.writeFileSync(filePath, JSON.stringify({ provider: "github-copilot", model: "gpt-5-mini" }));
 		const config = loadGlobalConfig(tmpDir);
 		expect(config.preferences.provider).toBe("github-copilot");
 		expect(config.preferences.model).toBe("gpt-5-mini");
+		expect(config.filePath).toBe(filePath);
 	});
 
 	test("returns empty preferences when files are missing", () => {
 		fs.mkdirSync(tmpDir, { recursive: true });
 		const config = loadGlobalConfig(tmpDir);
 		expect(config.preferences).toEqual({});
+		expect(config.filePath).toBe(path.join(tmpDir, "bobai.json"));
 	});
 
 	test("reads headers from bobai.json", () => {

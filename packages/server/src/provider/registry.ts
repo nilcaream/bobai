@@ -245,7 +245,7 @@ const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 
 const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 	id: "opencode-go",
-	defaultModel: "kimi-k2.6",
+	defaultModel: "deepseek-v4-flash",
 	auth: {
 		cliCommand: "bobai auth opencode-go",
 		missingAuthMessage: "OpenCode Go authentication not found. Please run: bobai auth opencode-go",
@@ -268,7 +268,7 @@ const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 
 const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 	id: "opencode-zen",
-	defaultModel: "claude-sonnet-4-6",
+	defaultModel: "minimax-m2.5-free",
 	auth: {
 		cliCommand: "bobai auth opencode-zen",
 		missingAuthMessage: "OpenCode Zen authentication not found. Please run: bobai auth opencode-zen",

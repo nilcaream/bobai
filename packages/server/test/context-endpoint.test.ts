@@ -119,7 +119,14 @@ describe("context endpoint", () => {
 				enabled: true,
 			},
 		]);
-		const started = startTestServer({ port: 0, db, projectRoot: import.meta.dir, configDir, model: "test-model" });
+		const started = startTestServer({
+			port: 0,
+			db,
+			projectRoot: import.meta.dir,
+			configDir,
+			providerId: "github-copilot",
+			model: "test-model",
+		});
 		try {
 			const session = createSession(db);
 			updateSessionModel(db, session.id, "test-model");

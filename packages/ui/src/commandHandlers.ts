@@ -279,12 +279,17 @@ export function handleGenericCommand(params: {
 	setTitle: (title: string | null) => void;
 	setStatus: (status: string) => void;
 	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	clearVolatileMessages: () => void;
 	currentProvider: string | null;
 	modelListProvider: string | null;
 	modelList: ModelListItem[] | null;
 	providerList: { index: number; id: string; runtimeSupported: boolean }[] | null;
 }): void {
 	const sid = params.getSessionId();
+	if (params.command === "model" && !params.currentProvider) {
+		params.addVolatileMessage("Select a provider before selecting a model", "error");
+		return;
+	}
 	const currentModelList =
 		params.command === "model" && params.modelListProvider === params.currentProvider ? params.modelList : null;
 	const resolvedModel =
@@ -322,24 +327,34 @@ export function handleGenericCommand(params: {
 		.then((res) => res.json())
 		.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string; provider?: string; model?: string }) => {
 			if (result.ok) {
+				params.clearVolatileMessages();
 				if (result.sessionId) {
 					params.setSessionId(result.sessionId);
 				}
 				if (result.provider) {
 					params.setProvider(result.provider);
 				}
+				const selectedModel =
+					result.model ??
+					(params.command === "model"
+						? (resolvedModel ?? (currentModelList ? resolveVisibleModel(currentModelList, submittedArgs) : undefined))?.id
+						: undefined);
 				if (result.model) {
 					params.setModel(result.model);
-				} else if (params.command === "model") {
-					const selected =
-						resolvedModel ?? (currentModelList ? resolveVisibleModel(currentModelList, submittedArgs) : undefined);
-					if (selected) params.setModel(selected.id);
+				} else if (params.command === "model" && selectedModel) {
+					params.setModel(selectedModel);
 				}
 				if (params.command === "title") {
 					params.setTitle(params.args);
 				}
 				if (result.status) {
 					params.setStatus(result.status);
+				}
+				if ((params.command === "provider" || params.command === "model") && selectedModel) {
+					const effectiveProvider = result.provider ?? params.currentProvider;
+					if (effectiveProvider) {
+						params.addVolatileMessage(`Using ${effectiveProvider} ${selectedModel} model`, "info");
+					}
 				}
 			} else {
 				params.addVolatileMessage(result.error ?? "Command failed", "error");

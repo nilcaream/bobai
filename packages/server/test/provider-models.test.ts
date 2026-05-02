@@ -129,27 +129,27 @@ describe("provider model facade", () => {
 
 	test("loads curated opencode-go model metadata through the provider facade", () => {
 		const models = loadProviderModelsConfig("opencode-go");
-		expect(models.find((model) => model.id === "kimi-k2.6")).toMatchObject({
+		expect(models.find((model) => model.id === "deepseek-v4-flash")).toMatchObject({
 			contextWindow: 131072,
 			maxOutput: expect.any(Number),
 			label: "beta",
 		});
 		expect(buildSortedProviderModelList("opencode-go")).toContainEqual({
-			id: "kimi-k2.6",
+			id: "deepseek-v4-flash",
 			cost: "beta",
 			contextWindow: 131072,
 		});
-		expect(formatProviderModelDisplay("opencode-go", "kimi-k2.6", 12800)).toBe(
-			"opencode-go | kimi-k2.6 | beta | 12800 / 131072 | 10%",
+		expect(formatProviderModelDisplay("opencode-go", "deepseek-v4-flash", 12800)).toBe(
+			"opencode-go | deepseek-v4-flash | beta | 12800 / 131072 | 10%",
 		);
 	});
 
 	test("loads curated opencode-zen model metadata through the provider facade", () => {
 		const models = loadProviderModelsConfig("opencode-zen");
-		expect(models.find((model) => model.id === "claude-sonnet-4-6")).toMatchObject({
-			contextWindow: 200000,
+		expect(models.find((model) => model.id === "minimax-m2.5-free")).toMatchObject({
+			contextWindow: 131072,
 			maxOutput: expect.any(Number),
-			label: "beta",
+			label: "free",
 		});
 		expect(models.find((model) => model.id === "gpt-5.4")).toMatchObject({
 			contextWindow: 272000,
@@ -157,17 +157,17 @@ describe("provider model facade", () => {
 			label: "beta",
 		});
 		expect(buildSortedProviderModelList("opencode-zen")).toContainEqual({
-			id: "claude-sonnet-4-6",
-			cost: "beta",
-			contextWindow: 200000,
+			id: "minimax-m2.5-free",
+			cost: "free",
+			contextWindow: 131072,
 		});
 		expect(buildSortedProviderModelList("opencode-zen")).toContainEqual({
 			id: "gpt-5.4",
 			cost: "beta",
 			contextWindow: 272000,
 		});
-		expect(formatProviderModelDisplay("opencode-zen", "claude-sonnet-4-6", 12800)).toBe(
-			"opencode-zen | claude-sonnet-4-6 | beta | 12800 / 200000 | 6%",
+		expect(formatProviderModelDisplay("opencode-zen", "minimax-m2.5-free", 12800)).toBe(
+			"opencode-zen | minimax-m2.5-free | free | 12800 / 131072 | 10%",
 		);
 		expect(formatProviderModelDisplay("opencode-zen", "gpt-5.4", 12800)).toBe(
 			"opencode-zen | gpt-5.4 | beta | 12800 / 272000 | 5%",
