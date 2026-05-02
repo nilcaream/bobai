@@ -165,7 +165,10 @@ export function groupParts(parts: MessagePart[]): Panel[] {
 }
 
 export function formatMsgSummary(msg: { summary?: string; model?: string }): string {
-	return msg.summary ?? (msg.model ? ` | ${msg.model}` : "");
+	if (msg.summary) {
+		return msg.summary.replace(/context: ([+-]\d+)/g, "context: Δ$1");
+	}
+	return msg.model ? ` | ${msg.model}` : "";
 }
 
 export function truncateContent(text: string, lineLimit: number): string {

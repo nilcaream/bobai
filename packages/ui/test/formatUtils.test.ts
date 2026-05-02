@@ -171,6 +171,18 @@ describe("formatMsgSummary", () => {
 		expect(formatMsgSummary({ summary: "quick summary" })).toBe("quick summary");
 	});
 
+	test("message with context delta in summary → adds delta marker for display", () => {
+		expect(formatMsgSummary({ summary: " | claude-haiku-4-5 | in: 9410 | out: 22 | context: +366 | 2.01s" })).toBe(
+			" | claude-haiku-4-5 | in: 9410 | out: 22 | context: Δ+366 | 2.01s",
+		);
+	});
+
+	test("message with negative context delta in summary → adds delta marker for display", () => {
+		expect(formatMsgSummary({ summary: " | claude-haiku-4-5 | in: 500 | out: 20 | context: -120 | 2.01s" })).toBe(
+			" | claude-haiku-4-5 | in: 500 | out: 20 | context: Δ-120 | 2.01s",
+		);
+	});
+
 	test("message with model only → returns ' | model'", () => {
 		expect(formatMsgSummary({ model: "gpt-4" })).toBe(" | gpt-4");
 	});
