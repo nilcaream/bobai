@@ -82,6 +82,10 @@ describe("handleNewCommand", () => {
 			setStagedSkills: mock(() => {}),
 			setStatus: mock(() => {}),
 			defaultStatus: "idle",
+			setProvider: mock(() => {}),
+			defaultProvider: "github-copilot" as string | null,
+			setModel: mock(() => {}),
+			defaultModel: "claude-opus-4.6" as string | null,
 			setView: mock(() => {}),
 			setTitle: mock(() => {}),
 			pendingNewTitle: { current: null } as { current: string | null },
@@ -91,13 +95,15 @@ describe("handleNewCommand", () => {
 		};
 	}
 
-	test("calls newChat, clears staged skills, resets status, sets view to chat", () => {
+	test("calls newChat, clears staged skills, resets backend defaults, and sets view to chat", () => {
 		const params = makeParams();
 		handleNewCommand(params);
 
 		expect(params.newChat).toHaveBeenCalledTimes(1);
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
 		expect(params.setStatus).toHaveBeenCalledWith("idle");
+		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
+		expect(params.setModel).toHaveBeenCalledWith("claude-opus-4.6");
 		// setView is called with an updater function
 		expect(params.setView).toHaveBeenCalledTimes(1);
 		const updater = extractUpdater<ViewUpdater>(params.setView);
@@ -622,6 +628,8 @@ describe("handleGenericCommand", () => {
 			setTitle: mock(() => {}),
 			setStatus: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
+			currentProvider: "github-copilot" as string | null,
+			modelListProvider: "github-copilot" as string | null,
 			modelList: null as { index: number; id: string; cost: string; contextWindow: number }[] | null,
 			providerList: null as { index: number; id: string; runtimeSupported: boolean }[] | null,
 			...overrides,
@@ -651,6 +659,23 @@ describe("handleGenericCommand", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ command: "model", args: "2", sessionId: "sid-123" }),
 		});
+	});
+
+	test("model submit skips stale model list from the previous provider and posts the numeric index unchanged", () => {
+		const params = makeParams({
+			command: "model",
+			args: "16",
+			currentProvider: "openrouter",
+			modelListProvider: "github-copilot",
+			modelList: [makeModel(1, "claude-3", "$0.02", 200000), makeModel(2, "gpt-5.4", "$0.01", 256000)],
+		});
+		handleGenericCommand(params);
+		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ command: "model", args: "16", sessionId: "sid-123" }),
+		});
+		expect(params.addVolatileMessage).not.toHaveBeenCalled();
 	});
 
 	test("on success with sessionId, calls setSessionId", async () => {

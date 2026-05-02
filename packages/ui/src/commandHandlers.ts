@@ -53,6 +53,10 @@ export function handleNewCommand(params: {
 	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
 	setStatus: (status: string) => void;
 	defaultStatus: string;
+	setProvider: (provider: string | null) => void;
+	defaultProvider: string | null;
+	setModel: (model: string | null) => void;
+	defaultModel: string | null;
 	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
 	setTitle: (title: string | null) => void;
 	pendingNewTitle: React.MutableRefObject<string | null>;
@@ -62,6 +66,8 @@ export function handleNewCommand(params: {
 	params.newChat();
 	params.setStagedSkills([]);
 	params.setStatus(params.defaultStatus);
+	params.setProvider(params.defaultProvider);
+	params.setModel(params.defaultModel);
 	params.setView((prev) => ({ ...prev, mode: "chat" }));
 	if (params.newTitle) {
 		params.setTitle(params.newTitle);
@@ -273,12 +279,16 @@ export function handleGenericCommand(params: {
 	setTitle: (title: string | null) => void;
 	setStatus: (status: string) => void;
 	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	currentProvider: string | null;
+	modelListProvider: string | null;
 	modelList: ModelListItem[] | null;
 	providerList: { index: number; id: string; runtimeSupported: boolean }[] | null;
 }): void {
 	const sid = params.getSessionId();
+	const currentModelList =
+		params.command === "model" && params.modelListProvider === params.currentProvider ? params.modelList : null;
 	const resolvedModel =
-		params.command === "model" && params.modelList ? resolveVisibleModel(params.modelList, params.args) : undefined;
+		params.command === "model" && currentModelList ? resolveVisibleModel(currentModelList, params.args) : undefined;
 	const resolvedProvider =
 		params.command === "provider" && params.providerList ? resolveVisibleProvider(params.providerList, params.args) : undefined;
 	const submittedArgs =
@@ -290,7 +300,7 @@ export function handleGenericCommand(params: {
 	const firstToken = params.args.trim().split(/\s+/)[0] ?? "";
 	const isNumericModelArg = params.command === "model" && /^\d+$/.test(firstToken);
 	const isNumericProviderArg = params.command === "provider" && /^\d+$/.test(firstToken);
-	if (params.command === "model" && params.modelList && params.args.trim() && !resolvedModel && !isNumericModelArg) {
+	if (params.command === "model" && currentModelList && params.args.trim() && !resolvedModel && !isNumericModelArg) {
 		params.addVolatileMessage(`No model matching "${params.args}"`, "error");
 		return;
 	}
@@ -322,7 +332,7 @@ export function handleGenericCommand(params: {
 					params.setModel(result.model);
 				} else if (params.command === "model") {
 					const selected =
-						resolvedModel ?? (params.modelList ? resolveVisibleModel(params.modelList, submittedArgs) : undefined);
+						resolvedModel ?? (currentModelList ? resolveVisibleModel(currentModelList, submittedArgs) : undefined);
 					if (selected) params.setModel(selected.id);
 				}
 				if (params.command === "title") {

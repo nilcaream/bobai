@@ -40,6 +40,7 @@ export function App() {
 		newChat,
 		provider,
 		setProvider,
+		model,
 		setModel,
 		title,
 		setTitle,
@@ -68,6 +69,7 @@ export function App() {
 	} = useWebSocket();
 	const [input, setInput] = useState("");
 	const [modelList, setModelList] = useState<ModelListItem[] | null>(null);
+	const [modelListProvider, setModelListProvider] = useState<string | null>(null);
 	const [providerList, setProviderList] = useState<ProviderListItem[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
@@ -173,15 +175,19 @@ export function App() {
 	// Fetch models for the active provider — needed for status bar and dot panel
 	useEffect(() => {
 		if (!provider) return;
+		setModelListProvider(null);
 		fetch(`/bobai/models?provider=${encodeURIComponent(provider)}`)
 			.then((res) => res.json())
 			.then((data: { models: ModelListItem[]; defaultModel: string; defaultStatus: string }) => {
 				setModelList(data.models);
+				setModelListProvider(provider);
 				defaultStatus.current = data.defaultStatus;
 				setModel((prev) => prev ?? data.defaultModel);
 				setStatus((prev) => prev || data.defaultStatus);
 			})
-			.catch(() => {});
+			.catch(() => {
+				setModelListProvider(null);
+			});
 	}, [provider, setModel, setStatus]);
 
 	// Fetch skills eagerly on mount — needed for slash command panel
@@ -257,6 +263,10 @@ export function App() {
 					setStagedSkills,
 					setStatus,
 					defaultStatus: defaultStatus.current,
+					setProvider,
+					defaultProvider: provider,
+					setModel,
+					defaultModel: model,
 					setView,
 					setTitle,
 					pendingNewTitle,
@@ -305,6 +315,8 @@ export function App() {
 					setTitle,
 					setStatus,
 					addVolatileMessage,
+					currentProvider: provider,
+					modelListProvider,
 					modelList,
 					providerList,
 				});
@@ -333,6 +345,10 @@ export function App() {
 					setStagedSkills,
 					setStatus,
 					defaultStatus: defaultStatus.current,
+					setProvider,
+					defaultProvider: provider,
+					setModel,
+					defaultModel: model,
 					setView,
 					setTitle,
 					pendingNewTitle,
