@@ -650,6 +650,56 @@ describe("reconstructMessages", () => {
 		}
 	});
 
+	test("skips whitespace-only assistant content before tool calls", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "use a tool",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "  \n\t  ",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "skill", arguments: '{"name":"x"}' } }],
+				},
+			},
+			{
+				id: "4",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "loaded skill",
+				createdAt: "2026-03-06T01:00:02Z",
+				sortOrder: 3,
+				metadata: { tool_call_id: "call_1" },
+			},
+		];
+		const result = reconstructMessages(stored);
+		expect(result).toHaveLength(2);
+		if (result[1]?.role === "assistant") {
+			expect(result[1].parts).toHaveLength(2);
+			expect(result[1].parts[0]?.type).toBe("tool_call");
+			expect(result[1].parts[1]?.type).toBe("tool_result");
+		}
+	});
+
 	test("places text before tool_calls when assistant message has both", () => {
 		// During streaming, the provider emits text tokens first, then tool_call events.
 		// Reconstruction must match that order: [text, tool_call, tool_result].

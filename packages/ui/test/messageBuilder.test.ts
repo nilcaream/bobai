@@ -43,6 +43,23 @@ describe("appendPart", () => {
 });
 
 describe("appendText", () => {
+	test("whitespace-only token on empty message list → does not create assistant message", () => {
+		const result = appendText([], " \n\t ");
+		expect(result).toEqual([]);
+	});
+
+	test("whitespace-only token after tool_call → does not create text part", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "tool_call", id: "tc1", content: "▸ bash ls" }] }];
+		const result = appendText(prev, "\n  ");
+		expect(result).toEqual(prev);
+	});
+
+	test("whitespace-only token after existing text part → is ignored", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "text", content: "Hello" }] }];
+		const result = appendText(prev, "\n\t");
+		expect(result).toEqual(prev);
+	});
+
 	test("empty message list → creates assistant message with text part", () => {
 		const result = appendText([], "hello");
 		expect(result).toHaveLength(1);

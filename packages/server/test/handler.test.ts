@@ -685,6 +685,43 @@ describe("handlePrompt", () => {
 		expect(errors[0].message).toContain("500");
 	});
 
+	test("stores whitespace-only assistant content as empty for tool-call turns", async () => {
+		let callCount = 0;
+		const toolProvider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					yield { type: "text", text: "\n \t" };
+					yield { type: "tool_call_start", index: 0, id: "call_1", name: "list_directory" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"path":"."}' };
+					yield { type: "finish", reason: "tool_calls" };
+				} else {
+					yield { type: "text", text: "I see the files" };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+
+		const ws = mockWs();
+		await handlePrompt({
+			ws,
+			db,
+			provider: toolProvider,
+			model: "test-model",
+			text: "what files?",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const sessionId = ws.messages().find((m: { type: string }) => m.type === "done").sessionId;
+		const stored = getMessages(db, sessionId);
+		expect(stored[1]?.role).toBe("assistant");
+		expect(stored[1]?.content).toBe("");
+		expect(stored[1]?.metadata?.tool_calls).toBeTruthy();
+	});
+
 	test("executes tool calls and persists tool messages", async () => {
 		// Provider that requests a tool call then responds with text
 		let callCount = 0;

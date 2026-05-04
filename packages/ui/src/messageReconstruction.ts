@@ -38,10 +38,11 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 			const toolCalls = msg.metadata?.tool_calls as
 				| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 				| undefined;
+			const hasVisibleContent = msg.content.trim().length > 0;
 
 			// Text before tool_calls — matches streaming order where the provider
 			// emits text tokens first, then fires tool_call events.
-			if (msg.content) {
+			if (hasVisibleContent) {
 				newParts.push({ type: "text", content: msg.content });
 			}
 

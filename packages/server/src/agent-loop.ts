@@ -190,9 +190,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			});
 		}
 
+		const normalizedToolCallContent = textContent.trim().length > 0 ? textContent : null;
 		const assistantMsg: AssistantMessage = {
 			role: "assistant",
-			content: textContent || null,
+			content: normalizedToolCallContent,
 			tool_calls: toolCallContents,
 		};
 		conversation.push(assistantMsg);

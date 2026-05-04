@@ -12,6 +12,10 @@ export function appendPart(prev: Message[], part: MessagePart): Message[] {
 
 /** Append text to the last text part of the last assistant message, or create one. */
 export function appendText(prev: Message[], text: string): Message[] {
+	if (text.trim().length === 0) {
+		return prev;
+	}
+
 	const last = prev.at(-1);
 	if (last?.role === "assistant" && last.parts.length > 0) {
 		const lastPart = last.parts.at(-1);

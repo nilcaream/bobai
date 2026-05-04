@@ -54,8 +54,9 @@ function renderMessagePanels(
 			const toolCalls = msg.metadata?.tool_calls as
 				| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 				| undefined;
+			const hasVisibleContent = msg.content.trim().length > 0;
 
-			if (msg.content) {
+			if (hasVisibleContent) {
 				const indexPrefix = !isRaw && msg.messageIndex !== undefined ? `#${msg.messageIndex} ` : "";
 				elements.push(
 					<div key={key++} className="panel panel--context">

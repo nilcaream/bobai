@@ -61,6 +61,20 @@ describe("ContextMessageList — context mode", () => {
 		expect(bodies[0]?.textContent).toBe("Sure, I can help.");
 	});
 
+	test("does not render whitespace-only assistant text panel in context mode", () => {
+		const msgs: ContextMessage[] = [
+			mkMsg("assistant", " \n\t ", {
+				tool_calls: [{ id: "call_123", type: "function", function: { name: "skill", arguments: '{"name":"x"}' } }],
+			}),
+		];
+		const { container } = render(
+			<ContextMessageList contextMessages={msgs} compactionData={noopCompaction} viewMode="context" lineLimit={0} />,
+		);
+		const headers = container.querySelectorAll(".context-header");
+		expect(headers).toHaveLength(1);
+		expect(headers[0]?.textContent).toBe("assistant | call_123");
+	});
+
 	test("renders assistant tool_calls with 'assistant | {id}' header", () => {
 		const msgs: ContextMessage[] = [
 			mkMsg("assistant", "", {
@@ -148,6 +162,24 @@ describe("ContextMessageList — compaction mode", () => {
 		const headers = container.querySelectorAll(".context-header");
 		expect(headers).toHaveLength(1);
 		expect(headers[0]?.textContent).toBe("user | excluded");
+	});
+
+	test("does not render whitespace-only assistant text panel in compaction mode", () => {
+		const data = {
+			messages: [
+				mkMsg("assistant", " \n\t ", {
+					tool_calls: [{ id: "call_x", type: "function", function: { name: "bash", arguments: "{}" } }],
+				}),
+			],
+			stats: null,
+			details: null,
+		};
+		const { container } = render(
+			<ContextMessageList contextMessages={noopContext} compactionData={data} viewMode="compaction" lineLimit={0} />,
+		);
+		const headers = container.querySelectorAll(".context-header");
+		expect(headers).toHaveLength(1);
+		expect(headers[0]?.textContent).toBe("assistant | call_x | excluded");
 	});
 
 	test("renders tool message with formatToolHeader output", () => {
