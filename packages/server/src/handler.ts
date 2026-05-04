@@ -16,7 +16,7 @@ import { repairMessageOrdering } from "./message-repair";
 import { getProjectInfo } from "./project-info";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
-import { getDefaultSessionBackend } from "./provider/backend-policy";
+import { getApiFamilyForModel, getDefaultSessionBackend } from "./provider/backend-policy";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import { getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
@@ -77,6 +77,16 @@ export interface PromptRequest {
 	dbGuard?: DbGuard;
 }
 
+function resolveConfiguredSessionBackend(defaultProviderId: ProviderId | null, defaultModel: string | null) {
+	if (!defaultProviderId) return null;
+	if (!defaultModel) return getDefaultSessionBackend(defaultProviderId);
+	return {
+		provider: defaultProviderId,
+		model: defaultModel,
+		apiFamily: getApiFamilyForModel(defaultProviderId, defaultModel),
+	};
+}
+
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
 	if (event.type === "text") {
 		send(ws, { type: "token", text: event.text, sessionId: event.sessionId });
@@ -133,7 +143,7 @@ export async function handlePrompt(req: PromptRequest) {
 			currentSessionId = sessionId;
 			sessionObj = session;
 		} else {
-			const backend = defaultProviderId ? getDefaultSessionBackend(defaultProviderId) : null;
+			const backend = resolveConfiguredSessionBackend(defaultProviderId, model ?? null);
 			const session = createSession(
 				db,
 				backend

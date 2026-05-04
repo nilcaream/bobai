@@ -42,7 +42,7 @@ export function handleCommand(db: Database, req: CommandRequest, options: Comman
 
 	// Create a session on the fly if none exists yet
 	if (!sessionId) {
-		const backend = defaultProviderId ? getDefaultSessionBackend(defaultProviderId) : null;
+		const backend = resolveConfiguredSessionBackend(defaultProviderId, defaultModel);
 		const session = createSession(
 			db,
 			backend
@@ -93,6 +93,19 @@ function withSessionId(result: CommandResult, sessionId: string): CommandResult 
 		return { ...result, sessionId };
 	}
 	return result;
+}
+
+function resolveConfiguredSessionBackend(
+	defaultProviderId: ProviderId | null,
+	defaultModel: string | null,
+): SessionBackendState | null {
+	if (!defaultProviderId) return null;
+	if (!defaultModel) return getDefaultSessionBackend(defaultProviderId);
+	return {
+		provider: defaultProviderId,
+		model: defaultModel,
+		apiFamily: getApiFamilyForModel(defaultProviderId, defaultModel),
+	};
 }
 
 function resolveSessionBackend(

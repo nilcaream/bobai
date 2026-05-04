@@ -150,6 +150,20 @@ describe("handleCommand", () => {
 		}
 	});
 
+	test("command-created sessions start from the configured default model, not the provider descriptor default", () => {
+		const result = handleCommand(
+			db,
+			{ command: "title", args: "Configured" },
+			{ defaultProviderId: "github-copilot", defaultModel: "gpt-5.4", configDir: tmpDir },
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			const session = getSession(db, result.sessionId ?? "");
+			expect(session?.provider).toBe("github-copilot");
+			expect(session?.model).toBe("gpt-5.4");
+		}
+	});
+
 	test("model command uses provider-aware options and the same config-backed sorted order as /bobai/models", () => {
 		const configModels = [
 			{ id: "claude-haiku-4.5", contextWindow: 1000 },
