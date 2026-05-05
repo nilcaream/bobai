@@ -3,9 +3,9 @@ import { createEventRouter } from "./eventRouter";
 import { formatTimestamp } from "./format";
 import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useSubagentPeek } from "./hooks/useSubagentPeek";
-import { appendPart, appendText } from "./messageBuilder";
-import type { Message, MessagePart, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo, VolatileMessage } from "./protocol";
+import type { Message, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo, VolatileMessage } from "./protocol";
 import { buildSessionUrl } from "./urlUtils";
+import { applyStreamingEvent, applySubagentLifecycle, stampStreamingCompletion } from "./websocketEventState";
 
 const SESSION_LOCKED_MESSAGE = "Session is active in another tab";
 
@@ -128,27 +128,9 @@ export function useWebSocket() {
 			const result = eventRouter.current.route(msg);
 
 			if (result.target === "lifecycle") {
-				if (msg.type === "subagent_start") {
-					setSubagents((prev) => [
-						...prev,
-						{ sessionId: msg.sessionId, title: msg.title, status: "running", toolCallId: msg.toolCallId },
-					]);
-				}
-				if (msg.type === "subagent_done") {
-					setSubagents((prev) => prev.map((s) => (s.sessionId === msg.sessionId ? { ...s, status: "done" } : s)));
-					// If peeking at this child, stamp the last assistant message with completion info
-					if (msg.sessionId === viewingSubagentIdRef.current) {
-						setMessages((prev) => {
-							const last = prev.at(-1);
-							if (last?.role === "assistant") {
-								return [
-									...prev.slice(0, -1),
-									{ ...last, timestamp: formatTimestamp(), model: msg.model, summary: msg.summary },
-								];
-							}
-							return prev;
-						});
-					}
+				setSubagents((prev) => applySubagentLifecycle(prev, msg));
+				if (msg.type === "subagent_done" && msg.sessionId === viewingSubagentIdRef.current) {
+					setMessages((prev) => stampStreamingCompletion(prev, msg, formatTimestamp()));
 				}
 				return;
 			}
@@ -157,25 +139,10 @@ export function useWebSocket() {
 				// Already buffered by router.
 				// If peeking at this child, also update displayed messages.
 				if (result.sessionId === viewingSubagentIdRef.current) {
-					if (msg.type === "prompt_echo") {
-						const userMsg: Message = { role: "user", text: msg.text, timestamp: formatTimestamp() };
-						setMessages((prev) => [...prev, userMsg]);
-					} else if (msg.type === "token") {
-						setMessages((prev) => appendText(prev, msg.text));
-					} else if (msg.type === "tool_call") {
-						setMessages((prev) => appendPart(prev, { type: "tool_call", id: msg.id, content: msg.output }));
-					} else if (msg.type === "tool_result") {
-						setMessages((prev) =>
-							appendPart(prev, {
-								type: "tool_result",
-								id: msg.id,
-								content: msg.output,
-								mergeable: msg.mergeable,
-								summary: msg.summary,
-							}),
-						);
-					} else if (msg.type === "status") {
+					if (msg.type === "status") {
 						setStatus(msg.text);
+					} else {
+						setMessages((prev) => applyStreamingEvent(prev, msg, formatTimestamp()));
 					}
 				}
 				return;
@@ -184,35 +151,17 @@ export function useWebSocket() {
 			// result.target === "parent" — handle token, tool_call, tool_result, done, error, status, prompt_echo
 			const isPeeking = viewingSubagentIdRef.current !== null;
 
-			if (msg.type === "token") {
+			if (
+				msg.type === "token" ||
+				msg.type === "tool_call" ||
+				msg.type === "tool_result" ||
+				msg.type === "error" ||
+				msg.type === "prompt_echo"
+			) {
 				if (isPeeking) {
-					parentMessagesRef.current = appendText(parentMessagesRef.current, msg.text);
+					parentMessagesRef.current = applyStreamingEvent(parentMessagesRef.current, msg, formatTimestamp());
 				} else {
-					setMessages((prev) => appendText(prev, msg.text));
-				}
-			}
-
-			if (msg.type === "tool_call") {
-				const part: MessagePart = { type: "tool_call", id: msg.id, content: msg.output };
-				if (isPeeking) {
-					parentMessagesRef.current = appendPart(parentMessagesRef.current, part);
-				} else {
-					setMessages((prev) => appendPart(prev, part));
-				}
-			}
-
-			if (msg.type === "tool_result") {
-				const part: MessagePart = {
-					type: "tool_result",
-					id: msg.id,
-					content: msg.output,
-					mergeable: msg.mergeable,
-					summary: msg.summary,
-				};
-				if (isPeeking) {
-					parentMessagesRef.current = appendPart(parentMessagesRef.current, part);
-				} else {
-					setMessages((prev) => appendPart(prev, part));
+					setMessages((prev) => applyStreamingEvent(prev, msg, formatTimestamp()));
 				}
 			}
 
@@ -224,34 +173,12 @@ export function useWebSocket() {
 				setParentId(null);
 				setParentTitle(null);
 				if (isPeeking) {
-					const last = parentMessagesRef.current.at(-1);
-					if (last?.role === "assistant") {
-						parentMessagesRef.current = [
-							...parentMessagesRef.current.slice(0, -1),
-							{ ...last, timestamp: formatTimestamp(), model: msg.model, summary: msg.summary },
-						];
-					}
+					parentMessagesRef.current = stampStreamingCompletion(parentMessagesRef.current, msg, formatTimestamp());
 				} else {
-					setMessages((prev) => {
-						const last = prev.at(-1);
-						if (last?.role === "assistant") {
-							return [...prev.slice(0, -1), { ...last, timestamp: formatTimestamp(), model: msg.model, summary: msg.summary }];
-						}
-						return prev;
-					});
+					setMessages((prev) => stampStreamingCompletion(prev, msg, formatTimestamp()));
 				}
 				setIsStreaming(false);
 				fetchProjectInfo();
-			}
-
-			if (msg.type === "error") {
-				const part: MessagePart = { type: "text", content: `Error: ${msg.message}` };
-				if (isPeeking) {
-					parentMessagesRef.current = appendPart(parentMessagesRef.current, part);
-				} else {
-					setMessages((prev) => appendPart(prev, part));
-				}
-				setIsStreaming(false);
 			}
 
 			if (msg.type === "status") {
@@ -262,13 +189,8 @@ export function useWebSocket() {
 				}
 			}
 
-			if (msg.type === "prompt_echo") {
-				const userMsg: Message = { role: "user", text: msg.text, timestamp: formatTimestamp() };
-				if (isPeeking) {
-					parentMessagesRef.current = [...parentMessagesRef.current, userMsg];
-				} else {
-					setMessages((prev) => [...prev, userMsg]);
-				}
+			if (msg.type === "error") {
+				setIsStreaming(false);
 			}
 		};
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { createEventRouter } from "../eventRouter";
-import { reconstructMessages, type StoredMessage } from "../messageReconstruction";
+import type { StoredMessage } from "../messageReconstruction";
 import type { Message } from "../protocol";
-import { replayBufferToMessages } from "../replayBuffer";
+import { buildDbPeekState, buildExitPeekState, buildLivePeekState } from "../subagentPeekState";
 
 export function useSubagentPeek(
 	messagesRef: React.MutableRefObject<Message[]>,
@@ -24,30 +24,35 @@ export function useSubagentPeek(
 
 	const exitSubagentPeek = useCallback(() => {
 		if (!viewingSubagentIdRef.current) return;
-		setViewingSubagentId(null);
-		setViewingSubagentTitle(null);
-		setMessages(parentMessagesRef.current);
-		setStatus(parentStatusRef.current);
-		parentMessagesRef.current = [];
-		parentStatusRef.current = "";
+		const nextState = buildExitPeekState({
+			storedParentMessages: parentMessagesRef.current,
+			storedParentStatus: parentStatusRef.current,
+		});
+		setViewingSubagentId(nextState.viewingSubagentId);
+		setViewingSubagentTitle(nextState.viewingSubagentTitle);
+		setMessages(nextState.displayedMessages);
+		setStatus(nextState.displayedStatus);
+		parentMessagesRef.current = nextState.storedParentMessages;
+		parentStatusRef.current = nextState.storedParentStatus;
 	}, [setMessages, setStatus]);
 
 	const peekSubagent = useCallback(
 		(childSessionId: string) => {
 			if (viewingSubagentIdRef.current === childSessionId) return;
-			if (!viewingSubagentIdRef.current) {
-				parentMessagesRef.current = messagesRef.current;
-				parentStatusRef.current = status;
-			}
-			setViewingSubagentId(childSessionId);
-			setViewingSubagentTitle(null); // live peeks fall back to subagents array lookup
-			const bufferedEvents = eventRouter.current.getBuffer(childSessionId);
-			const childMessages = replayBufferToMessages(bufferedEvents);
-			setMessages(childMessages);
-			const lastStatusEvent = bufferedEvents.findLast((e) => e.type === "status");
-			if (lastStatusEvent && "text" in lastStatusEvent) {
-				setStatus((lastStatusEvent as { type: "status"; text: string }).text);
-			}
+			const nextState = buildLivePeekState({
+				childSessionId,
+				currentMessages: messagesRef.current,
+				currentStatus: status,
+				storedParentMessages: parentMessagesRef.current,
+				storedParentStatus: parentStatusRef.current,
+				bufferedEvents: eventRouter.current.getBuffer(childSessionId),
+			});
+			setViewingSubagentId(nextState.viewingSubagentId);
+			setViewingSubagentTitle(nextState.viewingSubagentTitle); // live peeks fall back to subagents array lookup
+			setMessages(nextState.displayedMessages);
+			setStatus(nextState.displayedStatus);
+			parentMessagesRef.current = nextState.storedParentMessages;
+			parentStatusRef.current = nextState.storedParentStatus;
 		},
 		[status, messagesRef, eventRouter, setMessages, setStatus],
 	);
@@ -63,16 +68,20 @@ export function useSubagentPeek(
 					messages: StoredMessage[];
 					status: string | null;
 				};
-				if (!viewingSubagentIdRef.current) {
-					parentMessagesRef.current = messagesRef.current;
-					parentStatusRef.current = status;
-				}
-				setViewingSubagentId(childSessionId);
-				setViewingSubagentTitle(data.session.title);
-				setMessages(reconstructMessages(data.messages));
-				if (data.status) {
-					setStatus(data.status);
-				}
+				const nextState = buildDbPeekState({
+					childSessionId,
+					currentMessages: messagesRef.current,
+					currentStatus: status,
+					storedParentMessages: parentMessagesRef.current,
+					storedParentStatus: parentStatusRef.current,
+					data,
+				});
+				setViewingSubagentId(nextState.viewingSubagentId);
+				setViewingSubagentTitle(nextState.viewingSubagentTitle);
+				setMessages(nextState.displayedMessages);
+				setStatus(nextState.displayedStatus);
+				parentMessagesRef.current = nextState.storedParentMessages;
+				parentStatusRef.current = nextState.storedParentStatus;
 			} catch {
 				// fetch failed — ignore
 			}

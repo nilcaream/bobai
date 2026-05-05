@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import type { createEventRouter } from "../eventRouter";
-import { reconstructMessages, type StoredMessage } from "../messageReconstruction";
+import type { StoredMessage } from "../messageReconstruction";
 import type { Message, SubagentInfo } from "../protocol";
+import { applyLoadedSessionState, createLockedSessionState } from "../sessionLoaderState";
 import { buildSessionUrl } from "../urlUtils";
 
 interface UseSessionLoaderOptions {
@@ -68,10 +69,11 @@ export function useSessionLoader({
 					const ownershipData = await ownershipRes.json();
 					if (ownershipData.owned) {
 						// Session is owned by another tab — go straight to locked state
-						sessionId.current = targetId;
-						setSessionLocked(true);
-						addVolatileMessage("Session is active in another tab", "error");
-						setMessages([]);
+						const lockedState = createLockedSessionState(targetId);
+						sessionId.current = lockedState.sessionId;
+						setSessionLocked(lockedState.sessionLocked);
+						addVolatileMessage(lockedState.volatileMessage.text, lockedState.volatileMessage.kind);
+						setMessages(lockedState.messages);
 						if (!options?.skipUrlUpdate) {
 							history.pushState(null, "", buildSessionUrl(targetId));
 						}
@@ -91,24 +93,25 @@ export function useSessionLoader({
 					messages: StoredMessage[];
 					status: string | null;
 				};
-				sessionId.current = data.session.id;
-				setTitle(data.session.title);
-				setProvider(data.session.provider);
-				setModel(data.session.model);
-				setParentId(data.session.parentId);
-				setSubagents([]);
-				setStatus(data.status ?? "");
+				const loadedState = applyLoadedSessionState(data);
+				sessionId.current = loadedState.sessionId;
+				setTitle(loadedState.title);
+				setProvider(loadedState.provider);
+				setModel(loadedState.model);
+				setParentId(loadedState.parentId);
+				setSubagents(loadedState.subagents);
+				setStatus(loadedState.status);
 				// Reset autoscroll so the loaded session starts at the bottom,
 				// even if the user was scrolled up in the previous session.
 				autoScrollRef.current = true;
-				setMessages(reconstructMessages(data.messages));
+				setMessages(loadedState.messages);
 				clearVolatileMessages();
 
 				if (!options?.skipUrlUpdate) {
-					history.pushState(null, "", buildSessionUrl(data.session.id));
+					history.pushState(null, "", buildSessionUrl(loadedState.sessionId));
 				}
 
-				sendSubscribe(data.session.id);
+				sendSubscribe(loadedState.sessionId);
 
 				// Fetch parent title for subagent status bar
 				if (data.session.parentId) {

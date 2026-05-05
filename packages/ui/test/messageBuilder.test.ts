@@ -54,10 +54,16 @@ describe("appendText", () => {
 		expect(result).toEqual(prev);
 	});
 
-	test("whitespace-only token after existing text part → is ignored", () => {
-		const prev: Message[] = [{ role: "assistant", parts: [{ type: "text", content: "Hello" }] }];
-		const result = appendText(prev, "\n\t");
-		expect(result).toEqual(prev);
+	test("whitespace-only token after existing text part → is preserved because it can carry markdown structure", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "text", content: "What I implemented" }] }];
+		const withSpacing = appendText(prev, "\n\n");
+		const result = appendText(withSpacing, "#### New unified catalog\nI added:");
+		expect(result).toEqual([
+			{
+				role: "assistant",
+				parts: [{ type: "text", content: "What I implemented\n\n#### New unified catalog\nI added:" }],
+			},
+		]);
 	});
 
 	test("empty message list → creates assistant message with text part", () => {

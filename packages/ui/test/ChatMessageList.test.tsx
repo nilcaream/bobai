@@ -81,6 +81,15 @@ describe("ChatMessageList", () => {
 		expect(panel?.textContent).toContain("Here is the answer.");
 	});
 
+	test("assistant markdown text preserves blank lines between paragraphs and headings", () => {
+		const content = "What I implemented\n\n#### New unified catalog\nI added:";
+		const msg = mkAssistantMsg([{ type: "text", content }]);
+		const { container } = render(<ChatMessageList messages={[msg]} {...defaultProps} />);
+		const markdown = container.querySelector(".panel--assistant .md");
+		expect(markdown).not.toBeNull();
+		expect(markdown?.textContent).toBe(content);
+	});
+
 	test("assistant message with tool_call part renders ToolPanel", () => {
 		const msg = mkAssistantMsg([{ type: "tool_call", id: "tc_1", content: "Running bash..." }]);
 		const { container } = render(<ChatMessageList messages={[msg]} {...defaultProps} />);

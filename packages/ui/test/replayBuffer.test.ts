@@ -20,6 +20,19 @@ describe("replayBufferToMessages", () => {
 		}
 	});
 
+	test("whitespace-only token between text tokens is preserved for markdown structure", () => {
+		const events = [
+			{ type: "token" as const, text: "What I implemented", sessionId: "c1" },
+			{ type: "token" as const, text: "\n\n", sessionId: "c1" },
+			{ type: "token" as const, text: "#### New unified catalog\nI added:", sessionId: "c1" },
+		];
+		const msgs = replayBufferToMessages(events);
+		expect(msgs).toHaveLength(1);
+		if (msgs[0].role === "assistant") {
+			expect(msgs[0].parts).toEqual([{ type: "text", content: "What I implemented\n\n#### New unified catalog\nI added:" }]);
+		}
+	});
+
 	test("tool_call event creates a tool_call part", () => {
 		const events = [{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", sessionId: "c1" }];
 		const msgs = replayBufferToMessages(events);
@@ -62,6 +75,24 @@ describe("replayBufferToMessages", () => {
 			expect(msgs[0].parts[1].type).toBe("tool_call");
 			expect(msgs[0].parts[2].type).toBe("tool_result");
 			expect(msgs[0].parts[3].type).toBe("text");
+		}
+	});
+
+	test("whitespace-only token after tool_call is ignored and does not create a trailing empty text part", () => {
+		const events = [
+			{ type: "token" as const, text: "Starting analysis", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", sessionId: "c1" },
+			{ type: "token" as const, text: "\n\n", sessionId: "c1" },
+			{ type: "tool_result" as const, id: "tc1", output: "file1\nfile2", mergeable: true, sessionId: "c1" },
+		];
+		const msgs = replayBufferToMessages(events);
+		expect(msgs).toHaveLength(1);
+		if (msgs[0].role === "assistant") {
+			expect(msgs[0].parts).toEqual([
+				{ type: "text", content: "Starting analysis" },
+				{ type: "tool_call", id: "tc1", content: "▸ bash ls" },
+				{ type: "tool_result", id: "tc1", content: "file1\nfile2", mergeable: true, summary: undefined },
+			]);
 		}
 	});
 
