@@ -1,310 +1,163 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { refreshModels } from "../src/provider/copilot";
 
-// Minimal catalog response that includes curated models
-function catalogResponse(modelIds: string[]) {
-	const models: Record<string, object> = {};
-	for (const id of modelIds) {
-		models[id] = {
-			id,
-			name: id.toUpperCase(),
-			limit: { context: 128000, output: 16000 },
-		};
-	}
+const COPILOT_DOC_HTML = `
+<table>
+  <tbody>
+    <tr><th scope="row">Claude Sonnet 4.6</th><td>1</td><td>Not applicable</td></tr>
+    <tr><th scope="row">GPT-5 mini</th><td>0</td><td>1</td></tr>
+    <tr><th scope="row">GPT-5.4</th><td>1</td><td>Not applicable</td></tr>
+  </tbody>
+</table>`;
+
+function catalogResponse() {
 	return {
 		"github-copilot": {
 			id: "github-copilot",
 			name: "GitHub Copilot",
-			models,
+			models: {
+				"gpt-5.4": {
+					id: "gpt-5.4",
+					name: "GPT-5.4",
+					tool_call: true,
+					limit: { context: 128000, output: 16000 },
+					cost: { input: 1, output: 4 },
+				},
+				"claude-sonnet-4.6": {
+					id: "claude-sonnet-4.6",
+					name: "Claude Sonnet 4.6",
+					tool_call: true,
+					limit: { context: 200000, output: 64000 },
+					cost: { input: 3, output: 15 },
+				},
+				"gpt-5-mini": {
+					id: "gpt-5-mini",
+					name: "GPT-5 mini",
+					tool_call: true,
+					limit: { context: 272000, output: 128000 },
+					cost: { input: 0.25, output: 2 },
+				},
+				"text-only": {
+					id: "text-only",
+					name: "Text Only",
+					tool_call: false,
+					limit: { context: 1000, output: 100 },
+					cost: { input: 1, output: 1 },
+				},
+			},
 		},
+		openrouter: { id: "openrouter", name: "OpenRouter", models: {} },
+		"opencode-go": { id: "opencode-go", name: "OpenCode Go", models: {} },
+		opencode: { id: "opencode", name: "OpenCode Zen", models: {} },
 	};
 }
 
-const TEST_BASE_URL = "https://api.individual.githubcopilot.com";
-
-function mockFetch(pingResults: Record<string, number | Error>) {
-	return mock((url: string | URL | Request, init?: RequestInit) => {
-		const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-
-		// models.dev catalog fetch
-		if (urlStr.includes("models.dev")) {
-			return Promise.resolve(new Response(JSON.stringify(catalogResponse(Object.keys(pingResults)))));
-		}
-
-		// enableModels policy calls
-		if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
-			return Promise.resolve(new Response(null, { status: 200 }));
-		}
-
-		// Copilot API ping
-		if (urlStr.includes("api.individual.githubcopilot.com")) {
-			const body = JSON.parse(init?.body as string);
-			const result = pingResults[body.model];
-			if (result instanceof Error) {
-				return Promise.reject(result);
-			}
-			return Promise.resolve(new Response(null, { status: result }));
-		}
-
-		return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
-	});
-}
-
-describe("refreshModels", () => {
+describe("unified model refresh for Copilot", () => {
 	const originalFetch = globalThis.fetch;
 	let tmpDir: string;
-	let stdoutSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-refresh-"));
-		stdoutSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
-		stdoutSpy.mockRestore();
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("models that respond to ping get enabled: true", async () => {
-		globalThis.fetch = mockFetch({ "gpt-5.4": 200, "claude-sonnet-4.6": 200 });
-
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
-		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
-
-		expect(configs.every((c: { enabled: boolean }) => c.enabled)).toBe(true);
-		expect(result.enabled).toBe(2);
-	});
-
-	test("models that fail ping get enabled: false", async () => {
-		globalThis.fetch = mockFetch({ "gpt-5.4": 403, "claude-sonnet-4.6": 403 });
-
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
-		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
-
-		expect(configs.every((c: { enabled: boolean }) => !c.enabled)).toBe(true);
-		expect(result.enabled).toBe(0);
-	});
-
-	test("mixed results — some pass, some fail", async () => {
-		globalThis.fetch = mockFetch({ "gpt-5.4": 200, "claude-sonnet-4.6": 403 });
-
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
-		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
-
-		const gpt = configs.find((c: { id: string }) => c.id === "gpt-5.4");
-		const claude = configs.find((c: { id: string }) => c.id === "claude-sonnet-4.6");
-		expect(gpt.enabled).toBe(true);
-		expect(claude.enabled).toBe(false);
-		expect(result.enabled).toBe(1);
-		expect(result.total).toBe(2);
-	});
-
-	test("config file is written with correct structure", async () => {
-		globalThis.fetch = mockFetch({ "gpt-5.4": 200 });
-
-		await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
-		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
-
-		expect(configs).toHaveLength(1);
-		expect(configs[0]).toEqual({
-			id: "gpt-5.4",
-			name: "GPT-5.4",
-			contextWindow: 128000,
-			maxOutput: 16000,
-			premiumRequestMultiplier: 1,
-			label: "1x",
-			enabled: true,
-		});
-	});
-
-	test("returns correct summary counts", async () => {
-		globalThis.fetch = mockFetch({
-			"gpt-5.4": 200,
-			"claude-sonnet-4.6": 200,
-			"claude-opus-4.6": 403,
-		});
-
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
-
-		expect(result.total).toBe(3);
-		expect(result.enabled).toBe(2);
-		expect(result.configPath).toBe(path.join(tmpDir, "copilot-models.json"));
-	});
-
-	test("network error during ping is caught and model stays disabled", async () => {
-		globalThis.fetch = mockFetch({
-			"gpt-5.4": 200,
-			"claude-sonnet-4.6": new Error("ECONNREFUSED"),
-		});
-
-		const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
-		const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
-
-		const gpt = configs.find((c: { id: string }) => c.id === "gpt-5.4");
-		const claude = configs.find((c: { id: string }) => c.id === "claude-sonnet-4.6");
-		expect(gpt.enabled).toBe(true);
-		expect(claude.enabled).toBe(false);
-		expect(result.enabled).toBe(1);
-	});
-
-	test("creates configDir if it does not exist", async () => {
-		const nestedDir = path.join(tmpDir, "nested", "deep");
-		globalThis.fetch = mockFetch({ "gpt-5.4": 200 });
-
-		await refreshModels("fake-token", TEST_BASE_URL, nestedDir, { verify: true });
-
-		expect(fs.existsSync(path.join(nestedDir, "copilot-models.json"))).toBe(true);
-	});
-
-	test("throws when catalog fetch fails", async () => {
-		globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED")));
-		expect(refreshModels("token", TEST_BASE_URL, tmpDir)).rejects.toThrow("ECONNREFUSED");
-	});
-
-	test("non-verified refresh writes curated models as enabled without probing", async () => {
-		const consoleLog = spyOn(console, "log").mockImplementation(() => {});
+	test("writes models.json with normalized Copilot entries", async () => {
 		globalThis.fetch = mock((url: string | URL | Request) => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.4", "claude-sonnet-4.6", "gpt-5-mini"]))));
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse())));
+			}
+			if (urlStr.includes("docs.github.com")) {
+				return Promise.resolve(new Response(COPILOT_DOC_HTML));
 			}
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		}) as typeof fetch;
 
-		try {
-			const result = await refreshModels("fake-token", TEST_BASE_URL, tmpDir);
-			const configs = JSON.parse(fs.readFileSync(path.join(tmpDir, "copilot-models.json"), "utf8"));
+		const { refreshUnifiedModelCatalog, loadUnifiedModelsFile } = await import("../src/provider/unified-model-catalog");
+		const result = await refreshUnifiedModelCatalog(tmpDir);
+		const file = loadUnifiedModelsFile(tmpDir);
 
-			expect(result.total).toBe(3);
-			expect(result.enabled).toBe(3);
-			expect(configs.map((c: { id: string; enabled: boolean }) => [c.id, c.enabled])).toEqual([
-				["gpt-5.4", true],
-				["claude-sonnet-4.6", true],
-				["gpt-5-mini", true],
-			]);
-			expect(consoleLog.mock.calls.flat().join("\n")).toContain(
-				"Run `bobai refresh --verify` to verify that curated models are currently available.",
-			);
-		} finally {
-			consoleLog.mockRestore();
-		}
+		expect(result.configPath).toBe(path.join(tmpDir, "models.json"));
+		expect(file.providers["github-copilot"]).toEqual([
+			{
+				id: "claude-sonnet-4.6",
+				name: "Claude Sonnet 4.6",
+				contextWindow: 200000,
+				maxOutput: 64000,
+				inputPrice: 0,
+				outputPrice: 0,
+				premiumRequestMultiplier: 1,
+			},
+			{
+				id: "gpt-5-mini",
+				name: "GPT-5 mini",
+				contextWindow: 272000,
+				maxOutput: 128000,
+				inputPrice: 0,
+				outputPrice: 0,
+				premiumRequestMultiplier: 0,
+			},
+			{
+				id: "gpt-5.4",
+				name: "GPT-5.4",
+				contextWindow: 128000,
+				maxOutput: 16000,
+				inputPrice: 0,
+				outputPrice: 0,
+				premiumRequestMultiplier: 1,
+			},
+		]);
 	});
 
-	test("Claude models are probed via /v1/messages with max_tokens", async () => {
-		const calls: { url: string; body: Record<string, unknown> }[] = [];
-		globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {
+	test("excludes non-tool Copilot models during refresh", async () => {
+		globalThis.fetch = mock((url: string | URL | Request) => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-
 			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.4", "claude-sonnet-4.6"]))));
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse())));
 			}
-
-			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
-				return Promise.resolve(new Response(null, { status: 200 }));
+			if (urlStr.includes("docs.github.com")) {
+				return Promise.resolve(new Response(COPILOT_DOC_HTML));
 			}
-
-			if (urlStr.includes("api.individual.githubcopilot.com")) {
-				calls.push({
-					url: urlStr,
-					body: JSON.parse(init?.body as string),
-				});
-				return Promise.resolve(new Response(null, { status: 200 }));
-			}
-
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
-		});
+		}) as typeof fetch;
 
-		await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
+		const { refreshUnifiedModelCatalog, loadUnifiedModelsFile } = await import("../src/provider/unified-model-catalog");
+		await refreshUnifiedModelCatalog(tmpDir);
+		const file = loadUnifiedModelsFile(tmpDir);
 
-		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
-		const claudeCall = calls.find((c) => c.body.model === "claude-sonnet-4.6");
-
-		expect(responsesCall?.url).toContain("/responses");
-		expect(responsesCall?.url).not.toContain("/v1/messages");
-		expect(responsesCall?.body.input).toBeDefined();
-
-		expect(claudeCall?.url).toContain("/v1/messages");
-		expect(claudeCall?.url).not.toContain("/responses");
-		expect(claudeCall?.body.max_tokens).toBe(16);
+		expect(file.providers["github-copilot"]?.map((model) => model.id)).not.toContain("text-only");
 	});
 
-	test("Responses API models are probed via /responses with input format", async () => {
-		const calls: { url: string; body: Record<string, unknown> }[] = [];
-		globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {
+	test("refresh succeeds when multiplier data is unavailable", async () => {
+		globalThis.fetch = mock((url: string | URL | Request) => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-
 			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.2", "gpt-5.4"]))));
+				return Promise.resolve(new Response(JSON.stringify(catalogResponse())));
 			}
-
-			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
-				return Promise.resolve(new Response(null, { status: 200 }));
+			if (urlStr.includes("docs.github.com")) {
+				return Promise.reject(new Error("docs unavailable"));
 			}
-
-			if (urlStr.includes("api.individual.githubcopilot.com")) {
-				calls.push({
-					url: urlStr,
-					body: JSON.parse(init?.body as string),
-				});
-				return Promise.resolve(new Response(null, { status: 200 }));
-			}
-
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
-		});
+		}) as typeof fetch;
 
-		await refreshModels("fake-token", TEST_BASE_URL, tmpDir, { verify: true });
+		const { refreshUnifiedModelCatalog, loadUnifiedModelsFile } = await import("../src/provider/unified-model-catalog");
+		const result = await refreshUnifiedModelCatalog(tmpDir);
+		const file = loadUnifiedModelsFile(tmpDir);
 
-		const chatCall = calls.find((c) => c.body.model === "gpt-5.2");
-		const responsesCall = calls.find((c) => c.body.model === "gpt-5.4");
-
-		expect(chatCall?.url).toContain("/responses");
-
-		expect(responsesCall?.url).toContain("/responses");
-		expect(responsesCall?.url).not.toContain("/chat/completions");
-		expect(responsesCall?.body.input).toBeDefined();
-		expect(responsesCall?.body.messages).toBeUndefined();
-		expect(responsesCall?.body.store).toBe(false);
-		expect(responsesCall?.body.stream).toBe(false);
-	});
-
-	test("ping requests use correct headers and body", async () => {
-		const calls: { headers: Record<string, string>; body: unknown }[] = [];
-		globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {
-			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-
-			if (urlStr.includes("models.dev")) {
-				return Promise.resolve(new Response(JSON.stringify(catalogResponse(["gpt-5.4"]))));
-			}
-
-			if (urlStr.includes("/models/") && urlStr.includes("/policy")) {
-				return Promise.resolve(new Response(null, { status: 200 }));
-			}
-
-			if (urlStr.includes("api.individual.githubcopilot.com")) {
-				calls.push({
-					headers: Object.fromEntries(Object.entries(init?.headers ?? {})),
-					body: JSON.parse(init?.body as string),
-				});
-				return Promise.resolve(new Response(null, { status: 200 }));
-			}
-
-			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
-		});
-
-		await refreshModels("test-token-123", TEST_BASE_URL, tmpDir, { verify: true });
-
-		expect(calls).toHaveLength(1);
-		expect(calls[0].headers["x-initiator"]).toBe("agent");
-		expect(calls[0].headers.Authorization).toBe("Bearer test-token-123");
-		expect(calls[0].body).toEqual({
-			model: "gpt-5.4",
-			input: [{ role: "user", content: [{ type: "input_text", text: "Ping. Respond pong." }] }],
-			stream: false,
-			store: false,
+		expect(result.multiplierSourceAvailable).toBe(false);
+		expect(file.providers["github-copilot"]?.find((model) => model.id === "gpt-5.4")).toEqual({
+			id: "gpt-5.4",
+			name: "GPT-5.4",
+			contextWindow: 128000,
+			maxOutput: 16000,
+			inputPrice: 0,
+			outputPrice: 0,
 		});
 	});
 });

@@ -10,7 +10,7 @@ import { getProviderDescriptor } from "./registry";
  * Used for parallel task execution where multiple subagents need
  * independent turn metrics without corrupting each other or the parent.
  */
-export function createIsolatedTurnProvider(original: Provider): Provider {
+export function createIsolatedTurnProvider(original: Provider, configDir?: string): Provider {
 	let turnStartTime = 0;
 	let turnModel = "";
 	let turnInputTokens = 0;
@@ -22,6 +22,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 
 	return {
 		id: original.id,
+		configDir: configDir ?? original.configDir,
 
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			yield* original.stream({
@@ -58,6 +59,7 @@ export function createIsolatedTurnProvider(original: Provider): Provider {
 				modelId: turnModel,
 				inputTokens: turnTotalInputTokens,
 				outputTokens: turnTotalOutputTokens,
+				configDir: configDir ?? original.configDir,
 			}) ?? {
 				modelName: turnModel.includes("/") ? (turnModel.split("/").at(-1) ?? turnModel) : turnModel,
 			};

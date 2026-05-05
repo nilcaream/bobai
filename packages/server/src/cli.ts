@@ -12,14 +12,12 @@ export interface AuthCommand {
 export interface RefreshCommand {
 	command: "refresh";
 	debug: boolean;
-	verify: boolean;
 }
 
 export type CLICommand = ServeCommand | AuthCommand | RefreshCommand;
 
 export function parseCLI(argv: string[]): CLICommand {
 	const debug = argv.includes("--debug");
-	const verify = argv.includes("--verify");
 
 	if (argv[0] === "auth") {
 		const provider = argv.find((arg, index) => index > 0 && !arg.startsWith("--"));
@@ -27,7 +25,10 @@ export function parseCLI(argv: string[]): CLICommand {
 	}
 
 	if (argv[0] === "refresh") {
-		return { command: "refresh", debug, verify };
+		if (argv.includes("--verify")) {
+			throw new Error("--verify has been removed; refresh no longer verifies model availability");
+		}
+		return { command: "refresh", debug };
 	}
 
 	return { command: "serve", debug };

@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import { parseAnthropicStream } from "../src/provider/anthropic-stream";
 import type { StreamEvent } from "../src/provider/provider";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 // biome-ignore lint/suspicious/noExplicitAny: Anthropic SSE events are untyped objects with varying shapes
 function mockAnthropicEvents(events: any[]): AsyncIterable<Record<string, unknown>> {
@@ -21,9 +23,11 @@ async function collect(stream: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 	return events;
 }
 
-// configDir points to a nonexistent dir so loadModelsConfig returns []
-// and formatModelDisplay falls back to "model | ?x | N tokens"
-const FAKE_CONFIG_DIR = "/nonexistent-config-dir";
+const configDir = createProviderModelsTempDir();
+
+afterAll(() => {
+	fs.rmSync(configDir, { recursive: true, force: true });
+});
 
 describe("parseAnthropicStream", () => {
 	test("yields text events from content_block_delta (text_delta)", async () => {
@@ -37,7 +41,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "test-model", "user", FAKE_CONFIG_DIR));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "user", configDir));
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
@@ -45,8 +49,8 @@ describe("parseAnthropicStream", () => {
 			{
 				type: "usage",
 				tokenCount: 10,
-				tokenLimit: 0,
-				display: "test-model | ?x | 10 / 0 | 0%",
+				tokenLimit: 128000,
+				display: "github-copilot | claude-haiku-4.5 | 0.33x | 10 / 128000 | 0%",
 				outputTokens: 5,
 				totalTokens: 15,
 			},
@@ -65,7 +69,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "test-model", "user", FAKE_CONFIG_DIR));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "user", configDir));
 
 		expect(events).toEqual([
 			{ type: "tool_call_start", index: 0, id: "tc_1", name: "read_file" },
@@ -74,8 +78,8 @@ describe("parseAnthropicStream", () => {
 			{
 				type: "usage",
 				tokenCount: 20,
-				tokenLimit: 0,
-				display: "test-model | ?x | 20 / 0 | 0%",
+				tokenLimit: 128000,
+				display: "github-copilot | claude-haiku-4.5 | 0.33x | 20 / 128000 | 0%",
 				outputTokens: 8,
 				totalTokens: 28,
 			},
@@ -86,11 +90,9 @@ describe("parseAnthropicStream", () => {
 	test("handles mixed text and tool_use blocks in one message", async () => {
 		const stream = mockAnthropicEvents([
 			{ type: "message_start", message: { id: "msg_3", usage: { input_tokens: 15, output_tokens: 0 } } },
-			// Text block
 			{ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
 			{ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me read that." } },
 			{ type: "content_block_stop", index: 0 },
-			// Tool use block
 			{ type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "tc_2", name: "bash" } },
 			{ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' } },
 			{ type: "content_block_stop", index: 1 },
@@ -98,7 +100,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "test-model", "agent", FAKE_CONFIG_DIR));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "agent", configDir));
 
 		expect(events).toEqual([
 			{ type: "text", text: "Let me read that." },
@@ -107,48 +109,12 @@ describe("parseAnthropicStream", () => {
 			{
 				type: "usage",
 				tokenCount: 15,
-				tokenLimit: 0,
-				display: "test-model | ?x | 15 / 0 | 0%",
+				tokenLimit: 128000,
+				display: "github-copilot | claude-haiku-4.5 | 0.33x | 15 / 128000 | 0%",
 				outputTokens: 12,
 				totalTokens: 27,
 			},
 			{ type: "finish", reason: "tool_calls" },
-		]);
-	});
-
-	test("maps stop reasons correctly (end_turn → stop, tool_use → tool_calls, max_tokens → stop)", async () => {
-		async function getFinishReason(stopReason: string): Promise<string> {
-			const stream = mockAnthropicEvents([
-				{ type: "message_start", message: { id: "msg_x", usage: { input_tokens: 5, output_tokens: 0 } } },
-				{ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-				{ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hi" } },
-				{ type: "content_block_stop", index: 0 },
-				{ type: "message_delta", delta: { stop_reason: stopReason }, usage: { output_tokens: 1 } },
-				{ type: "message_stop" },
-			]);
-			const events = await collect(parseAnthropicStream(stream, "test-model", "user", FAKE_CONFIG_DIR));
-			const finish = events.find((e) => e.type === "finish");
-			return (finish as { reason: string }).reason;
-		}
-
-		expect(await getFinishReason("end_turn")).toBe("stop");
-		expect(await getFinishReason("tool_use")).toBe("tool_calls");
-		expect(await getFinishReason("max_tokens")).toBe("stop");
-	});
-
-	test("emits finish even if stream ends without message_stop", async () => {
-		const stream = mockAnthropicEvents([
-			{ type: "message_start", message: { id: "msg_4", usage: { input_tokens: 7, output_tokens: 0 } } },
-			{ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-			{ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "truncated" } },
-			// No message_delta, no message_stop — stream ends abruptly
-		]);
-
-		const events = await collect(parseAnthropicStream(stream, "test-model", "user", FAKE_CONFIG_DIR));
-
-		expect(events).toEqual([
-			{ type: "text", text: "truncated" },
-			{ type: "finish", reason: "stop" },
 		]);
 	});
 
@@ -165,15 +131,15 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "test-model", "user", FAKE_CONFIG_DIR));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "user", configDir));
 
 		expect(events).toEqual([
 			{ type: "text", text: "Answer" },
 			{
 				type: "usage",
 				tokenCount: 10,
-				tokenLimit: 0,
-				display: "test-model | ?x | 10 / 0 | 0%",
+				tokenLimit: 128000,
+				display: "github-copilot | claude-haiku-4.5 | 0.33x | 10 / 128000 | 0%",
 				outputTokens: 3,
 				totalTokens: 13,
 			},

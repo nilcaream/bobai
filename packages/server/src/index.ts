@@ -2,7 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { authorizeCopilot, getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
-import { getCopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "./auth/store";
 import { parseCLI } from "./cli";
 import { resolveValidatedDefaultBackend } from "./config/default-backend";
 import { loadGlobalConfig } from "./config/global";
@@ -12,10 +11,11 @@ import { createLogger } from "./log/logger";
 import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
-import { deriveBaseUrl, exchangeToken, refreshModels } from "./provider/copilot";
+import { ensureModelCatalogAvailable } from "./provider/model-catalog-startup";
 import { providerModelsConfigExists } from "./provider/models";
 import { isSupportedAuthProvider, isSupportedProvider } from "./provider/providers";
 import { createProviderRuntimeManager } from "./provider/runtime-manager";
+import { refreshUnifiedModelCatalog, unifiedModelsConfigExists } from "./provider/unified-model-catalog";
 import { createServer } from "./server";
 import { builtinSkills } from "./skill/builtin";
 import { discoverSkills } from "./skill/skill";
@@ -43,8 +43,7 @@ if (cli.command === "auth") {
 
 	logger.info("AUTH", `Starting authentication flow for ${cli.provider}`);
 	if (cli.provider === "github-copilot") {
-		const auth = await authorizeCopilot(globalConfigDir);
-		await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, { verify: true });
+		await authorizeCopilot(globalConfigDir);
 		process.exit(0);
 	}
 
@@ -58,31 +57,18 @@ if (cli.command === "auth") {
 }
 
 if (cli.command === "refresh") {
-	if (!cli.verify) {
-		await refreshModels("", "", globalConfigDir, { verify: false });
+	try {
+		const result = await refreshUnifiedModelCatalog(globalConfigDir);
+		console.log(`Wrote ${result.modelCount} models to ${result.configPath}`);
+		if (!result.multiplierSourceAvailable) {
+			console.log("Copilot multiplier metadata unavailable; Copilot models were written with ?x fallback.");
+		}
 		process.exit(0);
-	}
-
-	const store = loadAuthStore(globalConfigDir);
-	let auth = store ? getCopilotAuth(store) : undefined;
-	if (!auth) {
-		console.error("No auth found. Run `bobai auth github-copilot` first.");
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(`Model refresh failed: ${message}`);
 		process.exit(1);
 	}
-	if (Date.now() >= auth.expires) {
-		try {
-			const session = await exchangeToken(auth.refresh);
-			auth = { refresh: auth.refresh, access: session.access, expires: session.expires };
-			saveAuthStore(globalConfigDir, setCopilotAuth(store ?? { version: 1, providers: {} }, auth));
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			console.error(`Token refresh failed: ${message}`);
-			console.error("Your session may have expired. Run `bobai auth github-copilot` to re-authenticate.");
-			process.exit(1);
-		}
-	}
-	await refreshModels(auth.access, deriveBaseUrl(auth.access), globalConfigDir, { verify: true });
-	process.exit(0);
 }
 
 // Serve command: load config before creating logger so debug preference is respected
@@ -95,6 +81,18 @@ const logger = createLogger({ level: debug ? "debug" : "info", logDir });
 const trackingFetch = createTrackingFetch(fetch, { logger, logDir, debug });
 
 logger.info("SERVER", `Starting bobai (debug=${debug})`);
+
+await ensureModelCatalogAvailable({
+	catalogExists: () => unifiedModelsConfigExists(globalConfigDir),
+	refreshCatalog: async () => {
+		const result = await refreshUnifiedModelCatalog(globalConfigDir);
+		logger.info("MODEL", `Wrote ${result.modelCount} models to ${result.configPath}`);
+		if (!result.multiplierSourceAvailable) {
+			logger.error("MODEL", "Copilot multiplier metadata unavailable; Copilot models were written with ?x fallback.");
+		}
+	},
+	logger,
+});
 
 const config = resolveConfig(
 	{ provider: project.provider, model: project.model, maxIterations: project.maxIterations },

@@ -6,6 +6,7 @@ import type { StoredAuth } from "../src/auth/store";
 import { createCopilotProvider, isCopilotClaude, isCopilotResponses } from "../src/provider/copilot";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
+import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
 
 function makeAuth(access = "tok"): StoredAuth {
 	return { refresh: "gho_testauthrefreshtoken1234567890abcdef", access, expires: Date.now() + 3_600_000 };
@@ -249,7 +250,7 @@ describe("CopilotProvider", () => {
 			{ type: "tool_call_start", index: 0, id: "call_abc123", name: "read_file" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path"' },
 			{ type: "tool_call_delta", index: 0, arguments: ':"src/index.ts"}' },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | 0x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | ?x | 0 / 0 | 0%" },
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -290,7 +291,7 @@ describe("CopilotProvider", () => {
 		expect(events).toEqual([
 			{ type: "tool_call_start", index: 0, id: "call_gemini", name: "list_directory" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path":"."}' },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gemini-3-flash-preview | 0.33x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gemini-3-flash-preview | ?x | 0 / 0 | 0%" },
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -316,7 +317,7 @@ describe("CopilotProvider", () => {
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | 0x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | ?x | 0 / 0 | 0%" },
 			{ type: "finish", reason: "stop" },
 		]);
 	});
@@ -349,9 +350,9 @@ describe("CopilotProvider", () => {
 		fs.mkdirSync(configDir, { recursive: true });
 		try {
 			const modelsConfig = [
-				{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 1, enabled: true },
+				{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 0, enabled: true },
 			];
-			fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(modelsConfig));
+			writeUnifiedModelsConfig(configDir, { "github-copilot": createCopilotModels(modelsConfig) });
 
 			const chunks = [
 				chatChunk("Hello"),
@@ -415,7 +416,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hi" },
-				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "github-copilot | gpt-4o | 0x | 100 / 0 | 0%" },
+				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "github-copilot | gpt-4o | ?x | 100 / 0 | 0%" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -553,9 +554,9 @@ describe("Turn tracking", () => {
 	beforeEach(() => {
 		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-turn-"));
 		const modelsConfig = [
-			{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 1, enabled: true },
+			{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 0, enabled: true },
 		];
-		fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(modelsConfig));
+		writeUnifiedModelsConfig(configDir, { "github-copilot": createCopilotModels(modelsConfig) });
 	});
 
 	afterEach(() => {
@@ -2090,7 +2091,7 @@ describe("Anthropic routing for Claude models", () => {
 			},
 			{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 0, enabled: true },
 		];
-		fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(modelsConfig));
+		writeUnifiedModelsConfig(configDir, { "github-copilot": createCopilotModels(modelsConfig) });
 	});
 
 	afterEach(() => {
@@ -2595,20 +2596,17 @@ describe("Responses API routing for GPT-5+ models", () => {
 	});
 
 	test("includes provider prefix in usage display for Responses API models", async () => {
-		fs.writeFileSync(
-			path.join(configDir, "copilot-models.json"),
-			JSON.stringify([
+		writeUnifiedModelsConfig(configDir, {
+			"github-copilot": createCopilotModels([
 				{
 					id: "gpt-5.4",
 					name: "GPT-5.4",
 					contextWindow: 400000,
 					maxOutput: 128000,
 					premiumRequestMultiplier: 1,
-					label: "1x",
-					enabled: true,
 				},
 			]),
-		);
+		});
 		globalThis.fetch = mock(async () => {
 			return new Response(responsesTextStream("Hi from GPT-5.4", 42), {
 				status: 200,

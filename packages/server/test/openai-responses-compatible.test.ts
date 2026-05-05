@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import fs from "node:fs";
 import type { StreamEvent, ToolDefinition } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 function sseStream(chunks: Array<Record<string, unknown>>): ReadableStream<Uint8Array> {
 	return new ReadableStream({
@@ -21,13 +23,16 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 
 describe("openai responses compatible provider", () => {
 	const originalFetch = globalThis.fetch;
+	let configDir: string;
 
 	beforeEach(() => {
 		globalThis.fetch = originalFetch;
+		configDir = createProviderModelsTempDir();
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
 	test("sends Responses API request with converted input and tools", async () => {
@@ -56,11 +61,16 @@ describe("openai responses compatible provider", () => {
 			},
 		];
 
-		const provider = createOpenAIResponsesCompatibleProvider({
-			providerId: "opencode-zen",
-			baseUrl: "https://opencode.ai/zen/v1/responses",
-			apiKey: "zen-key",
-		});
+		const provider = createOpenAIResponsesCompatibleProvider(
+			{
+				providerId: "opencode-zen",
+				baseUrl: "https://opencode.ai/zen/v1/responses",
+				apiKey: "zen-key",
+			},
+			undefined,
+			globalThis.fetch,
+			configDir,
+		);
 		await collect(
 			provider.stream({
 				model: "gpt-5.4",
@@ -104,11 +114,16 @@ describe("openai responses compatible provider", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenAIResponsesCompatibleProvider({
-			providerId: "opencode-zen",
-			baseUrl: "https://opencode.ai/zen/v1/responses",
-			apiKey: "zen-key",
-		});
+		const provider = createOpenAIResponsesCompatibleProvider(
+			{
+				providerId: "opencode-zen",
+				baseUrl: "https://opencode.ai/zen/v1/responses",
+				apiKey: "zen-key",
+			},
+			undefined,
+			globalThis.fetch,
+			configDir,
+		);
 		const events = await collect(
 			provider.stream({
 				model: "gpt-5.4",
@@ -123,7 +138,7 @@ describe("openai responses compatible provider", () => {
 				type: "usage",
 				tokenCount: 42,
 				tokenLimit: 272000,
-				display: "opencode-zen | gpt-5.4 | beta | 42 / 272000 | 0%",
+				display: "opencode-zen | gpt-5.4 | $1.00 | $4.00 | 42 / 272000 | 0%",
 				outputTokens: 10,
 				totalTokens: 52,
 			},
@@ -149,11 +164,16 @@ describe("openai responses compatible provider", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenAIResponsesCompatibleProvider({
-			providerId: "opencode-zen",
-			baseUrl: "https://opencode.ai/zen/v1/responses",
-			apiKey: "zen-key",
-		});
+		const provider = createOpenAIResponsesCompatibleProvider(
+			{
+				providerId: "opencode-zen",
+				baseUrl: "https://opencode.ai/zen/v1/responses",
+				apiKey: "zen-key",
+			},
+			undefined,
+			globalThis.fetch,
+			configDir,
+		);
 		const events = await collect(
 			provider.stream({
 				model: "gpt-5.4",
@@ -169,7 +189,7 @@ describe("openai responses compatible provider", () => {
 				type: "usage",
 				tokenCount: 20,
 				tokenLimit: 272000,
-				display: "opencode-zen | gpt-5.4 | beta | 20 / 272000 | 0%",
+				display: "opencode-zen | gpt-5.4 | $1.00 | $4.00 | 20 / 272000 | 0%",
 				outputTokens: 5,
 				totalTokens: 25,
 			},
@@ -180,11 +200,16 @@ describe("openai responses compatible provider", () => {
 	test("throws ProviderError on non-OK response", async () => {
 		const { createOpenAIResponsesCompatibleProvider } = await import("../src/provider/openai-responses-compatible");
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
-		const provider = createOpenAIResponsesCompatibleProvider({
-			providerId: "opencode-zen",
-			baseUrl: "https://opencode.ai/zen/v1/responses",
-			apiKey: "zen-key",
-		});
+		const provider = createOpenAIResponsesCompatibleProvider(
+			{
+				providerId: "opencode-zen",
+				baseUrl: "https://opencode.ai/zen/v1/responses",
+				apiKey: "zen-key",
+			},
+			undefined,
+			globalThis.fetch,
+			configDir,
+		);
 		await expect(async () => {
 			for await (const _ of provider.stream({
 				model: "gpt-5.4",

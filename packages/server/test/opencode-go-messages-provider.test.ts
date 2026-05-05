@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import fs from "node:fs";
 import { createOpenCodeGoProvider } from "../src/provider/opencode-go";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 function sseStream(chunks: Array<Record<string, unknown> | "[DONE]">): ReadableStream<Uint8Array> {
 	return new ReadableStream({
@@ -23,13 +25,16 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 
 describe("opencode-go provider (messages)", () => {
 	const originalFetch = globalThis.fetch;
+	let configDir: string;
 
 	beforeEach(() => {
 		globalThis.fetch = originalFetch;
+		configDir = createProviderModelsTempDir();
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
 	test("routes MiniMax models to the OpenCode Go messages API", async () => {
@@ -48,7 +53,7 @@ describe("opencode-go provider (messages)", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenCodeGoProvider({ apiKey: "go-key" });
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
 		await collect(
 			provider.stream({
 				model: "minimax-m2.7",
@@ -85,7 +90,7 @@ describe("opencode-go provider (messages)", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenCodeGoProvider({ apiKey: "go-key" });
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
 		const events = await collect(
 			provider.stream({
 				model: "minimax-m2.7",
@@ -102,7 +107,7 @@ describe("opencode-go provider (messages)", () => {
 				type: "usage",
 				tokenCount: 12800,
 				tokenLimit: 131072,
-				display: "opencode-go | minimax-m2.7 | beta | 12800 / 131072 | 10%",
+				display: "opencode-go | minimax-m2.7 | $0.80 | $3.00 | 12800 / 131072 | 10%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -110,7 +115,7 @@ describe("opencode-go provider (messages)", () => {
 
 	test("throws ProviderError on non-OK response from messages API", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
-		const provider = createOpenCodeGoProvider({ apiKey: "bad" });
+		const provider = createOpenCodeGoProvider({ apiKey: "bad" }, undefined, globalThis.fetch, configDir);
 		await expect(async () => {
 			for await (const _ of provider.stream({
 				model: "minimax-m2.7",

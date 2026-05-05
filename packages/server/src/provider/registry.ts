@@ -1,16 +1,7 @@
 import type { AuthStore, CopilotAuth, OpenCodeGoAuth, OpenCodeZenAuth, OpenRouterAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
-import {
-	buildSortedModelList,
-	formatModelDisplay,
-	loadModelsConfig,
-	modelsConfigExists,
-	type SortedModelListItem,
-} from "./copilot-models";
-import { loadOpenCodeGoModelsConfig } from "./opencode-go-models";
-import { loadOpenCodeZenModelsConfig } from "./opencode-zen-models";
-import { loadOpenRouterModelsConfig } from "./openrouter-models";
 import type { Provider } from "./provider";
+import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
 
 export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen"] as const;
 export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen"] as const;
@@ -28,9 +19,14 @@ export interface ProviderModelConfig {
 	label?: string;
 	inputPrice?: number;
 	outputPrice?: number;
+	premiumRequestMultiplier?: number;
 }
 
-export type SortedProviderModelListItem = SortedModelListItem;
+export type SortedProviderModelListItem = {
+	id: string;
+	cost: string;
+	contextWindow: number;
+};
 
 export interface ProviderSummaryParts {
 	modelName: string;
@@ -74,19 +70,53 @@ export interface ProviderDescriptor {
 	}): Promise<Provider>;
 }
 
+function formatPrice(value: number | undefined): string {
+	return `$${(value ?? 0).toFixed(2)}`;
+}
+
+function formatProviderCostLabel(providerId: ProviderId, modelConfig: ProviderModelConfig | undefined): string {
+	if (!modelConfig) {
+		return providerId === "github-copilot" ? "?x" : `${formatPrice(0)} | ${formatPrice(0)}`;
+	}
+	if (providerId === "github-copilot") {
+		return modelConfig.premiumRequestMultiplier !== undefined ? `${modelConfig.premiumRequestMultiplier}x` : "?x";
+	}
+	return `${formatPrice(modelConfig.inputPrice)} | ${formatPrice(modelConfig.outputPrice)}`;
+}
+
+function formatProviderSummaryCostEstimate(
+	providerId: ProviderId,
+	modelConfig: ProviderModelConfig | undefined,
+): string | undefined {
+	if (!modelConfig) return undefined;
+	if (providerId === "openrouter" && modelConfig.inputPrice === 0 && modelConfig.outputPrice === 0) {
+		return "free";
+	}
+	return undefined;
+}
+
 function formatGenericProviderModelDisplay(
 	providerId: ProviderId,
+	modelId: string,
 	modelConfig: ProviderModelConfig | undefined,
 	promptTokens: number,
 ): string {
-	const label = modelConfig?.label ? ` | ${modelConfig.label}` : "";
+	const label = ` | ${formatProviderCostLabel(providerId, modelConfig)}`;
 	const contextWindow = modelConfig?.contextWindow ?? 0;
 	const percent = contextWindow > 0 ? Math.round((promptTokens / contextWindow) * 100) : 0;
-	return `${providerId} | ${modelConfig?.id ?? "unknown-model"}${label} | ${promptTokens} / ${contextWindow} | ${percent}%`;
+	return `${providerId} | ${modelConfig?.id ?? modelId}${label} | ${promptTokens} / ${contextWindow} | ${percent}%`;
 }
 
 function defaultModelName(modelId: string): string {
 	return modelId.includes("/") ? (modelId.split("/").at(-1) ?? modelId) : modelId;
+}
+
+function loadProviderModelsFromUnifiedCatalog(providerId: ProviderId, configDir?: string): ProviderModelConfig[] {
+	try {
+		return loadUnifiedModelsFile(configDir).providers[providerId] ?? [];
+	} catch {
+		return [];
+	}
 }
 
 interface ApiKeyProviderDescriptorOptions<Auth> {
@@ -94,7 +124,6 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 	defaultModel: string;
 	auth: ProviderAuthMetadata;
 	getApiFamily(modelId: string): ApiFamily;
-	loadModels(): ProviderModelConfig[];
 	buildTurnSummaryParts?: (options: {
 		modelId: string;
 		inputTokens: number;
@@ -121,22 +150,26 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 		defaultModel: options.defaultModel,
 		auth: options.auth,
 		getApiFamily: options.getApiFamily,
-		modelsConfigExists(): boolean {
-			return true;
+		modelsConfigExists(configDir?: string): boolean {
+			return unifiedModelsConfigExists(configDir);
 		},
-		loadModels(): ProviderModelConfig[] {
-			return options.loadModels();
+		loadModels(configDir?: string): ProviderModelConfig[] {
+			return loadProviderModelsFromUnifiedCatalog(options.id, configDir);
 		},
-		buildSortedModels(): SortedProviderModelListItem[] {
-			return options
-				.loadModels()
-				.map((model) => ({ id: model.id, cost: model.label, contextWindow: model.contextWindow }))
+		buildSortedModels(configDir?: string): SortedProviderModelListItem[] {
+			return loadProviderModelsFromUnifiedCatalog(options.id, configDir)
+				.map((model) => ({
+					id: model.id,
+					cost: formatProviderCostLabel(options.id, model),
+					contextWindow: model.contextWindow,
+				}))
 				.sort((a, b) => a.id.localeCompare(b.id));
 		},
-		formatModelDisplay(modelId: string, promptTokens: number): string {
+		formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string {
 			return formatGenericProviderModelDisplay(
 				options.id,
-				options.loadModels().find((model) => model.id === modelId),
+				modelId,
+				loadProviderModelsFromUnifiedCatalog(options.id, configDir).find((model) => model.id === modelId),
 				promptTokens,
 			);
 		},
@@ -177,22 +210,33 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 		return "openai-chat-completions";
 	},
 	modelsConfigExists(configDir?: string): boolean {
-		return modelsConfigExists(configDir);
+		return unifiedModelsConfigExists(configDir);
 	},
 	loadModels(configDir?: string): ProviderModelConfig[] {
-		return loadModelsConfig(configDir);
+		return loadProviderModelsFromUnifiedCatalog("github-copilot", configDir);
 	},
 	buildSortedModels(configDir?: string): SortedProviderModelListItem[] {
-		return buildSortedModelList(loadModelsConfig(configDir));
+		return loadProviderModelsFromUnifiedCatalog("github-copilot", configDir)
+			.map((model) => ({
+				id: model.id,
+				cost: formatProviderCostLabel("github-copilot", model),
+				contextWindow: model.contextWindow,
+			}))
+			.sort((a, b) => a.id.localeCompare(b.id));
 	},
 	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string {
-		return `${this.id} | ${formatModelDisplay(modelId, promptTokens, configDir)}`;
+		return formatGenericProviderModelDisplay(
+			"github-copilot",
+			modelId,
+			loadProviderModelsFromUnifiedCatalog("github-copilot", configDir).find((model) => model.id === modelId),
+			promptTokens,
+		);
 	},
 	buildTurnSummaryParts(options): ProviderSummaryParts {
 		const modelConfig = this.loadModels(options.configDir).find((model) => model.id === options.modelId);
 		return {
 			modelName: options.modelId,
-			pricingLabel: modelConfig?.label ?? formatModelDisplay(options.modelId, 0, options.configDir).split(" | ")[1],
+			pricingLabel: formatProviderCostLabel("github-copilot", modelConfig),
 		};
 	},
 	async createConfiguredProvider(options): Promise<Provider> {
@@ -219,12 +263,14 @@ const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 	getApiFamily(): ApiFamily {
 		return "openai-chat-completions";
 	},
-	loadModels: loadOpenRouterModelsConfig,
 	buildTurnSummaryParts(options): ProviderSummaryParts {
-		const modelConfig = loadOpenRouterModelsConfig().find((model) => model.id === options.modelId);
+		const modelConfig = loadProviderModelsFromUnifiedCatalog("openrouter", options.configDir).find(
+			(model) => model.id === options.modelId,
+		);
 		const modelName = defaultModelName(options.modelId);
-		if (modelConfig?.label === "free") {
-			return { modelName, costEstimate: "free" };
+		const staticEstimate = formatProviderSummaryCostEstimate("openrouter", modelConfig);
+		if (staticEstimate) {
+			return { modelName, costEstimate: staticEstimate };
 		}
 		if (modelConfig?.inputPrice !== undefined && modelConfig.outputPrice !== undefined) {
 			const cost = (options.inputTokens * modelConfig.inputPrice + options.outputTokens * modelConfig.outputPrice) / 1_000_000;
@@ -239,7 +285,7 @@ const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 	async createProvider(options): Promise<Provider> {
 		const openRouterModule = await import("./openrouter");
 		const createOpenRouterProvider = options.createOpenRouterProvider ?? openRouterModule.createOpenRouterProvider;
-		return createOpenRouterProvider(options.auth, options.logger, options.fetch);
+		return createOpenRouterProvider(options.auth, options.logger, options.fetch, options.configDir);
 	},
 });
 
@@ -254,7 +300,6 @@ const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 	getApiFamily(modelId: string): ApiFamily {
 		return modelId.startsWith("minimax-") ? "anthropic-messages" : "openai-chat-completions";
 	},
-	loadModels: loadOpenCodeGoModelsConfig,
 	getAuth(store) {
 		return store?.providers["opencode-go"];
 	},
@@ -262,7 +307,7 @@ const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 	async createProvider(options): Promise<Provider> {
 		const openCodeGoModule = await import("./opencode-go");
 		const createOpenCodeGoProvider = options.createOpenCodeGoProvider ?? openCodeGoModule.createOpenCodeGoProvider;
-		return createOpenCodeGoProvider(options.auth, options.logger, options.fetch);
+		return createOpenCodeGoProvider(options.auth, options.logger, options.fetch, options.configDir);
 	},
 });
 
@@ -279,7 +324,6 @@ const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 		if (modelId.startsWith("gpt-")) return "openai-responses";
 		return "openai-chat-completions";
 	},
-	loadModels: loadOpenCodeZenModelsConfig,
 	getAuth(store) {
 		return store?.providers["opencode-zen"];
 	},
@@ -287,7 +331,7 @@ const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 	async createProvider(options): Promise<Provider> {
 		const openCodeZenModule = await import("./opencode-zen");
 		const createOpenCodeZenProvider = options.createOpenCodeZenProvider ?? openCodeZenModule.createOpenCodeZenProvider;
-		return createOpenCodeZenProvider(options.auth, options.logger, options.fetch);
+		return createOpenCodeZenProvider(options.auth, options.logger, options.fetch, options.configDir);
 	},
 });
 

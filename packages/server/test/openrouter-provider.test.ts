@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import fs from "node:fs";
 import { createOpenRouterProvider } from "../src/provider/openrouter";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 function sseStream(chunks: Array<Record<string, unknown> | "[DONE]">): ReadableStream<Uint8Array> {
 	return new ReadableStream({
@@ -23,13 +25,16 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 
 describe("openrouter provider", () => {
 	const originalFetch = globalThis.fetch;
+	let configDir: string;
 
 	beforeEach(() => {
 		globalThis.fetch = originalFetch;
+		configDir = createProviderModelsTempDir();
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
 	test("sends correct request to OpenRouter chat completions API", async () => {
@@ -51,7 +56,7 @@ describe("openrouter provider", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenRouterProvider({ apiKey: "or-key" });
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
 		await collect(
 			provider.stream({
 				model: "openrouter/free",
@@ -97,7 +102,7 @@ describe("openrouter provider", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenRouterProvider({ apiKey: "or-key" });
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
 		const events = await collect(
 			provider.stream({
 				model: "anthropic/claude-haiku-4.5",
@@ -146,7 +151,7 @@ describe("openrouter provider", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenRouterProvider({ apiKey: "or-key" });
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
 		const events = await collect(
 			provider.stream({
 				model: "openrouter/free",
@@ -161,7 +166,7 @@ describe("openrouter provider", () => {
 				type: "usage",
 				tokenCount: 10,
 				tokenLimit: 200000,
-				display: "openrouter | openrouter/free | free | 10 / 200000 | 0%",
+				display: "openrouter | openrouter/free | $0.00 | $0.00 | 10 / 200000 | 0%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -169,7 +174,7 @@ describe("openrouter provider", () => {
 
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
-		const provider = createOpenRouterProvider({ apiKey: "bad" });
+		const provider = createOpenRouterProvider({ apiKey: "bad" }, undefined, globalThis.fetch, configDir);
 		await expect(async () => {
 			for await (const _ of provider.stream({
 				model: "openrouter/free",

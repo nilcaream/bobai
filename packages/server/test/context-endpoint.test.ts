@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { appendMessage, createSession, updateSessionModel, updateSessionPromptTokens } from "../src/session/repository";
 import { createTestDb, startTestServer } from "./helpers";
+import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
 
 const tempDirs: string[] = [];
 
@@ -13,8 +14,13 @@ function makeTempDir(prefix: string): string {
 	return dir;
 }
 
-function writeModelsConfig(configDir: string, models: unknown): void {
-	fs.writeFileSync(path.join(configDir, "copilot-models.json"), JSON.stringify(models, null, 2));
+function writeModelsConfig(
+	configDir: string,
+	models: Array<{ id: string; name: string; contextWindow: number; maxOutput: number }>,
+): void {
+	writeUnifiedModelsConfig(configDir, {
+		"github-copilot": createCopilotModels(models),
+	});
 }
 
 function addLegacySystemMessage(db: Database, sessionId: string, content: string): void {
@@ -114,9 +120,7 @@ describe("context endpoint", () => {
 				id: "test-model",
 				name: "Test Model",
 				contextWindow: 1000,
-				maxOutputTokens: 200,
-				premiumRequestMultiplier: 0,
-				enabled: true,
+				maxOutput: 200,
 			},
 		]);
 		const started = startTestServer({

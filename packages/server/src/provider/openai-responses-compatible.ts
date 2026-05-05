@@ -24,14 +24,16 @@ export function createOpenAIResponsesCompatibleProvider(
 	config: OpenAIResponsesCompatibleProviderOptions,
 	_logger?: Logger,
 	fetchFn: typeof fetch = fetch,
+	configDir = "",
 ): Provider {
 	return {
 		id: config.providerId,
+		configDir,
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			const input = convertMessagesToResponses(options.messages);
 			const tools = options.tools?.length ? convertToolsToResponses(options.tools) : undefined;
 			const promptChars = estimatePromptChars(options.messages);
-			const tokenLimit = getProviderModelConfig(config.providerId, options.model)?.contextWindow ?? 0;
+			const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
 			let completedUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 			const response = await fetchFn(config.baseUrl, {
@@ -58,9 +60,10 @@ export function createOpenAIResponsesCompatibleProvider(
 				return;
 			}
 
-			for await (const event of parseResponsesSSE(response.body, options.model, options.initiator ?? "user", "", {
+			for await (const event of parseResponsesSSE(response.body, options.model, options.initiator ?? "user", configDir, {
+				providerId: config.providerId,
 				tokenLimit,
-				display: formatProviderModelDisplay(config.providerId, options.model, 0),
+				display: formatProviderModelDisplay(config.providerId, options.model, 0, configDir),
 				onCompletedUsage: (usage) => {
 					completedUsage = usage;
 				},
@@ -68,7 +71,7 @@ export function createOpenAIResponsesCompatibleProvider(
 				if (event.type === "usage") {
 					yield {
 						...event,
-						display: formatProviderModelDisplay(config.providerId, options.model, completedUsage.inputTokens),
+						display: formatProviderModelDisplay(config.providerId, options.model, completedUsage.inputTokens, configDir),
 					};
 					options.onMetrics?.({
 						model: options.model,

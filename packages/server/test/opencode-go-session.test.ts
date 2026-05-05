@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { saveAuthStore } from "../src/auth/store";
 import { createServer } from "../src/server";
 import { createSession, getMessages } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb, openWs } from "./helpers";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
@@ -19,7 +18,7 @@ describe("OpenCode Go session flow", () => {
 	let seenProviderIds: string[];
 
 	beforeAll(() => {
-		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-opencode-go-session-"));
+		tmpDir = createProviderModelsTempDir();
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
@@ -35,6 +34,7 @@ describe("OpenCode Go session flow", () => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
+					configDir: tmpDir,
 					async *stream(opts: {
 						model: string;
 						initiator?: "user" | "agent";
@@ -98,7 +98,7 @@ describe("OpenCode Go session flow", () => {
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("opencode-go");
 		expect(body.model).toBe("deepseek-v4-flash");
-		expect(body.status).toBe("opencode-go | deepseek-v4-flash | beta | 0 / 131072 | 0%");
+		expect(body.status).toBe("opencode-go | deepseek-v4-flash | $0.27 | $1.10 | 0 / 131072 | 0%");
 	});
 
 	test("websocket prompt uses the OpenCode Go runtime after provider switch", async () => {

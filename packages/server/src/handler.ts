@@ -131,6 +131,7 @@ export async function handlePrompt(req: PromptRequest) {
 	let effectiveModel = model ?? null;
 	let lastAssistantMessageId: string | null = null;
 	let turnProvider: ReturnType<typeof createIsolatedTurnProvider> | undefined;
+	let scopedLogger: ReturnType<NonNullable<PromptRequest["logger"]>["withScope"]> | undefined;
 
 	try {
 		// Resolve or create session
@@ -173,7 +174,7 @@ export async function handlePrompt(req: PromptRequest) {
 			return;
 		}
 
-		const scopedLogger = req.logger?.withScope(sessionScope(currentSessionId as string));
+		scopedLogger = req.logger?.withScope(sessionScope(currentSessionId as string));
 
 		// Persist the effective model so session load can reconstruct the status bar
 		if (!sessionObj?.model && currentSessionId) {
@@ -356,7 +357,7 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 
 		// Create an isolated turn provider so concurrent sessions don't corrupt each other's metrics
-		turnProvider = createIsolatedTurnProvider(activeProvider);
+		turnProvider = createIsolatedTurnProvider(activeProvider, configDir);
 		turnProvider.beginTurn?.(sessionPromptTokens);
 
 		// Run the agent loop

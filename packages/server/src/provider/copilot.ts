@@ -1,14 +1,11 @@
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { type AuthStore, type CopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
-import { fetchCatalog } from "../models-catalog";
 import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
 import { parseAnthropicStream } from "./anthropic-stream";
-import { buildModelConfigs, getPremiumRequestMultiplier, loadModelsConfig } from "./copilot-models";
-import { formatProviderModelDisplay } from "./models";
+import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider";
 import { convertMessagesToResponses, convertToolsToResponses } from "./responses-convert";
@@ -177,9 +174,7 @@ export function createCopilotProvider(
 	}
 
 	function getMaxOutputTokens(modelId: string): number {
-		const configs = loadModelsConfig(resolvedConfigDir);
-		const config = configs.find((m) => m.id === modelId);
-		return config?.maxOutput ?? 16384;
+		return getProviderModelConfig("github-copilot", modelId, resolvedConfigDir)?.maxOutput ?? 16384;
 	}
 
 	// ── Shared retry infrastructure ──────────────────────────────────────
@@ -328,7 +323,8 @@ export function createCopilotProvider(
 							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
-							const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
+							const multiplier =
+								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.premiumRequestMultiplier ?? 0;
 							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
 						yield usageEvent;
@@ -520,7 +516,8 @@ export function createCopilotProvider(
 							turnLastCallChars = callChars;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
-							const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
+							const multiplier =
+								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.premiumRequestMultiplier ?? 0;
 							if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 						}
 						yield usageEvent;
@@ -559,6 +556,7 @@ export function createCopilotProvider(
 
 	return {
 		id: "github-copilot",
+		configDir: resolvedConfigDir,
 
 		beginTurn(sessionPromptTokens?: number) {
 			turnStartTime = performance.now();
@@ -804,8 +802,8 @@ export function createCopilotProvider(
 						if (choice?.finish_reason) {
 							const promptTokens = data.usage?.prompt_tokens ?? 0;
 							const totalTokens = data.usage?.total_tokens ?? 0;
-							const configs = loadModelsConfig(resolvedConfigDir);
-							const contextWindow = configs.find((m) => m.id === options.model)?.contextWindow ?? 0;
+							const contextWindow =
+								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.contextWindow ?? 0;
 							if (contextWindow <= 0 && !warnedContextWindow.has(options.model)) {
 								warnedContextWindow.add(options.model);
 								console.warn(`[WARN] No contextWindow for model "${options.model}"; context tracking degraded`);
@@ -832,7 +830,8 @@ export function createCopilotProvider(
 								turnLastCallChars = callChars;
 								if (effectiveInitiator === "agent") turnAgentCalls++;
 								else turnUserCalls++;
-								const multiplier = getPremiumRequestMultiplier(options.model) ?? 0;
+								const multiplier =
+									getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.premiumRequestMultiplier ?? 0;
 								if (effectiveInitiator === "user") turnPremiumCost += multiplier;
 							}
 
@@ -891,158 +890,4 @@ export function createCopilotProvider(
 			throw lastError ?? new Error("Unexpected: no response after retry loop");
 		},
 	};
-}
-
-export async function enableModels(sessionToken: string, baseUrl: string, modelIds: string[], padWidth = 20): Promise<void> {
-	console.log("Enabling models");
-
-	const results = await Promise.all(
-		modelIds.map(async (id) => {
-			try {
-				const response = await fetch(`${baseUrl}/models/${id}/policy`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...copilotConfig.headers,
-						"openai-intent": "chat-policy",
-						"x-interaction-type": "chat-policy",
-						Authorization: `Bearer ${sessionToken}`,
-					},
-					body: JSON.stringify({ state: "enabled" }),
-				});
-				if (response.ok) {
-					return { id, status: "enabled" };
-				}
-				return { id, status: `failed (HTTP ${response.status})` };
-			} catch (err) {
-				return { id, status: `failed (${err instanceof Error ? err.message : String(err)})` };
-			}
-		}),
-	);
-
-	for (const r of results) {
-		console.log(`- ${r.id.padEnd(padWidth)} : ${r.status}`);
-	}
-}
-
-export interface RefreshResult {
-	total: number;
-	enabled: number;
-	configPath: string;
-}
-
-export async function refreshModels(
-	sessionToken: string,
-	baseUrl: string,
-	configDir: string,
-	options?: { verify?: boolean },
-): Promise<RefreshResult> {
-	console.log("Fetching model catalog from models.dev");
-	const catalog = await fetchCatalog("github-copilot");
-	console.log(`- Got ${catalog.length} models`);
-	const configs = buildModelConfigs(catalog);
-
-	if (!options?.verify) {
-		for (const config of configs) {
-			config.enabled = true;
-		}
-		fs.mkdirSync(configDir, { recursive: true });
-		const configPath = path.join(configDir, "copilot-models.json");
-		fs.writeFileSync(configPath, JSON.stringify(configs, null, "\t"));
-		console.log("");
-		console.log(`Wrote ${configs.length} models (curated list) to ${configPath}`);
-		console.log("Run `bobai refresh --verify` to verify that curated models are currently available.");
-		return { total: configs.length, enabled: configs.length, configPath };
-	}
-
-	const padWidth = Math.max(...configs.map((c) => c.id.length), 0);
-
-	console.log("");
-	await enableModels(
-		sessionToken,
-		baseUrl,
-		configs.map((c) => c.id),
-		padWidth,
-	);
-	console.log("");
-
-	console.log("Checking models");
-	for (const config of configs) {
-		process.stdout.write(`- ${config.id.padEnd(padWidth)} : `);
-		try {
-			let response: Response;
-			if (isCopilotClaude(config.id)) {
-				response = await fetch(`${baseUrl}/v1/messages`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...copilotConfig.headers,
-						"Openai-Intent": "conversation-edits",
-						Authorization: `Bearer ${sessionToken}`,
-						"x-initiator": "agent",
-					},
-					body: JSON.stringify({
-						model: config.id,
-						messages: [{ role: "user", content: "Ping. Respond pong." }],
-						max_tokens: 16,
-						stream: false,
-					}),
-					signal: AbortSignal.timeout(40_000),
-				});
-			} else if (isCopilotResponses(config.id)) {
-				response = await fetch(`${baseUrl}/responses`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...copilotConfig.headers,
-						"Openai-Intent": "conversation-edits",
-						Authorization: `Bearer ${sessionToken}`,
-						"x-initiator": "agent",
-					},
-					body: JSON.stringify({
-						model: config.id,
-						input: [{ role: "user", content: [{ type: "input_text", text: "Ping. Respond pong." }] }],
-						stream: false,
-						store: false,
-					}),
-					signal: AbortSignal.timeout(40_000),
-				});
-			} else {
-				response = await fetch(`${baseUrl}/chat/completions`, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...copilotConfig.headers,
-						"Openai-Intent": "conversation-edits",
-						Authorization: `Bearer ${sessionToken}`,
-						"x-initiator": "agent",
-					},
-					body: JSON.stringify({
-						model: config.id,
-						messages: [{ role: "user", content: "Ping. Respond pong." }],
-						stream: false,
-					}),
-					signal: AbortSignal.timeout(40_000),
-				});
-			}
-			if (response.ok) {
-				config.enabled = true;
-				console.log("OK");
-			} else {
-				console.log(`failed (HTTP ${response.status})`);
-			}
-		} catch (err) {
-			console.log(`failed (${err instanceof Error ? err.message : "unknown error"})`);
-		}
-	}
-
-	fs.mkdirSync(configDir, { recursive: true });
-	const configPath = path.join(configDir, "copilot-models.json");
-	fs.writeFileSync(configPath, JSON.stringify(configs, null, "\t"));
-
-	const enabled = configs.filter((c) => c.enabled).length;
-	console.log("");
-	console.log(`Wrote ${configs.length} models (${enabled} enabled) to ${configPath}`);
-
-	return { total: configs.length, enabled, configPath };
 }

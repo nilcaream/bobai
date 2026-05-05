@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { saveAuthStore } from "../src/auth/store";
 import { createServer } from "../src/server";
 import { createSession, getMessages } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb, openWs } from "./helpers";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
@@ -19,7 +18,7 @@ describe("OpenRouter session flow", () => {
 	let seenProviderIds: string[];
 
 	beforeAll(() => {
-		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-openrouter-session-"));
+		tmpDir = createProviderModelsTempDir();
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
@@ -34,6 +33,7 @@ describe("OpenRouter session flow", () => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
+					configDir: tmpDir,
 					async *stream(opts: {
 						initiator?: "user" | "agent";
 						onMetrics?: (metrics: {
@@ -96,7 +96,7 @@ describe("OpenRouter session flow", () => {
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("openrouter");
 		expect(body.model).toBe("openrouter/free");
-		expect(body.status).toBe("openrouter | openrouter/free | free | 0 / 200000 | 0%");
+		expect(body.status).toBe("openrouter | openrouter/free | $0.00 | $0.00 | 0 / 200000 | 0%");
 	});
 
 	test("websocket prompt uses the OpenRouter runtime after provider switch", async () => {

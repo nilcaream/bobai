@@ -25,13 +25,15 @@ export function createAnthropicCompatibleProvider(
 	config: AnthropicCompatibleProviderOptions,
 	_logger?: Logger,
 	fetchFn: typeof fetch = fetch,
+	configDir = "",
 ): Provider {
 	return {
 		id: config.providerId,
+		configDir,
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			const { system, messages } = convertMessagesToAnthropic(options.messages);
 			const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
-			const maxTokens = getProviderModelConfig(config.providerId, options.model)?.maxOutput ?? 16384;
+			const maxTokens = getProviderModelConfig(config.providerId, options.model, configDir)?.maxOutput ?? 16384;
 			const apiKeyHeader = config.apiKeyHeader ?? "x-api-key";
 
 			const response = await fetchFn(config.baseUrl, {
@@ -120,8 +122,8 @@ export function createAnthropicCompatibleProvider(
 						break;
 					}
 					case "message_stop": {
-						const tokenLimit = getProviderModelConfig(config.providerId, options.model)?.contextWindow ?? 0;
-						const display = formatProviderModelDisplay(config.providerId, options.model, inputTokens);
+						const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
+						const display = formatProviderModelDisplay(config.providerId, options.model, inputTokens, configDir);
 						yield {
 							type: "usage",
 							tokenCount: inputTokens,

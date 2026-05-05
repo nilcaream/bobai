@@ -22,9 +22,11 @@ export function createOpenAIChatCompatibleProvider(
 	config: OpenAIChatCompatibleProviderOptions,
 	_logger?: Logger,
 	fetchFn: typeof fetch = fetch,
+	configDir = "",
 ): Provider {
 	return {
 		id: config.providerId,
+		configDir,
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
@@ -104,8 +106,8 @@ export function createOpenAIChatCompatibleProvider(
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
 					finishReason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
-					const tokenLimit = getProviderModelConfig(config.providerId, options.model)?.contextWindow ?? 0;
-					const display = formatProviderModelDisplay(config.providerId, options.model, promptTokens);
+					const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
+					const display = formatProviderModelDisplay(config.providerId, options.model, promptTokens, configDir);
 					yield { type: "usage", tokenCount: promptTokens, tokenLimit, display };
 					options.onMetrics?.({
 						model: options.model,

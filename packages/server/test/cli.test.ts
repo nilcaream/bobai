@@ -39,16 +39,13 @@ describe("parseCLI", () => {
 		expect(result.debug).toBe(true);
 	});
 
-	test("refresh without --verify defaults to non-verified mode", () => {
+	test("refresh returns refresh command without verify mode", () => {
 		const result = parseCLI(["refresh"]);
 		expect(result.command).toBe("refresh");
 		expect(result.debug).toBe(false);
-		expect(result.verify).toBe(false);
 	});
 
-	test("refresh with --verify enables verification mode", () => {
-		const result = parseCLI(["refresh", "--verify"]);
-		expect(result.command).toBe("refresh");
-		expect(result.verify).toBe(true);
+	test("refresh rejects removed --verify flag", () => {
+		expect(() => parseCLI(["refresh", "--verify"])).toThrow(/--verify has been removed/);
 	});
 });

@@ -1,7 +1,8 @@
-import { formatModelDisplay, loadModelsConfig } from "./copilot-models";
+import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { StreamEvent } from "./provider";
 
 export interface ResponsesStreamOptions {
+	providerId?: string;
 	tokenLimit?: number;
 	display?: string;
 	onCompletedUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
@@ -87,10 +88,10 @@ export async function* parseResponsesSSE(
 				const totalTokens = usage?.total_tokens ?? inputTokens + outputTokens;
 				options.onCompletedUsage?.({ inputTokens, outputTokens, totalTokens });
 
-				const configs =
-					options.tokenLimit !== undefined && options.display !== undefined ? undefined : loadModelsConfig(configDir);
-				const contextWindow = options.tokenLimit ?? configs?.find((m) => m.id === model)?.contextWindow ?? 0;
-				const display = options.display ?? formatModelDisplay(model, inputTokens, configDir);
+				const providerId = options.providerId ?? "github-copilot";
+				const contextWindow =
+					options.tokenLimit ?? getProviderModelConfig(providerId as never, model, configDir)?.contextWindow ?? 0;
+				const display = options.display ?? formatProviderModelDisplay(providerId as never, model, inputTokens, configDir);
 
 				yield {
 					type: "usage",

@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import { createIsolatedTurnProvider } from "../src/provider/isolated-turn";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 function makeProvider(id: "github-copilot" | "openrouter", model: string): Provider {
 	return {
@@ -19,9 +21,15 @@ function makeProvider(id: "github-copilot" | "openrouter", model: string): Provi
 	};
 }
 
+const configDir = createProviderModelsTempDir();
+
+afterAll(() => {
+	fs.rmSync(configDir, { recursive: true, force: true });
+});
+
 describe("isolated turn provider metadata", () => {
 	test("formats github-copilot summaries from provider descriptor metadata", async () => {
-		const provider = createIsolatedTurnProvider(makeProvider("github-copilot", "gpt-5-mini"));
+		const provider = createIsolatedTurnProvider(makeProvider("github-copilot", "gpt-5-mini"), configDir);
 		provider.beginTurn?.(0);
 		for await (const _ of provider.stream({ model: "gpt-5-mini", messages: [] })) {
 		}
@@ -31,7 +39,7 @@ describe("isolated turn provider metadata", () => {
 	});
 
 	test("formats openrouter summaries from provider descriptor metadata", async () => {
-		const provider = createIsolatedTurnProvider(makeProvider("openrouter", "openrouter/free"));
+		const provider = createIsolatedTurnProvider(makeProvider("openrouter", "openrouter/free"), configDir);
 		provider.beginTurn?.(0);
 		for await (const _ of provider.stream({ model: "openrouter/free", messages: [] })) {
 		}

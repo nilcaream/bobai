@@ -33,19 +33,38 @@ describe("resolveValidatedDefaultBackend", () => {
 		};
 	}
 
-	function writeCopilotModelsConfig() {
+	function writeModelsConfig() {
 		fs.writeFileSync(
-			path.join(configDir, "copilot-models.json"),
-			JSON.stringify([
-				{
-					id: "gpt-5-mini",
-					name: "GPT-5 Mini",
-					contextWindow: 264000,
-					maxOutput: 64000,
-					premiumRequestMultiplier: 0,
-					enabled: true,
+			path.join(configDir, "models.json"),
+			JSON.stringify({
+				version: 1,
+				generatedAt: "2026-05-05T00:00:00.000Z",
+				providers: {
+					"github-copilot": [
+						{
+							id: "gpt-5-mini",
+							name: "GPT-5 Mini",
+							contextWindow: 264000,
+							maxOutput: 64000,
+							inputPrice: 0,
+							outputPrice: 0,
+							premiumRequestMultiplier: 0,
+						},
+					],
+					openrouter: [
+						{
+							id: "openrouter/free",
+							name: "OpenRouter Free Router",
+							contextWindow: 200000,
+							maxOutput: 16384,
+							inputPrice: 0,
+							outputPrice: 0,
+						},
+					],
+					"opencode-go": [],
+					"opencode-zen": [],
 				},
-			]),
+			}),
 		);
 	}
 
@@ -63,7 +82,7 @@ describe("resolveValidatedDefaultBackend", () => {
 	});
 
 	test("prefers a valid project backend over a valid global backend", () => {
-		writeCopilotModelsConfig();
+		writeModelsConfig();
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
@@ -84,7 +103,7 @@ describe("resolveValidatedDefaultBackend", () => {
 	});
 
 	test("falls back to a valid global backend when project defaults are incomplete", () => {
-		writeCopilotModelsConfig();
+		writeModelsConfig();
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
@@ -104,7 +123,7 @@ describe("resolveValidatedDefaultBackend", () => {
 	});
 
 	test("logs an invalid provider and falls back to global", () => {
-		writeCopilotModelsConfig();
+		writeModelsConfig();
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
@@ -124,7 +143,7 @@ describe("resolveValidatedDefaultBackend", () => {
 	});
 
 	test("logs a missing authentication error and falls back to global", () => {
-		writeCopilotModelsConfig();
+		writeModelsConfig();
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
@@ -144,7 +163,7 @@ describe("resolveValidatedDefaultBackend", () => {
 	});
 
 	test("logs an invalid model and returns null when no valid defaults remain", () => {
-		writeCopilotModelsConfig();
+		writeModelsConfig();
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {

@@ -121,6 +121,7 @@ interface AccumulatedToolCall {
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
 	const { provider, model, tools, projectRoot, accessibleDirectories, sessionId, onEvent, onMessage, signal, initiator } =
 		options;
+	const configDir = provider.configDir;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 	if (!Number.isInteger(maxIterations) || maxIterations < 1) {
 		throw new Error(`Invalid maxIterations: ${maxIterations}. Must be a positive integer.`);
@@ -264,7 +265,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 						};
 					} else {
 						try {
-							const isolated = createIsolatedTurnProvider(provider);
+							const isolated = createIsolatedTurnProvider(provider, configDir);
 							const execResult = await tool.execute(args, {
 								projectRoot,
 								accessibleDirectories,

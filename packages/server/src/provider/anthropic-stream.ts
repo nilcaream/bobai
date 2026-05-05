@@ -1,4 +1,4 @@
-import { formatModelDisplay, loadModelsConfig } from "./copilot-models";
+import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { StreamEvent } from "./provider";
 
 /**
@@ -66,10 +66,8 @@ export async function* parseAnthropicStream(
 
 			case "message_stop": {
 				// Emit usage event
-				const configs = loadModelsConfig(configDir);
-				const modelConfig = configs.find((m) => m.id === model);
-				const tokenLimit = modelConfig?.contextWindow ?? 0;
-				const display = formatModelDisplay(model, inputTokens, configDir);
+				const tokenLimit = getProviderModelConfig("github-copilot", model, configDir)?.contextWindow ?? 0;
+				const display = formatProviderModelDisplay("github-copilot", model, inputTokens, configDir);
 				const totalTokens = inputTokens + outputTokens;
 
 				yield {

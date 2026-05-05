@@ -74,6 +74,7 @@ export interface ProviderOptions {
 
 export interface Provider {
 	readonly id: string;
+	readonly configDir?: string;
 	stream(options: ProviderOptions): AsyncIterable<StreamEvent>;
 	/** Reset per-turn stats. Called before the agent loop starts.
 	 *  @param sessionPromptTokens — last known prompt token count from the DB,

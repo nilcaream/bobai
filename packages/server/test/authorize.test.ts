@@ -67,7 +67,7 @@ describe("authorizeCopilot", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	test("runs device flow, exchanges, and persists auth under github-copilot", async () => {
+	test("runs device flow, exchanges, persists auth, and does not write models.json", async () => {
 		globalThis.fetch = createMockFetch();
 
 		const result = await authorizeCopilot(tmpDir);
@@ -82,6 +82,7 @@ describe("authorizeCopilot", () => {
 		expect(raw.providers["github-copilot"]?.refresh).toBe("gho_final");
 		expect(raw.providers["github-copilot"]?.access).toBe(SESSION_TOKEN);
 		expect(typeof raw.providers["github-copilot"]?.expires).toBe("number");
+		expect(fs.existsSync(path.join(tmpDir, "models.json"))).toBe(false);
 
 		expect(result).toEqual(raw.providers["github-copilot"]);
 	});

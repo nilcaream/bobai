@@ -10,6 +10,7 @@ import type { ProviderRuntimeManager } from "../src/provider/runtime-manager";
 import { createSession, getMessages, updateSessionPromptTokens } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
+import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
 
 const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
@@ -249,19 +250,17 @@ describe("handlePrompt", () => {
 		};
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-"));
 		try {
-			fs.writeFileSync(
-				path.join(tmpDir, "copilot-models.json"),
-				JSON.stringify([
+			writeUnifiedModelsConfig(tmpDir, {
+				"github-copilot": createCopilotModels([
 					{
 						id: "gpt-5-mini",
 						name: "GPT-5 Mini",
 						contextWindow: 264000,
 						maxOutput: 64000,
 						premiumRequestMultiplier: 0,
-						enabled: true,
 					},
 				]),
-			);
+			});
 
 			await handlePrompt({
 				ws,
@@ -315,20 +314,19 @@ describe("handlePrompt", () => {
 		const ws = mockWs();
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-summary-"));
 		try {
-			fs.writeFileSync(
-				path.join(tmpDir, "copilot-models.json"),
-				JSON.stringify([
+			writeUnifiedModelsConfig(tmpDir, {
+				"github-copilot": [
 					{
 						id: "claude-haiku-4.5",
 						name: "Claude Haiku 4.5",
 						contextWindow: 128000,
 						maxOutput: 64000,
+						inputPrice: 0,
+						outputPrice: 0,
 						premiumRequestMultiplier: 0.33,
-						label: "0.33x",
-						enabled: true,
 					},
-				]),
-			);
+				],
+			});
 			const session = createSession(db, {
 				provider: "github-copilot",
 				model: "claude-haiku-4.5",
@@ -363,82 +361,115 @@ describe("handlePrompt", () => {
 
 	test("formats openrouter message summaries with estimated cost", async () => {
 		const ws = mockWs();
-		const session = createSession(db, {
-			provider: "openrouter",
-			model: "anthropic/claude-haiku-4.5",
-			apiFamily: "openai-chat-completions",
-		});
-		updateSessionPromptTokens(db, session.id, 3760, 0);
-		await handlePrompt({
-			ws,
-			db,
-			provider: metricsProvider("openrouter", "anthropic/claude-haiku-4.5", 7473, 3123),
-			defaultProviderId: "openrouter",
-			sessionId: session.id,
-			model: "anthropic/claude-haiku-4.5",
-			text: "hello",
-			projectRoot: "/tmp",
-			configDir: "/tmp",
-			skills: emptySkills,
-		});
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-openrouter-summary-"));
+		try {
+			writeUnifiedModelsConfig(tmpDir, {
+				openrouter: [
+					{
+						id: "anthropic/claude-haiku-4.5",
+						name: "Anthropic Claude Haiku 4.5",
+						contextWindow: 128000,
+						maxOutput: 64000,
+						inputPrice: 0.5,
+						outputPrice: 5.12,
+					},
+				],
+			});
+			const session = createSession(db, {
+				provider: "openrouter",
+				model: "anthropic/claude-haiku-4.5",
+				apiFamily: "openai-chat-completions",
+			});
+			updateSessionPromptTokens(db, session.id, 3760, 0);
+			await handlePrompt({
+				ws,
+				db,
+				provider: metricsProvider("openrouter", "anthropic/claude-haiku-4.5", 7473, 3123),
+				defaultProviderId: "openrouter",
+				sessionId: session.id,
+				model: "anthropic/claude-haiku-4.5",
+				text: "hello",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
 
-		const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-		expect(done?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
-		);
-		const stored = getMessages(db, session.id);
-		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
-		);
+			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+			expect(done?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+			);
+			const stored = getMessages(db, session.id);
+			expect(stored.at(-1)?.metadata?.summary).toMatch(
+				/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+			);
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	test("formats free openrouter message summaries with a free label", async () => {
 		const ws = mockWs();
-		const session = createSession(db, {
-			provider: "openrouter",
-			model: "openrouter/free",
-			apiFamily: "openai-chat-completions",
-		});
-		updateSessionPromptTokens(db, session.id, 5007, 0);
-		await handlePrompt({
-			ws,
-			db,
-			provider: metricsProvider("openrouter", "tencent/hy3-preview:free", 7446, 279),
-			defaultProviderId: "openrouter",
-			sessionId: session.id,
-			model: "openrouter/free",
-			text: "hello",
-			projectRoot: "/tmp",
-			configDir: "/tmp",
-			skills: emptySkills,
-		});
+		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-openrouter-free-"));
+		try {
+			writeUnifiedModelsConfig(tmpDir, {
+				openrouter: [
+					{
+						id: "openrouter/free",
+						name: "OpenRouter Free Router",
+						contextWindow: 200000,
+						maxOutput: 16384,
+						inputPrice: 0,
+						outputPrice: 0,
+					},
+				],
+			});
+			const session = createSession(db, {
+				provider: "openrouter",
+				model: "openrouter/free",
+				apiFamily: "openai-chat-completions",
+			});
+			updateSessionPromptTokens(db, session.id, 5007, 0);
+			await handlePrompt({
+				ws,
+				db,
+				provider: metricsProvider("openrouter", "tencent/hy3-preview:free", 7446, 279),
+				defaultProviderId: "openrouter",
+				sessionId: session.id,
+				model: "openrouter/free",
+				text: "hello",
+				projectRoot: "/tmp",
+				configDir: tmpDir,
+				skills: emptySkills,
+			});
 
-		const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-		expect(done?.summary).toMatch(/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| free \| context: \+2439 \| \d+\.\d{2}s$/);
-		const stored = getMessages(db, session.id);
-		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| free \| context: \+2439 \| \d+\.\d{2}s$/,
-		);
+			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
+			expect(done?.summary).toMatch(/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| context: \+2439 \| \d+\.\d{2}s$/);
+			const stored = getMessages(db, session.id);
+			expect(stored.at(-1)?.metadata?.summary).toMatch(
+				/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| context: \+2439 \| \d+\.\d{2}s$/,
+			);
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	test("persists non-zero output tokens for Copilot responses models", async () => {
 		const ws = mockWs();
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-copilot-responses-"));
 		try {
-			fs.writeFileSync(
-				path.join(tmpDir, "copilot-models.json"),
-				JSON.stringify([
+			writeUnifiedModelsConfig(tmpDir, {
+				"github-copilot": [
 					{
 						id: "gpt-5.4",
 						name: "GPT-5.4",
 						contextWindow: 400000,
 						maxOutput: 128000,
+						inputPrice: 0,
+						outputPrice: 0,
 						premiumRequestMultiplier: 1,
-						label: "1x",
-						enabled: true,
 					},
-				]),
-			);
+				],
+			});
 			await handlePrompt({
 				ws,
 				db,
@@ -466,20 +497,19 @@ describe("handlePrompt", () => {
 		const ws = mockWs();
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-copilot-anthropic-"));
 		try {
-			fs.writeFileSync(
-				path.join(tmpDir, "copilot-models.json"),
-				JSON.stringify([
+			writeUnifiedModelsConfig(tmpDir, {
+				"github-copilot": [
 					{
 						id: "claude-haiku-4.5",
 						name: "Claude Haiku 4.5",
 						contextWindow: 128000,
 						maxOutput: 64000,
+						inputPrice: 0,
+						outputPrice: 0,
 						premiumRequestMultiplier: 0.33,
-						label: "0.33x",
-						enabled: true,
 					},
-				]),
-			);
+				],
+			});
 			await handlePrompt({
 				ws,
 				db,
@@ -509,20 +539,19 @@ describe("handlePrompt", () => {
 		const ws = mockWs();
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-turn-metrics-"));
 		try {
-			fs.writeFileSync(
-				path.join(tmpDir, "copilot-models.json"),
-				JSON.stringify([
+			writeUnifiedModelsConfig(tmpDir, {
+				"github-copilot": [
 					{
 						id: "claude-haiku-4.5",
 						name: "Claude Haiku 4.5",
 						contextWindow: 128000,
 						maxOutput: 64000,
+						inputPrice: 0,
+						outputPrice: 0,
 						premiumRequestMultiplier: 0.33,
-						label: "0.33x",
-						enabled: true,
 					},
-				]),
-			);
+				],
+			});
 			await handlePrompt({
 				ws,
 				db,

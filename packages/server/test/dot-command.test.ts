@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { handleCommand } from "../src/command";
 import { handlePrompt } from "../src/handler";
-import { CURATED_MODELS } from "../src/provider/copilot-models";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import type { ProviderId } from "../src/provider/providers";
 import { createServer } from "../src/server";
@@ -19,6 +18,7 @@ import {
 } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
+import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
 
 describe("session model field", () => {
 	let db: Database;
@@ -78,6 +78,54 @@ describe("handleCommand", () => {
 	beforeAll(() => {
 		db = createTestDb();
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
+		writeUnifiedModelsConfig(tmpDir, {
+			"github-copilot": createCopilotModels([
+				{ id: "claude-haiku-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
+				{ id: "claude-sonnet-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+				{ id: "gpt-5-mini", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0 },
+				{ id: "gpt-5.2", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+				{ id: "gpt-5.4", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+			]),
+			openrouter: [
+				{
+					id: "anthropic/claude-haiku-4.5",
+					name: "Anthropic Claude Haiku 4.5",
+					contextWindow: 128000,
+					maxOutput: 64000,
+					inputPrice: 0.5,
+					outputPrice: 5.12,
+				},
+				{
+					id: "openrouter/free",
+					name: "OpenRouter Free Router",
+					contextWindow: 200000,
+					maxOutput: 16384,
+					inputPrice: 0,
+					outputPrice: 0,
+				},
+			],
+			"opencode-go": [
+				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 131072,
+					maxOutput: 16384,
+					inputPrice: 0.27,
+					outputPrice: 1.1,
+				},
+			],
+			"opencode-zen": [
+				{
+					id: "minimax-m2.5-free",
+					name: "MiniMax M2.5 Free",
+					contextWindow: 131072,
+					maxOutput: 16384,
+					inputPrice: 0,
+					outputPrice: 0,
+				},
+				{ id: "gpt-5.4", name: "GPT-5.4", contextWindow: 272000, maxOutput: 64000, inputPrice: 1, outputPrice: 4 },
+			],
+		});
 	});
 
 	afterAll(() => {
@@ -169,19 +217,56 @@ describe("handleCommand", () => {
 			{ id: "claude-haiku-4.5", contextWindow: 1000 },
 			{ id: "claude-sonnet-4.5", contextWindow: 500000 },
 		];
-		fs.writeFileSync(
-			path.join(tmpDir, "copilot-models.json"),
-			JSON.stringify(
+		writeUnifiedModelsConfig(tmpDir, {
+			"github-copilot": createCopilotModels(
 				configModels.map((m) => ({
 					id: m.id,
 					name: m.id,
 					contextWindow: m.contextWindow,
 					maxOutput: 64000,
 					premiumRequestMultiplier: 1,
-					enabled: true,
 				})),
 			),
-		);
+			openrouter: [
+				{
+					id: "anthropic/claude-haiku-4.5",
+					name: "Anthropic Claude Haiku 4.5",
+					contextWindow: 128000,
+					maxOutput: 64000,
+					inputPrice: 0.5,
+					outputPrice: 5.12,
+				},
+				{
+					id: "openrouter/free",
+					name: "OpenRouter Free Router",
+					contextWindow: 200000,
+					maxOutput: 16384,
+					inputPrice: 0,
+					outputPrice: 0,
+				},
+			],
+			"opencode-go": [
+				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 131072,
+					maxOutput: 16384,
+					inputPrice: 0.27,
+					outputPrice: 1.1,
+				},
+			],
+			"opencode-zen": [
+				{
+					id: "minimax-m2.5-free",
+					name: "MiniMax M2.5 Free",
+					contextWindow: 131072,
+					maxOutput: 16384,
+					inputPrice: 0,
+					outputPrice: 0,
+				},
+				{ id: "gpt-5.4", name: "GPT-5.4", contextWindow: 272000, maxOutput: 64000, inputPrice: 1, outputPrice: 4 },
+			],
+		});
 		const session = createSession(db, {
 			provider: "github-copilot",
 			model: "gpt-5-mini",
@@ -281,6 +366,54 @@ describe("HTTP endpoints", () => {
 	beforeAll(() => {
 		db = createTestDb();
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
+		writeUnifiedModelsConfig(tmpDir, {
+			"github-copilot": createCopilotModels([
+				{ id: "claude-haiku-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
+				{ id: "claude-sonnet-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+				{ id: "gpt-5-mini", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0 },
+				{ id: "gpt-5.2", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+				{ id: "gpt-5.4", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+			]),
+			openrouter: [
+				{
+					id: "anthropic/claude-haiku-4.5",
+					name: "Anthropic Claude Haiku 4.5",
+					contextWindow: 128000,
+					maxOutput: 64000,
+					inputPrice: 0.5,
+					outputPrice: 5.12,
+				},
+				{
+					id: "openrouter/free",
+					name: "OpenRouter Free Router",
+					contextWindow: 200000,
+					maxOutput: 16384,
+					inputPrice: 0,
+					outputPrice: 0,
+				},
+			],
+			"opencode-go": [
+				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 131072,
+					maxOutput: 16384,
+					inputPrice: 0.27,
+					outputPrice: 1.1,
+				},
+			],
+			"opencode-zen": [
+				{
+					id: "minimax-m2.5-free",
+					name: "MiniMax M2.5 Free",
+					contextWindow: 131072,
+					maxOutput: 16384,
+					inputPrice: 0,
+					outputPrice: 0,
+				},
+				{ id: "gpt-5.4", name: "GPT-5.4", contextWindow: 272000, maxOutput: 64000, inputPrice: 1, outputPrice: 4 },
+			],
+		});
 		server = createServer({ port: 0, db, configDir: tmpDir, providerId: "github-copilot" });
 		baseUrl = `http://localhost:${server.port}`;
 	});
@@ -301,7 +434,7 @@ describe("HTTP endpoints", () => {
 			defaultStatus: string;
 		};
 		expect(body.providerId).toBe("github-copilot");
-		expect(body.models.length).toBe(CURATED_MODELS.length);
+		expect(body.models.length).toBe(5);
 		expect(body.models[0]).toEqual({ index: 1, id: "claude-haiku-4.5", cost: "0.33x", contextWindow: 0 });
 		expect(body.models.findIndex((model) => model.id === "claude-haiku-4.5")).toBeLessThan(
 			body.models.findIndex((model) => model.id === "gpt-5.2"),
@@ -330,7 +463,7 @@ describe("HTTP endpoints", () => {
 			contextWindow: 128000,
 		});
 		expect(body.defaultModel).toBe("openrouter/free");
-		expect(body.defaultStatus).toBe("openrouter | openrouter/free | free | 0 / 200000 | 0%");
+		expect(body.defaultStatus).toBe("openrouter | openrouter/free | $0.00 | $0.00 | 0 / 200000 | 0%");
 	});
 
 	test("GET /bobai/models returns curated opencode-go rows", async () => {
@@ -346,11 +479,11 @@ describe("HTTP endpoints", () => {
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "deepseek-v4-flash",
-			cost: "beta",
+			cost: "$0.27 | $1.10",
 			contextWindow: 131072,
 		});
 		expect(body.defaultModel).toBe("deepseek-v4-flash");
-		expect(body.defaultStatus).toBe("opencode-go | deepseek-v4-flash | beta | 0 / 131072 | 0%");
+		expect(body.defaultStatus).toBe("opencode-go | deepseek-v4-flash | $0.27 | $1.10 | 0 / 131072 | 0%");
 	});
 
 	test("GET /bobai/models returns curated opencode-zen rows", async () => {
@@ -366,17 +499,17 @@ describe("HTTP endpoints", () => {
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "minimax-m2.5-free",
-			cost: "free",
+			cost: "$0.00 | $0.00",
 			contextWindow: 131072,
 		});
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "gpt-5.4",
-			cost: "beta",
+			cost: "$1.00 | $4.00",
 			contextWindow: 272000,
 		});
 		expect(body.defaultModel).toBe("minimax-m2.5-free");
-		expect(body.defaultStatus).toBe("opencode-zen | minimax-m2.5-free | free | 0 / 131072 | 0%");
+		expect(body.defaultStatus).toBe("opencode-zen | minimax-m2.5-free | $0.00 | $0.00 | 0 / 131072 | 0%");
 	});
 
 	test("GET /bobai/models without a configured default backend returns select-provider status", async () => {

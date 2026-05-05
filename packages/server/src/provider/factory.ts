@@ -29,9 +29,9 @@ export interface CreateProviderDeps {
 	loadAuthStore?: (configDir: string) => AuthStore | undefined;
 	authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
 	createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger, fetchFn?: typeof fetch) => Provider;
-	createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
-	createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
-	createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+	createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
+	createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
+	createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 }
 
 export async function createConfiguredProvider(
