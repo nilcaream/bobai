@@ -22,7 +22,7 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("openrouter")?.defaultModel).toBe("openrouter/free");
 		expect(registry.getProviderDescriptor("opencode-go")?.defaultModel).toBe("deepseek-v4-flash");
 		expect(registry.getProviderDescriptor("opencode-zen")?.defaultModel).toBe("minimax-m2.5-free");
-		expect(registry.getProviderDescriptor("amazon-bedrock")?.defaultModel).toBe("us.amazon.nova-pro-v1:0");
+		expect(registry.getProviderDescriptor("amazon-bedrock")?.defaultModel).toBe("anthropic.claude-opus-4-7");
 	});
 
 	test("exposes provider-specific API-family resolution through descriptors", async () => {
@@ -36,5 +36,7 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
+		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-opus-4-7")).toBe("anthropic-messages");
+		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("us.amazon.nova-pro-v1:0")).toBe("openai-chat-completions");
 	});
 });

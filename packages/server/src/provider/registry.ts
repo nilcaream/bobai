@@ -342,14 +342,14 @@ const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 	"opencode-zen": openCodeZenDescriptor,
 	"amazon-bedrock": createApiKeyProviderDescriptor<AmazonBedrockAuth>({
 		id: "amazon-bedrock",
-		defaultModel: "us.amazon.nova-pro-v1:0",
+		defaultModel: "anthropic.claude-opus-4-7",
 		auth: {
 			cliCommand: "bobai auth amazon-bedrock",
 			missingAuthMessage: "Amazon Bedrock authentication not found. Please run: bobai auth amazon-bedrock",
 			permanentAuthErrorMessage: "Authentication expired. Run `bobai auth amazon-bedrock` to re-authenticate.",
 		},
-		getApiFamily(): ApiFamily {
-			return "anthropic-messages";
+		getApiFamily(modelId: string): ApiFamily {
+			return modelId.startsWith("anthropic.") ? "anthropic-messages" : "openai-chat-completions";
 		},
 		getAuth(store) {
 			return store?.providers["amazon-bedrock"];
