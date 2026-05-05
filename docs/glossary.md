@@ -9,18 +9,18 @@ speech, the internal name wins.
 ## UI Anatomy
 
 The UI is a single-page app with a **three-zone flex layout** (top to bottom).
-No modals, drawers, sidebars, or routing — navigation swaps content in place.
+No modals, drawers, sidebars, or routing. Navigation swaps content in place.
 
 ### Status Bar (top zone)
 
-Fixed bar at the top. Contains (left to right):
+Fixed bar at the top. Contains, from left to right:
 
 | Element | Description |
 |---------|-------------|
 | **Status dot** | Green/red connection indicator. Pulses when the agent is active. |
 | **Status bar label** | "Bob AI" text. |
 | **Status bar title** | Project dir, git branch, session title. Shows a breadcrumb trail when viewing a subagent. |
-| **Status** (right) | Current model name and cost info. |
+| **Status** (right) | Current provider, model, and pricing or multiplier info. |
 
 ### Messages (middle zone)
 
@@ -30,8 +30,8 @@ Scrollable area that fills available space. Content depends on the active
 | View Mode | Description |
 |-----------|-------------|
 | **Chat** (default) | Grouped panels with rendered Markdown. |
-| **Context** | Raw stored messages as plain text — what's in the database. |
-| **Compaction** | What the LLM actually sees after compaction/eviction is applied. |
+| **Context** | Raw stored messages as plain text — what is in the database. |
+| **Compaction** | What the LLM actually sees after compaction and eviction. |
 
 View modes are cycled with the `.view` dot command.
 
@@ -42,16 +42,16 @@ messages zone.
 
 | Panel | Description |
 |-------|-------------|
-| **User panel** | The human's prompt text. |
-| **Assistant panel** | The LLM's prose/Markdown response. |
-| **Tool panel** | A tool call and its result. Collapsible (collapsed by default at 6+ lines). Double-clickable to navigate into subagents. |
+| **User panel** | The human prompt text. |
+| **Assistant panel** | The LLM's prose or Markdown response. |
+| **Tool panel** | A tool call and its result. Collapsible by default at 6+ lines. Double-clickable to navigate into subagents. |
 | **Volatile panel** | Ephemeral notification above the prompt. Kinds: `error`, `success`. |
 
-A **panel status line** appears at the bottom of each panel showing timestamp,
-model, and turn summary.
+A **panel status line** appears at the bottom of each panel. It shows
+timestamp, model, and turn summary.
 
-When the session has no messages yet, a **welcome screen** is shown (fetched
-from the server).
+When the session has no messages yet, the UI shows a **welcome screen** fetched
+from the server.
 
 ### Prompt Panel (bottom zone)
 
@@ -60,17 +60,18 @@ transient panels can appear:
 
 | Element | Description |
 |---------|-------------|
-| **Dot panel** | Autocomplete/picker for dot commands. Appears when input starts with `.` |
-| **Slash panel** | Skill picker. Appears when input starts with `/`. |
-| **Staged skills** | Shows skills queued for injection before the next prompt. |
-| **Prompt input** | The textarea. Grayed out and read-only when browsing history. |
+| **Dot panel** | Autocomplete and picker for dot commands. Appears when input starts with `.` |
+| **Slash panel** | Skill picker. Appears when input starts with `/` |
+| **Staged skills** | Shows skills queued for injection before the next prompt |
+| **Prompt input** | The textarea. Grayed out and read-only when browsing history |
 
 ### Read-Only States
 
 The prompt input becomes read-only when:
-- Viewing (peeking at) a subagent session
-- The session is locked (owned by another tab)
-- A non-chat view mode is active
+
+- viewing a subagent session
+- the session is locked by another tab
+- a non-chat view mode is active
 
 ---
 
@@ -80,12 +81,11 @@ The prompt input becomes read-only when:
 
 A conversation thread. Owns an ordered list of messages. Two flavors:
 
-- **Parent session** — top-level, listed in the session picker.
-- **Subagent session** — child of a parent, created by the `task` tool. Not
-  listed in the session picker. Linked to parent via `parentId`.
+- **Parent session** — top-level, listed in the session picker
+- **Subagent session** — child of a parent, created by the `task` tool
 
 Sessions have **ownership** — one browser tab owns a session at a time. Other
-tabs see it as **locked** (only `.new` and `.session` commands work).
+tabs see it as **locked**.
 
 ### Message
 
@@ -94,99 +94,134 @@ A single entry in a session's conversation. Has a **role**:
 | Role | Description |
 |------|-------------|
 | **system** | System prompt. Built dynamically each turn, not persisted. |
-| **user** | Human prompt, or a synthetic prompt injected by the `task` tool (marked with `source: "agent"` in metadata). |
-| **assistant** | LLM response. May contain tool calls in its metadata. |
+| **user** | Human prompt, or a synthetic prompt injected by the `task` tool and marked with `source: "agent"` in metadata. |
+| **assistant** | LLM response. May contain tool calls in metadata. |
 | **tool** | Tool execution result. Linked to its tool call via `tool_call_id`. |
 
-Messages carry a **metadata** JSON blob for structured data (tool calls, model
-info, subagent references, compaction markers, etc.).
+Messages carry a **metadata** JSON blob for structured data such as tool calls,
+model info, subagent references, and compaction markers.
 
 ### Turn
 
-An implicit concept — not a stored entity. A turn starts at a user message and
+An implicit concept, not a stored entity. A turn starts at a user message and
 extends through all assistant responses and tool calls until the next user
 message. The UI merges all messages within a turn into a single visual group.
-Turn metrics (call counts, token usage, cost, timing) are tracked by the
-provider and displayed in panel status lines.
+Turn metrics such as token usage, timing, and cost are tracked by the provider
+and shown in panel status lines.
 
 ### Subagent
 
-A child session spawned by the `task` tool to handle a complex subtask. Key
-characteristics:
+A child session spawned by the `task` tool to handle a complex subtask.
 
-- Runs its own agent loop with independent message history.
-- Cannot spawn nested subagents (the `task` tool is excluded from its tool set).
-- Can be **resumed** by passing a `task_id` to the `task` tool.
-- Tracked via `SubagentStatus`: `running`, `done`, or `error`.
-- Multiple subagents from one assistant response run **in parallel**.
-- The UI can **peek** into a subagent's messages without leaving the parent
-  session — live for running subagents, from the database for completed ones.
+Characteristics:
 
-Subagents are indexed 1-based in the order they were created within a parent
-session. The `.subagent` command uses this index.
+- runs its own agent loop with independent history
+- cannot spawn nested subagents because the `task` tool is removed from its tool set
+- can be resumed by passing `task_id` to the `task` tool
+- is tracked via `SubagentStatus`: `running`, `done`, or `error`
+- multiple subagents from one assistant response run **in parallel**
+- can be **peeked** from the parent session, live or from the database
+
+Subagents are indexed 1-based in creation order within a parent session.
+The `.subagent` command uses that index.
 
 ### Tool
 
-A capability exposed to the LLM (e.g., `read_file`, `bash`, `task`). Each
-tool has:
+A capability exposed to the LLM, such as `read_file`, `bash`, or `task`.
+Each tool has:
 
-- A **definition** (name, description, parameter schema) sent to the LLM.
-- An **execute** function that returns a **tool result** with separate
-  `llmOutput` (what the LLM sees) and `uiOutput` (what the user sees).
-- Optional **compact** functions for reducing output size under context pressure.
-- A **mergeable** flag — when true, the UI can visually merge adjacent results.
+- a **definition** sent to the LLM
+- an **execute** function that returns separate `llmOutput` and `uiOutput`
+- optional compaction logic
+- a **mergeable** flag for UI grouping
 
 Built-in tools: `read_file`, `list_directory`, `file_search`, `write_file`,
 `edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `task`, `skill`.
 
 ### Skill
 
-A loadable instruction set (Markdown with YAML frontmatter) that provides
-specialized workflows. Skills can be:
+A loadable instruction set stored as Markdown with YAML frontmatter.
+Skills can be:
 
-- **Loaded by the LLM** via the `skill` tool during a turn.
-- **Staged by the user** via `/skillname` slash command before sending a prompt
-  — injected as synthetic tool-call message pairs.
+- **loaded by the LLM** via the `skill` tool during a turn
+- **staged by the user** via `/skillname` before sending a prompt
 
 Skills are discovered from `SKILL.md` files in configured directories.
 
 ### Provider
 
-The LLM backend. Currently only **GitHub Copilot** is supported, which routes
-to one of three APIs depending on the model:
+An LLM backend.
 
-- **Anthropic Messages API** (`/v1/messages`) — Claude models
-- **OpenAI Responses API** (`/responses`) — GPT-5.2+ models (except gpt-5-mini)
-- **OpenAI Chat Completions** (`/chat/completions`) — everything else (gpt-5-mini, Gemini, Grok)
+Current runtime providers:
 
-The provider handles streaming, token counting, turn metrics, retry logic with
-x-initiator downgrade, and auth token management (VS Code impersonation approach
-with session token exchange and coalesced refresh).
+- **GitHub Copilot**
+- **OpenRouter**
+- **OpenCode Go**
+- **OpenCode Zen**
 
-An **isolated turn provider** wraps the main provider for parallel subagent
-execution with independent metrics.
+Each provider maps models to one of the current API families:
+
+- `anthropic-messages`
+- `openai-responses`
+- `openai-chat-completions`
+
+Providers handle streaming, token counting, turn metrics, summaries, and auth.
+
+An **isolated turn provider** wraps a provider for parallel subagent execution
+with independent metrics.
 
 ### Model
 
-An LLM model available through the provider. Each model has an ID (e.g.,
-`claude-sonnet-4.6`), context window size, max output tokens, and a **premium
-request multiplier** (cost factor). Models with multiplier 0 (gpt-5-mini,
-gpt-4.1, gpt-4o) are included in paid Copilot plans at no premium cost.
+An LLM model available through a provider. Each model has:
 
-Models are defined in a **curated list** and probed at startup via
-`bobai refresh` — only reachable models are enabled. Model metadata
-(context window, max output) is fetched from `models.dev`.
+- an ID
+- a display name
+- a context window
+- a max output token limit
+- input and output pricing per 1M tokens
+- for Copilot, an optional **premium request multiplier**
+
+Bob AI stores all provider model metadata in a single generated file:
+
+- `~/.config/bobai/models.json`
+
+This file is grouped by provider and is the source of truth for runtime model
+selection and display.
+
+Important rules:
+
+- there is **no curated model list** anymore
+- Bob AI includes only supported providers
+- Bob AI includes only models with tool support and complete metadata
+- Copilot token prices are stored as `0`
+- Copilot models may have a missing multiplier, in which case the UI shows `?x`
+- default models are still hardcoded per provider in the registry
+
+### Model Catalog
+
+The **model catalog** is the generated `models.json` file in the global config
+directory.
+
+It is refreshed from:
+
+- `models.dev` for model metadata
+- GitHub Copilot billing docs for Copilot multipliers
+
+Startup behavior:
+
+- if the catalog is missing, Bob AI refreshes it synchronously before the server starts
+- if refresh fails and no catalog exists, startup fails
+- if refresh fails but a stale catalog exists, Bob AI logs the failure and keeps using the stale file
 
 ### Compaction
 
-A context management system that reduces message size as context grows. Two
-mechanisms:
+A context management system that reduces message size as context grows.
+Two mechanisms:
 
-- **Compaction** — reduces content size of individual tool outputs/arguments
-  based on a **compaction factor** (product of context pressure × message age).
-  Compacted content is prefixed with `# COMPACTED`.
-- **Eviction** — removes intermediate messages from old turns entirely, keeping
-  only the user prompt, task tool-call pairs, and the final assistant response.
+- **Compaction** — reduces content size of individual tool outputs and arguments
+- **Eviction** — removes intermediate messages from old turns entirely
+
+Compacted content is prefixed with `# COMPACTED`.
 
 ### Instructions
 
@@ -194,55 +229,59 @@ Layered instruction files injected into the system prompt:
 
 | Layer | Source | Description |
 |-------|--------|-------------|
-| **Global** | `~/.config/bobai/AGENT.md` | User-wide preferences and rules. |
-| **Project (bobai)** | `<project>/.bobai/AGENT.md` | Project-specific bobai configuration. |
-| **Project (standard)** | `AGENT.md`, `AGENTS.md`, `CLAUDE.md` in project root | Standard AI agent instruction files. |
+| **Global** | `~/.config/bobai/AGENT.md` | User-wide preferences and rules |
+| **Project (bobai)** | `<project>/.bobai/AGENT.md` | Project-specific Bob AI instructions |
+| **Project (standard)** | `AGENT.md`, `AGENTS.md`, `CLAUDE.md` in project root | Standard AI agent instruction files |
 
 ### Project
 
-A working directory with Bob AI initialized. Project state lives in the
-`.bobai/` directory: config (`bobai.json`), database (`bobai.db`),
-project-level instructions, compacted tool outputs (`compaction/`),
-and downloaded web content (`downloads/`).
+A working directory with Bob AI initialized. Project state lives in `.bobai/`:
+
+- config (`bobai.json`)
+- database (`bobai.db`)
+- project-level instructions
+- compacted tool outputs (`compaction/`)
+- downloaded web content (`downloads/`)
 
 ---
 
 ## Dot Commands
 
-Commands prefixed with `.` that control the application. Never sent to the LLM.
+Commands prefixed with `.` that control the application. They are never sent to
+the LLM.
 
 ### Command List
 
 | Command | Syntax | Description |
 |---------|--------|-------------|
-| `.model` | `.model <N>` | Switch LLM model. `N` is a 1-based index from the model list. |
-| `.new` | `.new [title]` | Start a new session with an optional title. |
-| `.session` | `.session [N\|text] [delete]` | Switch to session `N` (1-based index), search by title words, or delete with `N delete`. Without args: exit subagent peek / return to parent. |
-| `.stop` | `.stop` | Cancel the running agent loop. |
-| `.subagent` | `.subagent [N]` | Peek at subagent `N` (1-based index). Without args: show subagent list. |
-| `.title` | `.title <text>` | Rename the current session. |
-| `.view` | `.view [1\|2\|3]` | Switch view mode: 1=Chat, 2=Context, 3=Compaction. Without args: cycle. |
+| `.model` | `.model <N>` | Switch the current session model |
+| `.new` | `.new [title]` | Start a new session |
+| `.provider` | `.provider <N>` | Switch the current session provider |
+| `.session` | `.session [N\|text] [delete]` | Switch to session `N`, search by title, or delete with `N delete` |
+| `.stop` | `.stop` | Cancel the running agent loop |
+| `.subagent` | `.subagent [N]` | Peek at subagent `N` |
+| `.title` | `.title <text>` | Rename the current session |
+| `.view` | `.view [1\|2\|3]` | Switch view mode: 1=Chat, 2=Context, 3=Compaction |
 
 ### Abbreviation System
 
-Any **unambiguous prefix** of a command name resolves to that command. No
-hardcoded alias table — it's pure prefix matching against available commands.
+Any **unambiguous prefix** resolves to that command.
+There is no hardcoded alias table.
 
-Additionally, **trailing digits** are split off as arguments automatically
-(no command name contains a digit).
+Trailing digits are split off as arguments automatically.
 
 | Shortcut | Resolves To | Why |
 |----------|-------------|-----|
-| `.m` | `.model` | Only command starting with `m` |
-| `.m3` | `.model 3` | `m` → model, `3` → argument |
-| `.n` | `.new` | Only command starting with `n` |
-| `.t` | `.title` | Only command starting with `t` |
-| `.v` | `.view` | Only command starting with `v` |
-| `.su` | `.subagent` | Disambiguates from `session` and `stop` |
-| `.su1` | `.subagent 1` | `su` → subagent, `1` → argument |
-| `.se` | `.session` | Disambiguates from `stop` and `subagent` |
-| `.st` | `.stop` | Disambiguates from `session` and `subagent` |
-| `.s` | *(ambiguous)* | Matches `session`, `stop`, `subagent` — shows selection panel |
+| `.m` | `.model` | only command starting with `m` |
+| `.m3` | `.model 3` | `m` resolves to model, `3` becomes the argument |
+| `.p` | `.provider` | only command starting with `p` |
+| `.n` | `.new` | only command starting with `n` |
+| `.t` | `.title` | only command starting with `t` |
+| `.v` | `.view` | only command starting with `v` |
+| `.su` | `.subagent` | disambiguates from `session` and `stop` |
+| `.se` | `.session` | disambiguates from `stop` and `subagent` |
+| `.st` | `.stop` | disambiguates from `session` and `subagent` |
+| `.s` | *(ambiguous)* | shows the selection panel |
 
 ### Command Availability
 
@@ -250,38 +289,21 @@ Available commands change based on session state:
 
 | State | Available Commands |
 |-------|-------------------|
-| **Normal** | `model`, `new`, `session`, `subagent`, `title`, `view` |
-| **Streaming** (agent running) | `stop`, `subagent` |
-| **Read-only** (peeking, non-chat view) | `new`, `session`, `subagent`, `title`, `view` |
-| **Locked** (another tab owns it) | `new`, `session` |
+| **Normal** | `model`, `new`, `provider`, `session`, `subagent`, `title`, `view` |
+| **Streaming** | `stop`, `subagent` |
+| **Read-only** | `new`, `session`, `subagent`, `title`, `view` |
+| **Locked** | `new`, `session` |
 
 ---
 
-## WebSocket Protocol
+## Provider and Pricing Display
 
-The UI communicates with the server over a single WebSocket connection.
+In the status bar and model picker:
 
-### Client → Server
+- **Copilot** displays a multiplier such as `0x`, `1x`, or `?x`
+- **other providers** display token prices such as `$0.50 | $5.12`
 
-| Message | Description |
-|---------|-------------|
-| **prompt** | Send a user message. Carries text, optional session ID, and staged skills. |
-| **subscribe** | Claim ownership of a session. |
-| **unsubscribe** | Release session ownership. |
-| **cancel** | Abort the running agent loop. |
+In turn summaries:
 
-### Server → Client
-
-| Message | Description |
-|---------|-------------|
-| **token** | Streaming text chunk from the LLM. |
-| **tool_call** | Tool invocation started (name + formatted call). |
-| **tool_result** | Tool execution completed (output). |
-| **status** | Status bar update (model, tokens, cost). |
-| **done** | Turn complete. |
-| **error** | Error message. |
-| **prompt_echo** | Echo of user prompt (used with staged skills). |
-| **session_created** | New session established. |
-| **subagent_start** / **subagent_done** | Subagent lifecycle events. |
-| **session_subscribed** | Ownership confirmed. |
-| **session_locked** | Session owned by another tab. |
+- OpenRouter may display `free` for truly zero-cost models
+- other providers usually show token counts and context deltas without a separate cost label unless the provider summary logic adds one

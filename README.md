@@ -1,12 +1,21 @@
 # Bob AI
 
-A browser-first coding agent powered by GitHub Copilot. Bob AI runs as a local server, connects to the Copilot API, and provides a chat interface with full access to coding tools -- file read/write, search, bash, subagents, and more.
+A browser-first coding agent that runs as a local server and exposes a chat UI with coding tools, session history, subagents, and full context transparency.
 
-Bob AI's defining feature is **radical context transparency**. You can inspect exactly what the LLM sees: the system prompt, every tool call and result, token usage, and what gets compacted when the context window fills.
+Bob AI supports multiple providers:
+
+- GitHub Copilot
+- OpenRouter
+- OpenCode Go
+- OpenCode Zen
+
+Its defining feature is **radical context transparency**. You can inspect the system prompt, tool calls, tool results, token usage, and the exact messages that remain after compaction.
 
 ## Installation
 
-**Requirements:** Linux x86_64, `git`, `curl`, `unzip`. The installer downloads its own Bun runtime and requires no global Node.js or Bun.
+**Requirements:** Linux x86_64, `git`, `curl`, `unzip`.
+
+The installer downloads its own Bun runtime. You do not need a global Node.js or Bun installation.
 
 **One-liner (recommended):**
 
@@ -22,73 +31,146 @@ cd bobai
 ./install.sh
 ```
 
-The installer downloads Bun, builds the server and UI, and places everything under `~/.local/share/bobai/`. It installs the `bobai` command at `~/.local/bin/bobai` -- add that directory to your `PATH` if it is absent.
+The installer builds the server and UI, then places everything under `~/.local/share/bobai/`. It installs the `bobai` command at `~/.local/bin/bobai`.
 
 ## Getting Started
 
-**1. Authenticate with GitHub Copilot:**
+### 1. Authenticate a provider
+
+For GitHub Copilot:
 
 ```bash
-bobai auth
+bobai auth github-copilot
 ```
 
-This runs an OAuth device flow -- it prints a URL and a code. Open the URL in a browser, enter the code, and authorize. Bob AI saves your token to `~/.config/bobai/auth.json`.
+This runs a device-flow login. Bob AI prints a URL and code. Open the URL in a browser, enter the code, and approve access.
 
-**2. Start the server:**
+For API-key providers:
+
+```bash
+bobai auth openrouter
+bobai auth opencode-go
+bobai auth opencode-zen
+```
+
+Bob AI stores provider credentials in `~/.config/bobai/auth.json`.
+
+If you run `bobai auth` without a provider, Bob AI prints the supported auth provider IDs.
+
+### 2. Start the server
 
 ```bash
 bobai
 ```
 
-Bob AI prints a local URL (e.g. `http://localhost:8080/bobai/`). Open it in your browser and type a prompt to begin.
+Bob AI prints a local URL such as:
 
-**3. Start the server in a project directory:**
+```text
+http://localhost:8080/bobai/
+```
 
-Run `bobai` from any project directory. Bob AI creates a `.bobai/` folder there for sessions and project-level configuration. All LLM tools operate within that directory.
+Open it in your browser and start chatting.
+
+### 3. Run Bob AI inside a project
+
+Run `bobai` from a project directory. Bob AI creates a `.bobai/` directory there for project state, including:
+
+- project config
+- the SQLite session database
+- project-local skills
+- downloaded web content
+- compaction artifacts
+
+All file tools are constrained to the current project plus any explicitly allowed directories.
 
 ## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `bobai` | Start the server (default) |
-| `bobai auth` | Authenticate with GitHub Copilot |
-| `bobai refresh` | Refresh the model list from GitHub |
+| `bobai` | Start the server |
+| `bobai auth <provider>` | Authenticate a provider |
+| `bobai refresh` | Rebuild the unified model catalog |
 
 | Flag | Description |
 |------|-------------|
-| `-p <port>`, `--port <port>` | Set server port (default: OS picks an available port) |
-| `--debug` | Enable debug-level logging and HTTP dump files |
+| `-p <port>`, `--port <port>` | Set server port. By default, Bob AI picks an available port. |
+| `--debug` | Enable debug logging and dump files. |
+
+## Model Catalog
+
+Bob AI keeps a single generated model catalog at:
+
+```text
+~/.config/bobai/models.json
+```
+
+This catalog is grouped by provider and is the source of truth for:
+
+- model IDs
+- context windows
+- max output tokens
+- input/output token prices
+- Copilot premium multipliers
+
+Catalog generation rules:
+
+- data comes from `models.dev`
+- only Bob AI supported providers are included
+- only models with tool support are included
+- models with incomplete metadata are skipped
+- Copilot token prices are stored as `0`
+- Copilot multipliers come from GitHub billing docs when available
+- if Copilot multiplier data is unavailable, Bob AI keeps the model and shows `?x`
+
+Startup behavior:
+
+- if `models.json` is missing, Bob AI refreshes it synchronously before the server starts
+- if refresh fails and no catalog exists, startup fails
+- if refresh fails but a previous catalog exists, Bob AI logs the error and keeps using the stale catalog
+
+Use `bobai refresh` to rebuild the catalog manually.
+
+## Providers and Models
+
+Bob AI supports these runtime providers:
+
+- `github-copilot`
+- `openrouter`
+- `opencode-go`
+- `opencode-zen`
+
+Each provider has a hardcoded default model, but the full selectable model list comes from the generated catalog.
+
+In the UI:
+
+- Copilot models show a premium multiplier such as `0x`, `1x`, or `?x`
+- other providers show input/output pricing such as `$0.50 | $5.12`
+
+Use `.model` in chat to switch models for the current session.
 
 ## Dot Commands
 
-Type `.` in the prompt to access dot commands. These local commands control the session and are never sent to the LLM.
+Type `.` in the prompt to open the dot-command picker. Dot commands are local UI/server commands and are never sent to the LLM.
 
 | Command | Description |
 |---------|-------------|
-| `.model <n>` | Switch the LLM model (shows a numbered list) |
+| `.model <n>` | Switch the current session model |
 | `.new [title]` | Start a new session |
-| `.session [n\|text]` | Switch sessions by index or title search |
+| `.provider <n>` | Switch the current session provider |
+| `.session [n\|text]` | Switch sessions by index or fuzzy title search |
 | `.session <n> delete` | Delete a session |
+| `.stop` | Cancel the active agent loop |
 | `.subagent [n]` | Peek into a subagent session |
 | `.title <text>` | Set the current session title |
 | `.view [1\|2\|3]` | Cycle between Chat, Context, and Compaction views |
 
-Commands accept abbreviations -- `.m` matches `.model`, `.v` matches `.view`.
-
-### Session Selection
-
-`.session` supports two selection modes:
-
-- **By index:** `.session 3` loads session #3 from the list.
-- **By title:** `.session im tes` filters sessions whose title contains both "im" and "tes" (case-insensitive, any order). On submit, the first match is loaded.
-
-Without arguments, `.session` shows the session list. When viewing a subagent, it returns to the parent session.
+Commands accept unambiguous prefixes, so `.m` matches `.model`, `.v` matches `.view`, and so on.
 
 ## Skills
 
-Skills are markdown files (`SKILL.md`) with YAML frontmatter that give the LLM specialized instructions -- coding patterns, workflows, domain knowledge, or any guidance you want the agent to follow.
+Skills are markdown files named `SKILL.md` with YAML frontmatter. They give the LLM specialized instructions, workflows, or project conventions.
 
-**Example `SKILL.md`:**
+Example:
 
 ```yaml
 ---
@@ -98,40 +180,48 @@ description: Enforce project coding conventions
 Always use tabs for indentation. Prefer named exports...
 ```
 
-**Where to put skills:**
+Where to put skills:
 
 | Location | Scope |
 |----------|-------|
-| `~/.config/bobai/skills/` | Available in all projects |
+| `~/.config/bobai/skills/` | Available in every project |
 | `<project>/.bobai/skills/` | Available only in that project |
 
-Bob AI scans these directories for `**/SKILL.md`. Project skills override global skills when names collide.
+Bob AI scans both directories recursively for `**/SKILL.md`. Project skills override global skills with the same name.
 
-**Using skills in a session:**
+You can use skills in two ways:
 
-- Type `/` in the prompt to see available skills and stage one before sending your message.
-- The LLM can also load skills on its own via the `skill` tool during a conversation.
+- type `/` in the prompt to stage a skill before sending
+- let the LLM load a skill dynamically with the `skill` tool
 
 ## Plugins
 
-Plugins are `.ts` or `.js` files that Bob AI loads at startup. Place them in:
+Plugins are `.ts` or `.js` files loaded at startup from:
 
-```
+```text
 ~/.config/bobai/plugins/
 ```
 
-Bob AI loads files alphabetically via dynamic `import()`. If any plugin throws during loading, the server exits.
+Bob AI imports them alphabetically. If a plugin throws during loading, server startup fails.
 
 ## Configuration
 
-Bob AI uses layered configuration. Project settings override global settings, which override defaults.
+Bob AI uses layered configuration:
+
+- defaults
+- global config
+- project config
+
+Project settings override global settings.
 
 **Global config** (`~/.config/bobai/bobai.json`):
 
 ```json
 {
   "provider": "github-copilot",
-  "model": "gpt-5-mini"
+  "model": "gpt-5-mini",
+  "debug": false,
+  "maxIterations": 64
 }
 ```
 
@@ -141,90 +231,83 @@ Bob AI uses layered configuration. Project settings override global settings, wh
 {
   "id": "...",
   "port": 8080,
-  "provider": "github-copilot",
-  "model": "claude-sonnet-4.6"
+  "provider": "opencode-zen",
+  "model": "gpt-5.4",
+  "maxIterations": 64,
+  "debug": false
 }
 ```
 
-Bob AI creates the project config automatically when you first run `bobai` in a directory.
-
-### Available Models
-
-| Model | Premium Multiplier |
-|-------|-------------------|
-| grok-code-fast-1 | 0.25x |
-| claude-haiku-4.5 | 0.33x |
-| gpt-5.2 | 1x |
-| gpt-5.2-codex | 1x |
-| gpt-5.3-codex | 1x |
-| gpt-5.4 | 1x |
-| gemini-2.5-pro | 1x |
-| gemini-3.1-pro-preview | 1x |
-| gemini-3-flash-preview | 0.33x |
-| claude-opus-4.5 | 3x |
-| claude-opus-4.6 | 3x |
-| claude-sonnet-4.5 | 1x |
-| claude-sonnet-4.6 | 1x |
-| gpt-5-mini | 0x (default) |
-| gpt-5.4-mini | 0.33x |
-
-Preview model IDs are shown as returned by Copilot. For pricing, Bob AI best-matches documented model names when GitHub omits the `-preview` suffix in billing docs.
-
-Use `.model` in the chat to switch models mid-session.
+Bob AI creates the project config automatically the first time you run it in a directory.
 
 ## View Modes
 
-Bob AI has three view modes, accessible via `.view`:
+Use `.view` to switch between three views:
 
-1. **Chat** -- the standard conversation view.
-2. **Context** -- raw messages as stored in the database, including every tool call and result.
-3. **Compaction** -- what the LLM sees after context compaction, showing which messages were truncated or evicted and why.
+1. **Chat** — the normal conversation view
+2. **Context** — raw stored messages from the database
+3. **Compaction** — the effective message set after compaction and eviction
 
-The Compaction view is the key transparency feature. It exposes context pressure, per-message age and resistance scores, and exactly what was cut to fit the context window.
+The Compaction view is the key transparency feature. It shows context pressure, per-message decisions, and exactly what Bob AI removed or shortened.
 
 ## Directory Reference
 
 | Path | Purpose |
 |------|---------|
 | `~/.local/bin/bobai` | Runner script |
-| `~/.local/share/bobai/` | Installation home (Bun binary, bundled dist) |
-| `~/.local/share/bobai/log/` | Log files (daily rotation) |
-| `~/.config/bobai/auth.json` | OAuth token |
+| `~/.local/share/bobai/` | Installation home |
+| `~/.local/share/bobai/log/` | Rotated log files |
+| `~/.config/bobai/auth.json` | Stored provider credentials |
 | `~/.config/bobai/bobai.json` | Global config |
-| `~/.config/bobai/copilot-models.json` | Cached model metadata |
-| `~/.config/bobai/skills/` | Global skills directory |
-| `~/.config/bobai/plugins/` | Plugins directory |
-| `<project>/.bobai/` | Per-project state |
+| `~/.config/bobai/models.json` | Unified generated model catalog |
+| `~/.config/bobai/skills/` | Global skills |
+| `~/.config/bobai/plugins/` | Global plugins |
+| `<project>/.bobai/` | Project-local Bob AI state |
 | `<project>/.bobai/bobai.json` | Project config |
-| `<project>/.bobai/bobai.db` | Session database (SQLite) |
+| `<project>/.bobai/bobai.db` | Session database |
 | `<project>/.bobai/skills/` | Project-local skills |
+| `<project>/.bobai/downloads/` | Downloaded web content |
+| `<project>/.bobai/compaction/` | Compaction artifacts |
 
 ## Logs
 
-Bob AI writes logs to `~/.local/share/bobai/log/`, rotating daily. Each file is named `YYYY-MM-DD.log`.
+Bob AI writes logs to:
 
-With `--debug`, Bob AI also writes debug dump files to the log directory. All dump files follow a unified naming pattern: `debug-<date>-<time>-<scope>-<code>.txt`.
+```text
+~/.local/share/bobai/log/
+```
 
-- **HTTP dumps** (`debug-*-http.txt`) — full API request/response bodies.
-- **Compaction dumps** (`debug-*-{pre,emg}{0,1,2}.txt`) — message snapshots before compaction (`0`), after compaction (`1`), and after eviction (`2`).
+Files rotate daily and use the format `YYYY-MM-DD.log`.
+
+With `--debug`, Bob AI also writes debug dumps using this naming pattern:
+
+```text
+debug-<date>-<time>-<scope>-<code>.txt
+```
+
+Examples:
+
+- `debug-*-http.txt` — HTTP request/response dumps
+- `debug-*-pre0.txt`, `pre1.txt`, `pre2.txt` — normal compaction snapshots
+- `debug-*-emg0.txt`, `emg1.txt`, `emg2.txt` — emergency compaction snapshots
 
 ## Tools
 
-The LLM has access to these tools during a conversation:
+The LLM can use these built-in tools:
 
 | Tool | Description |
 |------|-------------|
 | `read_file` | Read file contents |
 | `write_file` | Create or overwrite a file |
-| `edit_file` | Make targeted edits to a file |
+| `edit_file` | Make targeted file edits |
 | `list_directory` | List directory contents |
 | `file_search` | Find files by glob pattern |
 | `grep_search` | Search file contents with regex |
-| `bash` | Run shell commands (30s timeout) |
+| `bash` | Run shell commands |
 | `sqlite3` | Execute SQL queries against SQLite databases |
-| `web_fetch` | Fetch web pages and URLs; extracts text from PDFs |
+| `web_fetch` | Fetch and extract web content |
 | `task` | Spawn a subagent for independent work |
-| `skill` | Load a skill for specialized instructions |
+| `skill` | Load a skill dynamically |
 
 ## Attribution
 
