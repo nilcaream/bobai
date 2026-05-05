@@ -3,8 +3,20 @@ import type { Logger } from "../log/logger";
 import type { Provider } from "./provider";
 import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
 
-export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"] as const;
-export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"] as const;
+export const SUPPORTED_RUNTIME_PROVIDER_IDS = [
+	"github-copilot",
+	"openrouter",
+	"opencode-go",
+	"opencode-zen",
+	"amazon-bedrock",
+] as const;
+export const SUPPORTED_AUTH_PROVIDER_IDS = [
+	"github-copilot",
+	"openrouter",
+	"opencode-go",
+	"opencode-zen",
+	"amazon-bedrock",
+] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
 export type ProviderId = (typeof SUPPORTED_RUNTIME_PROVIDER_IDS)[number];
@@ -67,6 +79,7 @@ export interface ProviderDescriptor {
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createAmazonBedrockProvider?: (auth: AmazonBedrockAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -139,6 +152,7 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createAmazonBedrockProvider?: (auth: AmazonBedrockAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -188,6 +202,7 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 				createOpenRouterProvider: providerOptions.createOpenRouterProvider,
 				createOpenCodeGoProvider: providerOptions.createOpenCodeGoProvider,
 				createOpenCodeZenProvider: providerOptions.createOpenCodeZenProvider,
+				createAmazonBedrockProvider: providerOptions.createAmazonBedrockProvider,
 			});
 		},
 	};
@@ -355,8 +370,11 @@ const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 			return store?.providers["amazon-bedrock"];
 		},
 		missingAuthMessage: "Amazon Bedrock authentication not found. Please run: bobai auth amazon-bedrock",
-		async createProvider(): Promise<Provider> {
-			throw new Error("Amazon Bedrock provider runtime not yet implemented.");
+		async createProvider(options): Promise<Provider> {
+			const amazonBedrockModule = await import("./amazon-bedrock");
+			const createAmazonBedrockProvider =
+				options.createAmazonBedrockProvider ?? amazonBedrockModule.createAmazonBedrockProvider;
+			return createAmazonBedrockProvider(options.auth, options.logger, options.fetch);
 		},
 	}),
 };

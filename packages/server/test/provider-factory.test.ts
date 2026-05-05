@@ -131,4 +131,33 @@ describe("provider factory", () => {
 
 		expect(result).toBe(provider);
 	});
+
+	test("creates amazon-bedrock provider from auth store entry", async () => {
+		const store = {
+			version: 1,
+			providers: {
+				"amazon-bedrock": { apiKey: "bedrock-key", region: "us-east-1" },
+			},
+		} as AuthStore;
+		const provider: Provider = {
+			id: "amazon-bedrock",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+
+		const result = await createConfiguredProvider(
+			{ providerId: "amazon-bedrock", configDir: "/cfg" },
+			{
+				providerModelsConfigExists: () => true,
+				loadAuthStore: () => store,
+				createAmazonBedrockProvider: (auth) => {
+					expect(auth).toEqual({ apiKey: "bedrock-key", region: "us-east-1" });
+					return provider;
+				},
+			},
+		);
+
+		expect(result).toBe(provider);
+	});
 });

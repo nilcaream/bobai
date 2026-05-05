@@ -92,6 +92,40 @@ export function createProviderModelsTempDir(): string {
 				outputPrice: 1.2,
 			},
 		],
+		"amazon-bedrock": [
+			{
+				id: "anthropic.claude-opus-4-7",
+				name: "Claude Opus 4.7",
+				contextWindow: 1000000,
+				maxOutput: 64000,
+				inputPrice: 15,
+				outputPrice: 75,
+			},
+			{
+				id: "anthropic.claude-haiku-4-5",
+				name: "Claude Haiku 4.5",
+				contextWindow: 1000000,
+				maxOutput: 64000,
+				inputPrice: 0.8,
+				outputPrice: 4,
+			},
+			{
+				id: "deepseek.v3-v1:0",
+				name: "DeepSeek V3",
+				contextWindow: 131072,
+				maxOutput: 16384,
+				inputPrice: 0.27,
+				outputPrice: 1.1,
+			},
+			{
+				id: "mistral.devstral-2-123b",
+				name: "Devstral 2 123B",
+				contextWindow: 131072,
+				maxOutput: 16384,
+				inputPrice: 0.5,
+				outputPrice: 1.5,
+			},
+		],
 	});
 	return tmpDir;
 }

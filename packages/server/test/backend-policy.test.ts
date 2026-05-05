@@ -68,4 +68,12 @@ describe("backend policy", () => {
 		});
 		expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
 	});
+
+	test("maps amazon-bedrock anthropic models to anthropic-messages backend", () => {
+		expect(getApiFamilyForModel("amazon-bedrock", "anthropic.claude-opus-4-7")).toBe("anthropic-messages");
+	});
+
+	test("maps amazon-bedrock non-anthropic models to openai-chat-completions backend", () => {
+		expect(getApiFamilyForModel("amazon-bedrock", "deepseek.v3-v1:0")).toBe("openai-chat-completions");
+	});
 });

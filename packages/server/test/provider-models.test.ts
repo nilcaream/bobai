@@ -85,6 +85,24 @@ function writeModelsConfig(tmpDir: string) {
 							outputPrice: 4,
 						},
 					],
+					"amazon-bedrock": [
+						{
+							id: "anthropic.claude-opus-4-7",
+							name: "Claude Opus 4.7",
+							contextWindow: 1000000,
+							maxOutput: 64000,
+							inputPrice: 15,
+							outputPrice: 75,
+						},
+						{
+							id: "deepseek.v3-v1:0",
+							name: "DeepSeek V3",
+							contextWindow: 131072,
+							maxOutput: 16384,
+							inputPrice: 0.27,
+							outputPrice: 1.1,
+						},
+					],
 				},
 			},
 			null,
@@ -248,6 +266,30 @@ describe("provider model facade", () => {
 	test("throws a clear error for unsupported providers", () => {
 		withTempDir((tmpDir) => {
 			expect(() => loadProviderModelsConfig("not-real" as never, tmpDir)).toThrow(/Unsupported provider/);
+		});
+	});
+
+	test("loads unified amazon-bedrock model metadata through the provider facade", () => {
+		withTempDir((tmpDir) => {
+			writeModelsConfig(tmpDir);
+			const models = loadProviderModelsConfig("amazon-bedrock", tmpDir);
+			expect(models.length).toBeGreaterThan(0);
+			expect(models.find((model) => model.id === "anthropic.claude-opus-4-7")).toMatchObject({
+				contextWindow: 1000000,
+				maxOutput: 64000,
+				inputPrice: 15,
+				outputPrice: 75,
+			});
+			expect(models.find((model) => model.id.startsWith("anthropic."))).toBeDefined();
+			expect(models.find((model) => !model.id.startsWith("anthropic."))).toBeDefined();
+			expect(buildSortedProviderModelList("amazon-bedrock", tmpDir)).toContainEqual({
+				id: "anthropic.claude-opus-4-7",
+				cost: "$15.00 | $75.00",
+				contextWindow: 1000000,
+			});
+			expect(formatProviderModelDisplay("amazon-bedrock", "anthropic.claude-opus-4-7", 12800, tmpDir)).toBe(
+				"amazon-bedrock | anthropic.claude-opus-4-7 | $15.00 | $75.00 | 12800 / 1000000 | 1%",
+			);
 		});
 	});
 });

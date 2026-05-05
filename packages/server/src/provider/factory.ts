@@ -1,5 +1,6 @@
 import { authorizeCopilot as defaultAuthorizeCopilot } from "../auth/authorize";
 import {
+	type AmazonBedrockAuth,
 	type AuthStore,
 	type CopilotAuth,
 	loadAuthStore as defaultLoadAuthStore,
@@ -8,6 +9,7 @@ import {
 	type OpenRouterAuth,
 } from "../auth/store";
 import type { Logger } from "../log/logger";
+import { createAmazonBedrockProvider as defaultCreateAmazonBedrockProvider } from "./amazon-bedrock";
 import { createCopilotProvider as defaultCreateCopilotProvider } from "./copilot";
 import { providerModelsConfigExists as defaultProviderModelsConfigExists } from "./models";
 import { createOpenCodeGoProvider as defaultCreateOpenCodeGoProvider } from "./opencode-go";
@@ -32,6 +34,7 @@ export interface CreateProviderDeps {
 	createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
+	createAmazonBedrockProvider?: (auth: AmazonBedrockAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 }
 
 export async function createConfiguredProvider(
@@ -59,5 +62,6 @@ export async function createConfiguredProvider(
 		createOpenRouterProvider: deps.createOpenRouterProvider ?? defaultCreateOpenRouterProvider,
 		createOpenCodeGoProvider: deps.createOpenCodeGoProvider ?? defaultCreateOpenCodeGoProvider,
 		createOpenCodeZenProvider: deps.createOpenCodeZenProvider ?? defaultCreateOpenCodeZenProvider,
+		createAmazonBedrockProvider: deps.createAmazonBedrockProvider ?? defaultCreateAmazonBedrockProvider,
 	});
 }

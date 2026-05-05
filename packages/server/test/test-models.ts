@@ -8,6 +8,7 @@ export function writeUnifiedModelsConfig(
 		openrouter?: unknown[];
 		"opencode-go"?: unknown[];
 		"opencode-zen"?: unknown[];
+		"amazon-bedrock"?: unknown[];
 	},
 ): void {
 	fs.mkdirSync(configDir, { recursive: true });
@@ -22,6 +23,7 @@ export function writeUnifiedModelsConfig(
 					openrouter: providers.openrouter ?? [],
 					"opencode-go": providers["opencode-go"] ?? [],
 					"opencode-zen": providers["opencode-zen"] ?? [],
+					"amazon-bedrock": providers["amazon-bedrock"] ?? [],
 				},
 			},
 			null,

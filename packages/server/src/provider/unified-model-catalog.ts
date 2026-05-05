@@ -35,6 +35,7 @@ const PROVIDER_SOURCE_MAP: Record<ProviderId, string> = {
 	openrouter: "openrouter",
 	"opencode-go": "opencode-go",
 	"opencode-zen": "opencode",
+	"amazon-bedrock": "amazon-bedrock",
 };
 
 const COPILOT_MULTIPLIER_MODEL_ID_MAP: Record<string, string> = {
@@ -177,6 +178,7 @@ export async function refreshUnifiedModelCatalog(configDir?: string): Promise<Un
 			openrouter: normalizeProviderModels("openrouter", catalog, copilotMultipliers),
 			"opencode-go": normalizeProviderModels("opencode-go", catalog, copilotMultipliers),
 			"opencode-zen": normalizeProviderModels("opencode-zen", catalog, copilotMultipliers),
+			"amazon-bedrock": normalizeProviderModels("amazon-bedrock", catalog, copilotMultipliers),
 		},
 	};
 	fs.mkdirSync(resolvedConfigDir, { recursive: true });
