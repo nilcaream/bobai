@@ -52,8 +52,14 @@ if (cli.command === "auth") {
 		console.error(`Unsupported provider: ${cli.provider}`);
 		process.exit(1);
 	}
-	await authProvider.authorize(globalConfigDir);
-	process.exit(0);
+	try {
+		await authProvider.authorize(globalConfigDir);
+		process.exit(0);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(message);
+		process.exit(1);
+	}
 }
 
 if (cli.command === "refresh") {

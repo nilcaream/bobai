@@ -125,10 +125,25 @@ describe("authorizeCopilot", () => {
 			authorizeOpenCodeGo(tmpDir, {
 				promptSecret: async () => "bad-go-key",
 				validateOpenCodeGoKey: async () => {
-					throw new Error("Unauthorized");
+					throw new Error("OpenCode Go API key was rejected (401): Unauthorized");
 				},
 			}),
-		).rejects.toThrow(/Unauthorized/);
+		).rejects.toThrow(/401|Unauthorized/);
+
+		expect(fs.existsSync(path.join(tmpDir, "auth.json"))).toBe(false);
+	});
+
+	test("does not save OpenCode Go key when validation hits quota", async () => {
+		await expect(
+			authorizeOpenCodeGo(tmpDir, {
+				promptSecret: async () => "quota-go-key",
+				validateOpenCodeGoKey: async () => {
+					throw new Error(
+						"OpenCode Go validation request hit a quota or rate limit for model deepseek-v4-flash (429 insufficient_quota): Error from provider (Alibaba): You exceeded your current quota, please check your plan and billing details.",
+					);
+				},
+			}),
+		).rejects.toThrow(/429|quota|rate limit/);
 
 		expect(fs.existsSync(path.join(tmpDir, "auth.json"))).toBe(false);
 	});
