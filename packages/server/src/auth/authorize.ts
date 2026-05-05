@@ -5,6 +5,7 @@ import { validateOpenCodeGoKey } from "./opencode-go";
 import { validateOpenCodeZenKey } from "./opencode-zen";
 import { validateOpenRouterKey } from "./openrouter";
 import { promptSecret } from "./prompt-secret";
+import { promptText } from "./prompt-text";
 import {
 	type AuthProviderId,
 	type AuthStore,
@@ -119,7 +120,7 @@ export async function authorizeAmazonBedrock(
 	} = {},
 ): Promise<void> {
 	const readSecret = deps.promptSecret ?? promptSecret;
-	const readRegion = deps.promptRegion ?? promptSecret; // reuse promptSecret for plain text input
+	const readRegion = deps.promptRegion ?? promptText; // plain-text visible input, region is not a secret
 	const validate = deps.validateAmazonBedrockKey ?? validateAmazonBedrockKey;
 
 	const apiKey = await readSecret("Paste Amazon Bedrock bearer token: ");
