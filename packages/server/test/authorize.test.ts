@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { authorizeCopilot, authorizeOpenCodeGo, authorizeOpenCodeZen, authorizeOpenRouter } from "../src/auth/authorize";
-import type { AuthStore } from "../src/auth/store";
+import { type AuthStore, getAmazonBedrockAuth, listAuthenticatedProviders, setAmazonBedrockAuth } from "../src/auth/store";
 
 const SESSION_TOKEN = "tid=session;proxy-ep=proxy.individual.githubcopilot.com";
 const SESSION_EXPIRES_AT = Math.floor(Date.now() / 1000) + 3600;
@@ -169,5 +169,18 @@ describe("authorizeCopilot", () => {
 		).rejects.toThrow(/Unauthorized/);
 
 		expect(fs.existsSync(path.join(tmpDir, "auth.json"))).toBe(false);
+	});
+});
+
+describe("amazon-bedrock auth store", () => {
+	test("can persist and retrieve amazon-bedrock auth", () => {
+		const store: AuthStore = { version: 1, providers: {} };
+		const updated = setAmazonBedrockAuth(store, { apiKey: "bedrock-key", region: "us-east-1" });
+		expect(getAmazonBedrockAuth(updated)).toEqual({ apiKey: "bedrock-key", region: "us-east-1" });
+	});
+
+	test("listAuthenticatedProviders includes amazon-bedrock when auth is set", () => {
+		const store = setAmazonBedrockAuth({ version: 1, providers: {} }, { apiKey: "k", region: "us-east-1" });
+		expect(listAuthenticatedProviders(store)).toContain("amazon-bedrock");
 	});
 });

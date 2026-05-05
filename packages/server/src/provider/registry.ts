@@ -1,10 +1,10 @@
-import type { AuthStore, CopilotAuth, OpenCodeGoAuth, OpenCodeZenAuth, OpenRouterAuth } from "../auth/store";
+import type { AmazonBedrockAuth, AuthStore, CopilotAuth, OpenCodeGoAuth, OpenCodeZenAuth, OpenRouterAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
 import type { Provider } from "./provider";
 import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
 
-export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen"] as const;
-export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen"] as const;
+export const SUPPORTED_RUNTIME_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"] as const;
+export const SUPPORTED_AUTH_PROVIDER_IDS = ["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
 export type ProviderId = (typeof SUPPORTED_RUNTIME_PROVIDER_IDS)[number];
@@ -340,6 +340,25 @@ const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 	openrouter: openRouterDescriptor,
 	"opencode-go": openCodeGoDescriptor,
 	"opencode-zen": openCodeZenDescriptor,
+	"amazon-bedrock": createApiKeyProviderDescriptor<AmazonBedrockAuth>({
+		id: "amazon-bedrock",
+		defaultModel: "us.amazon.nova-pro-v1:0",
+		auth: {
+			cliCommand: "bobai auth amazon-bedrock",
+			missingAuthMessage: "Amazon Bedrock authentication not found. Please run: bobai auth amazon-bedrock",
+			permanentAuthErrorMessage: "Authentication expired. Run `bobai auth amazon-bedrock` to re-authenticate.",
+		},
+		getApiFamily(): ApiFamily {
+			return "anthropic-messages";
+		},
+		getAuth(store) {
+			return store?.providers["amazon-bedrock"];
+		},
+		missingAuthMessage: "Amazon Bedrock authentication not found. Please run: bobai auth amazon-bedrock",
+		async createProvider(): Promise<Provider> {
+			throw new Error("Amazon Bedrock provider runtime not yet implemented.");
+		},
+	}),
 };
 
 export function getProviderDescriptor(providerId: ProviderId): ProviderDescriptor;

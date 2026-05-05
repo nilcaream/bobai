@@ -15,8 +15,8 @@ describe("provider registry", () => {
 	});
 
 	test("lists supported auth providers separately from runtime providers", () => {
-		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen"]);
-		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen"]);
+		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
+		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
 	});
 
 	test("returns the default model for github-copilot", () => {

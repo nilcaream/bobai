@@ -22,6 +22,11 @@ export interface OpenCodeZenAuth {
 	apiKey: string;
 }
 
+export interface AmazonBedrockAuth {
+	apiKey: string;
+	region: string;
+}
+
 export interface AuthStore {
 	version: 1;
 	providers: {
@@ -29,6 +34,7 @@ export interface AuthStore {
 		openrouter?: OpenRouterAuth;
 		"opencode-go"?: OpenCodeGoAuth;
 		"opencode-zen"?: OpenCodeZenAuth;
+		"amazon-bedrock"?: AmazonBedrockAuth;
 	};
 }
 
@@ -69,6 +75,10 @@ export function getOpenCodeZenAuth(store: AuthStore): OpenCodeZenAuth | undefine
 	return store.providers["opencode-zen"];
 }
 
+export function getAmazonBedrockAuth(store: AuthStore): AmazonBedrockAuth | undefined {
+	return store.providers["amazon-bedrock"];
+}
+
 export function setCopilotAuth(store: AuthStore, auth: CopilotAuth): AuthStore {
 	return {
 		...store,
@@ -105,6 +115,16 @@ export function setOpenCodeZenAuth(store: AuthStore, auth: OpenCodeZenAuth): Aut
 		providers: {
 			...store.providers,
 			"opencode-zen": auth,
+		},
+	};
+}
+
+export function setAmazonBedrockAuth(store: AuthStore, auth: AmazonBedrockAuth): AuthStore {
+	return {
+		...store,
+		providers: {
+			...store.providers,
+			"amazon-bedrock": auth,
 		},
 	};
 }

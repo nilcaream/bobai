@@ -46,3 +46,38 @@ describe("GET /bobai/providers", () => {
 		expect(body.defaultProvider).toBe("github-copilot");
 	});
 });
+
+describe("GET /bobai/providers with amazon-bedrock auth", () => {
+	let tmpDir: string;
+	let server: ReturnType<typeof Bun.serve>;
+	let baseUrl: string;
+
+	beforeAll(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-providers-bedrock-"));
+		saveAuthStore(tmpDir, {
+			version: 1,
+			providers: {
+				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
+				"amazon-bedrock": { apiKey: "bedrock-key", region: "us-east-1" },
+			},
+		});
+		server = createServer({ port: 0, configDir: tmpDir, providerId: "github-copilot" });
+		baseUrl = `http://localhost:${server.port}`;
+	});
+
+	afterAll(() => {
+		server.stop(true);
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("includes amazon-bedrock in authenticated providers list", async () => {
+		const res = await fetch(`${baseUrl}/bobai/providers`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			providers: { index: number; id: string; runtimeSupported: boolean }[];
+			defaultProvider: string;
+		};
+		const ids = body.providers.map((p) => p.id);
+		expect(ids).toContain("amazon-bedrock");
+	});
+});
