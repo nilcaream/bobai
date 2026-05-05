@@ -1,4 +1,5 @@
 import { exchangeToken } from "../provider/copilot";
+import { AMAZON_BEDROCK_DEFAULT_REGION, validateAmazonBedrockKey } from "./amazon-bedrock";
 import { pollForToken, requestDeviceCode } from "./device-flow";
 import { validateOpenCodeGoKey } from "./opencode-go";
 import { validateOpenCodeZenKey } from "./opencode-zen";
@@ -10,6 +11,7 @@ import {
 	type CopilotAuth,
 	loadAuthStore,
 	saveAuthStore,
+	setAmazonBedrockAuth,
 	setCopilotAuth,
 	setOpenCodeGoAuth,
 	setOpenCodeZenAuth,
@@ -108,6 +110,29 @@ export async function authorizeOpenCodeZen(
 	});
 }
 
+export async function authorizeAmazonBedrock(
+	configDir: string,
+	deps: {
+		promptSecret?: (prompt: string) => Promise<string>;
+		promptRegion?: (prompt: string) => Promise<string>;
+		validateAmazonBedrockKey?: (apiKey: string, region: string) => Promise<void>;
+	} = {},
+): Promise<void> {
+	const readSecret = deps.promptSecret ?? promptSecret;
+	const readRegion = deps.promptRegion ?? promptSecret; // reuse promptSecret for plain text input
+	const validate = deps.validateAmazonBedrockKey ?? validateAmazonBedrockKey;
+
+	const apiKey = await readSecret("Paste Amazon Bedrock bearer token: ");
+	const regionInput = await readRegion(`AWS Region [${AMAZON_BEDROCK_DEFAULT_REGION}]: `);
+	const region = regionInput.trim() || AMAZON_BEDROCK_DEFAULT_REGION;
+
+	await validate(apiKey, region);
+
+	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
+	saveAuthStore(configDir, setAmazonBedrockAuth(store, { apiKey, region }));
+	console.log("Amazon Bedrock bearer token saved");
+}
+
 export interface AuthProviderEntry {
 	id: AuthProviderId;
 	authorize(configDir: string): Promise<void>;
@@ -136,6 +161,12 @@ const AUTH_PROVIDERS: AuthProviderEntry[] = [
 		id: "opencode-zen",
 		authorize: async (configDir: string) => {
 			await authorizeOpenCodeZen(configDir);
+		},
+	},
+	{
+		id: "amazon-bedrock",
+		authorize: async (configDir: string) => {
+			await authorizeAmazonBedrock(configDir);
 		},
 	},
 ];

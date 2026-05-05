@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { authorizeCopilot, authorizeOpenCodeGo, authorizeOpenCodeZen, authorizeOpenRouter } from "../src/auth/authorize";
+import { authorizeCopilot, authorizeAmazonBedrock, authorizeOpenCodeGo, authorizeOpenCodeZen, authorizeOpenRouter } from "../src/auth/authorize";
+import { AMAZON_BEDROCK_DEFAULT_REGION } from "../src/auth/amazon-bedrock";
 import { type AuthStore, getAmazonBedrockAuth, listAuthenticatedProviders, setAmazonBedrockAuth } from "../src/auth/store";
 
 const SESSION_TOKEN = "tid=session;proxy-ep=proxy.individual.githubcopilot.com";
@@ -182,5 +183,53 @@ describe("amazon-bedrock auth store", () => {
 	test("listAuthenticatedProviders includes amazon-bedrock when auth is set", () => {
 		const store = setAmazonBedrockAuth({ version: 1, providers: {} }, { apiKey: "k", region: "us-east-1" });
 		expect(listAuthenticatedProviders(store)).toContain("amazon-bedrock");
+	});
+});
+
+describe("authorizeAmazonBedrock", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-bedrock-auth-"));
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("saves { apiKey, region } into auth.json when validation succeeds", async () => {
+		await authorizeAmazonBedrock(tmpDir, {
+			promptSecret: async () => "bk-token",
+			promptRegion: async () => "eu-west-1",
+			validateAmazonBedrockKey: async () => {},
+		});
+
+		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
+		expect(raw.providers["amazon-bedrock"]).toEqual({ apiKey: "bk-token", region: "eu-west-1" });
+	});
+
+	test("does not write auth.json when validation fails", async () => {
+		await expect(
+			authorizeAmazonBedrock(tmpDir, {
+				promptSecret: async () => "bad-token",
+				promptRegion: async () => "us-east-1",
+				validateAmazonBedrockKey: async () => {
+					throw new Error("Amazon Bedrock validation failed: 403 Forbidden");
+				},
+			}),
+		).rejects.toThrow(/403|Forbidden/);
+
+		expect(fs.existsSync(path.join(tmpDir, "auth.json"))).toBe(false);
+	});
+
+	test("uses AMAZON_BEDROCK_DEFAULT_REGION when empty string is entered for region", async () => {
+		await authorizeAmazonBedrock(tmpDir, {
+			promptSecret: async () => "bk-token",
+			promptRegion: async () => "",
+			validateAmazonBedrockKey: async () => {},
+		});
+
+		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
+		expect(raw.providers["amazon-bedrock"]?.region).toBe(AMAZON_BEDROCK_DEFAULT_REGION);
 	});
 });
