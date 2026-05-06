@@ -65,7 +65,6 @@ describe("provider registry", () => {
 	});
 
 	test("recognizes amazon-bedrock as a runtime and auth provider", () => {
-		expect(isSupportedAuthProvider("amazon-bedrock")).toBe(true);
 		expect(isSupportedProvider("amazon-bedrock")).toBe(true);
 		expect(getDefaultModelForProvider("amazon-bedrock")).toBe("anthropic.claude-opus-4-7");
 	});

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { saveAuthStore } from "../src/auth/store";
 import { createServer } from "../src/server";
@@ -83,6 +83,10 @@ describe("Amazon Bedrock session flow", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
+	beforeEach(() => {
+		seenProviderIds = [];
+	});
+
 	test("provider command switches an empty session to Amazon Bedrock and defaults to the Anthropic model", async () => {
 		const session = createSession(db, {
 			provider: "github-copilot",
@@ -157,17 +161,7 @@ describe("Amazon Bedrock session flow", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ command: "provider", args: "5", sessionId: session.id }),
 		});
-		// Default model is anthropic.claude-opus-4-7; switch to deepseek.v3-v1:0 (non-Anthropic)
-		// First find the model index by listing models
-		const modelRes = await fetch(`${baseUrl}/bobai/command`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "model", args: "2", sessionId: session.id }),
-		});
-		const _modelBody = (await modelRes.json()) as { ok: boolean; model?: string };
-		// Model index 2 should resolve to a non-anthropic model (sorted alphabetically)
 		// Sorted amazon-bedrock models: anthropic.claude-haiku-4-5(1), anthropic.claude-opus-4-7(2), deepseek.v3-v1:0(3), mistral.devstral-2-123b(4)
-		// Let's use index 3 for deepseek
 		const deepseekRes = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
