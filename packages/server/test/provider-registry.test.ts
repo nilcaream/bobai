@@ -16,7 +16,13 @@ describe("provider registry", () => {
 
 	test("lists supported auth providers separately from runtime providers", () => {
 		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
-		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
+		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual([
+			"github-copilot",
+			"openrouter",
+			"opencode-go",
+			"opencode-zen",
+			"amazon-bedrock",
+		]);
 	});
 
 	test("returns the default model for github-copilot", () => {
@@ -36,6 +42,7 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
 		expect(isSupportedAuthProvider("opencode-go")).toBe(true);
 		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
+		expect(isSupportedAuthProvider("amazon-bedrock")).toBe(true);
 		expect(isSupportedAuthProvider("anything-else")).toBe(false);
 	});
 
@@ -57,6 +64,12 @@ describe("provider registry", () => {
 		expect(getDefaultModelForProvider("opencode-zen")).toBe("minimax-m2.5-free");
 	});
 
+	test("recognizes amazon-bedrock as a runtime and auth provider", () => {
+		expect(isSupportedAuthProvider("amazon-bedrock")).toBe(true);
+		expect(isSupportedProvider("amazon-bedrock")).toBe(true);
+		expect(getDefaultModelForProvider("amazon-bedrock")).toBe("anthropic.claude-opus-4-7");
+	});
+
 	test("exposes provider descriptor metadata through the registry", () => {
 		expect(getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
 		expect(getProviderDescriptor("github-copilot")?.getApiFamily("claude-haiku-4.5")).toBe("anthropic-messages");
@@ -68,5 +81,10 @@ describe("provider registry", () => {
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("minimax-m2.5-free")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
+		expect(getProviderDescriptor("amazon-bedrock")?.defaultModel).toBe("anthropic.claude-opus-4-7");
+		expect(getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-opus-4-7")).toBe("anthropic-messages");
+		expect(getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-haiku-4-5")).toBe("anthropic-messages");
+		expect(getProviderDescriptor("amazon-bedrock")?.getApiFamily("deepseek.v3-v1:0")).toBe("openai-chat-completions");
+		expect(getProviderDescriptor("amazon-bedrock")?.getApiFamily("mistral.devstral-2-123b")).toBe("openai-chat-completions");
 	});
 });
