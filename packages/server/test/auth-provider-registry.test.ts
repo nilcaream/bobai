@@ -8,6 +8,7 @@ describe("auth provider registry", () => {
 			"openrouter",
 			"opencode-go",
 			"opencode-zen",
+			"amazon-bedrock",
 		]);
 	});
 });
