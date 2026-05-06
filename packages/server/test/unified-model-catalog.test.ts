@@ -135,7 +135,13 @@ describe("unified model catalog", () => {
 		expect(result.configPath).toBe(path.join(tmpDir, "models.json"));
 		expect(file.version).toBe(1);
 		expect(typeof file.generatedAt).toBe("string");
-		expect(Object.keys(file.providers).sort()).toEqual(["amazon-bedrock", "github-copilot", "opencode-go", "opencode-zen", "openrouter"]);
+		expect(Object.keys(file.providers).sort()).toEqual([
+			"amazon-bedrock",
+			"github-copilot",
+			"opencode-go",
+			"opencode-zen",
+			"openrouter",
+		]);
 	});
 
 	test("strict filtering excludes models without tool support or complete prices and limits", async () => {
