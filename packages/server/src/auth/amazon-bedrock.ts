@@ -1,4 +1,3 @@
-export const AMAZON_BEDROCK_SMOKE_TEST_MODEL = "anthropic.claude-haiku-4-5";
 export const AMAZON_BEDROCK_DEFAULT_REGION = "us-east-1";
 
 export async function validateAmazonBedrockKey(
@@ -7,21 +6,15 @@ export async function validateAmazonBedrockKey(
 	deps: { fetch?: typeof fetch } = {},
 ): Promise<void> {
 	const runFetch = deps.fetch ?? fetch;
-	const url = `https://bedrock-mantle.${region}.api.aws/anthropic/v1/messages`;
+	// Use the /v1/models endpoint: lightweight GET, no model ID required,
+	// confirms the bearer token is accepted by the mantle endpoint.
+	const url = `https://bedrock-mantle.${region}.api.aws/v1/models`;
 
 	const response = await runFetch(url, {
-		method: "POST",
+		method: "GET",
 		headers: {
-			"x-api-key": apiKey,
-			"anthropic-version": "2023-06-01",
-			"Content-Type": "application/json",
+			Authorization: `Bearer ${apiKey}`,
 		},
-		body: JSON.stringify({
-			model: AMAZON_BEDROCK_SMOKE_TEST_MODEL,
-			max_tokens: 8,
-			stream: true,
-			messages: [{ role: "user", content: "Reply with OK." }],
-		}),
 	});
 
 	if (!response.ok) {
