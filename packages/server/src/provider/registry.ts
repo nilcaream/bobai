@@ -79,7 +79,12 @@ export interface ProviderDescriptor {
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
-		createAmazonBedrockProvider?: (auth: AmazonBedrockAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createAmazonBedrockProvider?: (
+			auth: AmazonBedrockAuth,
+			logger?: Logger,
+			fetchFn?: typeof fetch,
+			configDir?: string,
+		) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -149,10 +154,16 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 		auth: Auth;
 		logger?: Logger;
 		fetch?: typeof fetch;
+		configDir?: string;
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
-		createAmazonBedrockProvider?: (auth: AmazonBedrockAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+		createAmazonBedrockProvider?: (
+			auth: AmazonBedrockAuth,
+			logger?: Logger,
+			fetchFn?: typeof fetch,
+			configDir?: string,
+		) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -199,6 +210,7 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 				auth,
 				logger: providerOptions.logger,
 				fetch: providerOptions.fetch,
+				configDir: providerOptions.configDir,
 				createOpenRouterProvider: providerOptions.createOpenRouterProvider,
 				createOpenCodeGoProvider: providerOptions.createOpenCodeGoProvider,
 				createOpenCodeZenProvider: providerOptions.createOpenCodeZenProvider,
@@ -374,7 +386,7 @@ const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 			const amazonBedrockModule = await import("./amazon-bedrock");
 			const createAmazonBedrockProvider =
 				options.createAmazonBedrockProvider ?? amazonBedrockModule.createAmazonBedrockProvider;
-			return createAmazonBedrockProvider(options.auth, options.logger, options.fetch);
+			return createAmazonBedrockProvider(options.auth, options.logger, options.fetch, options.configDir);
 		},
 	}),
 };

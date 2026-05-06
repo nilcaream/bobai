@@ -34,7 +34,12 @@ export interface CreateProviderDeps {
 	createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
-	createAmazonBedrockProvider?: (auth: AmazonBedrockAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
+	createAmazonBedrockProvider?: (
+		auth: AmazonBedrockAuth,
+		logger?: Logger,
+		fetchFn?: typeof fetch,
+		configDir?: string,
+	) => Provider;
 }
 
 export async function createConfiguredProvider(

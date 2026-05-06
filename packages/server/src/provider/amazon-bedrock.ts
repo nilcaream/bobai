@@ -9,14 +9,19 @@ function bedrockAnthropicUrl(region: string): string {
 }
 
 function bedrockChatUrl(region: string): string {
-	return `https://bedrock-mantle.${region}.api.aws/openai/v1/chat/completions`;
+	return `https://bedrock-mantle.${region}.api.aws/v1/chat/completions`;
 }
 
 function isAnthropicModel(modelId: string): boolean {
 	return modelId.startsWith("anthropic.");
 }
 
-export function createAmazonBedrockProvider(auth: AmazonBedrockAuth, logger?: Logger, fetchFn: typeof fetch = fetch): Provider {
+export function createAmazonBedrockProvider(
+	auth: AmazonBedrockAuth,
+	logger?: Logger,
+	fetchFn: typeof fetch = fetch,
+	configDir = "",
+): Provider {
 	const messagesProvider = createAnthropicCompatibleProvider(
 		{
 			providerId: "amazon-bedrock",
@@ -26,6 +31,7 @@ export function createAmazonBedrockProvider(auth: AmazonBedrockAuth, logger?: Lo
 		},
 		logger,
 		fetchFn,
+		configDir,
 	);
 	const chatProvider = createOpenAIChatCompatibleProvider(
 		{
@@ -35,6 +41,7 @@ export function createAmazonBedrockProvider(auth: AmazonBedrockAuth, logger?: Lo
 		},
 		logger,
 		fetchFn,
+		configDir,
 	);
 
 	return {
