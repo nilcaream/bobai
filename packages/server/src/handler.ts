@@ -2,9 +2,10 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
-import { compactToBudget } from "./compaction/compact-to-budget";
+import { getSnapshot, setSnapshot } from "./compaction/cache";
+import { type CompactToBudgetResult, compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
-import { PRE_PROMPT_TARGET } from "./compaction/strength";
+import { COMPACTION_OUTPUT_TARGET, computeCharBudget, PRE_PROMPT_TARGET, totalContentChars } from "./compaction/strength";
 import { DbDisconnectedError, type DbGuard } from "./db-guard";
 import { FileTime } from "./file/time";
 import { formatPromptDate } from "./format-date";
@@ -329,22 +330,67 @@ export async function handlePrompt(req: PromptRequest) {
 
 		const rawMessages = [...messages];
 		const beforeCompaction = messages;
-		const compactionResult = compactToBudget({
-			messages,
-			contextWindow,
-			promptTokens: sessionPromptTokens,
-			promptChars: sessionPromptChars,
-			target: PRE_PROMPT_TARGET,
-			type: "pre-prompt",
-			tools,
-			sessionId: currentSessionId as string,
-			onReadFileCompacted: invalidateCompactedRead,
-			logger: scopedLogger,
-		});
-		messages = compactionResult.messages;
 
-		// Write debug dump if compaction or eviction changed something
-		if (messages !== beforeCompaction && req.logDir) {
+		// Stateful compaction: reuse cached snapshot if messages still fit
+		const charBudget80 = computeCharBudget(contextWindow, PRE_PROMPT_TARGET, sessionPromptTokens, sessionPromptChars);
+		const existingSnapshot = getSnapshot(currentSessionId as string);
+
+		let compactionResult: CompactToBudgetResult | undefined;
+
+		if (existingSnapshot && charBudget80 > 0) {
+			// Reconstruct: frozen prefix + new messages appended since snapshot
+			const appendedMessages = rawMessages.slice(existingSnapshot.rawMessageCount);
+			const candidateMessages = [...existingSnapshot.compactedMessages, ...appendedMessages];
+			const candidateChars = totalContentChars(candidateMessages);
+
+			if (candidateChars <= charBudget80) {
+				// Still fits — use cached prefix, skip compaction entirely
+				messages = candidateMessages;
+			} else {
+				// Exceeded threshold — re-compact everything to 50%
+				compactionResult = compactToBudget({
+					messages: rawMessages,
+					contextWindow,
+					promptTokens: sessionPromptTokens,
+					promptChars: sessionPromptChars,
+					target: COMPACTION_OUTPUT_TARGET,
+					type: "pre-prompt",
+					tools,
+					sessionId: currentSessionId as string,
+					onReadFileCompacted: invalidateCompactedRead,
+					logger: scopedLogger,
+				});
+				messages = compactionResult.messages;
+				setSnapshot(currentSessionId as string, {
+					compactedMessages: compactionResult.messages,
+					rawMessageCount: rawMessages.length,
+					snapshotChars: totalContentChars(compactionResult.messages),
+				});
+			}
+		} else if (charBudget80 > 0 && totalContentChars(messages) > charBudget80) {
+			// No snapshot, but over threshold — compact to 50% and cache
+			compactionResult = compactToBudget({
+				messages,
+				contextWindow,
+				promptTokens: sessionPromptTokens,
+				promptChars: sessionPromptChars,
+				target: COMPACTION_OUTPUT_TARGET,
+				type: "pre-prompt",
+				tools,
+				sessionId: currentSessionId as string,
+				onReadFileCompacted: invalidateCompactedRead,
+				logger: scopedLogger,
+			});
+			messages = compactionResult.messages;
+			setSnapshot(currentSessionId as string, {
+				compactedMessages: compactionResult.messages,
+				rawMessageCount: rawMessages.length,
+				snapshotChars: totalContentChars(compactionResult.messages),
+			});
+		}
+
+		// Write debug dump if compaction changed something
+		if (compactionResult && messages !== beforeCompaction && req.logDir) {
 			writeCompactionDump({
 				logDir: req.logDir,
 				before: beforeCompaction,

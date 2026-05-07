@@ -24,6 +24,10 @@ export const PRE_PROMPT_TARGET = 0.8;
 /** Emergency (mid-turn) compaction targets this fraction of the context window. */
 export const EMERGENCY_TARGET = 0.9;
 
+/** When compaction triggers, compact down to this fraction of context window.
+ *  Leaves headroom before the next threshold is hit again. */
+export const COMPACTION_OUTPUT_TARGET = 0.5;
+
 /**
  * Compute the character budget for a given context window and target fraction.
  *

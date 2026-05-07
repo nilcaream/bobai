@@ -1,6 +1,7 @@
+import { setSnapshot } from "./compaction/cache";
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
-import { computeCharBudget, EMERGENCY_TARGET, totalContentChars } from "./compaction/strength";
+import { COMPACTION_OUTPUT_TARGET, computeCharBudget, EMERGENCY_TARGET, totalContentChars } from "./compaction/strength";
 import type { DbGuard } from "./db-guard";
 import type { Logger } from "./log/logger";
 import { getScope } from "./log/logger";
@@ -547,20 +548,42 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			const emgPromptTokens = options.sessionPromptTokens ?? 0;
 			const emgPromptChars = options.sessionPromptChars ?? 0;
 			const rawPlusNew = [...options.rawMessages, ...newMessages];
-			const compacted = emergencyCompactConversation(
-				rawPlusNew,
-				emgPromptTokens,
-				emgPromptChars,
-				options.contextWindow,
-				tools,
-				options.logDir,
-				options.logger,
-				options.onReadFileCompacted,
-				options.sessionId,
-			);
-			if (compacted !== rawPlusNew) {
-				conversation.length = 0;
-				conversation.push(...compacted);
+
+			if (shouldEmergencyCompact(emgPromptTokens, emgPromptChars, options.contextWindow, rawPlusNew)) {
+				const result = compactToBudget({
+					messages: rawPlusNew,
+					contextWindow: options.contextWindow,
+					promptTokens: emgPromptTokens,
+					promptChars: emgPromptChars,
+					target: COMPACTION_OUTPUT_TARGET,
+					type: "emergency",
+					tools,
+					sessionId: options.sessionId,
+					onReadFileCompacted: options.onReadFileCompacted,
+					logger: options.logger,
+				});
+
+				if (result.messages !== rawPlusNew) {
+					if (options.logDir) {
+						const scope = getScope() ?? "global";
+						writeCompactionDump({
+							logDir: options.logDir,
+							before: rawPlusNew,
+							afterCompaction: result.compacted,
+							afterEviction: result.messages,
+							code: "emg",
+							scope,
+							debug: options.logger?.level === "debug",
+						});
+					}
+					conversation.length = 0;
+					conversation.push(...result.messages);
+					setSnapshot(options.sessionId, {
+						compactedMessages: result.messages,
+						rawMessageCount: options.rawMessages.length + newMessages.length,
+						snapshotChars: totalContentChars(result.messages),
+					});
+				}
 			}
 		}
 
