@@ -376,7 +376,10 @@ const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 			permanentAuthErrorMessage: "Authentication expired. Run `bobai auth amazon-bedrock` to re-authenticate.",
 		},
 		getApiFamily(modelId: string): ApiFamily {
-			return modelId.startsWith("anthropic.") ? "anthropic-messages" : "openai-chat-completions";
+			// Cross-region inference prefixes (eu., us., ap.) wrap the standard model ID.
+			// Strip the prefix before checking the provider family.
+			const baseModelId = modelId.replace(/^(eu|us|ap)\./, "");
+			return baseModelId.startsWith("anthropic.") ? "anthropic-messages" : "openai-chat-completions";
 		},
 		getAuth(store) {
 			return store?.providers["amazon-bedrock"];

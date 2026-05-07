@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { authorizeCopilot, getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
+import { loadAuthStore } from "./auth/store";
 import { parseCLI } from "./cli";
 import { resolveValidatedDefaultBackend } from "./config/default-backend";
 import { loadGlobalConfig } from "./config/global";
@@ -64,8 +65,13 @@ if (cli.command === "auth") {
 
 if (cli.command === "refresh") {
 	try {
-		const result = await refreshUnifiedModelCatalog(globalConfigDir);
+		const authStore = loadAuthStore(globalConfigDir);
+		const bedrockAuth = authStore?.providers["amazon-bedrock"];
+		const result = await refreshUnifiedModelCatalog(globalConfigDir, { bedrockAuth });
 		console.log(`Wrote ${result.modelCount} models to ${result.configPath}`);
+		if (bedrockAuth) {
+			console.log(`Amazon Bedrock: refreshed from live API (${bedrockAuth.region})`);
+		}
 		if (!result.multiplierSourceAvailable) {
 			console.log("Copilot multiplier metadata unavailable; Copilot models were written with ?x fallback.");
 		}

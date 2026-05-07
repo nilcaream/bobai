@@ -228,6 +228,99 @@ describe("provider command", () => {
 		}
 	});
 
+	test(".provider amazon-bedrock switches the provider and defaults to anthropic.claude-opus-4-7", () => {
+		const db = createTestDb();
+		const tmpDir = makeTmpDir();
+		try {
+			writeUnifiedModelsConfig(tmpDir, {
+				"amazon-bedrock": [
+					{
+						id: "anthropic.claude-opus-4-7",
+						name: "Claude Opus 4.7",
+						contextWindow: 1000000,
+						maxOutput: 64000,
+						inputPrice: 15,
+						outputPrice: 75,
+					},
+					{
+						id: "deepseek.v3-v1:0",
+						name: "DeepSeek V3",
+						contextWindow: 131072,
+						maxOutput: 16384,
+						inputPrice: 0.27,
+						outputPrice: 1.1,
+					},
+				],
+			});
+			const session = createSession(db);
+			const result = handleCommand(
+				db,
+				{ command: "provider", args: "1", sessionId: session.id },
+				{
+					defaultProviderId: null,
+					defaultModel: null,
+					configDir: tmpDir,
+					listAuthenticatedProviders: () => [{ index: 1, id: "amazon-bedrock", runtimeSupported: true }],
+				},
+			);
+			expect(result.ok).toBe(true);
+			if (result.ok) {
+				const updated = getSession(db, session.id);
+				expect(updated?.provider).toBe("amazon-bedrock");
+				expect(updated?.model).toBe("anthropic.claude-opus-4-7");
+				expect(updated?.apiFamily).toBe("anthropic-messages");
+			}
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+			db.close();
+		}
+	});
+
+	test("amazon-bedrock cross-family model switch on non-empty session returns not supported error", () => {
+		const db = createTestDb();
+		const tmpDir = makeTmpDir();
+		try {
+			writeUnifiedModelsConfig(tmpDir, {
+				"amazon-bedrock": [
+					{
+						id: "anthropic.claude-haiku-4-5",
+						name: "Claude Haiku 4.5",
+						contextWindow: 1000000,
+						maxOutput: 64000,
+						inputPrice: 0.8,
+						outputPrice: 4,
+					},
+					{
+						id: "deepseek.v3-v1:0",
+						name: "DeepSeek V3",
+						contextWindow: 131072,
+						maxOutput: 16384,
+						inputPrice: 0.27,
+						outputPrice: 1.1,
+					},
+				],
+			});
+			const session = createSession(db, {
+				provider: "amazon-bedrock",
+				model: "anthropic.claude-haiku-4-5",
+				apiFamily: "anthropic-messages",
+			});
+			appendMessage(db, session.id, "user", "hello");
+			const models = buildSortedProviderModelList("amazon-bedrock", tmpDir);
+			const deepseekIndex = models.findIndex((model) => model.id === "deepseek.v3-v1:0") + 1;
+			expect(deepseekIndex).toBeGreaterThan(0);
+			const result = handleCommand(
+				db,
+				{ command: "model", args: String(deepseekIndex), sessionId: session.id },
+				{ defaultProviderId: "amazon-bedrock", configDir: tmpDir },
+			);
+			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
+		} finally {
+			fs.rmSync(tmpDir, { recursive: true, force: true });
+			db.close();
+		}
+	});
+
 	test("opencode-zen gpt-to-chat cross-family model switch on non-empty session returns not supported error", () => {
 		const db = createTestDb();
 		const tmpDir = makeTmpDir();

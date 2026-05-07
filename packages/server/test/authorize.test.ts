@@ -2,8 +2,16 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { authorizeCopilot, authorizeAmazonBedrock, authorizeOpenCodeGo, authorizeOpenCodeZen, authorizeOpenRouter } from "../src/auth/authorize";
 import { AMAZON_BEDROCK_DEFAULT_REGION } from "../src/auth/amazon-bedrock";
+import {
+	authorizeAmazonBedrock,
+	authorizeCopilot,
+	authorizeOpenCodeGo,
+	authorizeOpenCodeZen,
+	authorizeOpenRouter,
+	getAuthProvider,
+	listSupportedAuthProviders,
+} from "../src/auth/authorize";
 import { type AuthStore, getAmazonBedrockAuth, listAuthenticatedProviders, setAmazonBedrockAuth } from "../src/auth/store";
 
 const SESSION_TOKEN = "tid=session;proxy-ep=proxy.individual.githubcopilot.com";
@@ -201,7 +209,8 @@ describe("authorizeAmazonBedrock", () => {
 		await authorizeAmazonBedrock(tmpDir, {
 			promptSecret: async () => "bk-token",
 			promptRegion: async () => "eu-west-1",
-			validateAmazonBedrockKey: async () => {},
+			fetchBedrockFoundationModels: async () => [],
+			refreshBedrockModelsFromFoundation: async () => ({ configPath: "", modelCount: 0, skippedModelCount: 0 }),
 		});
 
 		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
@@ -213,9 +222,10 @@ describe("authorizeAmazonBedrock", () => {
 			authorizeAmazonBedrock(tmpDir, {
 				promptSecret: async () => "bad-token",
 				promptRegion: async () => "us-east-1",
-				validateAmazonBedrockKey: async () => {
+				fetchBedrockFoundationModels: async () => {
 					throw new Error("Amazon Bedrock validation failed: 403 Forbidden");
 				},
+				refreshBedrockModelsFromFoundation: async () => ({ configPath: "", modelCount: 0, skippedModelCount: 0 }),
 			}),
 		).rejects.toThrow(/403|Forbidden/);
 
@@ -226,10 +236,31 @@ describe("authorizeAmazonBedrock", () => {
 		await authorizeAmazonBedrock(tmpDir, {
 			promptSecret: async () => "bk-token",
 			promptRegion: async () => "",
-			validateAmazonBedrockKey: async () => {},
+			fetchBedrockFoundationModels: async () => [],
+			refreshBedrockModelsFromFoundation: async () => ({ configPath: "", modelCount: 0, skippedModelCount: 0 }),
 		});
 
 		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
 		expect(raw.providers["amazon-bedrock"]?.region).toBe(AMAZON_BEDROCK_DEFAULT_REGION);
+	});
+});
+
+describe("listSupportedAuthProviders / getAuthProvider", () => {
+	test("listSupportedAuthProviders includes an entry with id amazon-bedrock", () => {
+		const providers = listSupportedAuthProviders();
+		const ids = providers.map((p) => p.id);
+		expect(ids).toContain("amazon-bedrock");
+	});
+
+	test("getAuthProvider returns a valid entry for amazon-bedrock", () => {
+		const entry = getAuthProvider("amazon-bedrock");
+		expect(entry).toBeDefined();
+		expect(entry?.id).toBe("amazon-bedrock");
+		expect(typeof entry?.authorize).toBe("function");
+	});
+
+	test("listSupportedAuthProviders returns providers in stable canonical order", () => {
+		const ids = listSupportedAuthProviders().map((p) => p.id);
+		expect(ids).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
 	});
 });

@@ -36,7 +36,11 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
-		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-opus-4-7")).toBe("anthropic-messages");
-		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("us.amazon.nova-pro-v1:0")).toBe("openai-chat-completions");
+		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-opus-4-7")).toBe(
+			"anthropic-messages",
+		);
+		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("us.amazon.nova-pro-v1:0")).toBe(
+			"openai-chat-completions",
+		);
 	});
 });

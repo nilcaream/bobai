@@ -1,5 +1,6 @@
 import { exchangeToken } from "../provider/copilot";
-import { AMAZON_BEDROCK_DEFAULT_REGION, validateAmazonBedrockKey } from "./amazon-bedrock";
+import { refreshBedrockModelsFromFoundation } from "../provider/unified-model-catalog";
+import { AMAZON_BEDROCK_DEFAULT_REGION, fetchBedrockFoundationModels } from "./amazon-bedrock";
 import { pollForToken, requestDeviceCode } from "./device-flow";
 import { validateOpenCodeGoKey } from "./opencode-go";
 import { validateOpenCodeZenKey } from "./opencode-zen";
@@ -116,22 +117,32 @@ export async function authorizeAmazonBedrock(
 	deps: {
 		promptSecret?: (prompt: string) => Promise<string>;
 		promptRegion?: (prompt: string) => Promise<string>;
-		validateAmazonBedrockKey?: (apiKey: string, region: string) => Promise<void>;
+		fetchBedrockFoundationModels?: typeof fetchBedrockFoundationModels;
+		refreshBedrockModelsFromFoundation?: typeof refreshBedrockModelsFromFoundation;
 	} = {},
 ): Promise<void> {
 	const readSecret = deps.promptSecret ?? promptSecret;
 	const readRegion = deps.promptRegion ?? promptText; // plain-text visible input, region is not a secret
-	const validate = deps.validateAmazonBedrockKey ?? validateAmazonBedrockKey;
+	const fetchModels = deps.fetchBedrockFoundationModels ?? fetchBedrockFoundationModels;
+	const refreshCatalog = deps.refreshBedrockModelsFromFoundation ?? refreshBedrockModelsFromFoundation;
 
 	const apiKey = await readSecret("Paste Amazon Bedrock bearer token: ");
 	const regionInput = await readRegion(`AWS Region [${AMAZON_BEDROCK_DEFAULT_REGION}]: `);
 	const region = regionInput.trim() || AMAZON_BEDROCK_DEFAULT_REGION;
 
-	await validate(apiKey, region);
+	// Fetching foundation models validates the key and gives us the model list in one request.
+	console.log("Fetching available models from Amazon Bedrock...");
+	const foundationModels = await fetchModels(apiKey, region);
 
 	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
 	saveAuthStore(configDir, setAmazonBedrockAuth(store, { apiKey, region }));
-	console.log("Amazon Bedrock bearer token saved");
+
+	const result = await refreshCatalog(foundationModels, region, configDir);
+	console.log(`Amazon Bedrock bearer token saved`);
+	console.log(
+		`Model catalog updated: ${result.modelCount} models available in ${region}` +
+			(result.skippedModelCount > 0 ? ` (${result.skippedModelCount} skipped — missing metadata in models.dev)` : ""),
+	);
 }
 
 export interface AuthProviderEntry {

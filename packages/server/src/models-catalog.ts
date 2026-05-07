@@ -23,8 +23,8 @@ export interface ModelsDevProvider {
 
 export type ModelsDevCatalog = Record<string, ModelsDevProvider>;
 
-export async function fetchModelsDevCatalog(): Promise<ModelsDevCatalog> {
-	const response = await fetch(MODELS_DEV_URL);
+export async function fetchModelsDevCatalog(fetchFn: typeof fetch = fetch): Promise<ModelsDevCatalog> {
+	const response = await fetchFn(MODELS_DEV_URL);
 	if (!response.ok) {
 		throw new Error(`models.dev returned HTTP ${response.status}`);
 	}
