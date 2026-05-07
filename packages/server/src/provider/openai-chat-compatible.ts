@@ -222,7 +222,13 @@ export function createOpenAIChatCompatibleProvider(
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
 					finishReason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
 					const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
-					const display = formatProviderModelDisplay(config.providerId, options.model, promptTokens, configDir);
+					const display = formatProviderModelDisplay(
+						config.providerId,
+						options.model,
+						promptTokens,
+						configDir,
+						options.contextLimit,
+					);
 					if (reasoningStarted) {
 						yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
 						reasoningStarted = false;

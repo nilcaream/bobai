@@ -84,6 +84,22 @@ describe("parseDotInput", () => {
 		expect(result?.matches[0]?.name).toBe("stop");
 	});
 
+	test("limit command matches with prefix", () => {
+		const result = parseDotInput(".li", FULL_DOT_COMMANDS);
+		expect(result).not.toBeNull();
+		expect(result?.mode).toBe("select");
+		expect(result?.matches).toHaveLength(1);
+		expect(result?.matches[0]?.name).toBe("limit");
+	});
+
+	test("limit command with args returns args mode", () => {
+		const result = parseDotInput(".limit 10k", FULL_DOT_COMMANDS);
+		expect(result).not.toBeNull();
+		expect(result?.mode).toBe("args");
+		expect(result?.command).toBe("limit");
+		expect(result?.args).toBe("10k");
+	});
+
 	test("provider command is available in full command set", () => {
 		expect(FULL_DOT_COMMANDS.some((cmd) => cmd.name === "provider")).toBe(true);
 	});

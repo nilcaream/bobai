@@ -174,7 +174,13 @@ export function createAnthropicCompatibleProvider(
 					}
 					case "message_stop": {
 						const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
-						const display = formatProviderModelDisplay(config.providerId, options.model, inputTokens, configDir);
+						const display = formatProviderModelDisplay(
+							config.providerId,
+							options.model,
+							inputTokens,
+							configDir,
+							options.contextLimit,
+						);
 						yield {
 							type: "usage",
 							tokenCount: inputTokens,

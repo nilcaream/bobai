@@ -36,6 +36,7 @@ export function formatProviderModelDisplay(
 	modelId: string,
 	promptTokens: number,
 	configDir?: string,
+	contextLimit?: number | null,
 ): string {
-	return getDescriptor(providerId).formatModelDisplay(modelId, promptTokens, configDir);
+	return getDescriptor(providerId).formatModelDisplay(modelId, promptTokens, configDir, contextLimit);
 }

@@ -71,7 +71,7 @@ export function createOpenAIResponsesCompatibleProvider(
 			for await (const event of parseResponsesSSE(response.body, options.model, options.initiator ?? "user", configDir, {
 				providerId: config.providerId,
 				tokenLimit,
-				display: formatProviderModelDisplay(config.providerId, options.model, 0, configDir),
+				display: formatProviderModelDisplay(config.providerId, options.model, 0, configDir, options.contextLimit),
 				onCompletedUsage: (usage) => {
 					completedUsage = usage;
 				},
@@ -79,7 +79,13 @@ export function createOpenAIResponsesCompatibleProvider(
 				if (event.type === "usage") {
 					yield {
 						...event,
-						display: formatProviderModelDisplay(config.providerId, options.model, completedUsage.inputTokens, configDir),
+						display: formatProviderModelDisplay(
+							config.providerId,
+							options.model,
+							completedUsage.inputTokens,
+							configDir,
+							options.contextLimit,
+						),
 					};
 					options.onMetrics?.({
 						model: options.model,

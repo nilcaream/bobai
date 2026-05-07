@@ -62,7 +62,7 @@ export interface ProviderDescriptor {
 	modelsConfigExists(configDir?: string): boolean;
 	loadModels(configDir?: string): ProviderModelConfig[];
 	buildSortedModels(configDir?: string): SortedProviderModelListItem[];
-	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string;
+	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string, contextLimit?: number | null): string;
 	buildTurnSummaryParts?(options: {
 		modelId: string;
 		inputTokens: number;
@@ -118,11 +118,17 @@ function formatGenericProviderModelDisplay(
 	modelId: string,
 	modelConfig: ProviderModelConfig | undefined,
 	promptTokens: number,
+	contextLimit?: number | null,
 ): string {
 	const label = ` | ${formatProviderCostLabel(providerId, modelConfig)}`;
-	const contextWindow = modelConfig?.contextWindow ?? 0;
-	const percent = contextWindow > 0 ? Math.round((promptTokens / contextWindow) * 100) : 0;
-	return `${providerId} | ${modelConfig?.id ?? modelId}${label} | ${promptTokens} / ${contextWindow} | ${percent}%`;
+	const defaultContextWindow = modelConfig?.contextWindow ?? 0;
+	const effectiveLimit = contextLimit && contextLimit > 0 ? contextLimit : defaultContextWindow;
+	const percent = effectiveLimit > 0 ? Math.round((promptTokens / effectiveLimit) * 100) : 0;
+	const contextDisplay =
+		contextLimit && contextLimit > 0
+			? `${promptTokens} / ${contextLimit} (${defaultContextWindow})`
+			: `${promptTokens} / ${defaultContextWindow}`;
+	return `${providerId} | ${modelConfig?.id ?? modelId}${label} | ${contextDisplay} | ${percent}%`;
 }
 
 function defaultModelName(modelId: string): string {
@@ -190,12 +196,13 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 				}))
 				.sort((a, b) => a.id.localeCompare(b.id));
 		},
-		formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string {
+		formatModelDisplay(modelId: string, promptTokens: number, configDir?: string, contextLimit?: number | null): string {
 			return formatGenericProviderModelDisplay(
 				options.id,
 				modelId,
 				loadProviderModelsFromUnifiedCatalog(options.id, configDir).find((model) => model.id === modelId),
 				promptTokens,
+				contextLimit,
 			);
 		},
 		buildTurnSummaryParts(summaryOptions): ProviderSummaryParts {
@@ -251,12 +258,13 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 			}))
 			.sort((a, b) => a.id.localeCompare(b.id));
 	},
-	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string): string {
+	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string, contextLimit?: number | null): string {
 		return formatGenericProviderModelDisplay(
 			"github-copilot",
 			modelId,
 			loadProviderModelsFromUnifiedCatalog("github-copilot", configDir).find((model) => model.id === modelId),
 			promptTokens,
+			contextLimit,
 		);
 	},
 	buildTurnSummaryParts(options): ProviderSummaryParts {

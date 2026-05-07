@@ -109,6 +109,11 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE sessions ADD COLUMN api_family TEXT");
 	}
 
+	// Migrate: add context_limit column to sessions if missing (user-overridden context window)
+	if (!sessionColumns.some((c) => c.name === "context_limit")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN context_limit INTEGER");
+	}
+
 	return {
 		id,
 		port: config.port,

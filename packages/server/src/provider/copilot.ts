@@ -314,12 +314,24 @@ export function createCopilotProvider(
 				const anthropicStream = client.messages.stream(params, { signal: combinedSignal });
 				anthropicStream.on("connect", () => timer.reset(BODY_TIMEOUT_MS));
 
-				for await (const event of parseAnthropicStream(anthropicStream, options.model, effectiveInitiator, resolvedConfigDir)) {
+				for await (const event of parseAnthropicStream(
+					anthropicStream,
+					options.model,
+					effectiveInitiator,
+					resolvedConfigDir,
+					options.contextLimit,
+				)) {
 					timer.reset(BODY_TIMEOUT_MS);
 					if (event.type === "usage") {
 						const usageEvent = {
 							...event,
-							display: formatProviderModelDisplay("github-copilot", options.model, event.tokenCount, resolvedConfigDir),
+							display: formatProviderModelDisplay(
+								"github-copilot",
+								options.model,
+								event.tokenCount,
+								resolvedConfigDir,
+								options.contextLimit,
+							),
 						};
 						if (options.onMetrics) {
 							options.onMetrics({
@@ -512,7 +524,13 @@ export function createCopilotProvider(
 					if (event.type === "usage") {
 						const usageEvent = {
 							...event,
-							display: formatProviderModelDisplay("github-copilot", options.model, event.tokenCount, resolvedConfigDir),
+							display: formatProviderModelDisplay(
+								"github-copilot",
+								options.model,
+								event.tokenCount,
+								resolvedConfigDir,
+								options.contextLimit,
+							),
 						};
 						if (options.onMetrics) {
 							options.onMetrics({
@@ -822,7 +840,13 @@ export function createCopilotProvider(
 								warnedContextWindow.add(options.model);
 								console.warn(`[WARN] No contextWindow for model "${options.model}"; context tracking degraded`);
 							}
-							const display = formatProviderModelDisplay("github-copilot", options.model, promptTokens, resolvedConfigDir);
+							const display = formatProviderModelDisplay(
+								"github-copilot",
+								options.model,
+								promptTokens,
+								resolvedConfigDir,
+								options.contextLimit,
+							);
 
 							yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };
 

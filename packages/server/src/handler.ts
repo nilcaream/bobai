@@ -313,7 +313,7 @@ export async function handlePrompt(req: PromptRequest) {
 		const sessionPromptTokens = currentSession?.promptTokens ?? 0;
 		const providerId: ProviderId = isSupportedProvider(activeProvider.id) ? activeProvider.id : "github-copilot";
 		const modelConfig = getProviderModelConfig(providerId, effectiveModel, configDir);
-		const contextWindow = modelConfig?.contextWindow ?? 0;
+		const contextWindow = currentSession?.contextLimit ?? modelConfig?.contextWindow ?? 0;
 		if (contextWindow <= 0) {
 			scopedLogger?.warn("CONFIG", `No contextWindow for model "${effectiveModel}"; compaction disabled`);
 		}
@@ -429,6 +429,7 @@ export async function handlePrompt(req: PromptRequest) {
 				sessionId: currentSessionId as string,
 				maxIterations: req.maxIterations,
 				contextWindow,
+				contextLimit: currentSession?.contextLimit,
 				sessionPromptTokens,
 				sessionPromptChars,
 				rawMessages,

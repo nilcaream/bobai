@@ -104,6 +104,8 @@ export interface AgentLoopOptions {
 	initiator?: "user" | "agent";
 	reasoningDefaults?: ProviderOptions["reasoningDefaults"];
 	contextWindow?: number;
+	/** User-overridden context limit for display purposes (passed to provider stream). */
+	contextLimit?: number | null;
 	/** Stored prompt_tokens from the DB at turn start — used for a stable
 	 *  charsPerToken ratio in emergency compaction (avoids oscillation from
 	 *  live values that shift after each API call). */
@@ -329,6 +331,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				signal,
 				initiator,
 				reasoningDefaults,
+				contextLimit: options.contextLimit,
 			}),
 			onEvent,
 		);
@@ -598,7 +601,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	conversation.push(nudge);
 
 	const { textContent: finalText, reasoning: finalReasoning } = await consumeProviderStream(
-		provider.stream({ model, messages: conversation, signal, initiator, reasoningDefaults }),
+		provider.stream({
+			model,
+			messages: conversation,
+			signal,
+			initiator,
+			reasoningDefaults,
+			contextLimit: options.contextLimit,
+		}),
 		onEvent,
 	);
 

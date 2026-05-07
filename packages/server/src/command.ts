@@ -9,11 +9,13 @@ import {
 import { buildSortedProviderModelList, formatProviderModelDisplay } from "./provider/models";
 import type { AuthProviderId, ProviderId } from "./provider/providers";
 import {
+	clearSessionContextLimit,
 	countSessionMessages,
 	createSession,
 	getSession,
 	listSubagentSessions,
 	updateSessionBackend,
+	updateSessionContextLimit,
 	updateSessionTitle,
 } from "./session/repository";
 
@@ -79,6 +81,11 @@ export function handleCommand(db: Database, req: CommandRequest, options: Comman
 			);
 		case "title":
 			return withSessionId(handleTitleCommand(db, sessionId, args), sessionId);
+		case "limit":
+			return withSessionId(
+				handleLimitCommand(db, sessionId, args, { defaultProviderId, defaultModel, configDir: options.configDir }),
+				sessionId,
+			);
 		case "subagent":
 			return withSessionId(handleSubagentCommand(db, sessionId), sessionId);
 		case "session":
@@ -237,4 +244,46 @@ function handleTitleCommand(db: Database, sessionId: string, args: string): Comm
 	}
 	updateSessionTitle(db, sessionId, title);
 	return { ok: true };
+}
+
+function handleLimitCommand(
+	db: Database,
+	sessionId: string,
+	args: string,
+	options: { defaultProviderId: ProviderId | null; defaultModel: string | null; configDir?: string },
+): CommandResult {
+	const trimmed = args.trim();
+	const session = getSession(db, sessionId);
+	if (!session) return { ok: false, error: "Session not found" };
+
+	if (!trimmed) {
+		// Remove limit
+		clearSessionContextLimit(db, sessionId);
+		const backend = resolveSessionBackend(db, sessionId, options.defaultProviderId, options.defaultModel);
+		if (!backend) return { ok: true };
+		const promptTokens = session.promptTokens;
+		return {
+			ok: true,
+			status: formatProviderModelDisplay(backend.provider, backend.model, promptTokens, options.configDir),
+		};
+	}
+
+	// Parse number, optionally with "k" suffix
+	const match = trimmed.match(/^(\d+)(k)?$/i);
+	if (!match) {
+		return { ok: false, error: `Invalid limit: "${trimmed}". Use a number like 10000 or 10k` };
+	}
+	const value = Number.parseInt(match[1] as string, 10) * (match[2] ? 1000 : 1);
+	if (value <= 0) {
+		return { ok: false, error: "Limit must be greater than 0" };
+	}
+
+	updateSessionContextLimit(db, sessionId, value);
+	const backend = resolveSessionBackend(db, sessionId, options.defaultProviderId, options.defaultModel);
+	if (!backend) return { ok: true };
+	const promptTokens = session.promptTokens;
+	return {
+		ok: true,
+		status: formatProviderModelDisplay(backend.provider, backend.model, promptTokens, options.configDir, value),
+	};
 }

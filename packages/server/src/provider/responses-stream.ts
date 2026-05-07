@@ -5,6 +5,7 @@ export interface ResponsesStreamOptions {
 	providerId?: string;
 	tokenLimit?: number;
 	display?: string;
+	contextLimit?: number | null;
 	onCompletedUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
 }
 
@@ -152,7 +153,9 @@ export async function* parseResponsesSSE(
 				const providerId = options.providerId ?? "github-copilot";
 				const contextWindow =
 					options.tokenLimit ?? getProviderModelConfig(providerId as never, model, configDir)?.contextWindow ?? 0;
-				const display = options.display ?? formatProviderModelDisplay(providerId as never, model, inputTokens, configDir);
+				const display =
+					options.display ??
+					formatProviderModelDisplay(providerId as never, model, inputTokens, configDir, options.contextLimit);
 
 				yield {
 					type: "usage",

@@ -110,6 +110,8 @@ export interface ProviderOptions {
 			display?: "summarized" | "omitted";
 		};
 	};
+	/** User-overridden context limit for display purposes. */
+	contextLimit?: number | null;
 	/** When set, per-call metrics are routed to this callback instead of the provider's
 	 *  internal turn accumulator. Used by isolated turn providers for parallel execution. */
 	onMetrics?(metrics: StreamMetrics): void;

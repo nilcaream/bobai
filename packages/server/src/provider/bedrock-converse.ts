@@ -124,7 +124,13 @@ export function createBedrockConverseProvider(
 						const outputTokens = usage?.outputTokens ?? 0;
 
 						const tokenLimit = getProviderModelConfig("amazon-bedrock", options.model, configDir)?.contextWindow ?? 0;
-						const display = formatProviderModelDisplay("amazon-bedrock", options.model, inputTokens, configDir);
+						const display = formatProviderModelDisplay(
+							"amazon-bedrock",
+							options.model,
+							inputTokens,
+							configDir,
+							options.contextLimit,
+						);
 
 						yield {
 							type: "usage",

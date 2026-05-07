@@ -15,6 +15,7 @@ export function createTestDb(): Database {
 			parent_id TEXT REFERENCES sessions(id),
 			prompt_tokens INTEGER NOT NULL DEFAULT 0,
 			prompt_chars INTEGER NOT NULL DEFAULT 0,
+			context_limit INTEGER,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)

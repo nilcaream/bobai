@@ -222,7 +222,7 @@ export function createServer(options: ServerOptions) {
 				const modelConfig = providerForContext
 					? getProviderModelConfig(providerForContext, modelId, options.configDir)
 					: undefined;
-				const contextWindow = modelConfig?.contextWindow ?? 0;
+				const contextWindow = session?.contextLimit ?? modelConfig?.contextWindow ?? 0;
 				if (contextWindow <= 0) {
 					options.logger
 						?.withScope(sessionScope(sessionId))
@@ -480,7 +480,13 @@ export function createServer(options: ServerOptions) {
 				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
 				const status =
 					sessionProviderId && session.model
-						? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
+						? formatProviderModelDisplay(
+								sessionProviderId,
+								session.model,
+								session.promptTokens,
+								options.configDir,
+								session.contextLimit,
+							)
 						: (options.defaultStatus ?? "select provider and model");
 				return Response.json({
 					id: session.id,
@@ -526,7 +532,13 @@ export function createServer(options: ServerOptions) {
 				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
 				const status =
 					sessionProviderId && session.model
-						? formatProviderModelDisplay(sessionProviderId, session.model, session.promptTokens, options.configDir)
+						? formatProviderModelDisplay(
+								sessionProviderId,
+								session.model,
+								session.promptTokens,
+								options.configDir,
+								session.contextLimit,
+							)
 						: (options.defaultStatus ?? "select provider and model");
 				return Response.json({
 					session: {

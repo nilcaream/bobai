@@ -14,6 +14,7 @@ import {
 	createSubagentSession,
 	getSession,
 	updateSessionModel,
+	updateSessionPromptTokens,
 	updateSessionTitle,
 } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
@@ -352,6 +353,125 @@ describe("handleCommand", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.status).toContain("No subagent sessions");
+		}
+		freshDb.close();
+	});
+
+	test("limit command sets context limit on session", () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "claude-sonnet-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		const result = handleCommand(
+			db,
+			{ command: "limit", args: "20000", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(result.ok).toBe(true);
+		const updated = getSession(db, session.id);
+		expect(updated?.contextLimit).toBe(20000);
+		if (result.ok) {
+			expect(result.status).toContain("20000");
+		}
+	});
+
+	test("limit command supports k suffix", () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "claude-sonnet-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		const result = handleCommand(
+			db,
+			{ command: "limit", args: "10k", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(result.ok).toBe(true);
+		const updated = getSession(db, session.id);
+		expect(updated?.contextLimit).toBe(10000);
+	});
+
+	test("limit command with no args clears the limit", () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "claude-sonnet-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		// Set a limit first
+		handleCommand(
+			db,
+			{ command: "limit", args: "5000", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(getSession(db, session.id)?.contextLimit).toBe(5000);
+
+		// Clear it
+		const result = handleCommand(
+			db,
+			{ command: "limit", args: "", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(result.ok).toBe(true);
+		expect(getSession(db, session.id)?.contextLimit).toBeNull();
+	});
+
+	test("limit command rejects invalid input", () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "claude-sonnet-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		const result = handleCommand(
+			db,
+			{ command: "limit", args: "abc", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(result.ok).toBe(false);
+	});
+
+	test("limit is cleared when provider/model changes", () => {
+		const session = createSession(db, {
+			provider: "github-copilot",
+			model: "claude-sonnet-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		handleCommand(
+			db,
+			{ command: "limit", args: "15000", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(getSession(db, session.id)?.contextLimit).toBe(15000);
+
+		// Switch model — limit should be cleared
+		handleCommand(
+			db,
+			{ command: "model", args: "1", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(getSession(db, session.id)?.contextLimit).toBeNull();
+	});
+
+	test("limit command status shows overridden format", () => {
+		const freshDb = createTestDb();
+		const session = createSession(freshDb, {
+			provider: "github-copilot",
+			model: "claude-sonnet-4.5",
+			apiFamily: "anthropic-messages",
+		});
+		// Give the session some prompt tokens
+		updateSessionPromptTokens(freshDb, session.id, 1000, 4000);
+
+		const result = handleCommand(
+			freshDb,
+			{ command: "limit", args: "20000", sessionId: session.id },
+			{ defaultProviderId: providerId, configDir: tmpDir },
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			// Should show "1000 / 20000 (<real_context_window>)" with 5% usage
+			expect(result.status).toMatch(/1000 \/ 20000 \(\d+\)/);
+			expect(result.status).toContain("5%");
 		}
 		freshDb.close();
 	});
