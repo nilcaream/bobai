@@ -82,7 +82,6 @@ export interface SystemPromptMetadata {
 }
 
 export interface SystemPromptDebug {
-	uptimeSeconds: number;
 	sessionId: string;
 }
 
@@ -110,8 +109,8 @@ export function buildSystemPrompt(
 	}
 
 	if (options?.debug) {
-		const { uptimeSeconds, sessionId } = options.debug;
-		parts.push(`<debug>\n- Time since restart: ${uptimeSeconds}s\n- Bob AI parent session ID: ${sessionId}\n</debug>`);
+		const { sessionId } = options.debug;
+		parts.push(`<debug>\n- Bob AI parent session ID: ${sessionId}\n</debug>`);
 	}
 
 	if (skills.length > 0) {

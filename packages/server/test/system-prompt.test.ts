@@ -230,14 +230,14 @@ describe("buildSystemPrompt", () => {
 
 	test("metadata block is included when metadata is provided", () => {
 		const metadata: SystemPromptMetadata = {
-			date: "2025-07-14 Mon 14:32 UTC+2",
+			date: "2025-07-14 Mon",
 			projectDir: "/home/user/projects/bobai",
 			gitBranch: "main",
 		};
 		const result = buildSystemPrompt([], [], { metadata });
 		expect(result).toContain("<metadata>");
 		expect(result).toContain("</metadata>");
-		expect(result).toContain("- Date: 2025-07-14 Mon 14:32 UTC+2");
+		expect(result).toContain("- Date: 2025-07-14 Mon");
 		expect(result).toContain("- Project: /home/user/projects/bobai");
 		expect(result).toContain("- Branch: main");
 	});
@@ -250,18 +250,18 @@ describe("buildSystemPrompt", () => {
 
 	test("metadata block omits branch line when gitBranch is undefined", () => {
 		const metadata: SystemPromptMetadata = {
-			date: "2025-07-14 Mon 14:32 UTC+2",
+			date: "2025-07-14 Mon",
 			projectDir: "/home/user/projects/bobai",
 		};
 		const result = buildSystemPrompt([], [], { metadata });
-		expect(result).toContain("- Date: 2025-07-14 Mon 14:32 UTC+2");
+		expect(result).toContain("- Date: 2025-07-14 Mon");
 		expect(result).toContain("- Project: /home/user/projects/bobai");
 		expect(result).not.toContain("- Branch:");
 	});
 
 	test("metadata block appears after base and before skills", () => {
 		const metadata: SystemPromptMetadata = {
-			date: "2025-07-14 Mon 14:32 UTC+2",
+			date: "2025-07-14 Mon",
 			projectDir: "/home/user/projects/bobai",
 			gitBranch: "main",
 		};
@@ -276,7 +276,7 @@ describe("buildSystemPrompt", () => {
 
 	test("metadata block appears after base and before instructions when no skills", () => {
 		const metadata: SystemPromptMetadata = {
-			date: "2025-07-14 Mon 14:32 UTC+2",
+			date: "2025-07-14 Mon",
 			projectDir: "/home/user/projects/bobai",
 			gitBranch: "main",
 		};
@@ -295,13 +295,12 @@ describe("buildSystemPrompt", () => {
 
 	test("debug block is included when debug metadata is provided", () => {
 		const debug: SystemPromptDebug = {
-			uptimeSeconds: 3642,
 			sessionId: "abc-123-def",
 		};
 		const result = buildSystemPrompt([], [], { debug });
 		expect(result).toContain("<debug>");
 		expect(result).toContain("</debug>");
-		expect(result).toContain("- Time since restart: 3642s");
+		expect(result).not.toContain("Time since restart");
 		expect(result).toContain("- Bob AI parent session ID: abc-123-def");
 	});
 
@@ -313,12 +312,11 @@ describe("buildSystemPrompt", () => {
 
 	test("debug block appears after metadata and before skills", () => {
 		const metadata: SystemPromptMetadata = {
-			date: "2025-07-14 Mon 14:32 UTC+2",
+			date: "2025-07-14 Mon",
 			projectDir: "/home/user/projects/bobai",
 			gitBranch: "main",
 		};
 		const debug: SystemPromptDebug = {
-			uptimeSeconds: 100,
 			sessionId: "sess-001",
 		};
 		const skills: Skill[] = [{ name: "tdd", description: "Test-driven development", content: "...", filePath: "/a/SKILL.md" }];
@@ -332,22 +330,21 @@ describe("buildSystemPrompt", () => {
 
 	test("subagent prompt includes metadata and debug blocks", () => {
 		const metadata: SystemPromptMetadata = {
-			date: "2025-07-14 Mon 14:32 UTC+2",
+			date: "2025-07-14 Mon",
 			projectDir: "/home/user/projects/bobai",
 			gitBranch: "feature-x",
 		};
 		const debug: SystemPromptDebug = {
-			uptimeSeconds: 999,
 			sessionId: "sub-abc",
 		};
 		const result = buildSystemPrompt([], [], { subagent: true, metadata, debug });
 		expect(result).toContain("<metadata>");
-		expect(result).toContain("- Date: 2025-07-14 Mon 14:32 UTC+2");
+		expect(result).toContain("- Date: 2025-07-14 Mon");
 		expect(result).toContain("- Project: /home/user/projects/bobai");
 		expect(result).toContain("- Branch: feature-x");
 		expect(result).toContain("</metadata>");
 		expect(result).toContain("<debug>");
-		expect(result).toContain("- Time since restart: 999s");
+		expect(result).not.toContain("Time since restart");
 		expect(result).toContain("- Bob AI parent session ID: sub-abc");
 		expect(result).toContain("</debug>");
 	});

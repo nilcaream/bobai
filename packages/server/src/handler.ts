@@ -190,9 +190,7 @@ export async function handlePrompt(req: PromptRequest) {
 			gitBranch: projectInfo.git?.branch,
 		};
 		const debugInfo: SystemPromptDebug | undefined =
-			req.debug && req.startedAt != null && currentSessionId
-				? { uptimeSeconds: Math.floor((Date.now() - req.startedAt) / 1000), sessionId: currentSessionId }
-				: undefined;
+			req.debug && currentSessionId ? { sessionId: currentSessionId } : undefined;
 		const systemPrompt = buildSystemPrompt(skills.list(), instructions, { metadata, debug: debugInfo });
 
 		// Persist staged skills as real tool call/result pairs BEFORE the user message

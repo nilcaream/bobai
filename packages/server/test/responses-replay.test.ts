@@ -37,16 +37,16 @@ describe("Responses reasoning replay", () => {
 			{ role: "developer", content: "Be helpful." },
 			{ role: "user", content: [{ type: "input_text", text: "Use the tool." }] },
 			{
-				type: "message",
-				role: "assistant",
-				content: [{ type: "output_text", text: "Let me check." }],
-				status: "completed",
-			},
-			{
 				type: "reasoning",
 				id: "rs_1",
 				summary: [{ type: "summary_text", text: "Need file context" }],
 				encrypted_content: "enc_abc",
+			},
+			{
+				type: "message",
+				role: "assistant",
+				content: [{ type: "output_text", text: "Let me check." }],
+				status: "completed",
 			},
 			{ type: "function_call", call_id: "call_1", name: "read_file", arguments: '{"path":"src/index.ts"}' },
 			{ type: "function_call_output", call_id: "call_1", output: "file contents" },

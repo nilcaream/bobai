@@ -61,6 +61,13 @@ export function convertMessagesToResponses(messages: Message[], capabilities?: R
 				content: [{ type: "input_text", text: msg.content }],
 			});
 		} else if (msg.role === "assistant") {
+			if (canReplayResponsesReasoning(capabilities) && msg.reasoning) {
+				for (const reasoning of msg.reasoning) {
+					if (reasoning.kind === "responses-item") {
+						result.push(convertResponsesReasoningItem(reasoning));
+					}
+				}
+			}
 			if (msg.content && msg.content.length > 0) {
 				result.push({
 					type: "message",
@@ -68,13 +75,6 @@ export function convertMessagesToResponses(messages: Message[], capabilities?: R
 					content: [{ type: "output_text", text: msg.content }],
 					status: "completed",
 				});
-			}
-			if (canReplayResponsesReasoning(capabilities) && msg.reasoning) {
-				for (const reasoning of msg.reasoning) {
-					if (reasoning.kind === "responses-item") {
-						result.push(convertResponsesReasoningItem(reasoning));
-					}
-				}
 			}
 			if (msg.tool_calls) {
 				for (const tc of msg.tool_calls) {
