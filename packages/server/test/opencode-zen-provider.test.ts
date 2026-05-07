@@ -125,6 +125,39 @@ describe("opencode-zen provider", () => {
 		expect(body.messages).toBeUndefined();
 	});
 
+	test("emits reasoning events for interleaved reasoning_details deltas", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { reasoning_details: { steps: [1] } } }] },
+					{ choices: [{ delta: { reasoning_details: { steps: [1, 2] } } }] },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeZenProvider({ apiKey: "zen-key" });
+		const events = await collect(
+			provider.stream({
+				model: "qwen3.6-plus",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(events).toEqual([
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning_details" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "details", details: { steps: [1] } } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "details", details: { steps: [1, 2] } } },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning_details", details: { steps: [1, 2] } },
+			},
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenCodeZenProvider({ apiKey: "bad" });

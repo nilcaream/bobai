@@ -3,11 +3,14 @@ import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { type AuthStore, type CopilotAuth, loadAuthStore, saveAuthStore, setCopilotAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
+import { getAnthropicReasoningOptions } from "./anthropic-compatible";
 import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
 import { parseAnthropicStream } from "./anthropic-stream";
 import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider";
+import { getReasoningCapabilities } from "./reasoning-capabilities";
+import { DEFAULT_REASONING_DEFAULTS } from "./reasoning-defaults";
 import { convertMessagesToResponses, convertToolsToResponses } from "./responses-convert";
 import { parseResponsesSSE } from "./responses-stream";
 import { parseSSE } from "./sse";
@@ -247,12 +250,23 @@ export function createCopilotProvider(
 		const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
 		const maxTokens = getMaxOutputTokens(options.model);
 
+		const reasoningCapabilities = getReasoningCapabilities({
+			providerId: "github-copilot",
+			modelId: options.model,
+			apiFamily: "anthropic-messages",
+		});
+		const anthropicReasoningOptions = getAnthropicReasoningOptions(
+			reasoningCapabilities,
+			options.reasoningDefaults?.anthropic ?? DEFAULT_REASONING_DEFAULTS.anthropic,
+		);
+
 		const params: Record<string, unknown> = {
 			model: options.model,
 			messages,
 			max_tokens: maxTokens,
 			...(system ? { system } : {}),
 			...(tools ? { tools } : {}),
+			...(anthropicReasoningOptions ?? {}),
 		};
 
 		let lastError: unknown;

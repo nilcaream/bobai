@@ -3,6 +3,7 @@ import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import type { ProviderId } from "./providers";
+import { getReasoningCapabilities } from "./reasoning-capabilities";
 import { convertMessagesToResponses, convertToolsToResponses } from "./responses-convert";
 import { parseResponsesSSE } from "./responses-stream";
 
@@ -30,7 +31,12 @@ export function createOpenAIResponsesCompatibleProvider(
 		id: config.providerId,
 		configDir,
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
-			const input = convertMessagesToResponses(options.messages);
+			const reasoningCapabilities = getReasoningCapabilities({
+				providerId: config.providerId,
+				modelId: options.model,
+				apiFamily: "openai-responses",
+			});
+			const input = convertMessagesToResponses(options.messages, reasoningCapabilities);
 			const tools = options.tools?.length ? convertToolsToResponses(options.tools) : undefined;
 			const promptChars = estimatePromptChars(options.messages);
 			const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
@@ -47,6 +53,8 @@ export function createOpenAIResponsesCompatibleProvider(
 					model: options.model,
 					input,
 					stream: true,
+					reasoning: { effort: "medium", summary: "auto" },
+					include: ["reasoning.encrypted_content"],
 					...(tools ? { tools } : {}),
 				}),
 				signal: options.signal,

@@ -16,10 +16,34 @@ export interface ToolCallContent {
 	function: { name: string; arguments: string };
 }
 
+export type InterleavedChatReasoningField = "reasoning" | "reasoning_content" | "reasoning_details";
+
+export interface ResponsesItemReasoningState {
+	kind: "responses-item";
+	id?: string;
+	summary?: string;
+	encryptedContent?: string;
+}
+
+export interface InterleavedChatReasoningState {
+	kind: "interleaved-chat";
+	field: InterleavedChatReasoningField;
+	text?: string;
+	details?: unknown;
+}
+
+export interface TextSummaryReasoningState {
+	kind: "text-summary";
+	text: string;
+}
+
+export type ReasoningState = ResponsesItemReasoningState | InterleavedChatReasoningState | TextSummaryReasoningState;
+
 export interface AssistantMessage {
 	role: "assistant";
 	content: string | null;
 	tool_calls?: ToolCallContent[];
+	reasoning?: ReasoningState[];
 }
 
 export interface ToolMessage {
@@ -43,8 +67,21 @@ export interface ToolDefinition {
 
 // --- Stream events ---
 
+export type ReasoningDelta =
+	| { kind: "text"; text: string }
+	| { kind: "details"; details: unknown }
+	| { kind: "summary"; summary: string }
+	| { kind: "encrypted-content"; encryptedContent: string };
+
 export type StreamEvent =
 	| { type: "text"; text: string }
+	| { type: "reasoning_start"; index: number; reasoning: ReasoningState }
+	| { type: "reasoning_delta"; index: number; delta: ReasoningDelta }
+	| {
+			type: "reasoning_end";
+			index: number;
+			reasoning?: ReasoningState;
+	  }
 	| { type: "tool_call_start"; index: number; id: string; name: string }
 	| { type: "tool_call_delta"; index: number; arguments: string }
 	| { type: "usage"; tokenCount: number; tokenLimit: number; display: string; outputTokens?: number; totalTokens?: number }
@@ -67,6 +104,12 @@ export interface ProviderOptions {
 	tools?: ToolDefinition[];
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
+	reasoningDefaults?: {
+		anthropic?: {
+			budgetTokens?: number;
+			display?: "summarized" | "omitted";
+		};
+	};
 	/** When set, per-call metrics are routed to this callback instead of the provider's
 	 *  internal turn accumulator. Used by isolated turn providers for parallel execution. */
 	onMetrics?(metrics: StreamMetrics): void;

@@ -310,6 +310,50 @@ describe("handlePrompt", () => {
 		expect(stored[1].content).toBe("response text");
 	});
 
+	test("persists assistant reasoning metadata through the real handlePrompt path", async () => {
+		const ws = mockWs();
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield {
+					type: "reasoning_start",
+					index: 0,
+					reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+				};
+				yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: " harder" } };
+				yield { type: "reasoning_end", index: 0, reasoning: { kind: "text-summary", text: "done" } };
+				yield { type: "text", text: "reasoned answer" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+		const runtimeManager: ProviderRuntimeManager = {
+			get: async () => provider,
+		};
+
+		await handlePrompt({
+			ws,
+			db,
+			runtimeManager,
+			defaultProviderId: "github-copilot",
+			model: "test-model",
+			text: "my question",
+			projectRoot: "/tmp",
+			configDir: "/tmp",
+			skills: emptySkills,
+		});
+
+		const done = ws.messages().find((m: { type: string }) => m.type === "done");
+		const stored = getMessages(db, done.sessionId);
+		const assistant = stored.at(-1);
+
+		expect(assistant?.role).toBe("assistant");
+		expect(assistant?.content).toBe("reasoned answer");
+		expect(assistant?.metadata?.reasoning).toEqual([
+			{ kind: "interleaved-chat", field: "reasoning_content", text: "thinking harder" },
+			{ kind: "text-summary", text: "done" },
+		]);
+	});
+
 	test("formats github-copilot message summaries with the model label", async () => {
 		const ws = mockWs();
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-summary-"));

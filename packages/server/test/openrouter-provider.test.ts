@@ -172,6 +172,39 @@ describe("openrouter provider", () => {
 		]);
 	});
 
+	test("emits reasoning events for interleaved reasoning_content deltas", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { reasoning_content: "thinking" } }] },
+					{ choices: [{ delta: { content: "Answer" } }] },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "openrouter/deepseek-r1",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(events).toEqual([
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning_content" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "thinking" } },
+			{ type: "text", text: "Answer" },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+			},
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenRouterProvider({ apiKey: "bad" }, undefined, globalThis.fetch, configDir);

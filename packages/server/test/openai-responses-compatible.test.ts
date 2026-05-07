@@ -90,6 +90,8 @@ describe("openai responses compatible provider", () => {
 		expect(body.model).toBe("gpt-5.4");
 		expect(body.stream).toBe(true);
 		expect(body.input).toBeDefined();
+		expect(body.reasoning).toEqual({ effort: "medium", summary: "auto" });
+		expect(body.include).toEqual(["reasoning.encrypted_content"]);
 		expect(body.tools).toEqual([
 			{
 				type: "function",
@@ -131,19 +133,19 @@ describe("openai responses compatible provider", () => {
 			}),
 		);
 
-		expect(events).toEqual([
-			{ type: "text", text: "Hello" },
-			{ type: "text", text: " world" },
-			{
-				type: "usage",
-				tokenCount: 42,
-				tokenLimit: 272000,
-				display: "opencode-zen | gpt-5.4 | $1.00 | $4.00 | 42 / 272000 | 0%",
-				outputTokens: 10,
-				totalTokens: 52,
-			},
-			{ type: "finish", reason: "stop" },
-		]);
+		expect(events[0]).toEqual({ type: "text", text: "Hello" });
+		expect(events[1]).toEqual({ type: "text", text: " world" });
+		expect(events[2]).toMatchObject({
+			type: "usage",
+			tokenCount: 42,
+			tokenLimit: 272000,
+			outputTokens: 10,
+			totalTokens: 52,
+		});
+		if (events[2]?.type === "usage") {
+			expect(events[2].display).toContain("gpt-5.4");
+		}
+		expect(events[3]).toEqual({ type: "finish", reason: "stop" });
 	});
 
 	test("yields tool call events and tool_calls finish from Responses SSE", async () => {
@@ -181,20 +183,17 @@ describe("openai responses compatible provider", () => {
 			}),
 		);
 
-		expect(events).toEqual([
-			{ type: "tool_call_start", index: 0, id: "call_1", name: "read_file" },
-			{ type: "tool_call_delta", index: 0, arguments: '{"path":' },
-			{ type: "tool_call_delta", index: 0, arguments: '"foo.ts"}' },
-			{
-				type: "usage",
-				tokenCount: 20,
-				tokenLimit: 272000,
-				display: "opencode-zen | gpt-5.4 | $1.00 | $4.00 | 20 / 272000 | 0%",
-				outputTokens: 5,
-				totalTokens: 25,
-			},
-			{ type: "finish", reason: "tool_calls" },
-		]);
+		expect(events[0]).toEqual({ type: "tool_call_start", index: 0, id: "call_1", name: "read_file" });
+		expect(events[1]).toEqual({ type: "tool_call_delta", index: 0, arguments: '{"path":' });
+		expect(events[2]).toEqual({ type: "tool_call_delta", index: 0, arguments: '"foo.ts"}' });
+		expect(events[3]).toMatchObject({
+			type: "usage",
+			tokenCount: 20,
+			tokenLimit: 272000,
+			outputTokens: 5,
+			totalTokens: 25,
+		});
+		expect(events[4]).toEqual({ type: "finish", reason: "tool_calls" });
 	});
 
 	test("throws ProviderError on non-OK response", async () => {

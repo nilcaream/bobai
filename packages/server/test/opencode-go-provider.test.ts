@@ -125,6 +125,39 @@ describe("opencode-go provider", () => {
 		]);
 	});
 
+	test("emits reasoning events for interleaved reasoning deltas", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { reasoning: "step 1" } }] },
+					{ choices: [{ delta: { reasoning: " + step 2" } }] },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "kimi-k2.6",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(events).toEqual([
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "step 1" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: " + step 2" } },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "step 1 + step 2" },
+			},
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenCodeGoProvider({ apiKey: "bad" }, undefined, globalThis.fetch, configDir);

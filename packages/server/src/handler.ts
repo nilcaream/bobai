@@ -22,6 +22,7 @@ import { getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider/provider";
 import { isSupportedProvider, type ProviderId } from "./provider/providers";
+import { DEFAULT_REASONING_DEFAULTS } from "./provider/reasoning-defaults";
 import { getProviderAuthMetadata } from "./provider/registry";
 import type { ProviderRuntimeManager } from "./provider/runtime-manager";
 import {
@@ -249,14 +250,15 @@ export async function handlePrompt(req: PromptRequest) {
 				if (m.role === "tool" && m.metadata?.tool_call_id) {
 					return { role: "tool", content: m.content, tool_call_id: m.metadata.tool_call_id as string };
 				}
-				if (m.role === "assistant" && m.metadata?.tool_calls) {
+				if (m.role === "assistant") {
 					return {
 						role: "assistant",
 						content: m.content || null,
-						tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
+						...(m.metadata?.tool_calls ? { tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"] } : {}),
+						...(m.metadata?.reasoning ? { reasoning: m.metadata.reasoning as AssistantMessage["reasoning"] } : {}),
 					};
 				}
-				return { role: m.role as "user" | "assistant", content: m.content };
+				return { role: m.role as "user", content: m.content };
 			});
 
 		// Repair any message ordering issues from interrupted or concurrent agent loops
@@ -389,6 +391,7 @@ export async function handlePrompt(req: PromptRequest) {
 				logger: scopedLogger,
 				logDir: req.logDir,
 				signal: req.signal,
+				reasoningDefaults: DEFAULT_REASONING_DEFAULTS,
 				dbGuard: req.dbGuard,
 				onReadFileCompacted: invalidateCompactedRead,
 				onEvent(event: AgentEvent) {
@@ -411,8 +414,17 @@ export async function handlePrompt(req: PromptRequest) {
 				onMessage(msg) {
 					if (!currentSessionId) return;
 					if (msg.role === "assistant") {
-						const metadata = msg.tool_calls ? { tool_calls: msg.tool_calls } : undefined;
-						const stored = appendMessage(db, currentSessionId, "assistant", msg.content ?? "", metadata);
+						const metadata = {
+							...(msg.tool_calls ? { tool_calls: msg.tool_calls } : {}),
+							...(msg.reasoning ? { reasoning: msg.reasoning } : {}),
+						};
+						const stored = appendMessage(
+							db,
+							currentSessionId,
+							"assistant",
+							msg.content ?? "",
+							Object.keys(metadata).length > 0 ? metadata : undefined,
+						);
 						lastAssistantMessageId = stored.id;
 					} else if (msg.role === "tool") {
 						const metadata: Record<string, unknown> = { tool_call_id: msg.tool_call_id };

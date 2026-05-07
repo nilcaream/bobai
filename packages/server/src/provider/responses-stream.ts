@@ -1,11 +1,35 @@
 import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
-import type { StreamEvent } from "./provider";
+import type { ResponsesItemReasoningState, StreamEvent } from "./provider";
 
 export interface ResponsesStreamOptions {
 	providerId?: string;
 	tokenLimit?: number;
 	display?: string;
 	onCompletedUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
+}
+
+function getOutputIndex(parsed: Record<string, unknown>, fallback: number): number {
+	return typeof parsed.output_index === "number" ? parsed.output_index : fallback;
+}
+
+function summarizeReasoningItem(item: Record<string, unknown>): ResponsesItemReasoningState {
+	const summaryItems = Array.isArray(item.summary) ? item.summary : [];
+	const summary = summaryItems
+		.map((part) => {
+			if (part && typeof part === "object" && (part as { type?: unknown }).type === "summary_text") {
+				return typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : undefined;
+			}
+			return undefined;
+		})
+		.filter((text): text is string => typeof text === "string" && text.length > 0)
+		.join("\n\n");
+
+	return {
+		kind: "responses-item",
+		...(typeof item.id === "string" ? { id: item.id } : {}),
+		...(summary.length > 0 ? { summary } : {}),
+		...(typeof item.encrypted_content === "string" ? { encryptedContent: item.encrypted_content } : {}),
+	};
 }
 
 export async function* parseResponsesSSE(
@@ -18,8 +42,10 @@ export async function* parseResponsesSSE(
 	const decoder = new TextDecoder();
 	let buffer = "";
 	let toolCallIndex = 0;
+	let reasoningIndex = 0;
 	let hasToolCalls = false;
 	const outputIndexToToolIndex = new Map<number, number>();
+	const outputIndexToReasoningIndex = new Map<number, number>();
 
 	for await (const chunk of stream) {
 		buffer += decoder.decode(chunk, { stream: true });
@@ -47,7 +73,7 @@ export async function* parseResponsesSSE(
 			if (type === "response.output_item.added") {
 				const item = parsed.item as Record<string, unknown>;
 				if (item?.type === "function_call") {
-					const idx = typeof parsed.output_index === "number" ? parsed.output_index : toolCallIndex;
+					const idx = getOutputIndex(parsed, toolCallIndex);
 					outputIndexToToolIndex.set(idx, toolCallIndex);
 					hasToolCalls = true;
 					yield {
@@ -57,6 +83,15 @@ export async function* parseResponsesSSE(
 						name: item.name as string,
 					};
 					toolCallIndex++;
+				} else if (item?.type === "reasoning") {
+					const idx = getOutputIndex(parsed, reasoningIndex);
+					outputIndexToReasoningIndex.set(idx, reasoningIndex);
+					yield {
+						type: "reasoning_start",
+						index: reasoningIndex,
+						reasoning: summarizeReasoningItem(item),
+					};
+					reasoningIndex++;
 				}
 			} else if (type === "response.output_text.delta") {
 				const delta = parsed.delta as string;
@@ -66,13 +101,39 @@ export async function* parseResponsesSSE(
 			} else if (type === "response.function_call_arguments.delta") {
 				const delta = parsed.delta as string;
 				if (delta) {
-					const outputIdx = typeof parsed.output_index === "number" ? parsed.output_index : 0;
-					const mappedIdx = outputIndexToToolIndex.get(outputIdx) ?? 0;
+					const outputIdx = getOutputIndex(parsed, 0);
+					const mappedIdx = outputIndexToToolIndex.get(outputIdx);
+					if (mappedIdx === undefined) continue;
 					yield {
 						type: "tool_call_delta",
 						index: mappedIdx,
 						arguments: delta,
 					};
+				}
+			} else if (type === "response.reasoning_summary_text.delta") {
+				const delta = parsed.delta as string;
+				if (delta) {
+					const outputIdx = getOutputIndex(parsed, 0);
+					const mappedIdx = outputIndexToReasoningIndex.get(outputIdx);
+					if (mappedIdx === undefined) continue;
+					yield {
+						type: "reasoning_delta",
+						index: mappedIdx,
+						delta: { kind: "summary", summary: delta },
+					};
+				}
+			} else if (type === "response.output_item.done") {
+				const item = parsed.item as Record<string, unknown>;
+				if (item?.type === "reasoning") {
+					const outputIdx = getOutputIndex(parsed, 0);
+					const mappedIdx = outputIndexToReasoningIndex.get(outputIdx);
+					if (mappedIdx === undefined) continue;
+					yield {
+						type: "reasoning_end",
+						index: mappedIdx,
+						reasoning: summarizeReasoningItem(item),
+					};
+					outputIndexToReasoningIndex.delete(outputIdx);
 				}
 			} else if (type === "response.completed") {
 				const response = parsed.response as Record<string, unknown> | undefined;

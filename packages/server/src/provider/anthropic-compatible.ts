@@ -4,6 +4,7 @@ import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import type { ProviderId } from "./providers";
+import { getReasoningCapabilities, type ReasoningCapabilities } from "./reasoning-capabilities";
 import { parseSSE } from "./sse";
 
 function estimatePromptChars(messages: ProviderOptions["messages"]): number {
@@ -21,6 +22,46 @@ export interface AnthropicCompatibleProviderOptions {
 	anthropicVersion?: string;
 }
 
+interface AnthropicThinkingOptions {
+	thinking: {
+		type: "enabled";
+		budget_tokens: number;
+		display: "summarized" | "omitted";
+	};
+}
+
+export interface AnthropicReasoningDefaults {
+	budgetTokens?: number;
+	display?: "summarized" | "omitted";
+}
+
+const DEFAULT_ANTHROPIC_REASONING_DEFAULTS: Required<AnthropicReasoningDefaults> = {
+	budgetTokens: 1024,
+	display: "omitted",
+};
+
+export function getAnthropicReasoningOptions(
+	capabilities: ReasoningCapabilities,
+	defaults: AnthropicReasoningDefaults = DEFAULT_ANTHROPIC_REASONING_DEFAULTS,
+): AnthropicThinkingOptions | undefined {
+	if (capabilities.family !== "anthropic-thinking") {
+		return undefined;
+	}
+
+	const resolvedDefaults = {
+		...DEFAULT_ANTHROPIC_REASONING_DEFAULTS,
+		...defaults,
+	};
+
+	return {
+		thinking: {
+			type: "enabled",
+			budget_tokens: resolvedDefaults.budgetTokens,
+			display: resolvedDefaults.display,
+		},
+	};
+}
+
 export function createAnthropicCompatibleProvider(
 	config: AnthropicCompatibleProviderOptions,
 	_logger?: Logger,
@@ -35,6 +76,15 @@ export function createAnthropicCompatibleProvider(
 			const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
 			const maxTokens = getProviderModelConfig(config.providerId, options.model, configDir)?.maxOutput ?? 16384;
 			const apiKeyHeader = config.apiKeyHeader ?? "x-api-key";
+			const reasoningCapabilities = getReasoningCapabilities({
+				providerId: config.providerId,
+				modelId: options.model,
+				apiFamily: "anthropic-messages",
+			});
+			const anthropicReasoningOptions = getAnthropicReasoningOptions(
+				reasoningCapabilities,
+				options.reasoningDefaults?.anthropic,
+			);
 
 			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
@@ -50,6 +100,7 @@ export function createAnthropicCompatibleProvider(
 					stream: true,
 					...(system ? { system } : {}),
 					...(tools ? { tools } : {}),
+					...(anthropicReasoningOptions ?? {}),
 				}),
 				signal: options.signal,
 			});

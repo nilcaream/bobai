@@ -17,6 +17,7 @@ import { getApiFamilyForModel } from "../provider/backend-policy";
 import { getProviderModelConfig } from "../provider/models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
 import { isSupportedProvider, type ProviderId } from "../provider/providers";
+import { DEFAULT_REASONING_DEFAULTS } from "../provider/reasoning-defaults";
 import {
 	appendMessage,
 	createSubagentSession,
@@ -219,14 +220,15 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					if (m.role === "tool" && m.metadata?.tool_call_id) {
 						return { role: "tool" as const, content: m.content, tool_call_id: m.metadata.tool_call_id as string };
 					}
-					if (m.role === "assistant" && m.metadata?.tool_calls) {
+					if (m.role === "assistant") {
 						return {
 							role: "assistant" as const,
 							content: m.content || null,
-							tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"],
+							...(m.metadata?.tool_calls ? { tool_calls: m.metadata.tool_calls as AssistantMessage["tool_calls"] } : {}),
+							...(m.metadata?.reasoning ? { reasoning: m.metadata.reasoning as AssistantMessage["reasoning"] } : {}),
 						};
 					}
-					return { role: m.role as "user" | "assistant", content: m.content };
+					return { role: m.role as "user", content: m.content };
 				});
 
 			// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
@@ -325,6 +327,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 						maxIterations: deps.maxIterations,
 						signal,
 						initiator: "agent",
+						reasoningDefaults: DEFAULT_REASONING_DEFAULTS,
 						contextWindow: childContextWindow,
 						rawMessages,
 						logger: childLogger,
@@ -350,8 +353,17 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 						onMessage(msg) {
 							if (msg.role === "assistant") {
 								const assistantMsg = msg as AssistantMessage;
-								const metadata = assistantMsg.tool_calls ? { tool_calls: assistantMsg.tool_calls } : undefined;
-								const stored = appendMessage(db, childSessionId, "assistant", assistantMsg.content ?? "", metadata);
+								const metadata = {
+									...(assistantMsg.tool_calls ? { tool_calls: assistantMsg.tool_calls } : {}),
+									...(assistantMsg.reasoning ? { reasoning: assistantMsg.reasoning } : {}),
+								};
+								const stored = appendMessage(
+									db,
+									childSessionId,
+									"assistant",
+									assistantMsg.content ?? "",
+									Object.keys(metadata).length > 0 ? metadata : undefined,
+								);
 								lastAssistantMessageId = stored.id;
 							} else if (msg.role === "tool") {
 								const toolMsg = msg as { role: "tool"; content: string; tool_call_id: string };

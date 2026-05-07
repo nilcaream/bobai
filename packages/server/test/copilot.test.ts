@@ -2134,6 +2134,11 @@ describe("Anthropic routing for Claude models", () => {
 		expect(capturedBody.model).toBe("claude-sonnet-4.6");
 		expect(capturedBody.max_tokens).toBeDefined();
 		expect(capturedBody.stream).toBe(true);
+		expect(capturedBody.thinking).toEqual({
+			type: "enabled",
+			budget_tokens: 1024,
+			display: "omitted",
+		});
 		// Anthropic format: no "choices", no "messages" wrapping in OpenAI style
 		expect(capturedBody.messages).toBeDefined();
 

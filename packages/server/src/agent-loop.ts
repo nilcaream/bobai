@@ -5,7 +5,15 @@ import type { DbGuard } from "./db-guard";
 import type { Logger } from "./log/logger";
 import { getScope } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
-import type { AssistantMessage, Message, Provider, ToolCallContent, ToolMessage } from "./provider/provider";
+import type {
+	AssistantMessage,
+	Message,
+	Provider,
+	ReasoningDelta,
+	ReasoningState,
+	ToolCallContent,
+	ToolMessage,
+} from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
 
 const DEFAULT_MAX_ITERATIONS = 64;
@@ -93,6 +101,7 @@ export interface AgentLoopOptions {
 	maxIterations?: number;
 	signal?: AbortSignal;
 	initiator?: "user" | "agent";
+	reasoningDefaults?: ProviderOptions["reasoningDefaults"];
 	contextWindow?: number;
 	/** Stored prompt_tokens from the DB at turn start — used for a stable
 	 *  charsPerToken ratio in emergency compaction (avoids oscillation from
@@ -118,9 +127,182 @@ interface AccumulatedToolCall {
 	arguments: string;
 }
 
+function cloneReasoningState(reasoning: ReasoningState): ReasoningState {
+	switch (reasoning.kind) {
+		case "responses-item":
+			return { ...reasoning };
+		case "interleaved-chat":
+			return { ...reasoning };
+		case "text-summary":
+			return { ...reasoning };
+	}
+}
+
+function applyReasoningDelta(reasoning: ReasoningState, delta: ReasoningDelta): ReasoningState {
+	switch (delta.kind) {
+		case "text":
+			if (reasoning.kind === "interleaved-chat") {
+				return { ...reasoning, text: (reasoning.text ?? "") + delta.text };
+			}
+			if (reasoning.kind === "text-summary") {
+				return { ...reasoning, text: reasoning.text + delta.text };
+			}
+			return reasoning;
+		case "details":
+			if (reasoning.kind === "interleaved-chat") {
+				return { ...reasoning, details: delta.details };
+			}
+			return reasoning;
+		case "summary":
+			if (reasoning.kind === "responses-item") {
+				return { ...reasoning, summary: delta.summary };
+			}
+			return reasoning;
+		case "encrypted-content":
+			if (reasoning.kind === "responses-item") {
+				return { ...reasoning, encryptedContent: delta.encryptedContent };
+			}
+			return reasoning;
+	}
+}
+
+async function consumeProviderStream(
+	stream: AsyncIterable<import("./provider/provider").StreamEvent>,
+	onEvent: (event: AgentEvent) => void,
+): Promise<{
+	textContent: string;
+	toolCalls: Map<number, AccumulatedToolCall>;
+	reasoning: ReasoningState[] | undefined;
+	finishReason: "stop" | "tool_calls";
+}> {
+	let textContent = "";
+	const toolCalls = new Map<number, AccumulatedToolCall>();
+	const reasoningAccumulator = createReasoningAccumulator();
+	let finishReason: "stop" | "tool_calls" = "stop";
+
+	for await (const event of stream) {
+		switch (event.type) {
+			case "text":
+				textContent += event.text;
+				onEvent({ type: "text", text: event.text });
+				break;
+			case "reasoning_start":
+				reasoningAccumulator.active.set(event.index, cloneReasoningState(event.reasoning));
+				break;
+			case "reasoning_delta": {
+				const reasoning = reasoningAccumulator.active.get(event.index);
+				if (reasoning) {
+					reasoningAccumulator.active.set(event.index, applyReasoningDelta(reasoning, event.delta));
+				}
+				break;
+			}
+			case "reasoning_end":
+				endReasoning(reasoningAccumulator, event.index, event.reasoning);
+				break;
+			case "tool_call_start":
+				toolCalls.set(event.index, { id: event.id, name: event.name, arguments: "" });
+				break;
+			case "tool_call_delta": {
+				const tc = toolCalls.get(event.index);
+				if (tc) tc.arguments += event.arguments;
+				break;
+			}
+			case "usage":
+				onEvent({ type: "status", text: event.display });
+				break;
+			case "finish":
+				finishReason = event.reason;
+				break;
+		}
+	}
+
+	return {
+		textContent,
+		toolCalls,
+		reasoning: consumeAccumulatedReasoning(reasoningAccumulator),
+		finishReason,
+	};
+}
+
+function finalizeReasoningState(current: ReasoningState, finalReasoning?: ReasoningState): ReasoningState {
+	if (!finalReasoning) return current;
+	if (finalReasoning.kind !== current.kind) return current;
+
+	switch (current.kind) {
+		case "responses-item":
+			return { ...current, ...finalReasoning };
+		case "interleaved-chat":
+			return { ...current, ...finalReasoning };
+		case "text-summary":
+			return { ...current, ...finalReasoning };
+	}
+}
+
+interface IndexedReasoningState {
+	index: number;
+	reasoning: ReasoningState;
+}
+
+interface ReasoningAccumulator {
+	active: Map<number, ReasoningState>;
+	completed: IndexedReasoningState[];
+}
+
+function createReasoningAccumulator(): ReasoningAccumulator {
+	return {
+		active: new Map<number, ReasoningState>(),
+		completed: [],
+	};
+}
+
+function pushCompletedReasoning(accumulator: ReasoningAccumulator, index: number, reasoning: ReasoningState): void {
+	accumulator.completed.push({ index, reasoning: cloneReasoningState(reasoning) });
+}
+
+function endReasoning(accumulator: ReasoningAccumulator, index: number, finalReasoning?: ReasoningState): void {
+	const activeReasoning = accumulator.active.get(index);
+	if (activeReasoning) {
+		pushCompletedReasoning(accumulator, index, finalizeReasoningState(activeReasoning, finalReasoning));
+		accumulator.active.delete(index);
+		if (finalReasoning && finalReasoning.kind !== activeReasoning.kind) {
+			pushCompletedReasoning(accumulator, index, finalReasoning);
+		}
+		return;
+	}
+	if (finalReasoning) {
+		pushCompletedReasoning(accumulator, index, finalReasoning);
+	}
+}
+
+function consumeAccumulatedReasoning(accumulator: ReasoningAccumulator): ReasoningState[] | undefined {
+	if (accumulator.active.size > 0) {
+		for (const [index, reasoning] of accumulator.active.entries()) {
+			pushCompletedReasoning(accumulator, index, reasoning);
+		}
+		accumulator.active.clear();
+	}
+	if (accumulator.completed.length === 0) return undefined;
+	const reasoning = accumulator.completed
+		.sort((left, right) => left.index - right.index)
+		.map((item) => cloneReasoningState(item.reasoning));
+	accumulator.completed.length = 0;
+	return reasoning;
+}
+
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
-	const { provider, model, tools, projectRoot, accessibleDirectories, sessionId, onEvent, onMessage, signal, initiator } =
-		options;
+	const {
+		provider,
+		model,
+		tools,
+		projectRoot,
+		accessibleDirectories,
+		sessionId,
+		onEvent,
+		onMessage,
+		signal,
+		initiator,
+		reasoningDefaults,
+	} = options;
 	const configDir = provider.configDir;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 	if (!Number.isInteger(maxIterations) || maxIterations < 1) {
@@ -138,43 +320,25 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 		// Abort if the signal has been triggered (e.g. WebSocket closed)
 		signal?.throwIfAborted();
 
-		let textContent = "";
-		const toolCalls = new Map<number, AccumulatedToolCall>();
-		let finishReason: "stop" | "tool_calls" = "stop";
-
-		// Call the provider
-		for await (const event of provider.stream({
-			model,
-			messages: conversation,
-			tools: tools.definitions.length > 0 ? tools.definitions : undefined,
-			signal,
-			initiator,
-		})) {
-			switch (event.type) {
-				case "text":
-					textContent += event.text;
-					onEvent({ type: "text", text: event.text });
-					break;
-				case "tool_call_start":
-					toolCalls.set(event.index, { id: event.id, name: event.name, arguments: "" });
-					break;
-				case "tool_call_delta": {
-					const tc = toolCalls.get(event.index);
-					if (tc) tc.arguments += event.arguments;
-					break;
-				}
-				case "usage":
-					onEvent({ type: "status", text: event.display });
-					break;
-				case "finish":
-					finishReason = event.reason;
-					break;
-			}
-		}
+		const { textContent, toolCalls, reasoning, finishReason } = await consumeProviderStream(
+			provider.stream({
+				model,
+				messages: conversation,
+				tools: tools.definitions.length > 0 ? tools.definitions : undefined,
+				signal,
+				initiator,
+				reasoningDefaults,
+			}),
+			onEvent,
+		);
 
 		if (finishReason === "stop" || toolCalls.size === 0) {
 			// Normal text response — done
-			const assistantMsg: AssistantMessage = { role: "assistant", content: textContent };
+			const assistantMsg: AssistantMessage = {
+				role: "assistant",
+				content: textContent,
+				reasoning,
+			};
 			conversation.push(assistantMsg);
 			newMessages.push(assistantMsg);
 			onMessage(assistantMsg);
@@ -196,6 +360,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			role: "assistant",
 			content: normalizedToolCallContent,
 			tool_calls: toolCallContents,
+			reasoning,
 		};
 		conversation.push(assistantMsg);
 		newMessages.push(assistantMsg);
@@ -409,17 +574,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	};
 	conversation.push(nudge);
 
-	let finalText = "";
-	for await (const event of provider.stream({ model, messages: conversation, signal, initiator })) {
-		if (event.type === "text") {
-			finalText += event.text;
-			onEvent({ type: "text", text: event.text });
-		} else if (event.type === "usage") {
-			onEvent({ type: "status", text: event.display });
-		}
-	}
+	const { textContent: finalText, reasoning: finalReasoning } = await consumeProviderStream(
+		provider.stream({ model, messages: conversation, signal, initiator, reasoningDefaults }),
+		onEvent,
+	);
 
-	const finalMsg: AssistantMessage = { role: "assistant", content: finalText };
+	const finalMsg: AssistantMessage = {
+		role: "assistant",
+		content: finalText,
+		reasoning: finalReasoning,
+	};
 	conversation.push(finalMsg);
 	newMessages.push(finalMsg);
 	onMessage(finalMsg);

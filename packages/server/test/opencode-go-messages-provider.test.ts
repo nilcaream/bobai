@@ -71,6 +71,11 @@ describe("opencode-go provider (messages)", () => {
 		expect(body.model).toBe("minimax-m2.7");
 		expect(body.stream).toBe(true);
 		expect(body.max_tokens).toBe(16384);
+		expect(body.thinking).toEqual({
+			type: "enabled",
+			budget_tokens: 1024,
+			display: "omitted",
+		});
 	});
 
 	test("parses text, tool calls, usage and finish events from the messages SSE stream", async () => {
@@ -111,6 +116,42 @@ describe("opencode-go provider (messages)", () => {
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
+	});
+
+	test("uses passed anthropic reasoning defaults in the messages request body", async () => {
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(
+				sseStream([
+					{ type: "message_start", message: { usage: { input_tokens: 12 } } },
+					{ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+					{ type: "message_stop" },
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
+		await collect(
+			provider.stream({
+				model: "minimax-m2.7",
+				messages: [{ role: "user", content: "hello" }],
+				reasoningDefaults: {
+					anthropic: {
+						budgetTokens: 2048,
+						display: "summarized",
+					},
+				},
+			}),
+		);
+
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.thinking).toEqual({
+			type: "enabled",
+			budget_tokens: 2048,
+			display: "summarized",
+		});
 	});
 
 	test("throws ProviderError on non-OK response from messages API", async () => {

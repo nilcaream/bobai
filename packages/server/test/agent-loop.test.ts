@@ -4,11 +4,23 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentEvent } from "../src/agent-loop";
 import { runAgentLoop } from "../src/agent-loop";
-import type { Message, Provider, ProviderOptions, StreamEvent, ToolMessage } from "../src/provider/provider";
+import type {
+	AssistantMessage,
+	InterleavedChatReasoningState,
+	Message,
+	Provider,
+	ProviderOptions,
+	ReasoningDelta,
+	ResponsesItemReasoningState,
+	StreamEvent,
+	ToolMessage,
+} from "../src/provider/provider";
+import { appendMessage, createSession, getMessages } from "../src/session/repository";
 import { editFileTool } from "../src/tool/edit-file";
 import { readFileTool } from "../src/tool/read-file";
 import type { Tool, ToolResult } from "../src/tool/tool";
 import { createToolRegistry } from "../src/tool/tool";
+import { createTestDb } from "./helpers";
 
 function textProvider(tokens: string[]): Provider {
 	return {
@@ -58,6 +70,345 @@ function echoTool(): Tool {
 		},
 	};
 }
+
+describe("provider reasoning types", () => {
+	test("assistant messages can carry optional reasoning state", () => {
+		const responsesReasoning: ResponsesItemReasoningState = {
+			kind: "responses-item",
+			id: "rs_1",
+			summary: "condensed",
+			encryptedContent: "opaque",
+		};
+		const chatReasoning: InterleavedChatReasoningState = {
+			kind: "interleaved-chat",
+			field: "reasoning_content",
+			text: "step 1",
+		};
+		const assistantWithReasoning: AssistantMessage = {
+			role: "assistant",
+			content: "Answer",
+			reasoning: [responsesReasoning, chatReasoning, { kind: "text-summary", text: "portable summary" }],
+		};
+
+		expect(assistantWithReasoning.reasoning).toHaveLength(3);
+	});
+
+	test("provider stream consumers can accept reasoning stream events", async () => {
+		const firstReasoning: InterleavedChatReasoningState = {
+			kind: "interleaved-chat",
+			field: "reasoning_content",
+			text: "first thought",
+		};
+		const delta: ReasoningDelta = {
+			kind: "text",
+			text: " continued",
+		};
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				yield {
+					type: "reasoning_start",
+					index: 0,
+					reasoning: firstReasoning,
+				};
+				yield { type: "reasoning_delta", index: 0, delta };
+				yield { type: "reasoning_end", index: 0, reasoning: { kind: "text-summary", text: "done thinking" } };
+				yield { type: "text", text: "Answer" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		const seen: StreamEvent[] = [];
+		for await (const event of provider.stream({ model: "test", messages: [] })) {
+			seen.push(event);
+		}
+
+		expect(seen).toHaveLength(5);
+		expect(seen[0]).toEqual({ type: "reasoning_start", index: 0, reasoning: firstReasoning });
+		expect(seen[1]).toEqual({ type: "reasoning_delta", index: 0, delta });
+	});
+
+	test("runAgentLoop attaches accumulated reasoning to text-only assistant messages", async () => {
+		const events: AgentEvent[] = [];
+		const messages = await runAgentLoop({
+			provider: {
+				id: "mock",
+				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+					};
+					yield {
+						type: "reasoning_delta",
+						index: 0,
+						delta: { kind: "text", text: " harder" },
+					};
+					yield { type: "text", text: "Hello" };
+					yield { type: "reasoning_end", index: 0, reasoning: { kind: "text-summary", text: "done" } };
+					yield { type: "text", text: " world" };
+					yield { type: "finish", reason: "stop" };
+				},
+			},
+			model: "test",
+			messages: [{ role: "user", content: "hi" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(event) {
+				events.push(event);
+			},
+			onMessage() {},
+		});
+
+		expect(events).toEqual([
+			{ type: "text", text: "Hello" },
+			{ type: "text", text: " world" },
+		]);
+		expect(messages).toEqual([
+			{
+				role: "assistant",
+				content: "Hello world",
+				reasoning: [
+					{ kind: "interleaved-chat", field: "reasoning_content", text: "thinking harder" },
+					{ kind: "text-summary", text: "done" },
+				],
+			},
+		]);
+	});
+
+	test("runAgentLoop attaches accumulated reasoning to assistant tool-call messages", async () => {
+		const events: AgentEvent[] = [];
+		const seenMessages: Message[] = [];
+		let callCount = 0;
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+					};
+					yield {
+						type: "reasoning_delta",
+						index: 0,
+						delta: { kind: "text", text: " about tool" },
+					};
+					yield { type: "tool_call_start", index: 0, id: "call-1", name: "echo" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"text":"hi"}' };
+					yield { type: "reasoning_end", index: 0, reasoning: { kind: "text-summary", text: "done" } };
+					yield { type: "finish", reason: "tool_calls" };
+					return;
+				}
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		const newMessages = await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [{ role: "user", content: "hi" }],
+			tools: createToolRegistry([echoTool()]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(event) {
+				events.push(event);
+			},
+			onMessage(message) {
+				seenMessages.push(message);
+			},
+			maxIterations: 1,
+		});
+
+		expect(events).toEqual([
+			{ type: "tool_call", id: "call-1", output: "▸ Echo hi" },
+			{
+				type: "tool_result",
+				id: "call-1",
+				output: "▸ Echo hi (done)",
+				mergeable: true,
+				summary: undefined,
+				metadata: undefined,
+			},
+		]);
+		expect(seenMessages[0]).toEqual({
+			role: "assistant",
+			content: null,
+			tool_calls: [{ id: "call-1", type: "function", function: { name: "echo", arguments: '{"text":"hi"}' } }],
+			reasoning: [
+				{ kind: "interleaved-chat", field: "reasoning_content", text: "thinking about tool" },
+				{ kind: "text-summary", text: "done" },
+			],
+		});
+		expect(seenMessages[1]).toEqual({ role: "tool", content: "echoed: hi", tool_call_id: "call-1" });
+		expect(newMessages).toEqual([
+			{
+				role: "assistant",
+				content: null,
+				tool_calls: [{ id: "call-1", type: "function", function: { name: "echo", arguments: '{"text":"hi"}' } }],
+				reasoning: [
+					{ kind: "interleaved-chat", field: "reasoning_content", text: "thinking about tool" },
+					{ kind: "text-summary", text: "done" },
+				],
+			},
+			{ role: "tool", content: "echoed: hi", tool_call_id: "call-1" },
+			{ role: "assistant", content: "" },
+		]);
+	});
+
+	test("runAgentLoop merges same-kind final reasoning and orders multiple indexes stably", async () => {
+		const messages = await runAgentLoop({
+			provider: {
+				id: "mock",
+				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					yield {
+						type: "reasoning_start",
+						index: 1,
+						reasoning: { kind: "responses-item", id: "rs_2" },
+					};
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "A" },
+					};
+					yield { type: "reasoning_delta", index: 1, delta: { kind: "summary", summary: "sum-2" } };
+					yield { type: "reasoning_delta", index: 1, delta: { kind: "encrypted-content", encryptedContent: "enc-2" } };
+					yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: { step: 1 } } };
+					yield {
+						type: "reasoning_end",
+						index: 1,
+						reasoning: { kind: "responses-item", id: "rs_2-final", summary: "sum-2-final" },
+					};
+					yield {
+						type: "reasoning_end",
+						index: 2,
+						reasoning: { kind: "text-summary", text: "orphan" },
+					};
+					yield { type: "text", text: "Done" };
+					yield { type: "finish", reason: "stop" };
+				},
+			},
+			model: "test",
+			messages: [{ role: "user", content: "hi" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent() {},
+			onMessage() {},
+		});
+
+		expect(messages).toEqual([
+			{
+				role: "assistant",
+				content: "Done",
+				reasoning: [
+					{ kind: "interleaved-chat", field: "reasoning_content", text: "A", details: { step: 1 } },
+					{ kind: "responses-item", id: "rs_2-final", summary: "sum-2-final", encryptedContent: "enc-2" },
+					{ kind: "text-summary", text: "orphan" },
+				],
+			},
+		]);
+	});
+
+	test("final fallback call preserves accumulated reasoning after maxIterations is reached", async () => {
+		let callCount = 0;
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					yield { type: "tool_call_start", index: 0, id: "call_1", name: "echo" };
+					yield { type: "tool_call_delta", index: 0, arguments: '{"text":"loop"}' };
+					yield { type: "finish", reason: "tool_calls" };
+					return;
+				}
+				yield {
+					type: "reasoning_start",
+					index: 0,
+					reasoning: { kind: "responses-item", id: "rs_final" },
+				};
+				yield { type: "reasoning_delta", index: 0, delta: { kind: "summary", summary: "final-summary" } };
+				yield {
+					type: "reasoning_end",
+					index: 0,
+					reasoning: { kind: "responses-item", id: "rs_final_done", encryptedContent: "enc-final" },
+				};
+				yield { type: "text", text: "Recovered" };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		const messages = await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [{ role: "user", content: "loop" }],
+			tools: createToolRegistry([echoTool()]),
+			projectRoot: "/tmp",
+			maxIterations: 1,
+			onEvent() {},
+			onMessage() {},
+		});
+
+		expect(messages.at(-1)).toEqual({
+			role: "assistant",
+			content: "Recovered",
+			reasoning: [{ kind: "responses-item", id: "rs_final_done", summary: "final-summary", encryptedContent: "enc-final" }],
+		});
+	});
+
+	test("assistant reasoning metadata survives persistence when stored from emitted messages", async () => {
+		const db = createTestDb();
+		const session = createSession(db);
+
+		await runAgentLoop({
+			provider: {
+				id: "mock",
+				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+					};
+					yield {
+						type: "reasoning_delta",
+						index: 0,
+						delta: { kind: "text", text: " harder" },
+					};
+					yield { type: "reasoning_end", index: 0, reasoning: { kind: "text-summary", text: "done" } };
+					yield { type: "text", text: "Answer" };
+					yield { type: "finish", reason: "stop" };
+				},
+			},
+			model: "test",
+			messages: [{ role: "user", content: "hi" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: session.id,
+			onEvent() {},
+			onMessage(msg) {
+				if (msg.role !== "assistant") return;
+				const metadata = {
+					...(msg.tool_calls ? { tool_calls: msg.tool_calls } : {}),
+					...(msg.reasoning ? { reasoning: msg.reasoning } : {}),
+				};
+				appendMessage(db, session.id, "assistant", msg.content ?? "", Object.keys(metadata).length > 0 ? metadata : undefined);
+			},
+		});
+
+		const storedMessages = getMessages(db, session.id);
+		expect(storedMessages).toHaveLength(1);
+		expect(storedMessages[0]?.metadata).toEqual({
+			reasoning: [
+				{ kind: "interleaved-chat", field: "reasoning_content", text: "thinking harder" },
+				{ kind: "text-summary", text: "done" },
+			],
+		});
+
+		db.close();
+	});
+});
 
 describe("runAgentLoop", () => {
 	test("returns text response when no tool calls", async () => {
