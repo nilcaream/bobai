@@ -1,4 +1,4 @@
-import { setSnapshot } from "./compaction/cache";
+import { getSnapshot, setSnapshot } from "./compaction/cache";
 import { compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
 import { COMPACTION_OUTPUT_TARGET, computeCharBudget, EMERGENCY_TARGET, totalContentChars } from "./compaction/strength";
@@ -571,7 +571,32 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			const emgPromptChars = options.sessionPromptChars ?? 0;
 			const rawPlusNew = [...options.rawMessages, ...newMessages];
 
-			if (shouldEmergencyCompact(emgPromptTokens, emgPromptChars, options.contextWindow, rawPlusNew)) {
+			// Stateful compaction: reuse cached snapshot if messages still fit under emergency threshold
+			const charBudget90 = computeCharBudget(options.contextWindow, EMERGENCY_TARGET, emgPromptTokens, emgPromptChars);
+			const existingSnapshot = getSnapshot(options.sessionId);
+
+			let needsCompaction = false;
+
+			if (existingSnapshot && charBudget90 > 0) {
+				// Reconstruct: frozen prefix + new messages appended since snapshot
+				const appendedMessages = rawPlusNew.slice(existingSnapshot.rawMessageCount);
+				const candidateMessages = [...existingSnapshot.compactedMessages, ...appendedMessages];
+				const candidateChars = totalContentChars(candidateMessages);
+
+				if (candidateChars <= charBudget90) {
+					// Still fits — use cached prefix, skip compaction entirely
+					conversation.length = 0;
+					conversation.push(...candidateMessages);
+				} else {
+					// Exceeded threshold — need to re-compact
+					needsCompaction = true;
+				}
+			} else if (charBudget90 > 0 && totalContentChars(rawPlusNew) > charBudget90) {
+				// No snapshot, but over threshold — need to compact
+				needsCompaction = true;
+			}
+
+			if (needsCompaction) {
 				const result = compactToBudget({
 					messages: rawPlusNew,
 					contextWindow: options.contextWindow,
