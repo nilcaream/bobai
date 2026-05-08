@@ -14,7 +14,6 @@ function makeProvider(id: "github-copilot" | "openrouter", model: string): Provi
 				outputTokens: 500,
 				promptChars: 120,
 				totalTokens: 1500,
-				initiator: options.initiator ?? "user",
 			});
 			yield { type: "finish", reason: "stop" };
 		},

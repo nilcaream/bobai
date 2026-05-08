@@ -79,6 +79,7 @@ describe("openai responses compatible provider", () => {
 					{ role: "user", content: "hello" },
 				],
 				tools,
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -86,6 +87,7 @@ describe("openai responses compatible provider", () => {
 		expect(capturedInit?.method).toBe("POST");
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer zen-key");
+		expect(headers["x-opencode-session"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("gpt-5.4");
 		expect(body.stream).toBe(true);

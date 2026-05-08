@@ -53,6 +53,7 @@ describe("opencode-zen provider", () => {
 			provider.stream({
 				model: "claude-sonnet-4-6",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -61,6 +62,7 @@ describe("opencode-zen provider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers["x-api-key"]).toBe("zen-key");
 		expect(headers["anthropic-version"]).toBe("2023-06-01");
+		expect(headers["x-opencode-session"]).toBe("12345678");
 	});
 
 	test("routes chat models to the OpenCode Zen chat completions API", async () => {
@@ -84,6 +86,7 @@ describe("opencode-zen provider", () => {
 			provider.stream({
 				model: "qwen3.6-plus",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -91,6 +94,7 @@ describe("opencode-zen provider", () => {
 		expect(capturedInit?.method).toBe("POST");
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer zen-key");
+		expect(headers["x-opencode-session"]).toBe("12345678");
 	});
 
 	test("routes GPT models to the OpenCode Zen responses API", async () => {
@@ -113,6 +117,7 @@ describe("opencode-zen provider", () => {
 			provider.stream({
 				model: "gpt-5.4",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -120,6 +125,7 @@ describe("opencode-zen provider", () => {
 		expect(capturedInit?.method).toBe("POST");
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer zen-key");
+		expect(headers["x-opencode-session"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.input).toBeDefined();
 		expect(body.messages).toBeUndefined();

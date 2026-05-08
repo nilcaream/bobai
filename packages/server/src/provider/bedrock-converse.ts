@@ -39,6 +39,7 @@ export function createBedrockConverseProvider(
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${auth.apiKey}`,
 					Accept: "application/vnd.amazon.eventstream",
+					...(options.sessionId ? { "x-session-affinity": options.sessionId.substring(0, 8) } : {}),
 				},
 				body: JSON.stringify(body),
 				signal: options.signal,
@@ -147,7 +148,6 @@ export function createBedrockConverseProvider(
 							outputTokens,
 							promptChars,
 							totalTokens: inputTokens + outputTokens,
-							initiator: options.initiator ?? "user",
 						});
 
 						yield {

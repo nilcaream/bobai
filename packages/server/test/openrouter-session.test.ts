@@ -35,14 +35,12 @@ describe("OpenRouter session flow", () => {
 					id: providerId,
 					configDir: tmpDir,
 					async *stream(opts: {
-						initiator?: "user" | "agent";
 						onMetrics?: (metrics: {
 							model: string;
 							promptTokens: number;
 							outputTokens: number;
 							promptChars: number;
 							totalTokens: number;
-							initiator: "user" | "agent";
 						}) => void;
 					}) {
 						yield { type: "text" as const, text: "openrouter response" };
@@ -52,7 +50,6 @@ describe("OpenRouter session flow", () => {
 							outputTokens: 3123,
 							promptChars: 100,
 							totalTokens: 10596,
-							initiator: opts.initiator ?? "user",
 						});
 						yield { type: "finish" as const, reason: "stop" as const };
 					},

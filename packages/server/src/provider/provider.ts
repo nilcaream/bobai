@@ -95,7 +95,6 @@ export interface StreamMetrics {
 	outputTokens: number;
 	promptChars: number;
 	totalTokens: number;
-	initiator: "user" | "agent";
 }
 
 export interface ProviderOptions {
@@ -103,7 +102,8 @@ export interface ProviderOptions {
 	messages: Message[];
 	tools?: ToolDefinition[];
 	signal?: AbortSignal;
-	initiator?: "user" | "agent";
+	/** Session ID for API provider session affinity (truncated to first 8 characters). */
+	sessionId?: string;
 	reasoningDefaults?: {
 		anthropic?: {
 			budgetTokens?: number;

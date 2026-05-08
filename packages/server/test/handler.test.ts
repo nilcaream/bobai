@@ -80,7 +80,6 @@ function metricsProvider(
 				outputTokens,
 				promptChars: 100,
 				totalTokens: promptTokens + outputTokens,
-				initiator: opts.initiator ?? "user",
 			});
 			yield { type: "finish", reason: "stop" };
 		},
@@ -104,7 +103,6 @@ function multiMetricsProvider(
 					outputTokens: call.outputTokens,
 					promptChars: call.promptChars ?? 100,
 					totalTokens: call.promptTokens + call.outputTokens,
-					initiator: opts.initiator ?? "user",
 				});
 			}
 			yield { type: "finish", reason: "stop" };

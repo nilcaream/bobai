@@ -12,7 +12,6 @@ function mockProvider(): Provider {
 			yield { type: "text", text: "hello" };
 			yield { type: "usage", tokenCount: 500, tokenLimit: 8000, display: "mock-model" };
 			// Route metrics via onMetrics if provided, otherwise accumulate locally
-			const initiator = opts.initiator ?? "agent";
 			if (opts.onMetrics) {
 				opts.onMetrics({
 					model: opts.model,
@@ -20,7 +19,6 @@ function mockProvider(): Provider {
 					outputTokens: 250,
 					promptChars: 1200,
 					totalTokens: 750,
-					initiator,
 				});
 			} else {
 				turnModel = opts.model;
@@ -60,7 +58,6 @@ function accumulatingMockProvider(): Provider {
 				outputTokens: 40,
 				promptChars: 300,
 				totalTokens: 140,
-				initiator: opts.initiator ?? "agent",
 			});
 			opts.onMetrics?.({
 				model: opts.model,
@@ -68,7 +65,6 @@ function accumulatingMockProvider(): Provider {
 				outputTokens: 10,
 				promptChars: 900,
 				totalTokens: 260,
-				initiator: opts.initiator ?? "agent",
 			});
 			yield { type: "finish", reason: "stop" };
 		},
@@ -184,7 +180,7 @@ describe("createIsolatedTurnProvider", () => {
 		isolated.beginTurn?.(0);
 
 		// Stream through the isolated provider — onMetrics should route to its locals
-		for await (const _event of isolated.stream({ model: "test-model", messages: [], initiator: "agent" })) {
+		for await (const _event of isolated.stream({ model: "test-model", messages: [] })) {
 			// consume all events
 		}
 
@@ -208,11 +204,11 @@ describe("createIsolatedTurnProvider", () => {
 
 		// Run both streams concurrently
 		const streamA = async () => {
-			for await (const _e of a.stream({ model: "model-a", messages: [], initiator: "agent" })) {
+			for await (const _e of a.stream({ model: "model-a", messages: [] })) {
 			}
 		};
 		const streamB = async () => {
-			for await (const _e of b.stream({ model: "model-b", messages: [], initiator: "agent" })) {
+			for await (const _e of b.stream({ model: "model-b", messages: [] })) {
 			}
 		};
 		await Promise.all([streamA(), streamB()]);
@@ -229,7 +225,7 @@ describe("createIsolatedTurnProvider", () => {
 		const original = mockProvider();
 		const isolated = createIsolatedTurnProvider(original);
 		isolated.beginTurn?.(0);
-		for await (const _e of isolated.stream({ model: "m", messages: [], initiator: "agent" })) {
+		for await (const _e of isolated.stream({ model: "m", messages: [] })) {
 		}
 		expect(isolated.getTurnPromptChars?.()).toBe(1200);
 	});
@@ -237,7 +233,7 @@ describe("createIsolatedTurnProvider", () => {
 	test("summary uses total in/out across multiple provider calls but keeps context from last call", async () => {
 		const isolated = createIsolatedTurnProvider(accumulatingMockProvider());
 		isolated.beginTurn?.(80);
-		for await (const _e of isolated.stream({ model: "total-model", messages: [], initiator: "agent" })) {
+		for await (const _e of isolated.stream({ model: "total-model", messages: [] })) {
 		}
 		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("in: 350");

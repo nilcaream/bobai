@@ -326,7 +326,6 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 						sessionId: childSessionId,
 						maxIterations: deps.maxIterations,
 						signal,
-						initiator: "agent",
 						reasoningDefaults: DEFAULT_REASONING_DEFAULTS,
 						contextWindow: childContextWindow,
 						rawMessages,

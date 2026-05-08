@@ -117,6 +117,12 @@ export function createOpenAIChatCompatibleProvider(
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${config.apiKey}`,
+					...(options.sessionId
+						? {
+								[config.providerId.startsWith("opencode") ? "x-opencode-session" : "x-session-affinity"]:
+									options.sessionId.substring(0, 8),
+							}
+						: {}),
 				},
 				body: JSON.stringify({
 					model: options.model,
@@ -240,7 +246,6 @@ export function createOpenAIChatCompatibleProvider(
 						outputTokens: Math.max(0, totalTokens - promptTokens),
 						promptChars,
 						totalTokens,
-						initiator: options.initiator ?? "user",
 					});
 					yield { type: "finish", reason: finishReason };
 					sawFinish = true;

@@ -61,6 +61,7 @@ describe("openrouter provider", () => {
 			provider.stream({
 				model: "openrouter/free",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -69,6 +70,7 @@ describe("openrouter provider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer or-key");
 		expect(headers["Content-Type"]).toBe("application/json");
+		expect(headers["x-session-affinity"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("openrouter/free");
 		expect(body.stream).toBe(true);

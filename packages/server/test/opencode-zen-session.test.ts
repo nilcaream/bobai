@@ -38,14 +38,12 @@ describe("OpenCode Zen session flow", () => {
 					configDir: tmpDir,
 					async *stream(opts: {
 						model: string;
-						initiator?: "user" | "agent";
 						onMetrics?: (metrics: {
 							model: string;
 							promptTokens: number;
 							outputTokens: number;
 							promptChars: number;
 							totalTokens: number;
-							initiator: "user" | "agent";
 						}) => void;
 					}) {
 						yield { type: "text" as const, text: `opencode zen response for ${opts.model}` };
@@ -55,7 +53,6 @@ describe("OpenCode Zen session flow", () => {
 							outputTokens: 3123,
 							promptChars: 100,
 							totalTokens: 10596,
-							initiator: opts.initiator ?? "user",
 						});
 						yield { type: "finish" as const, reason: "stop" as const };
 					},

@@ -101,7 +101,6 @@ export interface AgentLoopOptions {
 	sessionId: string;
 	maxIterations?: number;
 	signal?: AbortSignal;
-	initiator?: "user" | "agent";
 	reasoningDefaults?: ProviderOptions["reasoningDefaults"];
 	contextWindow?: number;
 	/** User-overridden context limit for display purposes (passed to provider stream). */
@@ -303,7 +302,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 		onEvent,
 		onMessage,
 		signal,
-		initiator,
 		reasoningDefaults,
 	} = options;
 	const configDir = provider.configDir;
@@ -329,9 +327,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				messages: conversation,
 				tools: tools.definitions.length > 0 ? tools.definitions : undefined,
 				signal,
-				initiator,
 				reasoningDefaults,
 				contextLimit: options.contextLimit,
+				sessionId,
 			}),
 			onEvent,
 		);
@@ -605,9 +603,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			model,
 			messages: conversation,
 			signal,
-			initiator,
 			reasoningDefaults,
 			contextLimit: options.contextLimit,
+			sessionId,
 		}),
 		onEvent,
 	);

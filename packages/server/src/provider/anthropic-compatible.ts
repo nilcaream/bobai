@@ -92,6 +92,12 @@ export function createAnthropicCompatibleProvider(
 					"Content-Type": "application/json",
 					[apiKeyHeader]: apiKeyHeader === "Authorization" ? `Bearer ${config.apiKey}` : config.apiKey,
 					...(config.anthropicVersion ? { "anthropic-version": config.anthropicVersion } : {}),
+					...(options.sessionId
+						? {
+								[config.providerId.startsWith("opencode") ? "x-opencode-session" : "x-session-affinity"]:
+									options.sessionId.substring(0, 8),
+							}
+						: {}),
 				},
 				body: JSON.stringify({
 					model: options.model,
@@ -193,7 +199,6 @@ export function createAnthropicCompatibleProvider(
 							outputTokens,
 							promptChars,
 							totalTokens: inputTokens + outputTokens,
-							initiator: options.initiator ?? "user",
 						});
 						yield { type: "finish", reason: stopReason === "tool_use" ? "tool_calls" : "stop" };
 						didEmitFinish = true;

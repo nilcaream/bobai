@@ -39,14 +39,12 @@ describe("Amazon Bedrock session flow", () => {
 					configDir: tmpDir,
 					async *stream(opts: {
 						model: string;
-						initiator?: "user" | "agent";
 						onMetrics?: (metrics: {
 							model: string;
 							promptTokens: number;
 							outputTokens: number;
 							promptChars: number;
 							totalTokens: number;
-							initiator: "user" | "agent";
 						}) => void;
 					}) {
 						yield { type: "text" as const, text: `amazon bedrock response for ${opts.model}` };
@@ -56,7 +54,6 @@ describe("Amazon Bedrock session flow", () => {
 							outputTokens: 2000,
 							promptChars: 100,
 							totalTokens: 7000,
-							initiator: opts.initiator ?? "user",
 						});
 						yield { type: "finish" as const, reason: "stop" as const };
 					},

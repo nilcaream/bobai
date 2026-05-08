@@ -48,6 +48,12 @@ export function createOpenAIResponsesCompatibleProvider(
 					Authorization: `Bearer ${config.apiKey}`,
 					"Content-Type": "application/json",
 					...(config.headers ?? {}),
+					...(options.sessionId
+						? {
+								[config.providerId.startsWith("opencode") ? "x-opencode-session" : "x-session-affinity"]:
+									options.sessionId.substring(0, 8),
+							}
+						: {}),
 				},
 				body: JSON.stringify({
 					model: options.model,
@@ -68,7 +74,7 @@ export function createOpenAIResponsesCompatibleProvider(
 				return;
 			}
 
-			for await (const event of parseResponsesSSE(response.body, options.model, options.initiator ?? "user", configDir, {
+			for await (const event of parseResponsesSSE(response.body, options.model, configDir, {
 				providerId: config.providerId,
 				tokenLimit,
 				display: formatProviderModelDisplay(config.providerId, options.model, 0, configDir, options.contextLimit),
@@ -93,7 +99,6 @@ export function createOpenAIResponsesCompatibleProvider(
 						outputTokens: completedUsage.outputTokens,
 						promptChars,
 						totalTokens: completedUsage.totalTokens,
-						initiator: options.initiator ?? "user",
 					});
 				} else {
 					yield event;

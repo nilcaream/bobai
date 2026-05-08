@@ -2194,6 +2194,7 @@ describe("Anthropic routing for Claude models", () => {
 		for await (const _ of provider.stream({
 			model: "claude-sonnet-4.6",
 			messages: [{ role: "user", content: "hi" }],
+			sessionId: "12345678-1234-1234-1234-123456789abc",
 		})) {
 			/* drain */
 		}
@@ -2204,6 +2205,7 @@ describe("Anthropic routing for Claude models", () => {
 		expect(capturedHeaders["copilot-integration-id"]).toBeDefined();
 		// Custom routing headers
 		expect(capturedHeaders["x-initiator"]).toBe("user");
+		expect(capturedHeaders["x-session-affinity"]).toBe("12345678");
 		expect(capturedHeaders["openai-intent"]).toBe("conversation-edits");
 	});
 
@@ -2303,7 +2305,6 @@ describe("Anthropic routing for Claude models", () => {
 			promptTokens: number;
 			outputTokens: number;
 			totalTokens: number;
-			initiator: "user" | "agent";
 		}> = [];
 		for await (const _ of provider.stream({
 			model: "claude-sonnet-4.6",
@@ -2314,7 +2315,6 @@ describe("Anthropic routing for Claude models", () => {
 					promptTokens: metric.promptTokens,
 					outputTokens: metric.outputTokens,
 					totalTokens: metric.totalTokens,
-					initiator: metric.initiator,
 				});
 			},
 		})) {
@@ -2327,7 +2327,6 @@ describe("Anthropic routing for Claude models", () => {
 				promptTokens: 42,
 				outputTokens: 5,
 				totalTokens: 47,
-				initiator: "user",
 			},
 		]);
 	});
@@ -2653,7 +2652,6 @@ describe("Responses API routing for GPT-5+ models", () => {
 			promptTokens: number;
 			outputTokens: number;
 			totalTokens: number;
-			initiator: "user" | "agent";
 		}> = [];
 		for await (const _ of provider.stream({
 			model: "gpt-5.4",
@@ -2664,7 +2662,6 @@ describe("Responses API routing for GPT-5+ models", () => {
 					promptTokens: metric.promptTokens,
 					outputTokens: metric.outputTokens,
 					totalTokens: metric.totalTokens,
-					initiator: metric.initiator,
 				});
 			},
 		})) {
@@ -2677,7 +2674,6 @@ describe("Responses API routing for GPT-5+ models", () => {
 				promptTokens: 42,
 				outputTokens: 5,
 				totalTokens: 47,
-				initiator: "user",
 			},
 		]);
 	});

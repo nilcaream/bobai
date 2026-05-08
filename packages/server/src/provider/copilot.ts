@@ -308,6 +308,7 @@ export function createCopilotProvider(
 						...copilotConfig.headers,
 						"Openai-Intent": "conversation-edits",
 						"x-initiator": effectiveInitiator,
+						...(options.sessionId ? { "x-session-affinity": options.sessionId.substring(0, 8) } : {}),
 					},
 				});
 
@@ -444,6 +445,7 @@ export function createCopilotProvider(
 						"Openai-Intent": "conversation-edits",
 						Authorization: `Bearer ${sessionToken}`,
 						"x-initiator": effectiveInitiator,
+						...(options.sessionId ? { "x-session-affinity": options.sessionId.substring(0, 8) } : {}),
 					},
 					body: JSON.stringify({
 						model: options.model,
@@ -519,7 +521,7 @@ export function createCopilotProvider(
 			}
 
 			try {
-				for await (const event of parseResponsesSSE(response.body, options.model, effectiveInitiator, resolvedConfigDir)) {
+				for await (const event of parseResponsesSSE(response.body, options.model, resolvedConfigDir)) {
 					timer.reset(BODY_TIMEOUT_MS);
 					if (event.type === "usage") {
 						const usageEvent = {
@@ -731,6 +733,7 @@ export function createCopilotProvider(
 							"Openai-Intent": "conversation-edits",
 							Authorization: `Bearer ${sessionToken}`,
 							"x-initiator": effectiveInitiator,
+							...(options.sessionId ? { "x-session-affinity": options.sessionId.substring(0, 8) } : {}),
 						},
 						body: JSON.stringify({
 							model: options.model,

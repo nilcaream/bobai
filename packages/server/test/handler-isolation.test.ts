@@ -15,7 +15,7 @@ async function simulateSession(
 	turnProvider.beginTurn?.(sessionPromptTokens);
 
 	for (let i = 0; i < callCount; i++) {
-		for await (const _e of turnProvider.stream({ model: "test-model", messages: [], initiator: "agent" })) {
+		for await (const _e of turnProvider.stream({ model: "test-model", messages: [] })) {
 		}
 		// Simulate async interleaving
 		await new Promise((r) => setTimeout(r, 0));
@@ -32,7 +32,6 @@ function mockConcurrentProvider(): Provider {
 		id: "mock",
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			yield { type: "text", text: "ok" };
-			const initiator = opts.initiator ?? "agent";
 			if (opts.onMetrics) {
 				opts.onMetrics({
 					model: opts.model,
@@ -40,7 +39,6 @@ function mockConcurrentProvider(): Provider {
 					outputTokens: 250,
 					promptChars: 1200,
 					totalTokens: 750,
-					initiator,
 				});
 			}
 			yield { type: "finish", reason: "stop" };
@@ -76,7 +74,7 @@ describe("handler-level session isolation", () => {
 		parentA.beginTurn?.(5000);
 
 		// Simulate parent making calls
-		for await (const _e of parentA.stream({ model: "m", messages: [], initiator: "agent" })) {
+		for await (const _e of parentA.stream({ model: "m", messages: [] })) {
 		}
 
 		// Simulate subagent: save parent state, begin child turn, run child, restore
@@ -86,11 +84,11 @@ describe("handler-level session isolation", () => {
 		// Meanwhile, another session runs concurrently
 		const sessionB = createIsolatedTurnProvider(provider);
 		sessionB.beginTurn?.(50000);
-		for await (const _e of sessionB.stream({ model: "m", messages: [], initiator: "agent" })) {
+		for await (const _e of sessionB.stream({ model: "m", messages: [] })) {
 		}
 
 		// Child finishes
-		for await (const _e of parentA.stream({ model: "m", messages: [], initiator: "agent" })) {
+		for await (const _e of parentA.stream({ model: "m", messages: [] })) {
 		}
 		const childSummary = parentA.getTurnSummary?.();
 		parentA.restoreTurnState?.(parentState);

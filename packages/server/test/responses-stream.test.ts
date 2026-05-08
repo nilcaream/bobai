@@ -31,7 +31,7 @@ afterAll(() => {
 describe("parseResponsesSSE", () => {
 	async function parse(frames: { event: string; data: Record<string, unknown> }[], model = "gpt-5.4") {
 		const { parseResponsesSSE } = await import("../src/provider/responses-stream");
-		return parseResponsesSSE(mockSSEStream(frames), model, "user", configDir, { providerId: "opencode-zen" });
+		return parseResponsesSSE(mockSSEStream(frames), model, configDir, { providerId: "opencode-zen" });
 	}
 
 	test("text streaming yields text events then usage + finish(stop)", async () => {
@@ -342,7 +342,7 @@ describe("parseResponsesSSE", () => {
 			},
 		});
 		const { parseResponsesSSE } = await import("../src/provider/responses-stream");
-		const events = await collect(parseResponsesSSE(broken, "gpt-5.4", "user", configDir, { providerId: "opencode-zen" }));
+		const events = await collect(parseResponsesSSE(broken, "gpt-5.4", configDir, { providerId: "opencode-zen" }));
 		expect(events).toEqual([{ type: "finish", reason: "stop" }]);
 	});
 });

@@ -162,6 +162,7 @@ describe("amazon-bedrock provider (Converse API)", () => {
 			provider.stream({
 				model: "anthropic.claude-opus-4-7",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -169,6 +170,7 @@ describe("amazon-bedrock provider (Converse API)", () => {
 		expect(capturedInit?.method).toBe("POST");
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer bedrock-key");
+		expect(headers["x-session-affinity"]).toBe("12345678");
 	});
 
 	test("uses correct URL for cross-region inference model IDs", async () => {

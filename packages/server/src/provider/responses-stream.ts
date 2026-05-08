@@ -36,7 +36,6 @@ function summarizeReasoningItem(item: Record<string, unknown>): ResponsesItemRea
 export async function* parseResponsesSSE(
 	stream: ReadableStream<Uint8Array>,
 	model: string,
-	_initiator: "user" | "agent",
 	configDir: string,
 	options: ResponsesStreamOptions = {},
 ): AsyncGenerator<StreamEvent> {

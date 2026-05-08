@@ -58,6 +58,7 @@ describe("opencode-go provider (messages)", () => {
 			provider.stream({
 				model: "minimax-m2.7",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -67,6 +68,7 @@ describe("opencode-go provider (messages)", () => {
 		expect(headers["x-api-key"]).toBe("go-key");
 		expect(headers["anthropic-version"]).toBe("2023-06-01");
 		expect(headers["Content-Type"]).toBe("application/json");
+		expect(headers["x-opencode-session"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("minimax-m2.7");
 		expect(body.stream).toBe(true);

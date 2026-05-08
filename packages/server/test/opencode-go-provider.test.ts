@@ -61,6 +61,7 @@ describe("opencode-go provider", () => {
 			provider.stream({
 				model: "kimi-k2.6",
 				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
 			}),
 		);
 
@@ -69,6 +70,7 @@ describe("opencode-go provider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer go-key");
 		expect(headers["Content-Type"]).toBe("application/json");
+		expect(headers["x-opencode-session"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("kimi-k2.6");
 		expect(body.stream).toBe(true);
