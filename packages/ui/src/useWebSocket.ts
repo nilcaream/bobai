@@ -26,6 +26,7 @@ export function useWebSocket() {
 	const [model, setModel] = useState<string | null>(null);
 	const [title, setTitle] = useState<string | null>(null);
 	const [status, setStatus] = useState("");
+	const [contextLimit, setContextLimit] = useState<number | null>(null);
 	const [subagents, setSubagents] = useState<SubagentInfo[]>([]);
 	const [parentId, setParentId] = useState<string | null>(null);
 	const [parentTitle, setParentTitle] = useState<string | null>(null);
@@ -280,6 +281,7 @@ export function useWebSocket() {
 		setModel(null);
 		setTitle(null);
 		setStatus("");
+		setContextLimit(null);
 		setSubagents([]);
 		setParentId(null);
 		setParentTitle(null);
@@ -306,6 +308,7 @@ export function useWebSocket() {
 		setParentTitle,
 		setSubagents,
 		setStatus,
+		setContextLimit,
 		addVolatileMessage,
 		clearVolatileMessages,
 		setSessionLocked,
@@ -333,6 +336,8 @@ export function useWebSocket() {
 		setTitle,
 		status,
 		setStatus,
+		contextLimit,
+		setContextLimit,
 		subagents,
 		parentId,
 		parentTitle,

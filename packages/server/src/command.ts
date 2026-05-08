@@ -33,7 +33,7 @@ export interface CommandOptions {
 }
 
 export type CommandResult =
-	| { ok: true; status?: string; sessionId?: string; provider?: string; model?: string }
+	| { ok: true; status?: string; sessionId?: string; provider?: string; model?: string; contextLimit?: number | null }
 	| { ok: false; error: string };
 
 export function handleCommand(db: Database, req: CommandRequest, options: CommandOptions = {}): CommandResult {
@@ -260,10 +260,11 @@ function handleLimitCommand(
 		// Remove limit
 		clearSessionContextLimit(db, sessionId);
 		const backend = resolveSessionBackend(db, sessionId, options.defaultProviderId, options.defaultModel);
-		if (!backend) return { ok: true };
+		if (!backend) return { ok: true, contextLimit: null };
 		const promptTokens = session.promptTokens;
 		return {
 			ok: true,
+			contextLimit: null,
 			status: formatProviderModelDisplay(backend.provider, backend.model, promptTokens, options.configDir),
 		};
 	}
@@ -280,10 +281,11 @@ function handleLimitCommand(
 
 	updateSessionContextLimit(db, sessionId, value);
 	const backend = resolveSessionBackend(db, sessionId, options.defaultProviderId, options.defaultModel);
-	if (!backend) return { ok: true };
+	if (!backend) return { ok: true, contextLimit: value };
 	const promptTokens = session.promptTokens;
 	return {
 		ok: true,
+		contextLimit: value,
 		status: formatProviderModelDisplay(backend.provider, backend.model, promptTokens, options.configDir, value),
 	};
 }

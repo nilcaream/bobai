@@ -4,6 +4,15 @@ import { fuzzyFilterAndSort } from "./commandParser";
 export type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
 export type ProviderListItem = { index: number; id: string; runtimeSupported: boolean };
 
+function parseLimitArg(arg: string): number | null {
+	const trimmed = arg.trim();
+	if (!trimmed) return null;
+	const match = trimmed.match(/^(\d+)(k)?$/i);
+	if (!match) return null;
+	const value = Number.parseInt(match[1] as string, 10) * (match[2] ? 1000 : 1);
+	return value > 0 ? value : null;
+}
+
 export function DotCommandPanel({
 	parsed,
 	modelList,
@@ -12,6 +21,7 @@ export function DotCommandPanel({
 	subagentList,
 	getSessionId,
 	sessionLocked,
+	contextLimit,
 }: {
 	parsed: ParsedDotInput | null;
 	modelList: ModelListItem[] | null;
@@ -20,13 +30,23 @@ export function DotCommandPanel({
 	subagentList: { index: number; title: string; sessionId: string }[] | null;
 	getSessionId: () => string | null;
 	sessionLocked: boolean;
+	contextLimit: number | null;
 }) {
 	if (!parsed) return null;
 
 	let content: React.ReactNode;
 
 	if (parsed.mode === "select") {
-		content = renderSelectMode(parsed.matches);
+		// For limit, even in select mode (no space typed), show the contextual hint
+		if (parsed.matches.length === 1 && parsed.matches[0]?.name === "limit") {
+			if (contextLimit !== null) {
+				content = `Remove current context limit of ${contextLimit.toLocaleString()} tokens`;
+			} else {
+				content = "Set context limit (e.g. 20000 or 20k), or press Enter to remove";
+			}
+		} else {
+			content = renderSelectMode(parsed.matches);
+		}
 	} else if (parsed.command === "model") {
 		content = renderModelPanel(parsed.args, modelList);
 	} else if (parsed.command === "provider") {
@@ -37,6 +57,15 @@ export function DotCommandPanel({
 	} else if (parsed.command === "title") {
 		const titleText = parsed.args.trim();
 		content = titleText ? `Set session title: ${titleText}` : "Enter session title";
+	} else if (parsed.command === "limit") {
+		const parsedValue = parseLimitArg(parsed.args);
+		if (parsedValue !== null) {
+			content = `Set context limit to ${parsedValue.toLocaleString()} tokens`;
+		} else if (contextLimit !== null) {
+			content = `Remove current context limit of ${contextLimit.toLocaleString()} tokens`;
+		} else {
+			content = "Set context limit (e.g. 20000 or 20k), or press Enter to remove";
+		}
 	} else if (parsed.command === "session") {
 		content = renderSessionPanel(parsed.args, sessionList, getSessionId, sessionLocked);
 	} else if (parsed.command === "subagent") {

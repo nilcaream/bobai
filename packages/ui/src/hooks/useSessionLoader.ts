@@ -16,6 +16,7 @@ interface UseSessionLoaderOptions {
 	setParentTitle: React.Dispatch<React.SetStateAction<string | null>>;
 	setSubagents: React.Dispatch<React.SetStateAction<SubagentInfo[]>>;
 	setStatus: React.Dispatch<React.SetStateAction<string>>;
+	setContextLimit: React.Dispatch<React.SetStateAction<number | null>>;
 	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 	clearVolatileMessages: () => void;
 	setSessionLocked: React.Dispatch<React.SetStateAction<boolean>>;
@@ -39,6 +40,7 @@ export function useSessionLoader({
 	setParentTitle,
 	setSubagents,
 	setStatus,
+	setContextLimit,
 	addVolatileMessage,
 	clearVolatileMessages,
 	setSessionLocked,
@@ -89,7 +91,14 @@ export function useSessionLoader({
 				const res = await fetch(`/bobai/session/${targetId}/load`);
 				if (!res.ok) return false;
 				const data = (await res.json()) as {
-					session: { id: string; title: string | null; provider: string | null; model: string | null; parentId: string | null };
+					session: {
+						id: string;
+						title: string | null;
+						provider: string | null;
+						model: string | null;
+						parentId: string | null;
+						contextLimit: number | null;
+					};
 					messages: StoredMessage[];
 					status: string | null;
 				};
@@ -101,6 +110,7 @@ export function useSessionLoader({
 				setParentId(loadedState.parentId);
 				setSubagents(loadedState.subagents);
 				setStatus(loadedState.status);
+				setContextLimit(data.session.contextLimit ?? null);
 				// Reset autoscroll so the loaded session starts at the bottom,
 				// even if the user was scrolled up in the previous session.
 				autoScrollRef.current = true;
@@ -140,6 +150,7 @@ export function useSessionLoader({
 			setParentTitle,
 			setSubagents,
 			setStatus,
+			setContextLimit,
 			addVolatileMessage,
 			clearVolatileMessages,
 			setSessionLocked,

@@ -79,6 +79,7 @@ describe("useSessionLoader integration", () => {
 					state.status = typeof value === "function" ? value(state.status) : value;
 				},
 				addVolatileMessage,
+				setContextLimit: () => {},
 				clearVolatileMessages,
 				setSessionLocked: (value) => {
 					state.sessionLocked = typeof value === "function" ? value(state.sessionLocked) : value;
@@ -126,7 +127,14 @@ describe("useSessionLoader integration", () => {
 			.mockResolvedValueOnce({
 				ok: true,
 				json: async () => ({
-					session: { id: "s1", title: "Loaded chat", provider: "openrouter", model: "gpt-4.1", parentId: "parent-1" },
+					session: {
+						id: "s1",
+						title: "Loaded chat",
+						provider: "openrouter",
+						model: "gpt-4.1",
+						parentId: "parent-1",
+						contextLimit: null,
+					},
 					messages: [
 						{
 							id: "1",

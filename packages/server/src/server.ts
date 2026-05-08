@@ -547,6 +547,7 @@ export function createServer(options: ServerOptions) {
 						provider: session.provider,
 						model: session.model,
 						parentId: session.parentId,
+						contextLimit: session.contextLimit,
 					},
 					messages,
 					status,

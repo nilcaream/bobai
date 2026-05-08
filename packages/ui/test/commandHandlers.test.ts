@@ -635,6 +635,7 @@ describe("handleGenericCommand", () => {
 			setModel: mock(() => {}),
 			setTitle: mock(() => {}),
 			setStatus: mock(() => {}),
+			setContextLimit: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
 			clearVolatileMessages: mock(() => {}),
 			currentProvider: "github-copilot" as string | null,

@@ -278,6 +278,7 @@ export function handleGenericCommand(params: {
 	setModel: (id: string) => void;
 	setTitle: (title: string | null) => void;
 	setStatus: (status: string) => void;
+	setContextLimit: (contextLimit: number | null) => void;
 	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
 	clearVolatileMessages: () => void;
 	currentProvider: string | null;
@@ -325,41 +326,55 @@ export function handleGenericCommand(params: {
 		body: JSON.stringify({ command: params.command, args: submittedArgs, sessionId: sid }),
 	})
 		.then((res) => res.json())
-		.then((result: { ok: boolean; error?: string; status?: string; sessionId?: string; provider?: string; model?: string }) => {
-			if (result.ok) {
-				params.clearVolatileMessages();
-				if (result.sessionId) {
-					params.setSessionId(result.sessionId);
-				}
-				if (result.provider) {
-					params.setProvider(result.provider);
-				}
-				const selectedModel =
-					result.model ??
-					(params.command === "model"
-						? (resolvedModel ?? (currentModelList ? resolveVisibleModel(currentModelList, submittedArgs) : undefined))?.id
-						: undefined);
-				if (result.model) {
-					params.setModel(result.model);
-				} else if (params.command === "model" && selectedModel) {
-					params.setModel(selectedModel);
-				}
-				if (params.command === "title") {
-					params.setTitle(params.args);
-				}
-				if (result.status) {
-					params.setStatus(result.status);
-				}
-				if ((params.command === "provider" || params.command === "model") && selectedModel) {
-					const effectiveProvider = result.provider ?? params.currentProvider;
-					if (effectiveProvider) {
-						params.addVolatileMessage(`Using ${effectiveProvider} ${selectedModel} model`, "info");
+		.then(
+			(result: {
+				ok: boolean;
+				error?: string;
+				status?: string;
+				sessionId?: string;
+				provider?: string;
+				model?: string;
+				contextLimit?: number | null;
+			}) => {
+				if (result.ok) {
+					params.clearVolatileMessages();
+					if (result.sessionId) {
+						params.setSessionId(result.sessionId);
 					}
+					if (result.provider) {
+						params.setProvider(result.provider);
+					}
+					const selectedModel =
+						result.model ??
+						(params.command === "model"
+							? (resolvedModel ?? (currentModelList ? resolveVisibleModel(currentModelList, submittedArgs) : undefined))?.id
+							: undefined);
+					if (result.model) {
+						params.setModel(result.model);
+					} else if (params.command === "model" && selectedModel) {
+						params.setModel(selectedModel);
+					}
+					if (params.command === "title") {
+						params.setTitle(params.args);
+					}
+					if (result.status) {
+						params.setStatus(result.status);
+					}
+					if (params.command === "limit") {
+						params.setContextLimit(result.contextLimit ?? null);
+					}
+					if ((params.command === "provider" || params.command === "model") && selectedModel) {
+						params.setContextLimit(null);
+						const effectiveProvider = result.provider ?? params.currentProvider;
+						if (effectiveProvider) {
+							params.addVolatileMessage(`Using ${effectiveProvider} ${selectedModel} model`, "info");
+						}
+					}
+				} else {
+					params.addVolatileMessage(result.error ?? "Command failed", "error");
 				}
-			} else {
-				params.addVolatileMessage(result.error ?? "Command failed", "error");
-			}
-		})
+			},
+		)
 		.catch(() => {
 			params.addVolatileMessage("Failed to execute command", "error");
 		});

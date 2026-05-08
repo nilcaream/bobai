@@ -47,6 +47,8 @@ export function App() {
 		setTitle,
 		status,
 		setStatus,
+		contextLimit,
+		setContextLimit,
 		subagents,
 		parentId,
 		parentTitle,
@@ -346,6 +348,7 @@ export function App() {
 					setModel,
 					setTitle,
 					setStatus,
+					setContextLimit,
 					addVolatileMessage,
 					clearVolatileMessages,
 					currentProvider: provider,
@@ -400,6 +403,7 @@ export function App() {
 					setModel,
 					setTitle,
 					setStatus,
+					setContextLimit,
 					addVolatileMessage,
 					clearVolatileMessages,
 					currentProvider: provider,
@@ -574,6 +578,7 @@ export function App() {
 				subagentList={subagentList}
 				getSessionId={getSessionId}
 				sessionLocked={sessionLocked}
+				contextLimit={contextLimit}
 			/>
 			<SlashCommandPanel parsed={parsedSlashInput} />
 
