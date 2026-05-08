@@ -104,6 +104,8 @@ export interface ProviderOptions {
 	signal?: AbortSignal;
 	/** Session ID for API provider session affinity (truncated to first 8 characters). */
 	sessionId?: string;
+	/** Computed per-call output cap after accounting for remaining context window. */
+	maxOutputTokens?: number;
 	reasoningDefaults?: {
 		anthropic?: {
 			budgetTokens?: number;

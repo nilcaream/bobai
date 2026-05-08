@@ -293,6 +293,29 @@ describe("amazon-bedrock provider (Converse API)", () => {
 		expect(usage).toMatchObject({ type: "usage", tokenCount: 10, outputTokens: 5, totalTokens: 15 });
 	});
 
+	test("uses maxOutputTokens override", async () => {
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(simpleTextStream(), {
+				status: 200,
+				headers: { "Content-Type": "application/vnd.amazon.eventstream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createAmazonBedrockProvider({ apiKey: "key", region: "us-east-1" });
+		await collect(
+			provider.stream({
+				model: "anthropic.claude-opus-4-7",
+				messages: [{ role: "user", content: "hi" }],
+				maxOutputTokens: 123,
+			}),
+		);
+
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.inferenceConfig).toEqual({ maxTokens: 123 });
+	});
+
 	test("throws ProviderError on non-OK HTTP response", async () => {
 		globalThis.fetch = mock(async () => new Response("Forbidden", { status: 403 })) as typeof fetch;
 

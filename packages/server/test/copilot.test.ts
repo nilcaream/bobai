@@ -2357,6 +2357,33 @@ describe("Anthropic routing for Claude models", () => {
 		expect(capturedBody.max_tokens).toBe(16384);
 	});
 
+	test("uses maxOutputTokens override for Claude models", async () => {
+		let capturedBody: Record<string, unknown>;
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			if (init?.body) {
+				capturedBody = JSON.parse(init.body as string);
+			} else if (input instanceof Request) {
+				capturedBody = await input.clone().json();
+			}
+			return new Response(anthropicTextResponse("ok"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "claude-sonnet-4.6",
+			messages: [{ role: "user", content: "hi" }],
+			maxOutputTokens: 222,
+		})) {
+			/* drain */
+		}
+
+		expect(capturedBody.max_tokens).toBe(222);
+	});
+
 	test("converts tools to Anthropic format", async () => {
 		let capturedBody: Record<string, unknown>;
 

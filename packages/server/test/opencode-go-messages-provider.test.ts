@@ -156,6 +156,33 @@ describe("opencode-go provider (messages)", () => {
 		});
 	});
 
+	test("uses maxOutputTokens override for the messages API", async () => {
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(
+				sseStream([
+					{ type: "message_start", message: { usage: { input_tokens: 12 } } },
+					{ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+					{ type: "message_stop" },
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
+		await collect(
+			provider.stream({
+				model: "minimax-m2.7",
+				messages: [{ role: "user", content: "hello" }],
+				maxOutputTokens: 321,
+			}),
+		);
+
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.max_tokens).toBe(321);
+	});
+
 	test("throws ProviderError on non-OK response from messages API", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenCodeGoProvider({ apiKey: "bad" }, undefined, globalThis.fetch, configDir);

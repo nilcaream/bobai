@@ -21,6 +21,7 @@ import { readFileTool } from "../src/tool/read-file";
 import type { Tool, ToolResult } from "../src/tool/tool";
 import { createToolRegistry } from "../src/tool/tool";
 import { createTestDb } from "./helpers";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 function textProvider(tokens: string[]): Provider {
 	return {
@@ -753,6 +754,43 @@ describe("runAgentLoop", () => {
 		});
 
 		expect(captured[0].signal).toBe(controller.signal);
+	});
+
+	test("clips requested output tokens by remaining context", async () => {
+		const configDir = createProviderModelsTempDir();
+		try {
+			const captured: ProviderOptions[] = [];
+			const provider: Provider = {
+				id: "openrouter",
+				configDir,
+				async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					captured.push(opts);
+					yield { type: "text", text: "ok" };
+					yield { type: "finish", reason: "stop" };
+				},
+			};
+
+			await runAgentLoop({
+				provider,
+				model: "openrouter/free",
+				messages: [
+					{ role: "system", content: "sys" },
+					{ role: "user", content: "x".repeat(3200) },
+				],
+				tools: createToolRegistry([]),
+				projectRoot: "/tmp",
+				sessionId: "test-session",
+				contextWindow: 1000,
+				sessionPromptTokens: 100,
+				sessionPromptChars: 400,
+				onEvent() {},
+				onMessage() {},
+			});
+
+			expect(captured[0].maxOutputTokens).toBe(189);
+		} finally {
+			fs.rmSync(configDir, { recursive: true, force: true });
+		}
 	});
 
 	test("signal defaults to undefined when not provided", async () => {

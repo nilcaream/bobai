@@ -6,6 +6,8 @@ import type { DbGuard } from "./db-guard";
 import type { Logger } from "./log/logger";
 import { getScope } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
+import { getProviderModelConfig } from "./provider/models";
+import { computeSafeMaxOutputTokens, estimateMessageChars } from "./provider/output-budget";
 import type {
 	AssistantMessage,
 	Message,
@@ -315,6 +317,24 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	// New messages produced by this loop (what we return)
 	const newMessages: Message[] = [];
 
+	function computeMaxOutputTokensForConversation(messages: Message[]): number | undefined {
+		if (!options.contextWindow || options.contextWindow <= 0) return undefined;
+		let configuredMaxOutput = 0;
+		try {
+			configuredMaxOutput = getProviderModelConfig(provider.id as never, model, configDir)?.maxOutput ?? 0;
+		} catch {
+			return undefined;
+		}
+		if (configuredMaxOutput <= 0) return undefined;
+		return computeSafeMaxOutputTokens({
+			contextWindow: options.contextWindow,
+			configuredMaxOutput,
+			messageChars: estimateMessageChars(messages),
+			sessionPromptTokens: options.sessionPromptTokens,
+			sessionPromptChars: options.sessionPromptChars,
+		});
+	}
+
 	for (let iteration = 0; iteration < maxIterations; iteration++) {
 		// Check if the database file was replaced or deleted
 		options.dbGuard?.assertConnected();
@@ -330,6 +350,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				reasoningDefaults,
 				contextLimit: options.contextLimit,
 				sessionId,
+				maxOutputTokens: computeMaxOutputTokensForConversation(conversation),
 			}),
 			onEvent,
 		);
@@ -606,6 +627,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			reasoningDefaults,
 			contextLimit: options.contextLimit,
 			sessionId,
+			maxOutputTokens: computeMaxOutputTokensForConversation(conversation),
 		}),
 		onEvent,
 	);

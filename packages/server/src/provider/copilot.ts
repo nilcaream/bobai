@@ -176,7 +176,7 @@ export function createCopilotProvider(
 		}
 	}
 
-	function getMaxOutputTokens(modelId: string): number {
+	function getConfiguredMaxOutputTokens(modelId: string): number {
 		return getProviderModelConfig("github-copilot", modelId, resolvedConfigDir)?.maxOutput ?? 16384;
 	}
 
@@ -248,7 +248,7 @@ export function createCopilotProvider(
 	): AsyncGenerator<StreamEvent> {
 		const { system, messages } = convertMessagesToAnthropic(options.messages);
 		const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
-		const maxTokens = getMaxOutputTokens(options.model);
+		const maxTokens = options.maxOutputTokens ?? getConfiguredMaxOutputTokens(options.model);
 
 		const reasoningCapabilities = getReasoningCapabilities({
 			providerId: "github-copilot",
