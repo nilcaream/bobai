@@ -3,11 +3,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { AgentEvent } from "../src/agent-loop";
 import type { ServerMessage } from "../src/protocol";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
+import { createIsolatedTurnProvider } from "../src/provider/isolated-turn";
 import { createSession, getMessages, listSubagentSessions } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { SubagentStatus } from "../src/subagent-status";
 import { createTaskTool } from "../src/tool/task";
 import { createTestDb } from "./helpers";
+import { createProviderModelsTempDir } from "./test-provider-models";
 
 const emptySkills: SkillRegistry = {
 	get: () => undefined,
@@ -385,6 +387,58 @@ describe("createTaskTool", () => {
 		if (doneMsg?.type === "subagent_done") {
 			expect(doneMsg.model).toBe("test-model");
 			expect(doneMsg.summary).toBeDefined();
+		}
+	});
+
+	test("subagent done summary survives nested isolated providers", async () => {
+		const wsMsgs: ServerMessage[] = [];
+		const configDir = createProviderModelsTempDir();
+		try {
+			const metricsProvider: Provider = {
+				id: "openrouter",
+				configDir,
+				async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					yield { type: "text", text: "result" };
+					opts.onMetrics?.({
+						model: opts.model,
+						promptTokens: 500,
+						outputTokens: 250,
+						promptChars: 1200,
+						totalTokens: 750,
+					});
+					yield { type: "finish", reason: "stop" };
+				},
+			};
+			const baseProvider = createIsolatedTurnProvider(metricsProvider, configDir);
+			const nestedProvider = createIsolatedTurnProvider(baseProvider, configDir);
+			const tool = createTaskTool({
+				db,
+				provider: nestedProvider,
+				model: "openrouter/free",
+				parentSessionId,
+				projectRoot: "/tmp",
+				skills: emptySkills,
+				instructions: [],
+				onEvent: () => {},
+				sendWs: (msg) => wsMsgs.push(msg),
+				subagentStatus: new SubagentStatus(),
+			});
+
+			const result = await tool.execute({ description: "Nested", prompt: "do it" }, { projectRoot: "/tmp" });
+
+			expect(result.summary).toBeDefined();
+			expect(result.summary).toContain("in: 500");
+			expect(result.summary).toContain("out: 250");
+			const doneMsg = wsMsgs.find((m) => m.type === "subagent_done");
+			expect(doneMsg).toBeTruthy();
+			if (doneMsg?.type === "subagent_done") {
+				expect(doneMsg.summary).toBeDefined();
+				expect(doneMsg.summary).toContain("in: 500");
+				expect(doneMsg.summary).toContain("out: 250");
+			}
+		} finally {
+			const fs = await import("node:fs");
+			fs.rmSync(configDir, { recursive: true, force: true });
 		}
 	});
 

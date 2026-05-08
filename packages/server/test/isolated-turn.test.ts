@@ -221,6 +221,28 @@ describe("createIsolatedTurnProvider", () => {
 		expect(bSummary).toContain("in: 500");
 	});
 
+	test("nested isolated providers route metrics to the innermost wrapper", async () => {
+		const original = mockProvider();
+		const outer = createIsolatedTurnProvider(original);
+		const inner = createIsolatedTurnProvider(outer);
+		outer.beginTurn?.(0);
+		inner.beginTurn?.(0);
+
+		for await (const _event of inner.stream({ model: "nested-model", messages: [] })) {
+			// consume all events
+		}
+
+		const innerSummary = inner.getTurnSummary?.();
+		expect(innerSummary).toContain("nested-model");
+		expect(innerSummary).toContain("in: 500");
+		expect(innerSummary).toContain("out: 250");
+
+		const outerSummary = outer.getTurnSummary?.();
+		expect(outerSummary).toContain("nested-model");
+		expect(outerSummary).toContain("in: 500");
+		expect(outerSummary).toContain("out: 250");
+	});
+
 	test("getTurnPromptChars returns chars from onMetrics", async () => {
 		const original = mockProvider();
 		const isolated = createIsolatedTurnProvider(original);

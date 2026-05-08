@@ -34,6 +34,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 					turnTotalInputTokens += metrics.promptTokens;
 					turnTotalOutputTokens += metrics.outputTokens;
 					turnLastCallChars = metrics.promptChars;
+					options.onMetrics?.(metrics);
 				},
 			});
 		},
