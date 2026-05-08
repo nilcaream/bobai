@@ -226,48 +226,50 @@ describe("parseSlashInput", () => {
 });
 
 describe("shouldAutoFillTitle", () => {
+	const parse = (input: string, cmds = FULL_DOT_COMMANDS) => parseDotInput(input, cmds);
+
 	test("returns filled value for .title with space and non-blank title", () => {
-		expect(shouldAutoFillTitle(".title ", "abc 123", FULL_DOT_COMMANDS, false)).toBe(".title abc 123");
+		expect(shouldAutoFillTitle(parse(".title "), "abc 123", false)).toBe(".title abc 123");
 	});
 
 	test("returns filled value for abbreviation .t with space", () => {
-		expect(shouldAutoFillTitle(".t ", "my session", FULL_DOT_COMMANDS, false)).toBe(".title my session");
+		expect(shouldAutoFillTitle(parse(".t "), "my session", false)).toBe(".title my session");
 	});
 
 	test("returns null when title is null", () => {
-		expect(shouldAutoFillTitle(".title ", null, FULL_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".title "), null, false)).toBeNull();
 	});
 
 	test("returns null when title is empty string", () => {
-		expect(shouldAutoFillTitle(".title ", "", FULL_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".title "), "", false)).toBeNull();
 	});
 
 	test("returns null when input has no space", () => {
-		expect(shouldAutoFillTitle(".title", "abc", FULL_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".title"), "abc", false)).toBeNull();
 	});
 
 	test("returns null when args are already present", () => {
-		expect(shouldAutoFillTitle(".title foo", "abc", FULL_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".title foo"), "abc", false)).toBeNull();
 	});
 
 	test("returns null when alreadyFilled is true", () => {
-		expect(shouldAutoFillTitle(".title ", "abc", FULL_DOT_COMMANDS, true)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".title "), "abc", true)).toBeNull();
 	});
 
 	test("returns null when title command is not active", () => {
-		expect(shouldAutoFillTitle(".title ", "abc", STREAMING_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".title ", STREAMING_DOT_COMMANDS), "abc", false)).toBeNull();
 	});
 
 	test("returns null for non-title dot commands", () => {
-		expect(shouldAutoFillTitle(".model ", "abc", FULL_DOT_COMMANDS, false)).toBeNull();
-		expect(shouldAutoFillTitle(".new ", "abc", FULL_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".model "), "abc", false)).toBeNull();
+		expect(shouldAutoFillTitle(parse(".new "), "abc", false)).toBeNull();
 	});
 
 	test("returns null for non-dot input", () => {
-		expect(shouldAutoFillTitle("hello", "abc", FULL_DOT_COMMANDS, false)).toBeNull();
+		expect(shouldAutoFillTitle(parse("hello"), "abc", false)).toBeNull();
 	});
 
 	test("treats whitespace-only args as empty and fills", () => {
-		expect(shouldAutoFillTitle(".title  ", "abc", FULL_DOT_COMMANDS, false)).toBe(".title abc");
+		expect(shouldAutoFillTitle(parse(".title  "), "abc", false)).toBe(".title abc");
 	});
 });

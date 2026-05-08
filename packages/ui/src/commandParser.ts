@@ -88,16 +88,15 @@ export function fuzzyMatchSkill(query: string, name: string): number | null {
 /**
  * Returns the auto-filled input value when the user has just typed `.title `
  * (or an unambiguous abbreviation) with empty args and a session title exists.
+ * Accepts a pre-parsed result to avoid a second `parseDotInput` call.
  * Returns `null` when no auto-fill should happen.
  */
 export function shouldAutoFillTitle(
-	input: string,
+	parsed: ParsedDotInput | null,
 	title: string | null,
-	activeDotCommands: DotCommand[],
 	alreadyFilled: boolean,
 ): string | null {
 	if (alreadyFilled || !title) return null;
-	const parsed = parseDotInput(input, activeDotCommands);
 	if (parsed?.mode === "args" && parsed.command === "title" && parsed.args.trim() === "") {
 		return `.title ${title}`;
 	}

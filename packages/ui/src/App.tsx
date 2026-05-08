@@ -90,6 +90,13 @@ export function App() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const titleAutoFilledRef = useRef(false);
 
+	// Reset auto-fill flag whenever the session title changes so the next
+	// .title invocation always shows the up-to-date title.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: title is the intentional trigger; ref mutation has no stable identity
+	useEffect(() => {
+		titleAutoFilledRef.current = false;
+	}, [title]);
+
 	const { messagesRef, scrollToBottom, peekSubagentWithScroll, peekSubagentFromDbWithScroll, exitSubagentPeekWithScroll } =
 		useAutoScroll(messages, autoScrollRef, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
 
@@ -562,17 +569,15 @@ export function App() {
 					value={input}
 					readOnly={historyIndex >= 0}
 					onChange={(e) => {
-						const ta = e.target;
-						const newValue = ta.value;
-						const filledValue = shouldAutoFillTitle(newValue, title, activeDotCommands, titleAutoFilledRef.current);
+						const newValue = e.target.value;
+						const parsed = parseDotInput(newValue, activeDotCommands);
+						const filledValue = shouldAutoFillTitle(parsed, title, titleAutoFilledRef.current);
 						if (filledValue) {
 							titleAutoFilledRef.current = true;
-							ta.value = filledValue;
 							setInput(filledValue);
 							adjustHeight();
 							return;
 						}
-						const parsed = parseDotInput(newValue, activeDotCommands);
 						if (parsed?.command !== "title") {
 							titleAutoFilledRef.current = false;
 						}
