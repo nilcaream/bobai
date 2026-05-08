@@ -390,6 +390,23 @@ export function App() {
 				});
 			} else if (name === "stop") {
 				handleStopCommand({ sendCancel });
+			} else if (name === "limit") {
+				handleGenericCommand({
+					command: "limit",
+					args: "",
+					getSessionId,
+					setSessionId,
+					setProvider,
+					setModel,
+					setTitle,
+					setStatus,
+					addVolatileMessage,
+					clearVolatileMessages,
+					currentProvider: provider,
+					modelListProvider,
+					modelList,
+					providerList,
+				});
 			}
 			clearInput();
 			return;
