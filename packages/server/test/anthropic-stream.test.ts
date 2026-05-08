@@ -41,7 +41,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "user", configDir));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", configDir));
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
@@ -69,7 +69,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "user", configDir));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", configDir));
 
 		expect(events).toEqual([
 			{ type: "tool_call_start", index: 0, id: "tc_1", name: "read_file" },
@@ -100,7 +100,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "agent", configDir));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", configDir));
 
 		expect(events).toEqual([
 			{ type: "text", text: "Let me read that." },
@@ -131,7 +131,7 @@ describe("parseAnthropicStream", () => {
 			{ type: "message_stop" },
 		]);
 
-		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", "user", configDir));
+		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", configDir));
 
 		expect(events).toEqual([
 			{ type: "text", text: "Answer" },

@@ -8,6 +8,11 @@ import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic
 import { parseAnthropicStream } from "./anthropic-stream";
 import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
+
+interface CopilotProviderOptions extends ProviderOptions {
+	initiator?: "user" | "agent";
+}
+
 import { AuthError, ProviderError, TimeoutError } from "./provider";
 import { getReasoningCapabilities } from "./reasoning-capabilities";
 import { DEFAULT_REASONING_DEFAULTS } from "./reasoning-defaults";
@@ -242,7 +247,7 @@ export function createCopilotProvider(
 	// ── Anthropic (Claude) streaming path ────────────────────────────────
 
 	async function* streamClaude(
-		options: ProviderOptions,
+		options: CopilotProviderOptions,
 		initiator: "user" | "agent",
 		callChars: number,
 	): AsyncGenerator<StreamEvent> {
@@ -318,7 +323,6 @@ export function createCopilotProvider(
 				for await (const event of parseAnthropicStream(
 					anthropicStream,
 					options.model,
-					effectiveInitiator,
 					resolvedConfigDir,
 					options.contextLimit,
 				)) {
@@ -410,7 +414,7 @@ export function createCopilotProvider(
 	// ── OpenAI Responses API streaming path ──────────────────────────────
 
 	async function* streamResponses(
-		options: ProviderOptions,
+		options: CopilotProviderOptions,
 		initiator: "user" | "agent",
 		callChars: number,
 	): AsyncGenerator<StreamEvent> {
@@ -674,8 +678,9 @@ export function createCopilotProvider(
 		},
 
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
+			const copilotOptions = options as CopilotProviderOptions;
 			await ensureValidSession();
-			const initiator = options.initiator ?? resolveInitiator(options.messages);
+			const initiator = copilotOptions.initiator ?? resolveInitiator(options.messages);
 
 			// Compute total content + tool_call argument chars for the messages
 			// being sent. Must stay consistent with totalContentChars() in

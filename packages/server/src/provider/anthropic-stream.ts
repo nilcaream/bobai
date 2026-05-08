@@ -9,7 +9,6 @@ export async function* parseAnthropicStream(
 	// biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK SSE events are untyped
 	stream: AsyncIterable<any>,
 	model: string,
-	_initiator: "user" | "agent",
 	configDir: string,
 	contextLimit?: number | null,
 ): AsyncGenerator<StreamEvent> {
