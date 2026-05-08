@@ -77,23 +77,34 @@ function shouldReplayInterleavedReasoning(
 }
 
 export function convertMessagesToOpenAIChat(messages: Message[], capabilities?: ReasoningCapabilities): OpenAIChatMessage[] {
-	return messages.map((message) => {
-		if (message.role !== "assistant") return { ...message };
-		const { reasoning: _reasoning, ...assistantMessage } = message;
-		if (!shouldReplayInterleavedReasoning(capabilities)) {
-			return assistantMessage;
-		}
+	return messages
+		.filter((message) => {
+			// Filter out assistant messages with empty content and no tool_calls
+			// These can occur from interrupted sessions and cause provider errors
+			if (message.role === "assistant") {
+				const hasContent = message.content && message.content.trim().length > 0;
+				const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
+				return hasContent || hasToolCalls;
+			}
+			return true;
+		})
+		.map((message) => {
+			if (message.role !== "assistant") return { ...message };
+			const { reasoning: _reasoning, ...assistantMessage } = message;
+			if (!shouldReplayInterleavedReasoning(capabilities)) {
+				return assistantMessage;
+			}
 
-		const value = getInterleavedReasoningValue(message.reasoning, capabilities.assistantField);
-		const shouldIncludeField =
-			value !== undefined || (capabilities.requiresEmptyAssistantReasoningFields === true && message.reasoning !== undefined);
-		if (!shouldIncludeField) return assistantMessage;
+			const value = getInterleavedReasoningValue(message.reasoning, capabilities.assistantField);
+			const shouldIncludeField =
+				value !== undefined || (capabilities.requiresEmptyAssistantReasoningFields === true && message.reasoning !== undefined);
+			if (!shouldIncludeField) return assistantMessage;
 
-		return {
-			...assistantMessage,
-			[capabilities.assistantField]: value ?? "",
-		};
-	});
+			return {
+				...assistantMessage,
+				[capabilities.assistantField]: value ?? "",
+			};
+		});
 }
 
 export function createOpenAIChatCompatibleProvider(

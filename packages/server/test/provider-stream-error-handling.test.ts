@@ -150,4 +150,42 @@ describe("Provider stream error handling", () => {
 			expect(finishEvents.length).toBe(1);
 		});
 	});
+
+	describe("convertMessagesToOpenAIChat", () => {
+		test("filters out assistant messages with empty content and no tool_calls", async () => {
+			const { convertMessagesToOpenAIChat } = await import("../src/provider/openai-chat-compatible");
+
+			const messages = [
+				{ role: "user" as const, content: "Hello" },
+				{ role: "assistant" as const, content: "", tool_calls: [] }, // Empty - should be filtered
+				{ role: "assistant" as const, content: "  ", tool_calls: [] }, // Whitespace - should be filtered
+				{ role: "assistant" as const, content: "Valid response", tool_calls: [] }, // Should be kept
+				{
+					role: "assistant" as const,
+					content: "",
+					tool_calls: [{ id: "1", type: "function" as const, function: { name: "test", arguments: "{}" } }],
+				}, // Tool call - should be kept
+			];
+
+			const result = convertMessagesToOpenAIChat(messages);
+
+			expect(result.length).toBe(3);
+			expect(result[0].role).toBe("user");
+			expect(result[1].role).toBe("assistant");
+			expect(result[1].content).toBe("Valid response");
+			expect(result[2].role).toBe("assistant");
+			expect(result[2].tool_calls?.length).toBe(1);
+		});
+
+		test("keeps assistant messages with content even if empty tool_calls", async () => {
+			const { convertMessagesToOpenAIChat } = await import("../src/provider/openai-chat-compatible");
+
+			const messages = [{ role: "assistant" as const, content: "Text and tools", tool_calls: [] }];
+
+			const result = convertMessagesToOpenAIChat(messages);
+
+			expect(result.length).toBe(1);
+			expect(result[0].content).toBe("Text and tools");
+		});
+	});
 });
