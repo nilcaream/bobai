@@ -65,6 +65,7 @@ export function createBedrockConverseProvider(
 
 			let stopReason: string | undefined;
 			let didEmitFinish = false;
+			let hasReceivedContent = false;
 
 			// Track active content block types so tool_call_delta knows the right index
 			const blockTypes = new Map<number, "text" | "toolUse">();
@@ -98,6 +99,7 @@ export function createBedrockConverseProvider(
 						const delta = raw.delta as Record<string, unknown> | undefined;
 
 						if (delta?.text) {
+							hasReceivedContent = true;
 							yield { type: "text", text: delta.text as string };
 						} else if (delta?.toolUse) {
 							const toolUseDelta = delta.toolUse as { input: string };
@@ -166,6 +168,13 @@ export function createBedrockConverseProvider(
 			}
 
 			if (!didEmitFinish) {
+				// Stream ended without proper metadata event
+				if (!hasReceivedContent) {
+					throw new ProviderError(
+						0,
+						"Stream ended unexpectedly without receiving any content. This may be due to a network interruption.",
+					);
+				}
 				yield { type: "finish", reason: stopReason === "tool_use" ? "tool_calls" : "stop" };
 			}
 		},

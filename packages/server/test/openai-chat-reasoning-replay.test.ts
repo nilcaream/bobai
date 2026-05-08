@@ -121,10 +121,17 @@ describe("OpenAI chat reasoning replay", () => {
 		let capturedBody: Record<string, unknown> | undefined;
 		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
 			capturedBody = JSON.parse(String(init?.body));
-			return new Response(sseStream(["[DONE]"]), {
-				status: 200,
-				headers: { "Content-Type": "text/event-stream" },
-			});
+			// Return a proper response with content and finish_reason
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { content: "OK" } }] },
+					{ choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, total_tokens: 12 } },
+				]),
+				{
+					status: 200,
+					headers: { "Content-Type": "text/event-stream" },
+				},
+			);
 		}) as typeof fetch;
 
 		const provider = createOpenAIChatCompatibleProvider(
@@ -181,10 +188,17 @@ describe("OpenAI chat reasoning replay", () => {
 		let capturedBody: Record<string, unknown> | undefined;
 		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
 			capturedBody = JSON.parse(String(init?.body));
-			return new Response(sseStream(["[DONE]"]), {
-				status: 200,
-				headers: { "Content-Type": "text/event-stream" },
-			});
+			// Return a proper response with content and finish_reason
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { content: "OK" } }] },
+					{ choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, total_tokens: 12 } },
+				]),
+				{
+					status: 200,
+					headers: { "Content-Type": "text/event-stream" },
+				},
+			);
 		}) as typeof fetch;
 
 		const provider = createOpenAIChatCompatibleProvider(

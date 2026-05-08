@@ -148,6 +148,7 @@ export function createOpenAIChatCompatibleProvider(
 			let finishReason: "stop" | "tool_calls" = "stop";
 			let sawFinish = false;
 			let sawAnyToolCalls = false;
+			let hasReceivedContent = false;
 			const reasoningField = shouldReplayInterleavedReasoning(reasoningCapabilities)
 				? reasoningCapabilities.assistantField
 				: undefined;
@@ -201,6 +202,7 @@ export function createOpenAIChatCompatibleProvider(
 				}
 
 				if (delta?.content) {
+					hasReceivedContent = true;
 					yield { type: "text", text: delta.content };
 				}
 
@@ -253,6 +255,14 @@ export function createOpenAIChatCompatibleProvider(
 			}
 
 			if (!sawFinish) {
+				// Stream ended without a proper finish_reason - this indicates a network
+				// interruption or incomplete response from the server
+				if (!hasReceivedContent && !sawAnyToolCalls && !reasoningStarted) {
+					throw new ProviderError(
+						0,
+						"Stream ended unexpectedly without receiving any content. This may be due to a network interruption.",
+					);
+				}
 				if (reasoningStarted) {
 					yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
 				}

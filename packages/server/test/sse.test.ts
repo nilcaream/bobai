@@ -86,4 +86,52 @@ describe("parseSSE", () => {
 		}
 		expect(chunks).toEqual([{ a: 1 }]);
 	});
+
+	test("throws error when stream fails mid-read", async () => {
+		const errorStream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'));
+				controller.error(new Error("Network connection reset"));
+			},
+		});
+
+		let errorThrown = false;
+		const chunks: unknown[] = [];
+
+		try {
+			for await (const chunk of parseSSE(errorStream)) {
+				chunks.push(chunk);
+			}
+		} catch (err) {
+			errorThrown = true;
+			expect((err as Error).message).toBe("Network connection reset");
+		}
+
+		expect(errorThrown).toBe(true);
+	});
+
+	test("throws error when stream connection is aborted", async () => {
+		const abortController = new AbortController();
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				// Simulate receiving some data then the connection being aborted
+				controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"start"}}]}\n\n'));
+				// Signal abort (this simulates what fetch does when network drops)
+				abortController.abort();
+				// When fetch's signal is aborted, the reader throws an AbortError
+				controller.error(new DOMException("The operation was aborted", "AbortError"));
+			},
+		});
+
+		let errorThrown = false;
+		try {
+			for await (const _chunk of parseSSE(stream)) {
+				// Do nothing, just consume
+			}
+		} catch (_err) {
+			errorThrown = true;
+		}
+
+		expect(errorThrown).toBe(true);
+	});
 });

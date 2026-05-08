@@ -125,6 +125,8 @@ export function createAnthropicCompatibleProvider(
 			let outputTokens = 0;
 			let stopReason: string | undefined;
 			let didEmitFinish = false;
+			let hasReceivedContent = false;
+			let sawToolCalls = false;
 
 			for await (const event of parseSSE(response.body)) {
 				const raw = event as {
@@ -153,6 +155,7 @@ export function createAnthropicCompatibleProvider(
 							raw.content_block.name &&
 							typeof raw.index === "number"
 						) {
+							sawToolCalls = true;
 							yield {
 								type: "tool_call_start",
 								index: raw.index,
@@ -164,8 +167,10 @@ export function createAnthropicCompatibleProvider(
 					}
 					case "content_block_delta": {
 						if (raw.delta?.type === "text_delta" && raw.delta.text) {
+							hasReceivedContent = true;
 							yield { type: "text", text: raw.delta.text };
 						} else if (raw.delta?.type === "input_json_delta" && raw.delta.partial_json && typeof raw.index === "number") {
+							sawToolCalls = true;
 							yield {
 								type: "tool_call_delta",
 								index: raw.index,
@@ -209,6 +214,13 @@ export function createAnthropicCompatibleProvider(
 			}
 
 			if (!didEmitFinish) {
+				// Stream ended without proper message_stop event
+				if (!hasReceivedContent && !sawToolCalls) {
+					throw new ProviderError(
+						0,
+						"Stream ended unexpectedly without receiving any content. This may be due to a network interruption.",
+					);
+				}
 				yield { type: "finish", reason: stopReason === "tool_use" ? "tool_calls" : "stop" };
 			}
 		},

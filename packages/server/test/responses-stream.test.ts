@@ -333,7 +333,7 @@ describe("parseResponsesSSE", () => {
 		}).toThrow("bad_request: invalid input");
 	});
 
-	test("invalid JSON line is ignored and stream finishes cleanly", async () => {
+	test("invalid JSON line is ignored but stream errors when no content received", async () => {
 		const encoder = new TextEncoder();
 		const broken = new ReadableStream<Uint8Array>({
 			start(controller) {
@@ -342,7 +342,30 @@ describe("parseResponsesSSE", () => {
 			},
 		});
 		const { parseResponsesSSE } = await import("../src/provider/responses-stream");
+		// Stream ends without content or valid response.completed - should error
+		await expect(collect(parseResponsesSSE(broken, "gpt-5.4", configDir, { providerId: "opencode-zen" }))).rejects.toThrow(
+			"Stream ended unexpectedly",
+		);
+	});
+
+	test("invalid JSON line is ignored when content was received", async () => {
+		const encoder = new TextEncoder();
+		const broken = new ReadableStream<Uint8Array>({
+			start(controller) {
+				// Proper Responses API format for output_text.delta
+				controller.enqueue(
+					encoder.encode(
+						'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","output_index":0,"delta":"Hello"}\n\n',
+					),
+				);
+				controller.enqueue(encoder.encode("event: response.completed\ndata: {not-json}\n\n"));
+				controller.close();
+			},
+		});
+		const { parseResponsesSSE } = await import("../src/provider/responses-stream");
 		const events = await collect(parseResponsesSSE(broken, "gpt-5.4", configDir, { providerId: "opencode-zen" }));
-		expect(events).toEqual([{ type: "finish", reason: "stop" }]);
+		// Should have text event and finish event - invalid JSON is skipped but content was received
+		expect(events.filter((e: { type: string }) => e.type === "text").length).toBe(1);
+		expect(events.filter((e: { type: string }) => e.type === "finish").length).toBe(1);
 	});
 });

@@ -44,6 +44,7 @@ export async function* parseResponsesSSE(
 	let toolCallIndex = 0;
 	let reasoningIndex = 0;
 	let hasToolCalls = false;
+	let hasReceivedContent = false;
 	const outputIndexToToolIndex = new Map<number, number>();
 	const outputIndexToReasoningIndex = new Map<number, number>();
 
@@ -96,6 +97,7 @@ export async function* parseResponsesSSE(
 			} else if (type === "response.output_text.delta") {
 				const delta = parsed.delta as string;
 				if (delta) {
+					hasReceivedContent = true;
 					yield { type: "text", text: delta };
 				}
 			} else if (type === "response.function_call_arguments.delta") {
@@ -188,5 +190,8 @@ export async function* parseResponsesSSE(
 	}
 
 	// Stream ended without response.completed
+	if (!hasReceivedContent && !hasToolCalls) {
+		throw new Error("Stream ended unexpectedly without receiving any content. This may be due to a network interruption.");
+	}
 	yield { type: "finish", reason: hasToolCalls ? "tool_calls" : "stop" };
 }
