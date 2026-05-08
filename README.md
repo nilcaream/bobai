@@ -154,6 +154,7 @@ Type `.` in the prompt to open the dot-command picker. Dot commands are local UI
 
 | Command | Description |
 |---------|-------------|
+| `.limit [n\|nk]` | Override context window size for the session; no argument removes the override |
 | `.model <n>` | Switch the current session model |
 | `.new [title]` | Start a new session |
 | `.provider <n>` | Switch the current session provider |
@@ -165,6 +166,20 @@ Type `.` in the prompt to open the dot-command picker. Dot commands are local UI
 | `.view [1\|2\|3]` | Cycle between Chat, Context, and Compaction views |
 
 Commands accept unambiguous prefixes, so `.m` matches `.model`, `.v` matches `.view`, and so on.
+
+### Context limit
+
+`.limit` overrides the context window for the current session. It affects the status bar display, compaction budget, and emergency compaction threshold — useful to force earlier compaction on a large-context model.
+
+```
+.limit 20000   set limit to 20 000 tokens
+.limit 20k     same, using k suffix
+.limit         remove the override and use the model's default
+```
+
+The status bar shows the override: `1000 / 20000 (100000) | 5%` — tokens used, limit, and the model's real maximum in parentheses.
+
+The limit resets automatically when you switch provider or model.
 
 ## Skills
 
