@@ -8,6 +8,7 @@ Bob AI supports multiple providers:
 - OpenRouter
 - OpenCode Go
 - OpenCode Zen
+- Amazon Bedrock
 
 Its defining feature is **radical context transparency**. You can inspect the system prompt, tool calls, tool results, token usage, and the exact messages that remain after compaction.
 
@@ -52,6 +53,14 @@ bobai auth openrouter
 bobai auth opencode-go
 bobai auth opencode-zen
 ```
+
+For Amazon Bedrock:
+
+```bash
+bobai auth amazon-bedrock
+```
+
+Bob AI prompts for a bearer token and an AWS region (default: `us-east-1`). It validates the token by listing foundation models, then updates the model catalog automatically. The bearer token is the only supported auth method — SigV4 signing and IAM role-based flows are not used.
 
 Bob AI stores provider credentials in `~/.config/bobai/auth.json`.
 
@@ -138,6 +147,7 @@ Bob AI supports these runtime providers:
 - `openrouter`
 - `opencode-go`
 - `opencode-zen`
+- `amazon-bedrock`
 
 Each provider has a hardcoded default model, but the full selectable model list comes from the generated catalog.
 
