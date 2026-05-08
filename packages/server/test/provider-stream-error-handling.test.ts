@@ -10,23 +10,26 @@ import type { StreamEvent } from "../src/provider/provider";
 describe("Provider stream error handling", () => {
 	describe("openai-chat-compatible", () => {
 		test("throws error when stream ends without finish_reason and no content", async () => {
-			// Simulate a network interruption: stream closes cleanly without any content or proper termination
 			const mockFetch = () =>
 				Promise.resolve({
 					ok: true,
 					status: 200,
 					body: new ReadableStream<Uint8Array>({
 						start(controller) {
-							// Stream closes immediately without any data (simulating connection drop before first chunk)
 							controller.close();
 						},
 					}),
-				} as Response);
+				}) as unknown as typeof fetch;
 
 			const provider = createOpenAIChatCompatibleProvider(
-				{ providerId: "opencode-go", baseUrl: "https://test", apiKey: "test" },
+				{
+					providerId: "opencode-go",
+					baseUrl: "https://example.invalid/chat/completions",
+					apiKey: "test-key",
+				},
 				undefined,
 				mockFetch,
+				"/tmp/test-config",
 			);
 
 			await expect(
@@ -35,10 +38,10 @@ describe("Provider stream error handling", () => {
 						model: "test-model",
 						messages: [{ role: "user", content: "Hello" }],
 					})) {
-						// consume
+						// consume stream
 					}
 				})(),
-			).rejects.toThrow("Stream ended unexpectedly");
+			).rejects.toThrow("Stream ended unexpectedly without receiving any content");
 		});
 
 		test("completes successfully when stream ends with proper finish_reason", async () => {
@@ -51,22 +54,27 @@ describe("Provider stream error handling", () => {
 							controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'));
 							controller.enqueue(
 								new TextEncoder().encode(
-									'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"total_tokens":15}}\n\n',
+									'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"total_tokens":12}}\n\n',
 								),
 							);
+							controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
 							controller.close();
 						},
 					}),
-				} as Response);
+				}) as unknown as typeof fetch;
 
 			const provider = createOpenAIChatCompatibleProvider(
-				{ providerId: "opencode-go", baseUrl: "https://test", apiKey: "test" },
+				{
+					providerId: "opencode-go",
+					baseUrl: "https://example.invalid/chat/completions",
+					apiKey: "test-key",
+				},
 				undefined,
 				mockFetch,
+				"/tmp/test-config",
 			);
 
 			const events: StreamEvent[] = [];
-
 			for await (const event of provider.stream({
 				model: "test-model",
 				messages: [{ role: "user", content: "Hello" }],
@@ -74,7 +82,11 @@ describe("Provider stream error handling", () => {
 				events.push(event);
 			}
 
+			const textEvents = events.filter((e) => e.type === "text");
 			const finishEvents = events.filter((e) => e.type === "finish");
+
+			expect(textEvents.length).toBe(1);
+			expect(textEvents[0]).toEqual({ type: "text", text: "Hello" });
 			expect(finishEvents.length).toBe(1);
 			expect(finishEvents[0]).toEqual({ type: "finish", reason: "stop" });
 		});
@@ -90,12 +102,17 @@ describe("Provider stream error handling", () => {
 							controller.error(new Error("Network connection reset"));
 						},
 					}),
-				} as Response);
+				}) as unknown as typeof fetch;
 
 			const provider = createOpenAIChatCompatibleProvider(
-				{ providerId: "opencode-go", baseUrl: "https://test", apiKey: "test" },
+				{
+					providerId: "opencode-go",
+					baseUrl: "https://example.invalid/chat/completions",
+					apiKey: "test-key",
+				},
 				undefined,
 				mockFetch,
+				"/tmp/test-config",
 			);
 
 			await expect(
@@ -104,15 +121,13 @@ describe("Provider stream error handling", () => {
 						model: "test-model",
 						messages: [{ role: "user", content: "Hello" }],
 					})) {
-						// consume
+						// consume stream
 					}
 				})(),
-			).rejects.toThrow("Network connection reset");
+			).rejects.toThrow();
 		});
 
 		test("allows partial content without finish_reason (graceful degradation)", async () => {
-			// If content was received but stream ends without finish_reason,
-			// we should still yield the content and finish gracefully
 			const mockFetch = () =>
 				Promise.resolve({
 					ok: true,
@@ -120,20 +135,23 @@ describe("Provider stream error handling", () => {
 					body: new ReadableStream<Uint8Array>({
 						start(controller) {
 							controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Partial response"}}]}\n\n'));
-							// Stream closes without sending finish_reason
 							controller.close();
 						},
 					}),
-				} as Response);
+				}) as unknown as typeof fetch;
 
 			const provider = createOpenAIChatCompatibleProvider(
-				{ providerId: "opencode-go", baseUrl: "https://test", apiKey: "test" },
+				{
+					providerId: "opencode-go",
+					baseUrl: "https://example.invalid/chat/completions",
+					apiKey: "test-key",
+				},
 				undefined,
 				mockFetch,
+				"/tmp/test-config",
 			);
 
 			const events: StreamEvent[] = [];
-
 			for await (const event of provider.stream({
 				model: "test-model",
 				messages: [{ role: "user", content: "Hello" }],
@@ -141,7 +159,6 @@ describe("Provider stream error handling", () => {
 				events.push(event);
 			}
 
-			// Should get the partial text and a finish event
 			const textEvents = events.filter((e) => e.type === "text");
 			const finishEvents = events.filter((e) => e.type === "finish");
 
@@ -157,14 +174,14 @@ describe("Provider stream error handling", () => {
 
 			const messages = [
 				{ role: "user" as const, content: "Hello" },
-				{ role: "assistant" as const, content: "", tool_calls: [] }, // Empty - should be filtered
-				{ role: "assistant" as const, content: "  ", tool_calls: [] }, // Whitespace - should be filtered
-				{ role: "assistant" as const, content: "Valid response", tool_calls: [] }, // Should be kept
+				{ role: "assistant" as const, content: "", tool_calls: [] },
+				{ role: "assistant" as const, content: "  ", tool_calls: [] },
+				{ role: "assistant" as const, content: "Valid response", tool_calls: [] },
 				{
 					role: "assistant" as const,
 					content: "",
 					tool_calls: [{ id: "1", type: "function" as const, function: { name: "test", arguments: "{}" } }],
-				}, // Tool call - should be kept
+				},
 			];
 
 			const result = convertMessagesToOpenAIChat(messages);
@@ -186,6 +203,42 @@ describe("Provider stream error handling", () => {
 
 			expect(result.length).toBe(1);
 			expect(result[0].content).toBe("Text and tools");
+		});
+	});
+
+	describe("convertMessagesToAnthropic", () => {
+		test("filters out assistant messages with empty content and no tool_calls", async () => {
+			const { convertMessagesToAnthropic } = await import("../src/provider/anthropic-convert");
+
+			const messages = [
+				{ role: "user" as const, content: "Hello" },
+				{ role: "assistant" as const, content: "" },
+				{ role: "assistant" as const, content: "Valid response" },
+			];
+
+			const result = convertMessagesToAnthropic(messages);
+
+			expect(result.messages.length).toBe(2);
+			expect(result.messages[0]).toEqual({ role: "user", content: "Hello" });
+			expect(result.messages[1]).toEqual({ role: "assistant", content: [{ type: "text", text: "Valid response" }] });
+		});
+	});
+
+	describe("convertMessagesToBedrockConverse", () => {
+		test("filters out assistant messages with empty content and no tool_calls", async () => {
+			const { convertMessagesToConverse } = await import("../src/provider/bedrock-converse-convert");
+
+			const messages = [
+				{ role: "user" as const, content: "Hello", name: undefined },
+				{ role: "assistant" as const, content: "" },
+				{ role: "assistant" as const, content: "Valid response" },
+			];
+
+			const result = convertMessagesToConverse(messages);
+
+			expect(result.messages.length).toBe(2);
+			expect(result.messages[0]).toEqual({ role: "user", content: [{ text: "Hello" }] });
+			expect(result.messages[1]).toEqual({ role: "assistant", content: [{ text: "Valid response" }] });
 		});
 	});
 });

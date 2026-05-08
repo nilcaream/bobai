@@ -87,7 +87,11 @@ export function convertMessagesToAnthropic(messages: Message[]): ConvertedMessag
 				}
 			}
 
-			result.push({ role: "assistant", content: blocks });
+			// Only add assistant message if it has content or tool calls
+			// Empty assistant messages can occur from interrupted sessions
+			if (blocks.length > 0) {
+				result.push({ role: "assistant", content: blocks });
+			}
 		} else if (msg.role === "tool") {
 			// Check if the previous result message is already a grouped tool_result user message
 			const prev = result[result.length - 1];

@@ -296,4 +296,17 @@ describe("convertToolsToAnthropic", () => {
 	test("returns empty array for empty tools", () => {
 		expect(convertToolsToAnthropic([])).toEqual([]);
 	});
+
+	test("filters out assistant messages with empty content and no tool_calls", () => {
+		const messages: Message[] = [
+			{ role: "user", content: "Hello" },
+			{ role: "assistant", content: "" }, // Empty - should be filtered
+			{ role: "assistant", content: null }, // Null - should be filtered
+			{ role: "assistant", content: "valid response" }, // Valid - should be kept
+		];
+		const result = convertMessagesToAnthropic(messages);
+		expect(result.messages.length).toBe(2);
+		expect(result.messages[0]).toEqual({ role: "user", content: "Hello" });
+		expect(result.messages[1]).toEqual({ role: "assistant", content: [{ type: "text", text: "valid response" }] });
+	});
 });

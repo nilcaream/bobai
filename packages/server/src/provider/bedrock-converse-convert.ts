@@ -117,12 +117,11 @@ export function convertMessagesToConverse(messages: Message[]): {
 				});
 			}
 
-			// Bedrock requires at least one content block
-			if (content.length === 0) {
-				content.push({ text: "" });
+			// Only add assistant message if it has content or tool calls
+			// Empty assistant messages can occur from interrupted sessions
+			if (content.length > 0) {
+				bedrockMessages.push({ role: "assistant", content });
 			}
-
-			bedrockMessages.push({ role: "assistant", content });
 			i++;
 			continue;
 		}
