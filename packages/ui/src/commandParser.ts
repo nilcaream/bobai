@@ -85,6 +85,25 @@ export function fuzzyMatchSkill(query: string, name: string): number | null {
 	return fuzzyMatch(query, name, SLASH_FUZZY_OPTIONS);
 }
 
+/**
+ * Returns the auto-filled input value when the user has just typed `.title `
+ * (or an unambiguous abbreviation) with empty args and a session title exists.
+ * Returns `null` when no auto-fill should happen.
+ */
+export function shouldAutoFillTitle(
+	input: string,
+	title: string | null,
+	activeDotCommands: DotCommand[],
+	alreadyFilled: boolean,
+): string | null {
+	if (alreadyFilled || !title) return null;
+	const parsed = parseDotInput(input, activeDotCommands);
+	if (parsed?.mode === "args" && parsed.command === "title" && parsed.args.trim() === "") {
+		return `.title ${title}`;
+	}
+	return null;
+}
+
 export function parseSlashInput(text: string, skillList: SkillInfo[] | null, isReadOnly: boolean): ParsedSlashInput | null {
 	if (!text.startsWith("/") || isReadOnly) return null;
 	if (!skillList || skillList.length === 0) return null;

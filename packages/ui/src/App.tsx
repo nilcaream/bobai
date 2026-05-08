@@ -19,6 +19,7 @@ import {
 	parseSlashInput,
 	READ_ONLY_DOT_COMMANDS,
 	STREAMING_DOT_COMMANDS,
+	shouldAutoFillTitle,
 } from "./commandParser";
 import { DotCommandPanel, type ModelListItem, type ProviderListItem } from "./DotCommandPanel";
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
@@ -87,6 +88,7 @@ export function App() {
 		details: Record<string, CompactionDetail> | null;
 	} | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const titleAutoFilledRef = useRef(false);
 
 	const { messagesRef, scrollToBottom, peekSubagentWithScroll, peekSubagentFromDbWithScroll, exitSubagentPeekWithScroll } =
 		useAutoScroll(messages, autoScrollRef, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
@@ -560,7 +562,21 @@ export function App() {
 					value={input}
 					readOnly={historyIndex >= 0}
 					onChange={(e) => {
-						setInput(e.target.value);
+						const ta = e.target;
+						const newValue = ta.value;
+						const filledValue = shouldAutoFillTitle(newValue, title, activeDotCommands, titleAutoFilledRef.current);
+						if (filledValue) {
+							titleAutoFilledRef.current = true;
+							ta.value = filledValue;
+							setInput(filledValue);
+							adjustHeight();
+							return;
+						}
+						const parsed = parseDotInput(newValue, activeDotCommands);
+						if (parsed?.command !== "title") {
+							titleAutoFilledRef.current = false;
+						}
+						setInput(newValue);
 						adjustHeight();
 					}}
 					onKeyDown={handleKeyDown}
