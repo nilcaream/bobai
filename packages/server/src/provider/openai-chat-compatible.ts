@@ -191,24 +191,24 @@ export function createOpenAIChatCompatibleProvider(
 				const delta = choice?.delta;
 
 				if (reasoningField) {
-					if (delta?.reasoning_content !== undefined && reasoningField === "reasoning_content") {
+					if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
 						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_content);
-					} else if (delta?.reasoning !== undefined && reasoningField === "reasoning") {
+					} else if (delta?.reasoning != null && reasoningField === "reasoning") {
 						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning);
-					} else if (delta?.reasoning_details !== undefined && reasoningField === "reasoning_details") {
+					} else if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
 						activeReasoning = setReasoningDetails(activeReasoning, reasoningField, delta.reasoning_details);
 					}
 					if (activeReasoning && !reasoningStarted) {
 						yield { type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: reasoningField } };
 						reasoningStarted = true;
 					}
-					if (delta?.reasoning_content !== undefined && reasoningField === "reasoning_content") {
+					if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
 						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_content } };
 					}
-					if (delta?.reasoning !== undefined && reasoningField === "reasoning") {
+					if (delta?.reasoning != null && reasoningField === "reasoning") {
 						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning } };
 					}
-					if (delta?.reasoning_details !== undefined && reasoningField === "reasoning_details") {
+					if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
 						yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: delta.reasoning_details } };
 					}
 				}
