@@ -33,7 +33,7 @@ describe("isolated turn provider metadata", () => {
 		for await (const _ of provider.stream({ model: "gpt-5-mini", messages: [] })) {
 		}
 		expect(provider.getTurnSummary?.()).toMatch(
-			/^ \| gpt-5-mini \| 0x \| in: 1000 \| out: 500 \| context: \+1000 \| \d+\.\d{2}s$/,
+			/^ \| gpt-5-mini \| \[0x\] \| in: 1000 \| out: 500 \| context: \+1000 \| \d+\.\d{2}s$/,
 		);
 	});
 

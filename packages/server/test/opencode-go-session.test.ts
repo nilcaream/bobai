@@ -95,7 +95,7 @@ describe("OpenCode Go session flow", () => {
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("opencode-go");
 		expect(body.model).toBe("deepseek-v4-flash");
-		expect(body.status).toBe("opencode-go | deepseek-v4-flash | $0.27 | $1.10 | 0 / 131072 | 0%");
+		expect(body.status).toBe("opencode-go | deepseek-v4-flash [$0.27 $1.10] | $0.00 | 0 / 131072 | 0%");
 	});
 
 	test("websocket prompt uses the OpenCode Go runtime after provider switch", async () => {

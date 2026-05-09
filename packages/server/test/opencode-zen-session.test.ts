@@ -96,7 +96,7 @@ describe("OpenCode Zen session flow", () => {
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("opencode-zen");
 		expect(body.model).toBe("minimax-m2.5-free");
-		expect(body.status).toBe("opencode-zen | minimax-m2.5-free | $0.00 | $0.00 | 0 / 131072 | 0%");
+		expect(body.status).toBe("opencode-zen | minimax-m2.5-free [$0.00 $0.00] | $0.00 | 0 / 131072 | 0%");
 	});
 
 	test("websocket prompt uses the OpenCode Zen runtime after provider switch to a GPT responses model", async () => {

@@ -156,16 +156,16 @@ describe("GET /bobai/models for amazon-bedrock", () => {
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "anthropic.claude-opus-4-7",
-			cost: "$15.00 | $75.00",
+			cost: "[$15.00 $75.00]",
 			contextWindow: 1000000,
 		});
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "deepseek.v3-v1:0",
-			cost: "$0.27 | $1.10",
+			cost: "[$0.27 $1.10]",
 			contextWindow: 131072,
 		});
 		expect(body.defaultModel).toBe("anthropic.claude-opus-4-7");
-		expect(body.defaultStatus).toBe("amazon-bedrock | anthropic.claude-opus-4-7 | $15.00 | $75.00 | 0 / 1000000 | 0%");
+		expect(body.defaultStatus).toBe("amazon-bedrock | anthropic.claude-opus-4-7 [$15.00 $75.00] | $0.00 | 0 / 1000000 | 0%");
 	});
 });

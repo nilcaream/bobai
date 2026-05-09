@@ -123,6 +123,8 @@ export interface AgentLoopOptions {
 	onReadFileCompacted?: (toolCallId: string, callArgs: Record<string, unknown>) => void;
 	onEvent: (event: AgentEvent) => void;
 	onMessage: (msg: Message) => void;
+	/** Precomputed session cost total for display during streaming. */
+	sessionCostDisplay?: string;
 }
 
 interface AccumulatedToolCall {
@@ -351,6 +353,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				contextLimit: options.contextLimit,
 				sessionId,
 				maxOutputTokens: computeMaxOutputTokensForConversation(conversation),
+				sessionCostDisplay: options.sessionCostDisplay,
 			}),
 			onEvent,
 		);
@@ -653,6 +656,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			contextLimit: options.contextLimit,
 			sessionId,
 			maxOutputTokens: computeMaxOutputTokensForConversation(conversation),
+			sessionCostDisplay: options.sessionCostDisplay,
 		}),
 		onEvent,
 	);

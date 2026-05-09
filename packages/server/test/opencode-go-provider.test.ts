@@ -121,7 +121,7 @@ describe("opencode-go provider", () => {
 				type: "usage",
 				tokenCount: 12800,
 				tokenLimit: 131072,
-				display: "opencode-go | kimi-k2.6 | $0.60 | $2.40 | 12800 / 131072 | 10%",
+				display: "opencode-go | kimi-k2.6 [$0.60 $2.40] | $0.00 | 12800 / 131072 | 10%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);

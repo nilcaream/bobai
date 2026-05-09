@@ -247,6 +247,7 @@ export function createOpenAIChatCompatibleProvider(
 						promptTokens,
 						configDir,
 						options.contextLimit,
+						options.sessionCostDisplay,
 					);
 					if (reasoningStarted) {
 						yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };

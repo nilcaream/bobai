@@ -93,7 +93,7 @@ describe("OpenRouter session flow", () => {
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("openrouter");
 		expect(body.model).toBe("openrouter/free");
-		expect(body.status).toBe("openrouter | openrouter/free | $0.00 | $0.00 | 0 / 200000 | 0%");
+		expect(body.status).toBe("openrouter | openrouter/free [$0.00 $0.00] | $0.00 | 0 / 200000 | 0%");
 	});
 
 	test("websocket prompt uses the OpenRouter runtime after provider switch", async () => {

@@ -316,3 +316,51 @@ export function updateSessionContextLimit(db: Database, sessionId: string, conte
 export function clearSessionContextLimit(db: Database, sessionId: string): void {
 	db.prepare("UPDATE sessions SET context_limit = NULL, updated_at = ? WHERE id = ?").run(new Date().toISOString(), sessionId);
 }
+
+export function getDescendantSessionIds(db: Database, parentId: string): string[] {
+	const result: string[] = [];
+	const queue = [parentId];
+	while (queue.length > 0) {
+		const current = queue.shift() as string;
+		const rows = db.prepare("SELECT id FROM sessions WHERE parent_id = ?").all(current) as { id: string }[];
+		for (const row of rows) {
+			result.push(row.id);
+			queue.push(row.id);
+		}
+	}
+	return result;
+}
+
+export interface AssistantTurnRecord {
+	sessionId: string;
+	turnModel: string | null;
+	inputTokensTotal: number | null;
+	outputTokensTotal: number | null;
+}
+
+export function getAssistantMessagesWithTurnMetrics(db: Database, sessionIds: string[]): AssistantTurnRecord[] {
+	if (sessionIds.length === 0) return [];
+	const placeholders = sessionIds.map(() => "?").join(",");
+	const rows = db
+		.prepare(
+			`SELECT session_id, metadata FROM messages
+			 WHERE session_id IN (${placeholders})
+			   AND role = 'assistant'
+			   AND metadata IS NOT NULL`,
+		)
+		.all(...sessionIds) as { session_id: string; metadata: string }[];
+
+	return rows
+		.map((r) => {
+			const metadata = JSON.parse(r.metadata) as Record<string, unknown>;
+			const turnModel = typeof metadata.turn_model === "string" ? metadata.turn_model : null;
+			const turnMetrics = metadata.turn_metrics as Record<string, number> | undefined;
+			return {
+				sessionId: r.session_id,
+				turnModel,
+				inputTokensTotal: turnMetrics?.input_tokens_total ?? null,
+				outputTokensTotal: turnMetrics?.output_tokens_total ?? null,
+			};
+		})
+		.filter((r) => r.turnModel !== null);
+}

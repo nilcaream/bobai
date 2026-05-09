@@ -325,6 +325,7 @@ export function createCopilotProvider(
 					options.model,
 					resolvedConfigDir,
 					options.contextLimit,
+					options.sessionCostDisplay,
 				)) {
 					timer.reset(BODY_TIMEOUT_MS);
 					if (event.type === "usage") {
@@ -336,6 +337,7 @@ export function createCopilotProvider(
 								event.tokenCount,
 								resolvedConfigDir,
 								options.contextLimit,
+								options.sessionCostDisplay,
 							),
 						};
 						if (options.onMetrics) {
@@ -536,6 +538,7 @@ export function createCopilotProvider(
 								event.tokenCount,
 								resolvedConfigDir,
 								options.contextLimit,
+								options.sessionCostDisplay,
 							),
 						};
 						if (options.onMetrics) {
@@ -854,6 +857,7 @@ export function createCopilotProvider(
 								promptTokens,
 								resolvedConfigDir,
 								options.contextLimit,
+								options.sessionCostDisplay,
 							);
 
 							yield { type: "usage" as const, tokenCount: promptTokens, tokenLimit: contextWindow, display };

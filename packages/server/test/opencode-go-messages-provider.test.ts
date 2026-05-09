@@ -114,7 +114,7 @@ describe("opencode-go provider (messages)", () => {
 				type: "usage",
 				tokenCount: 12800,
 				tokenLimit: 131072,
-				display: "opencode-go | minimax-m2.7 | $0.80 | $3.00 | 12800 / 131072 | 10%",
+				display: "opencode-go | minimax-m2.7 [$0.80 $3.00] | $0.00 | 12800 / 131072 | 10%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);

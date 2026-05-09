@@ -102,7 +102,7 @@ describe("Amazon Bedrock session flow", () => {
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("amazon-bedrock");
 		expect(body.model).toBe("anthropic.claude-opus-4-7");
-		expect(body.status).toBe("amazon-bedrock | anthropic.claude-opus-4-7 | $15.00 | $75.00 | 0 / 1000000 | 0%");
+		expect(body.status).toBe("amazon-bedrock | anthropic.claude-opus-4-7 [$15.00 $75.00] | $0.00 | 0 / 1000000 | 0%");
 	});
 
 	test("selecting amazon-bedrock with default Anthropic model resolves to anthropic-messages backend", async () => {

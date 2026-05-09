@@ -6,6 +6,7 @@ export interface ResponsesStreamOptions {
 	tokenLimit?: number;
 	display?: string;
 	contextLimit?: number | null;
+	sessionCostDisplay?: string;
 	onCompletedUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
 }
 
@@ -156,7 +157,14 @@ export async function* parseResponsesSSE(
 					options.tokenLimit ?? getProviderModelConfig(providerId as never, model, configDir)?.contextWindow ?? 0;
 				const display =
 					options.display ??
-					formatProviderModelDisplay(providerId as never, model, inputTokens, configDir, options.contextLimit);
+					formatProviderModelDisplay(
+						providerId as never,
+						model,
+						inputTokens,
+						configDir,
+						options.contextLimit,
+						options.sessionCostDisplay,
+					);
 
 				yield {
 					type: "usage",

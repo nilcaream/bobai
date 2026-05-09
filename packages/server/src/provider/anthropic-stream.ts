@@ -11,6 +11,7 @@ export async function* parseAnthropicStream(
 	model: string,
 	configDir: string,
 	contextLimit?: number | null,
+	sessionCostDisplay?: string,
 ): AsyncGenerator<StreamEvent> {
 	let inputTokens = 0;
 	let outputTokens = 0;
@@ -67,7 +68,14 @@ export async function* parseAnthropicStream(
 			case "message_stop": {
 				// Emit usage event
 				const tokenLimit = getProviderModelConfig("github-copilot", model, configDir)?.contextWindow ?? 0;
-				const display = formatProviderModelDisplay("github-copilot", model, inputTokens, configDir, contextLimit);
+				const display = formatProviderModelDisplay(
+					"github-copilot",
+					model,
+					inputTokens,
+					configDir,
+					contextLimit,
+					sessionCostDisplay,
+				);
 				const totalTokens = inputTokens + outputTokens;
 
 				yield {

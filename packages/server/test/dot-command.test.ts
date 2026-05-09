@@ -147,7 +147,7 @@ describe("handleCommand", () => {
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.status).toBe("github-copilot | claude-haiku-4.5 | 0.33x | 0 / 0 | 0%");
+			expect(result.status).toBe("github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 0 / 0 | 0%");
 			expect(result.sessionId).toBe(session.id);
 			expect(result.provider).toBe("github-copilot");
 			expect(result.model).toBe("claude-haiku-4.5");
@@ -190,7 +190,7 @@ describe("handleCommand", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
-			expect(result.status).toBe("github-copilot | claude-haiku-4.5 | 0.33x | 0 / 0 | 0%");
+			expect(result.status).toBe("github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 0 / 0 | 0%");
 			expect(result.provider).toBe("github-copilot");
 			expect(result.model).toBe("claude-haiku-4.5");
 			const session = getSession(db, result.sessionId ?? "");
@@ -555,7 +555,7 @@ describe("HTTP endpoints", () => {
 		};
 		expect(body.providerId).toBe("github-copilot");
 		expect(body.models.length).toBe(5);
-		expect(body.models[0]).toEqual({ index: 1, id: "claude-haiku-4.5", cost: "0.33x", contextWindow: 0 });
+		expect(body.models[0]).toEqual({ index: 1, id: "claude-haiku-4.5", cost: "[0.33x]", contextWindow: 0 });
 		expect(body.models.findIndex((model) => model.id === "claude-haiku-4.5")).toBeLessThan(
 			body.models.findIndex((model) => model.id === "gpt-5.2"),
 		);
@@ -563,7 +563,7 @@ describe("HTTP endpoints", () => {
 			body.models.findIndex((model) => model.id === "gpt-5.4"),
 		);
 		expect(body.defaultModel).toBe("gpt-5-mini");
-		expect(body.defaultStatus).toBe("github-copilot | gpt-5-mini | 0x | 0 / 0 | 0%");
+		expect(body.defaultStatus).toBe("github-copilot | gpt-5-mini [0x] | 0 PR | 0 / 0 | 0%");
 	});
 
 	test("GET /bobai/models returns curated openrouter rows", async () => {
@@ -579,11 +579,11 @@ describe("HTTP endpoints", () => {
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "anthropic/claude-haiku-4.5",
-			cost: "$0.50 | $5.12",
+			cost: "[$0.50 $5.12]",
 			contextWindow: 128000,
 		});
 		expect(body.defaultModel).toBe("openrouter/free");
-		expect(body.defaultStatus).toBe("openrouter | openrouter/free | $0.00 | $0.00 | 0 / 200000 | 0%");
+		expect(body.defaultStatus).toBe("openrouter | openrouter/free [$0.00 $0.00] | $0.00 | 0 / 200000 | 0%");
 	});
 
 	test("GET /bobai/models returns curated opencode-go rows", async () => {
@@ -599,11 +599,11 @@ describe("HTTP endpoints", () => {
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "deepseek-v4-flash",
-			cost: "$0.27 | $1.10",
+			cost: "[$0.27 $1.10]",
 			contextWindow: 131072,
 		});
 		expect(body.defaultModel).toBe("deepseek-v4-flash");
-		expect(body.defaultStatus).toBe("opencode-go | deepseek-v4-flash | $0.27 | $1.10 | 0 / 131072 | 0%");
+		expect(body.defaultStatus).toBe("opencode-go | deepseek-v4-flash [$0.27 $1.10] | $0.00 | 0 / 131072 | 0%");
 	});
 
 	test("GET /bobai/models returns curated opencode-zen rows", async () => {
@@ -619,17 +619,17 @@ describe("HTTP endpoints", () => {
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "minimax-m2.5-free",
-			cost: "$0.00 | $0.00",
+			cost: "[$0.00 $0.00]",
 			contextWindow: 131072,
 		});
 		expect(body.models).toContainEqual({
 			index: expect.any(Number),
 			id: "gpt-5.4",
-			cost: "$1.00 | $4.00",
+			cost: "[$1.00 $4.00]",
 			contextWindow: 272000,
 		});
 		expect(body.defaultModel).toBe("minimax-m2.5-free");
-		expect(body.defaultStatus).toBe("opencode-zen | minimax-m2.5-free | $0.00 | $0.00 | 0 / 131072 | 0%");
+		expect(body.defaultStatus).toBe("opencode-zen | minimax-m2.5-free [$0.00 $0.00] | $0.00 | 0 / 131072 | 0%");
 	});
 
 	test("GET /bobai/models without a configured default backend returns select-provider status", async () => {
@@ -670,7 +670,7 @@ describe("HTTP endpoints", () => {
 		const body = (await res.json()) as { ok: boolean; status?: string };
 		expect(body.ok).toBe(true);
 		expect(firstVisible?.id).toBe("claude-haiku-4.5");
-		expect(body.status).toBe("github-copilot | claude-haiku-4.5 | 0.33x | 0 / 0 | 0%");
+		expect(body.status).toBe("github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 0 / 0 | 0%");
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe(firstVisible?.id);
 	});

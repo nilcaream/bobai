@@ -192,6 +192,7 @@ export function createAnthropicCompatibleProvider(
 							inputTokens,
 							configDir,
 							options.contextLimit,
+							options.sessionCostDisplay,
 						);
 						yield {
 							type: "usage",

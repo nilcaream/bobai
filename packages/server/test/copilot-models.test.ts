@@ -20,17 +20,17 @@ describe("copilot model display semantics via unified catalog", () => {
 			const list = buildSortedProviderModelList("github-copilot", tmpDir);
 			expect(list.find((model) => model.id === "claude-haiku-4.5")).toEqual({
 				id: "claude-haiku-4.5",
-				cost: "0.33x",
+				cost: "[0.33x]",
 				contextWindow: 128000,
 			});
 			expect(list.find((model) => model.id === "gpt-5-mini")).toEqual({
 				id: "gpt-5-mini",
-				cost: "0x",
+				cost: "[0x]",
 				contextWindow: 264000,
 			});
 			expect(list.find((model) => model.id === "gpt-5.4")).toEqual({
 				id: "gpt-5.4",
-				cost: "1x",
+				cost: "[1x]",
 				contextWindow: 272000,
 			});
 		} finally {
@@ -46,7 +46,7 @@ describe("copilot model display semantics via unified catalog", () => {
 			});
 
 			expect(formatProviderModelDisplay("github-copilot", "gpt-4o", 100, tmpDir)).toBe(
-				"github-copilot | gpt-4o | ?x | 100 / 64000 | 0%",
+				"github-copilot | gpt-4o [?x] | 0 PR | 100 / 64000 | 0%",
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });

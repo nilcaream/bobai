@@ -121,7 +121,7 @@ describe("openrouter provider", () => {
 				type: "usage",
 				tokenCount: 12800,
 				tokenLimit: 128000,
-				display: "openrouter | anthropic/claude-haiku-4.5 | $0.50 | $5.12 | 12800 / 128000 | 10%",
+				display: "openrouter | anthropic/claude-haiku-4.5 [$0.50 $5.12] | $0.00 | 12800 / 128000 | 10%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -168,7 +168,7 @@ describe("openrouter provider", () => {
 				type: "usage",
 				tokenCount: 10,
 				tokenLimit: 200000,
-				display: "openrouter | openrouter/free | $0.00 | $0.00 | 10 / 200000 | 0%",
+				display: "openrouter | openrouter/free [$0.00 $0.00] | $0.00 | 10 / 200000 | 0%",
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);

@@ -250,7 +250,7 @@ describe("CopilotProvider", () => {
 			{ type: "tool_call_start", index: 0, id: "call_abc123", name: "read_file" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path"' },
 			{ type: "tool_call_delta", index: 0, arguments: ':"src/index.ts"}' },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | ?x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o [?x] | 0 PR | 0 / 0 | 0%" },
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -291,7 +291,12 @@ describe("CopilotProvider", () => {
 		expect(events).toEqual([
 			{ type: "tool_call_start", index: 0, id: "call_gemini", name: "list_directory" },
 			{ type: "tool_call_delta", index: 0, arguments: '{"path":"."}' },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gemini-3-flash-preview | ?x | 0 / 0 | 0%" },
+			{
+				type: "usage",
+				tokenCount: 0,
+				tokenLimit: 0,
+				display: "github-copilot | gemini-3-flash-preview [?x] | 0 PR | 0 / 0 | 0%",
+			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
 	});
@@ -317,7 +322,7 @@ describe("CopilotProvider", () => {
 
 		expect(events).toEqual([
 			{ type: "text", text: "Hello" },
-			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o | ?x | 0 / 0 | 0%" },
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gpt-4o [?x] | 0 PR | 0 / 0 | 0%" },
 			{ type: "finish", reason: "stop" },
 		]);
 	});
@@ -378,7 +383,12 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hello" },
-				{ type: "usage", tokenCount: 895, tokenLimit: 64000, display: "github-copilot | gpt-4o | 0x | 895 / 64000 | 1%" },
+				{
+					type: "usage",
+					tokenCount: 895,
+					tokenLimit: 64000,
+					display: "github-copilot | gpt-4o [0x] | 0 PR | 895 / 64000 | 1%",
+				},
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -416,7 +426,7 @@ describe("CopilotProvider", () => {
 
 			expect(events).toEqual([
 				{ type: "text", text: "Hi" },
-				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "github-copilot | gpt-4o | ?x | 100 / 0 | 0%" },
+				{ type: "usage", tokenCount: 100, tokenLimit: 0, display: "github-copilot | gpt-4o [?x] | 0 PR | 100 / 0 | 0%" },
 				{ type: "finish", reason: "stop" },
 			]);
 		} finally {
@@ -2285,7 +2295,7 @@ describe("Anthropic routing for Claude models", () => {
 			type: "usage",
 			tokenCount: 42,
 			tokenLimit: 200000,
-			display: "github-copilot | claude-sonnet-4.6 | 1x | 42 / 200000 | 0%",
+			display: "github-copilot | claude-sonnet-4.6 [1x] | 0 PR | 42 / 200000 | 0%",
 			outputTokens: 5,
 			totalTokens: 47,
 		});
@@ -2659,7 +2669,7 @@ describe("Responses API routing for GPT-5+ models", () => {
 			type: "usage",
 			tokenCount: 42,
 			tokenLimit: 400000,
-			display: "github-copilot | gpt-5.4 | 1x | 42 / 400000 | 0%",
+			display: "github-copilot | gpt-5.4 [1x] | 0 PR | 42 / 400000 | 0%",
 			outputTokens: 5,
 			totalTokens: 47,
 		});

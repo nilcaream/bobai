@@ -19,7 +19,7 @@ import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
 import { getApiFamilyForModel, getDefaultSessionBackend } from "./provider/backend-policy";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
-import { getProviderModelConfig } from "./provider/models";
+import { formatProviderModelDisplay, formatSessionCostDisplay, getProviderModelConfig } from "./provider/models";
 import type { AssistantMessage, Message, Provider } from "./provider/provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider/provider";
 import { isSupportedProvider, type ProviderId } from "./provider/providers";
@@ -406,6 +406,12 @@ export async function handlePrompt(req: PromptRequest) {
 		turnProvider = createIsolatedTurnProvider(activeProvider, configDir);
 		turnProvider.beginTurn?.(sessionPromptTokens);
 
+		// Compute prior session total so streaming status shows the completed total
+		const costProviderId = (effectiveProviderId ?? (activeProvider?.id as ProviderId) ?? "github-copilot") as ProviderId;
+		const priorSessionCost = currentSessionId
+			? formatSessionCostDisplay(db, costProviderId, currentSessionId, configDir)
+			: undefined;
+
 		// Run the agent loop
 		// Capture tool metadata from onEvent (fires before onMessage for the same tool call)
 		const toolMeta = new Map<
@@ -439,6 +445,7 @@ export async function handlePrompt(req: PromptRequest) {
 				reasoningDefaults: DEFAULT_REASONING_DEFAULTS,
 				dbGuard: req.dbGuard,
 				onReadFileCompacted: invalidateCompactedRead,
+				sessionCostDisplay: priorSessionCost,
 				onEvent(event: AgentEvent) {
 					routeEventToWs(ws, event);
 					if (event.type === "tool_call") {
@@ -512,6 +519,20 @@ export async function handlePrompt(req: PromptRequest) {
 					: {}),
 			});
 		}
+		// Recompute and broadcast the final session total after persistence
+		if (currentSessionId && effectiveModel) {
+			const finalCostProviderId = (effectiveProviderId ?? (activeProvider?.id as ProviderId) ?? "github-copilot") as ProviderId;
+			const finalSessionCost = formatSessionCostDisplay(db, finalCostProviderId, currentSessionId, configDir);
+			const finalStatus = formatProviderModelDisplay(
+				finalCostProviderId,
+				effectiveModel,
+				promptTokens,
+				configDir,
+				currentSession?.contextLimit,
+				finalSessionCost,
+			);
+			send(ws, { type: "status", text: finalStatus, sessionId: currentSessionId });
+		}
 		send(ws, {
 			type: "done",
 			sessionId: currentSessionId,
@@ -584,6 +605,21 @@ export async function handlePrompt(req: PromptRequest) {
 					...(errSummary ? { summary: errSummary } : {}),
 					turn_model: effectiveModel,
 				});
+			}
+			// Recompute and broadcast the final session total after error persistence
+			if (effectiveModel && currentSessionId) {
+				const errCostProviderId = (effectiveProviderId ?? (activeProvider?.id as ProviderId) ?? "github-copilot") as ProviderId;
+				const errSession = getSession(db, currentSessionId);
+				const errSessionCost = formatSessionCostDisplay(db, errCostProviderId, currentSessionId, configDir);
+				const errStatus = formatProviderModelDisplay(
+					errCostProviderId,
+					effectiveModel,
+					errPromptTokens,
+					configDir,
+					errSession?.contextLimit,
+					errSessionCost,
+				);
+				send(ws, { type: "status", text: errStatus, sessionId: currentSessionId });
 			}
 			send(ws, {
 				type: "done",

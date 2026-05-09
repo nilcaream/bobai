@@ -35,7 +35,7 @@ describe("subagent integration", () => {
 	test("full subagent flow: parent spawns child, child runs, parent receives result", async () => {
 		let callCount = 0;
 		const provider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {

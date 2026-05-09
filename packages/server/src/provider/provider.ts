@@ -114,6 +114,8 @@ export interface ProviderOptions {
 	};
 	/** User-overridden context limit for display purposes. */
 	contextLimit?: number | null;
+	/** Precomputed session cost total for display during streaming. */
+	sessionCostDisplay?: string;
 	/** When set, per-call metrics are routed to this callback instead of the provider's
 	 *  internal turn accumulator. Used by isolated turn providers for parallel execution. */
 	onMetrics?(metrics: StreamMetrics): void;

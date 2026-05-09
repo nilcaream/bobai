@@ -133,7 +133,7 @@ describe("provider model facade", () => {
 		withTempDir((tmpDir) => {
 			writeModelsConfig(tmpDir);
 			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 12800, tmpDir)).toBe(
-				"github-copilot | gpt-5-mini | 0x | 12800 / 264000 | 5%",
+				"github-copilot | gpt-5-mini [0x] | 0 PR | 12800 / 264000 | 5%",
 			);
 		});
 	});
@@ -144,7 +144,7 @@ describe("provider model facade", () => {
 			const list = buildSortedProviderModelList("github-copilot", tmpDir);
 			expect(list.find((model) => model.id === "gpt-5-mini")).toEqual({
 				id: "gpt-5-mini",
-				cost: "0x",
+				cost: "[0x]",
 				contextWindow: 264000,
 			});
 		});
@@ -177,11 +177,11 @@ describe("provider model facade", () => {
 
 			expect(buildSortedProviderModelList("github-copilot", tmpDir).find((model) => model.id === "gpt-5-mini")).toEqual({
 				id: "gpt-5-mini",
-				cost: "?x",
+				cost: "[?x]",
 				contextWindow: 264000,
 			});
 			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 12800, tmpDir)).toBe(
-				"github-copilot | gpt-5-mini | ?x | 12800 / 264000 | 5%",
+				"github-copilot | gpt-5-mini [?x] | 0 PR | 12800 / 264000 | 5%",
 			);
 		});
 	});
@@ -198,11 +198,11 @@ describe("provider model facade", () => {
 			});
 			expect(buildSortedProviderModelList("openrouter", tmpDir)).toContainEqual({
 				id: "anthropic/claude-haiku-4.5",
-				cost: "$0.50 | $5.12",
+				cost: "[$0.50 $5.12]",
 				contextWindow: 128000,
 			});
 			expect(formatProviderModelDisplay("openrouter", "anthropic/claude-haiku-4.5", 12800, tmpDir)).toBe(
-				"openrouter | anthropic/claude-haiku-4.5 | $0.50 | $5.12 | 12800 / 128000 | 10%",
+				"openrouter | anthropic/claude-haiku-4.5 [$0.50 $5.12] | $0.00 | 12800 / 128000 | 10%",
 			);
 		});
 	});
@@ -219,11 +219,11 @@ describe("provider model facade", () => {
 			});
 			expect(buildSortedProviderModelList("opencode-go", tmpDir)).toContainEqual({
 				id: "deepseek-v4-flash",
-				cost: "$0.27 | $1.10",
+				cost: "[$0.27 $1.10]",
 				contextWindow: 131072,
 			});
 			expect(formatProviderModelDisplay("opencode-go", "deepseek-v4-flash", 12800, tmpDir)).toBe(
-				"opencode-go | deepseek-v4-flash | $0.27 | $1.10 | 12800 / 131072 | 10%",
+				"opencode-go | deepseek-v4-flash [$0.27 $1.10] | $0.00 | 12800 / 131072 | 10%",
 			);
 		});
 	});
@@ -246,19 +246,19 @@ describe("provider model facade", () => {
 			});
 			expect(buildSortedProviderModelList("opencode-zen", tmpDir)).toContainEqual({
 				id: "minimax-m2.5-free",
-				cost: "$0.00 | $0.00",
+				cost: "[$0.00 $0.00]",
 				contextWindow: 131072,
 			});
 			expect(buildSortedProviderModelList("opencode-zen", tmpDir)).toContainEqual({
 				id: "gpt-5.4",
-				cost: "$1.00 | $4.00",
+				cost: "[$1.00 $4.00]",
 				contextWindow: 272000,
 			});
 			expect(formatProviderModelDisplay("opencode-zen", "minimax-m2.5-free", 12800, tmpDir)).toBe(
-				"opencode-zen | minimax-m2.5-free | $0.00 | $0.00 | 12800 / 131072 | 10%",
+				"opencode-zen | minimax-m2.5-free [$0.00 $0.00] | $0.00 | 12800 / 131072 | 10%",
 			);
 			expect(formatProviderModelDisplay("opencode-zen", "gpt-5.4", 12800, tmpDir)).toBe(
-				"opencode-zen | gpt-5.4 | $1.00 | $4.00 | 12800 / 272000 | 5%",
+				"opencode-zen | gpt-5.4 [$1.00 $4.00] | $0.00 | 12800 / 272000 | 5%",
 			);
 		});
 	});
@@ -284,11 +284,11 @@ describe("provider model facade", () => {
 			expect(models.find((model) => !model.id.startsWith("anthropic."))).toBeDefined();
 			expect(buildSortedProviderModelList("amazon-bedrock", tmpDir)).toContainEqual({
 				id: "anthropic.claude-opus-4-7",
-				cost: "$15.00 | $75.00",
+				cost: "[$15.00 $75.00]",
 				contextWindow: 1000000,
 			});
 			expect(formatProviderModelDisplay("amazon-bedrock", "anthropic.claude-opus-4-7", 12800, tmpDir)).toBe(
-				"amazon-bedrock | anthropic.claude-opus-4-7 | $15.00 | $75.00 | 12800 / 1000000 | 1%",
+				"amazon-bedrock | anthropic.claude-opus-4-7 [$15.00 $75.00] | $0.00 | 12800 / 1000000 | 1%",
 			);
 		});
 	});

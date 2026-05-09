@@ -134,6 +134,7 @@ export function createBedrockConverseProvider(
 							inputTokens,
 							configDir,
 							options.contextLimit,
+							options.sessionCostDisplay,
 						);
 
 						yield {

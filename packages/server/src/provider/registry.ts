@@ -44,6 +44,7 @@ export interface ProviderSummaryParts {
 	modelName: string;
 	pricingLabel?: string;
 	costEstimate?: string;
+	premiumRequests?: string;
 }
 
 export interface ProviderAuthMetadata {
@@ -62,12 +63,19 @@ export interface ProviderDescriptor {
 	modelsConfigExists(configDir?: string): boolean;
 	loadModels(configDir?: string): ProviderModelConfig[];
 	buildSortedModels(configDir?: string): SortedProviderModelListItem[];
-	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string, contextLimit?: number | null): string;
+	formatModelDisplay(
+		modelId: string,
+		promptTokens: number,
+		configDir?: string,
+		contextLimit?: number | null,
+		sessionCostDisplay?: string,
+	): string;
 	buildTurnSummaryParts?(options: {
 		modelId: string;
 		inputTokens: number;
 		outputTokens: number;
 		configDir?: string;
+		billable?: boolean;
 	}): ProviderSummaryParts;
 	createConfiguredProvider(options: {
 		configDir: string;
@@ -94,12 +102,12 @@ function formatPrice(value: number | undefined): string {
 
 function formatProviderCostLabel(providerId: ProviderId, modelConfig: ProviderModelConfig | undefined): string {
 	if (!modelConfig) {
-		return providerId === "github-copilot" ? "?x" : `${formatPrice(0)} | ${formatPrice(0)}`;
+		return providerId === "github-copilot" ? "[?x]" : `[${formatPrice(0)} ${formatPrice(0)}]`;
 	}
 	if (providerId === "github-copilot") {
-		return modelConfig.premiumRequestMultiplier !== undefined ? `${modelConfig.premiumRequestMultiplier}x` : "?x";
+		return modelConfig.premiumRequestMultiplier !== undefined ? `[${modelConfig.premiumRequestMultiplier}x]` : "[?x]";
 	}
-	return `${formatPrice(modelConfig.inputPrice)} | ${formatPrice(modelConfig.outputPrice)}`;
+	return `[${formatPrice(modelConfig.inputPrice)} ${formatPrice(modelConfig.outputPrice)}]`;
 }
 
 function formatProviderSummaryCostEstimate(
@@ -119,8 +127,11 @@ function formatGenericProviderModelDisplay(
 	modelConfig: ProviderModelConfig | undefined,
 	promptTokens: number,
 	contextLimit?: number | null,
+	sessionCostDisplay?: string,
 ): string {
-	const label = ` | ${formatProviderCostLabel(providerId, modelConfig)}`;
+	const costLabel = formatProviderCostLabel(providerId, modelConfig);
+	const defaultZeroCost = providerId === "github-copilot" ? "0 PR" : "$0.00";
+	const costTotal = sessionCostDisplay ?? defaultZeroCost;
 	const defaultContextWindow = modelConfig?.contextWindow ?? 0;
 	const effectiveLimit = contextLimit && contextLimit > 0 ? contextLimit : defaultContextWindow;
 	const percent = effectiveLimit > 0 ? Math.round((promptTokens / effectiveLimit) * 100) : 0;
@@ -128,7 +139,7 @@ function formatGenericProviderModelDisplay(
 		contextLimit && contextLimit > 0
 			? `${promptTokens} / ${contextLimit} (${defaultContextWindow})`
 			: `${promptTokens} / ${defaultContextWindow}`;
-	return `${providerId} | ${modelConfig?.id ?? modelId}${label} | ${contextDisplay} | ${percent}%`;
+	return `${providerId} | ${modelConfig?.id ?? modelId} ${costLabel} | ${costTotal} | ${contextDisplay} | ${percent}%`;
 }
 
 function defaultModelName(modelId: string): string {
@@ -153,6 +164,7 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 		inputTokens: number;
 		outputTokens: number;
 		configDir?: string;
+		billable?: boolean;
 	}) => ProviderSummaryParts;
 	getAuth(store: AuthStore | undefined): Auth | undefined;
 	missingAuthMessage: string;
@@ -196,13 +208,20 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 				}))
 				.sort((a, b) => a.id.localeCompare(b.id));
 		},
-		formatModelDisplay(modelId: string, promptTokens: number, configDir?: string, contextLimit?: number | null): string {
+		formatModelDisplay(
+			modelId: string,
+			promptTokens: number,
+			configDir?: string,
+			contextLimit?: number | null,
+			sessionCostDisplay?: string,
+		): string {
 			return formatGenericProviderModelDisplay(
 				options.id,
 				modelId,
 				loadProviderModelsFromUnifiedCatalog(options.id, configDir).find((model) => model.id === modelId),
 				promptTokens,
 				contextLimit,
+				sessionCostDisplay,
 			);
 		},
 		buildTurnSummaryParts(summaryOptions): ProviderSummaryParts {
@@ -258,13 +277,20 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 			}))
 			.sort((a, b) => a.id.localeCompare(b.id));
 	},
-	formatModelDisplay(modelId: string, promptTokens: number, configDir?: string, contextLimit?: number | null): string {
+	formatModelDisplay(
+		modelId: string,
+		promptTokens: number,
+		configDir?: string,
+		contextLimit?: number | null,
+		sessionCostDisplay?: string,
+	): string {
 		return formatGenericProviderModelDisplay(
 			"github-copilot",
 			modelId,
 			loadProviderModelsFromUnifiedCatalog("github-copilot", configDir).find((model) => model.id === modelId),
 			promptTokens,
 			contextLimit,
+			sessionCostDisplay,
 		);
 	},
 	buildTurnSummaryParts(options): ProviderSummaryParts {

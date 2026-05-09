@@ -28,7 +28,7 @@ function mockWs() {
 
 function mockProvider(tokens: string[]): Provider {
 	return {
-		id: "mock",
+		id: "github-copilot",
 		async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			for (const t of tokens) yield { type: "text", text: t };
 			yield { type: "finish", reason: "stop" };
@@ -40,7 +40,7 @@ function mockProvider(tokens: string[]): Provider {
 function capturingProvider(tokens: string[]): Provider & { captured: ProviderOptions[] } {
 	const captured: ProviderOptions[] = [];
 	return {
-		id: "mock",
+		id: "github-copilot",
 		captured,
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			captured.push(opts);
@@ -52,7 +52,7 @@ function capturingProvider(tokens: string[]): Provider & { captured: ProviderOpt
 
 function failingProvider(status: number, body: string): Provider {
 	return {
-		id: "mock",
+		id: "github-copilot",
 		stream() {
 			async function* gen(): AsyncGenerator<StreamEvent> {
 				yield* [];
@@ -126,7 +126,7 @@ function authFailingProvider(status: number, body: string, permanent: boolean, p
 /** Provider that yields some tokens then throws a ProviderError */
 function partialFailingProvider(tokens: string[], status: number, body: string): Provider {
 	return {
-		id: "mock",
+		id: "github-copilot",
 		stream() {
 			async function* gen(): AsyncGenerator<StreamEvent> {
 				for (const t of tokens) yield { type: "text", text: t };
@@ -174,7 +174,7 @@ describe("handlePrompt", () => {
 	test("uses runtime manager to resolve the active provider for the session", async () => {
 		const ws = mockWs();
 		const fallbackProvider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			stream() {
 				throw new Error("fallback provider should not be used");
 			},
@@ -311,7 +311,7 @@ describe("handlePrompt", () => {
 	test("persists assistant reasoning metadata through the real handlePrompt path", async () => {
 		const ws = mockWs();
 		const provider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield {
 					type: "reasoning_start",
@@ -390,11 +390,11 @@ describe("handlePrompt", () => {
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
 			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
 			);
 			const stored = getMessages(db, session.id);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -525,10 +525,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| 1x \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/);
+			expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| gpt-5\.4 \| 1x \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/,
+				/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -566,11 +566,11 @@ describe("handlePrompt", () => {
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
 			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
 			);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -611,11 +611,11 @@ describe("handlePrompt", () => {
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
 			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
 			);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| 0\.33x \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
 			);
 			expect(stored.at(-1)?.metadata?.turn_metrics).toEqual({
 				input_tokens_total: 10948,
@@ -759,7 +759,7 @@ describe("handlePrompt", () => {
 	test("stores whitespace-only assistant content as empty for tool-call turns", async () => {
 		let callCount = 0;
 		const toolProvider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -797,7 +797,7 @@ describe("handlePrompt", () => {
 		// Provider that requests a tool call then responds with text
 		let callCount = 0;
 		const toolProvider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -876,7 +876,7 @@ describe("handlePrompt", () => {
 	test("persists partial messages and error on mid-stream failure", async () => {
 		let callCount = 0;
 		const provider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -917,7 +917,7 @@ describe("handlePrompt", () => {
 		// Provider that requests the "task" tool call
 		let callCount = 0;
 		const taskProvider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -978,7 +978,7 @@ describe("handlePrompt", () => {
 		// First prompt: provider errors after tool call
 		let callCount = 0;
 		const failProvider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -1142,7 +1142,7 @@ describe("handlePrompt", () => {
 
 		// Provider that yields a tool call, during which the abort fires
 		const slowProvider: Provider = {
-			id: "mock",
+			id: "github-copilot",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "tool_call_start", index: 0, id: "call_1", name: "list_directory" };
 				yield { type: "tool_call_delta", index: 0, arguments: '{"path":"."}' };
@@ -1227,7 +1227,7 @@ describe("handlePrompt", () => {
 
 	test("sends network error message for transient AuthError", async () => {
 		const ws = mockWs();
-		const provider = authFailingProvider(0, "Token exchange network error: Unable to connect", false);
+		const provider = authFailingProvider(0, "Token exchange network error: Unable to connect", false, "github-copilot");
 		await handlePrompt({
 			ws,
 			db,
