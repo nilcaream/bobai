@@ -58,6 +58,7 @@ export function createOpenAIResponsesCompatibleProvider(
 				body: JSON.stringify({
 					model: options.model,
 					input,
+					max_output_tokens: options.maxOutputTokens,
 					stream: true,
 					reasoning: { effort: "medium", summary: "auto" },
 					include: ["reasoning.encrypted_content"],

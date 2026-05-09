@@ -22,8 +22,7 @@ export function createBedrockConverseProvider(
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			const { messages, system } = convertMessagesToConverse(options.messages);
 			const tools = options.tools?.length ? convertToolsToConverse(options.tools) : undefined;
-			const configuredMaxOutput = getProviderModelConfig("amazon-bedrock", options.model, configDir)?.maxOutput ?? 16384;
-			const maxTokens = options.maxOutputTokens ?? configuredMaxOutput;
+			const maxTokens = options.maxOutputTokens;
 
 			const url = bedrockRuntimeUrl(auth.region, options.model);
 

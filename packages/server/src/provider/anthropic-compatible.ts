@@ -74,8 +74,7 @@ export function createAnthropicCompatibleProvider(
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
 			const { system, messages } = convertMessagesToAnthropic(options.messages);
 			const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
-			const configuredMaxOutput = getProviderModelConfig(config.providerId, options.model, configDir)?.maxOutput ?? 16384;
-			const maxTokens = options.maxOutputTokens ?? configuredMaxOutput;
+			const maxTokens = options.maxOutputTokens;
 			const apiKeyHeader = config.apiKeyHeader ?? "x-api-key";
 			const reasoningCapabilities = getReasoningCapabilities({
 				providerId: config.providerId,

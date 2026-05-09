@@ -181,10 +181,6 @@ export function createCopilotProvider(
 		}
 	}
 
-	function getConfiguredMaxOutputTokens(modelId: string): number {
-		return getProviderModelConfig("github-copilot", modelId, resolvedConfigDir)?.maxOutput ?? 16384;
-	}
-
 	// ── Shared retry infrastructure ──────────────────────────────────────
 
 	const MAX_RETRIES = 3;
@@ -253,7 +249,7 @@ export function createCopilotProvider(
 	): AsyncGenerator<StreamEvent> {
 		const { system, messages } = convertMessagesToAnthropic(options.messages);
 		const tools = options.tools?.length ? convertToolsToAnthropic(options.tools) : undefined;
-		const maxTokens = options.maxOutputTokens ?? getConfiguredMaxOutputTokens(options.model);
+		const maxTokens = options.maxOutputTokens;
 
 		const reasoningCapabilities = getReasoningCapabilities({
 			providerId: "github-copilot",

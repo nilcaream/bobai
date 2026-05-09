@@ -62,6 +62,7 @@ describe("opencode-go provider", () => {
 				model: "kimi-k2.6",
 				messages: [{ role: "user", content: "hello" }],
 				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
 			}),
 		);
 
@@ -75,6 +76,7 @@ describe("opencode-go provider", () => {
 		expect(body.model).toBe("kimi-k2.6");
 		expect(body.stream).toBe(true);
 		expect(body.stream_options).toEqual({ include_usage: true });
+		expect(body.max_tokens).toBeGreaterThan(0);
 	});
 
 	test("yields text, tool-call, usage and finish events from OpenCode Go SSE stream", async () => {

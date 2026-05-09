@@ -80,6 +80,7 @@ describe("openai responses compatible provider", () => {
 				],
 				tools,
 				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
 			}),
 		);
 
@@ -92,6 +93,7 @@ describe("openai responses compatible provider", () => {
 		expect(body.model).toBe("gpt-5.4");
 		expect(body.stream).toBe(true);
 		expect(body.input).toBeDefined();
+		expect(body.max_output_tokens).toBeGreaterThan(0);
 		expect(body.reasoning).toEqual({ effort: "medium", summary: "auto" });
 		expect(body.include).toEqual(["reasoning.encrypted_content"]);
 		expect(body.tools).toEqual([

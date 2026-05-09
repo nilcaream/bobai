@@ -54,6 +54,7 @@ describe("opencode-zen provider", () => {
 				model: "claude-sonnet-4-6",
 				messages: [{ role: "user", content: "hello" }],
 				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
 			}),
 		);
 
@@ -87,6 +88,7 @@ describe("opencode-zen provider", () => {
 				model: "qwen3.6-plus",
 				messages: [{ role: "user", content: "hello" }],
 				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
 			}),
 		);
 
@@ -118,6 +120,7 @@ describe("opencode-zen provider", () => {
 				model: "gpt-5.4",
 				messages: [{ role: "user", content: "hello" }],
 				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
 			}),
 		);
 
@@ -148,6 +151,7 @@ describe("opencode-zen provider", () => {
 			provider.stream({
 				model: "qwen3.6-plus",
 				messages: [{ role: "user", content: "hello" }],
+				maxOutputTokens: 16384,
 			}),
 		);
 
@@ -171,6 +175,7 @@ describe("opencode-zen provider", () => {
 			for await (const _ of provider.stream({
 				model: "qwen3.6-plus",
 				messages: [{ role: "user", content: "hi" }],
+				maxOutputTokens: 16384,
 			})) {
 				// drain
 			}

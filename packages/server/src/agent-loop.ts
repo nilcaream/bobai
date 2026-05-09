@@ -319,15 +319,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	// New messages produced by this loop (what we return)
 	const newMessages: Message[] = [];
 
-	function computeMaxOutputTokensForConversation(messages: Message[]): number | undefined {
-		if (!options.contextWindow || options.contextWindow <= 0) return undefined;
+	function computeMaxOutputTokensForConversation(messages: Message[]): number {
+		const ABSOLUTE_FALLBACK = 16384;
 		let configuredMaxOutput = 0;
 		try {
 			configuredMaxOutput = getProviderModelConfig(provider.id as never, model, configDir)?.maxOutput ?? 0;
 		} catch {
-			return undefined;
+			// Model not in catalog — use safe fallback
 		}
-		if (configuredMaxOutput <= 0) return undefined;
+		if (configuredMaxOutput <= 0) return ABSOLUTE_FALLBACK;
+		if (!options.contextWindow || options.contextWindow <= 0) return configuredMaxOutput;
 		return computeSafeMaxOutputTokens({
 			contextWindow: options.contextWindow,
 			configuredMaxOutput,

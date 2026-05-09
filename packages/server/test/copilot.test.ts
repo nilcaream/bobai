@@ -2132,6 +2132,7 @@ describe("Anthropic routing for Claude models", () => {
 		for await (const e of provider.stream({
 			model: "claude-sonnet-4.6",
 			messages: [{ role: "user", content: "hello" }],
+			maxOutputTokens: 16384,
 		})) {
 			events.push(e);
 		}
@@ -2360,6 +2361,7 @@ describe("Anthropic routing for Claude models", () => {
 		for await (const _ of provider.stream({
 			model: "claude-sonnet-4.6",
 			messages: [{ role: "user", content: "hi" }],
+			maxOutputTokens: 16384,
 		})) {
 			/* drain */
 		}

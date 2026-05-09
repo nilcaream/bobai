@@ -59,6 +59,7 @@ describe("opencode-go provider (messages)", () => {
 				model: "minimax-m2.7",
 				messages: [{ role: "user", content: "hello" }],
 				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
 			}),
 		);
 

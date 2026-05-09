@@ -28,6 +28,16 @@ Use these first:
 - `src/provider/openai-responses-compatible.ts`
   - for OpenAI-style `/responses` providers
 
+All transports **must** include the output token limit in the API request body:
+
+- `max_tokens` for OpenAI chat completions and Anthropic messages
+- `max_output_tokens` for OpenAI responses
+
+The value comes from `ProviderOptions.maxOutputTokens`, which is always set by
+the agent loop. Providers must not omit it or apply their own fallback — the
+single source of truth is the agent loop's computation based on the model
+catalog and remaining context window.
+
 Shared provider plumbing:
 
 - `src/provider/registry.ts`
@@ -266,6 +276,7 @@ Write tests first when adding new behavior.
 - correct endpoint chosen
 - correct headers used
 - correct request body shape
+- `max_tokens` (or equivalent) is present and positive in every request body
 - SSE text streaming
 - tool-call streaming if supported
 - non-OK response handling
@@ -345,6 +356,25 @@ Finally run full repo verification:
 ```sh
 ./test.sh
 ```
+
+## Safety invariants
+
+These rules apply to every provider transport. Violating them is a bug.
+
+1. **Every API request must include an output token limit.**
+   `ProviderOptions.maxOutputTokens` is required and always positive.
+   Transports must forward it as `max_tokens`, `max_output_tokens`, or
+   the equivalent field for the API family. Never omit it.
+
+2. **Models must have complete metadata to be offered.**
+   The unified model catalog rejects models missing `contextWindow` or
+   `maxOutput`. Do not invent defaults for incomplete upstream data.
+   If a model is missing limits, it does not appear in the model list.
+
+3. **No silent degradation.**
+   If a required value is missing at runtime, fail loudly (throw) rather
+   than silently proceeding without it. A crash is better than an
+   uncontrolled $50 API call.
 
 ## When to refactor
 

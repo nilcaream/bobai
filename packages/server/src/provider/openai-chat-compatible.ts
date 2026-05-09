@@ -138,6 +138,7 @@ export function createOpenAIChatCompatibleProvider(
 				body: JSON.stringify({
 					model: options.model,
 					messages: requestMessages,
+					max_tokens: options.maxOutputTokens,
 					stream: true,
 					stream_options: { include_usage: true },
 					...(options.tools?.length ? { tools: options.tools } : {}),
