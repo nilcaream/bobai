@@ -27,6 +27,10 @@ step() { echo -e "${BOLD}▸${RESET} ${*}"; }
 
 cd "${SCRIPT_DIR}"
 
+# Platform identifier for server startup. CI always runs on Linux x64.
+# Developers on other platforms should set this in their environment.
+export BOBAI_PLATFORM="${BOBAI_PLATFORM:-linux-x64}"
+
 # --- Server ---
 
 step "Server: lint"

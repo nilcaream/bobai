@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "bun run --watch src/index.ts",
 		"check": "biome check .",
-		"test": "bun test"
+		"test": "BOBAI_PLATFORM=linux-x64 bun test"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.0.0",

@@ -30,12 +30,11 @@ import type { SkillRegistry } from "../skill/skill";
 import type { SubagentStatus } from "../subagent-status";
 import type { SystemPromptDebug, SystemPromptMetadata } from "../system-prompt";
 import { buildSystemPrompt } from "../system-prompt";
-import { bashTool } from "./bash";
 import { editFileTool } from "./edit-file";
 import { fileSearchTool } from "./file-search";
-import { grepSearchTool } from "./grep-search";
 import { listDirectoryTool } from "./list-directory";
 import { readFileTool } from "./read-file";
+import { getGrepTool, getShellTool } from "./registry-helpers";
 import { createSkillTool } from "./skill";
 import { sqlite3Tool } from "./sqlite3";
 import type { Tool, ToolContext, ToolResult } from "./tool";
@@ -74,6 +73,8 @@ export interface TaskToolDeps {
 	logDir?: string;
 	debug?: boolean;
 	startedAt?: number;
+	availableTools?: import("../platform/types").AvailableTools;
+	platformInfo?: import("../platform/types").PlatformInfo;
 }
 
 export function createTaskTool(deps: TaskToolDeps): Tool {
@@ -94,6 +95,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		logDir,
 		debug,
 		startedAt,
+		availableTools,
+		platformInfo,
 	} = deps;
 
 	return {
@@ -231,34 +234,49 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 					return { role: m.role as "user", content: m.content };
 				});
 
+			// Build tool registry without the task tool itself (no recursion)
+			const skillTool = createSkillTool(skills);
+			const avail = availableTools ?? { shells: [], grepTools: [], git: false };
+			const childDynamicTools = [
+				readFileTool,
+				listDirectoryTool,
+				fileSearchTool,
+				writeFileTool,
+				editFileTool,
+				sqlite3Tool,
+				webFetchTool,
+				skillTool,
+			];
+			for (const kind of avail.shells) {
+				const tool = getShellTool(kind);
+				if (tool) childDynamicTools.push(tool);
+			}
+			for (const kind of avail.grepTools) {
+				const tool = getGrepTool(kind);
+				if (tool) childDynamicTools.push(tool);
+			}
+			const childTools = createToolRegistry(childDynamicTools);
+
 			// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
 			const projectInfo = await getProjectInfo(projectRoot);
 			const metadata: SystemPromptMetadata = {
 				date: formatPromptDate(),
 				projectDir: projectRoot,
 				gitBranch: projectInfo.git?.branch,
+				platform: platformInfo?.id,
 			};
 			const debugInfo: SystemPromptDebug | undefined =
 				debug && startedAt != null
 					? { uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), sessionId: childSessionId }
 					: undefined;
-			const subagentPrompt = buildSystemPrompt(skills.list(), instructions, { subagent: true, metadata, debug: debugInfo });
+			const platformToolNames = [...avail.shells, ...avail.grepTools];
+			const subagentPrompt = buildSystemPrompt(skills.list(), instructions, {
+				subagent: true,
+				metadata,
+				debug: debugInfo,
+				toolNames: platformToolNames,
+			});
 			messages.unshift({ role: "system", content: subagentPrompt });
-
-			// Build tool registry without the task tool itself (no recursion)
-			const skillTool = createSkillTool(skills);
-			const childTools = createToolRegistry([
-				readFileTool,
-				listDirectoryTool,
-				fileSearchTool,
-				writeFileTool,
-				editFileTool,
-				grepSearchTool,
-				bashTool,
-				sqlite3Tool,
-				webFetchTool,
-				skillTool,
-			]);
 
 			// Compact old tool outputs for resumed subagent sessions.
 			// New sessions have no tool messages yet, so this is a no-op.

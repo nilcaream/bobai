@@ -40,7 +40,10 @@ export function startTestServer(options: ServerOptions): {
 	baseUrl: string;
 	wsUrl: string;
 } {
-	const server = createServer(options);
+	const server = createServer({
+		availableTools: { shells: ["bash"], grepTools: ["grep_search"], git: true },
+		...options,
+	});
 	return {
 		server,
 		baseUrl: `http://localhost:${server.port}`,

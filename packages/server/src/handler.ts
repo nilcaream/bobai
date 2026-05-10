@@ -14,6 +14,7 @@ import type { Logger } from "./log/logger";
 import { runWithScope } from "./log/logger";
 import { sessionScope } from "./log/session-tag";
 import { repairMessageOrdering } from "./message-repair";
+import type { AvailableTools, PlatformInfo } from "./platform";
 import { getProjectInfo } from "./project-info";
 import type { StagedSkill } from "./protocol";
 import { send } from "./protocol";
@@ -39,12 +40,11 @@ import type { SkillRegistry } from "./skill/skill";
 import { SubagentStatus } from "./subagent-status";
 import type { SystemPromptDebug, SystemPromptMetadata } from "./system-prompt";
 import { buildSystemPrompt } from "./system-prompt";
-import { bashTool } from "./tool/bash";
 import { editFileTool } from "./tool/edit-file";
 import { fileSearchTool } from "./tool/file-search";
-import { grepSearchTool } from "./tool/grep-search";
 import { listDirectoryTool } from "./tool/list-directory";
 import { readFileTool } from "./tool/read-file";
+import { getGrepTool, getShellTool } from "./tool/registry-helpers";
 import { createSkillTool } from "./tool/skill";
 import { sqlite3Tool } from "./tool/sqlite3";
 import { createTaskTool } from "./tool/task";
@@ -77,6 +77,8 @@ export interface PromptRequest {
 	debug?: boolean;
 	startedAt?: number;
 	dbGuard?: DbGuard;
+	availableTools?: AvailableTools;
+	platformInfo?: PlatformInfo;
 }
 
 function resolveConfiguredSessionBackend(defaultProviderId: ProviderId | null, defaultModel: string | null) {
@@ -183,17 +185,6 @@ export async function handlePrompt(req: PromptRequest) {
 			updateSessionModel(db, currentSessionId, effectiveModel);
 		}
 
-		// Build metadata and optional debug info for system prompt
-		const projectInfo = await getProjectInfo(projectRoot);
-		const metadata: SystemPromptMetadata = {
-			date: formatPromptDate(),
-			projectDir: projectRoot,
-			gitBranch: projectInfo.git?.branch,
-		};
-		const debugInfo: SystemPromptDebug | undefined =
-			req.debug && currentSessionId ? { sessionId: currentSessionId } : undefined;
-		const systemPrompt = buildSystemPrompt(skills.list(), instructions, { metadata, debug: debugInfo });
-
 		// Persist staged skills as real tool call/result pairs BEFORE the user message
 		// so they appear in the correct order in conversation history and survive reload.
 		if (stagedSkills && stagedSkills.length > 0) {
@@ -267,9 +258,6 @@ export async function handlePrompt(req: PromptRequest) {
 			scopedLogger?.warn("REPAIR", `Repaired message ordering in session ${currentSessionId}`);
 		}
 
-		// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
-		messages.unshift({ role: "system", content: systemPrompt });
-
 		const taskTool = createTaskTool({
 			db,
 			provider: activeProvider,
@@ -289,23 +277,56 @@ export async function handlePrompt(req: PromptRequest) {
 			},
 			sendWs: (msg) => send(ws, msg),
 			subagentStatus,
+			availableTools: req.availableTools,
+			platformInfo: req.platformInfo,
 		});
 
 		const skillTool = createSkillTool(skills);
 
-		const tools = createToolRegistry([
+		// Build the tool registry dynamically based on platform-available tools.
+		const availableTools = req.availableTools ?? { shells: [], grepTools: [], git: false };
+		const dynamicTools = [
 			readFileTool,
 			listDirectoryTool,
 			fileSearchTool,
 			writeFileTool,
 			editFileTool,
-			grepSearchTool,
-			bashTool,
 			sqlite3Tool,
 			webFetchTool,
 			taskTool,
 			skillTool,
-		]);
+		];
+
+		for (const kind of availableTools.shells) {
+			const tool = getShellTool(kind);
+			if (tool) dynamicTools.push(tool);
+		}
+		for (const kind of availableTools.grepTools) {
+			const tool = getGrepTool(kind);
+			if (tool) dynamicTools.push(tool);
+		}
+
+		const tools = createToolRegistry(dynamicTools);
+
+		// Build metadata and system prompt AFTER tool registry so toolNames are accurate.
+		const projectInfo = await getProjectInfo(projectRoot);
+		const metadata: SystemPromptMetadata = {
+			date: formatPromptDate(),
+			projectDir: projectRoot,
+			gitBranch: projectInfo.git?.branch,
+			platform: req.platformInfo?.id,
+		};
+		const debugInfo: SystemPromptDebug | undefined =
+			req.debug && currentSessionId ? { sessionId: currentSessionId } : undefined;
+		const platformToolNames = [...availableTools.shells, ...availableTools.grepTools];
+		const systemPrompt = buildSystemPrompt(skills.list(), instructions, {
+			metadata,
+			debug: debugInfo,
+			toolNames: platformToolNames,
+		});
+
+		// Prepend the dynamic system prompt (always fresh, reflects current skills/config)
+		messages.unshift({ role: "system", content: systemPrompt });
 
 		// Compact old/irrelevant tool outputs before sending to the LLM.
 		// Uses the session's last known prompt token count and the model's context window.

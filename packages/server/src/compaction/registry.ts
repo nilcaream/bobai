@@ -13,12 +13,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { bashTool } from "../tool/bash";
 import { editFileTool } from "../tool/edit-file";
 import { fileSearchTool } from "../tool/file-search";
-import { grepSearchTool } from "../tool/grep-search";
 import { listDirectoryTool } from "../tool/list-directory";
 import { readFileTool } from "../tool/read-file";
+import { getGrepTool, getShellTool } from "../tool/registry-helpers";
 import { SKILL_BASE_DISTANCE, SKILL_OUTPUT_THRESHOLD } from "../tool/skill";
 import { sqlite3Tool } from "../tool/sqlite3";
 import { TASK_ARGS_THRESHOLD, TASK_BASE_DISTANCE, TASK_OUTPUT_THRESHOLD } from "../tool/task";
@@ -82,18 +81,28 @@ const taskCompactionStub: Tool = {
 };
 
 /** Build a ToolRegistry with all tools' compaction metadata (thresholds + compact methods). */
-export function createCompactionRegistry(): ToolRegistry {
-	return createToolRegistry([
+export function createCompactionRegistry(availableTools?: import("../platform/types").AvailableTools): ToolRegistry {
+	const tools: Tool[] = [
 		readFileTool,
 		listDirectoryTool,
 		fileSearchTool,
 		writeFileTool,
 		editFileTool,
-		grepSearchTool,
-		bashTool,
 		sqlite3Tool,
 		webFetchTool,
 		skillCompactionStub,
 		taskCompactionStub,
-	]);
+	];
+
+	const avail = availableTools ?? { shells: ["bash"], grepTools: ["grep_search"], git: false };
+	for (const kind of avail.shells) {
+		const t = getShellTool(kind);
+		if (t) tools.push(t);
+	}
+	for (const kind of avail.grepTools) {
+		const t = getGrepTool(kind);
+		if (t) tools.push(t);
+	}
+
+	return createToolRegistry(tools);
 }

@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { authorizeCopilot, getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
 import { loadAuthStore } from "./auth/store";
@@ -9,6 +8,7 @@ import { loadGlobalConfig } from "./config/global";
 import { resolveConfig } from "./config/resolve";
 import { createTrackingFetch } from "./log/fetch";
 import { createLogger } from "./log/logger";
+import { createPlatform, detectAvailableTools } from "./platform";
 import { loadPlugins } from "./plugins/loader";
 import { resolvePort } from "./port";
 import { initProject } from "./project";
@@ -22,10 +22,9 @@ import { builtinSkills } from "./skill/builtin";
 import { discoverSkills } from "./skill/skill";
 
 const cli = parseCLI(process.argv.slice(2));
-
-const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-const logDir = path.join(dataHome, "bobai", "log");
-const globalConfigDir = path.join(os.homedir(), ".config", "bobai");
+const platform = createPlatform();
+const globalConfigDir = platform.paths.configDir;
+const logDir = platform.paths.logDir;
 
 if (cli.command === "auth") {
 	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
@@ -123,7 +122,7 @@ const defaultBackend = resolveValidatedDefaultBackend(
 	logger,
 );
 
-const skillDirectories = [path.join(globalConfigDir, "skills"), path.join(process.cwd(), ".bobai", "skills")];
+const skillDirectories = [platform.skillsDir, path.join(process.cwd(), ".bobai", "skills")];
 const skills = discoverSkills(skillDirectories, { debug, builtinSkills });
 logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
 for (const skill of skills.list()) {
@@ -146,6 +145,14 @@ const runtimeManager = createProviderRuntimeManager({
 	fetch: trackingFetch,
 });
 const port = resolvePort(process.argv.slice(2), { port: project.port });
+
+// Detect platform-available tools (shell, grep, git).
+const availableTools = await detectAvailableTools(platform.info);
+logger.info(
+	"PLATFORM",
+	`${platform.info.id}: shells=[${availableTools.shells.join(",")}] grep=[${availableTools.grepTools.join(",")}] git=${availableTools.git}`,
+);
+
 // Bundled layout: server.js + ui/ live side-by-side in dist/.
 // Source layout:  packages/server/src/index.ts → ../../ui/dist.
 const bundledUi = path.resolve(import.meta.dir, "ui");
@@ -170,6 +177,8 @@ const server = createServer({
 	logDir,
 	debug,
 	startedAt: Date.now(),
+	availableTools,
+	platformInfo: platform.info,
 });
 
 logger.info("SERVER", `Project: ${project.id}`);
@@ -180,4 +189,4 @@ console.log(`Project: ${project.id}`);
 console.log(`Provider: ${defaultBackend ? `${defaultBackend.provider} / ${defaultBackend.model}` : "(none)"}`);
 console.log(`http://localhost:${server.port}/bobai`);
 
-await loadPlugins(globalConfigDir, logger);
+await loadPlugins(platform.pluginsDir, logger);

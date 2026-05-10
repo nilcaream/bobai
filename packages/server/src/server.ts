@@ -13,6 +13,7 @@ import { handlePrompt } from "./handler";
 import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
 import { sessionScope } from "./log/session-tag";
+import type { AvailableTools, PlatformInfo } from "./platform";
 import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
@@ -58,6 +59,8 @@ export interface ServerOptions {
 	logDir?: string;
 	debug?: boolean;
 	startedAt?: number;
+	availableTools?: AvailableTools;
+	platformInfo?: PlatformInfo;
 }
 
 function resolveConfiguredProviderId(providerId?: ProviderId, runtimeProviderId?: string): ProviderId | null {
@@ -187,12 +190,15 @@ export function createServer(options: ServerOptions) {
 					date: formatPromptDate(),
 					projectDir: options.projectRoot ?? process.cwd(),
 					gitBranch: projectInfo.git?.branch,
+					platform: options.platformInfo?.id,
 				};
 				const debugInfo =
 					options.debug && options.startedAt != null
 						? { uptimeSeconds: Math.floor((Date.now() - options.startedAt) / 1000), sessionId }
 						: undefined;
-				const systemPrompt = buildSystemPrompt(skills.list(), instructions, { metadata, debug: debugInfo });
+				const available = options.availableTools ?? { shells: [], grepTools: [], git: false };
+				const toolNames: string[] = [...available.shells, ...available.grepTools];
+				const systemPrompt = buildSystemPrompt(skills.list(), instructions, { metadata, debug: debugInfo, toolNames });
 
 				// BACKWARD COMPAT: Sessions created before the dynamic system prompt change
 				// stored the system message in the DB at sort_order 0. Strip it — we always
@@ -265,7 +271,7 @@ export function createServer(options: ServerOptions) {
 					});
 				}
 
-				const tools = createCompactionRegistry();
+				const tools = createCompactionRegistry(options.availableTools);
 				const compactionResult = compactToBudget({
 					messages,
 					contextWindow,
@@ -671,6 +677,8 @@ export function createServer(options: ServerOptions) {
 								debug: options.debug,
 								startedAt: options.startedAt,
 								dbGuard: options.dbGuard,
+								availableTools: options.availableTools ?? { shells: [], grepTools: [], git: false },
+								platformInfo: options.platformInfo,
 							})
 								.catch((err) => {
 									if (err instanceof DbDisconnectedError) {

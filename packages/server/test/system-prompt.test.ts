@@ -25,7 +25,7 @@ describe("buildSystemPrompt", () => {
 	});
 
 	test("mentions available tools", () => {
-		const result = buildSystemPrompt([]);
+		const result = buildSystemPrompt([], [], { toolNames: ["bash", "grep_search"] });
 		expect(result).toContain("read_file");
 		expect(result).toContain("list_directory");
 		expect(result).toContain("write_file");
@@ -192,7 +192,7 @@ describe("buildSystemPrompt", () => {
 	});
 
 	test("subagent prompt includes all other tools", () => {
-		const result = buildSystemPrompt([], [], { subagent: true });
+		const result = buildSystemPrompt([], [], { subagent: true, toolNames: ["bash", "grep_search"] });
 		expect(result).toContain("- read_file:");
 		expect(result).toContain("- list_directory:");
 		expect(result).toContain("- write_file:");

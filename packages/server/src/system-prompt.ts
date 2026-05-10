@@ -8,7 +8,11 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 	write_file: "Create or overwrite a file. Parent directories are created automatically.",
 	edit_file: "Edit a file by replacing an exact string with new content. The old_string must match exactly one location.",
 	grep_search: "Search file contents for a pattern. Returns matching lines with paths and line numbers.",
-	bash: "Execute a bash command in the project directory. Use for running tests, builds, linters, git, and other shell operations.",
+	findstr: "Search file contents using findstr (Windows built-in). Returns matching lines with file paths and line numbers.",
+	bash: "Execute a bash script in the project directory. Use for running tests, builds, linters, git, and other shell operations.",
+	cmd: "Execute a Windows batch command (cmd.exe) in the project directory. Use for running builds, tests, git, and other shell operations.",
+	powershell:
+		"Execute a PowerShell script in the project directory. Use for complex scripting, object manipulation, or when cmd is insufficient.",
 	sqlite3:
 		"Execute a SQL query against a SQLite database in the project directory. Use for querying, creating, and modifying SQLite databases without needing sqlite3 installed on the system.",
 	web_fetch:
@@ -18,37 +22,28 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Load a skill by name to get specialized instructions and workflows. Use when a task matches an available skill's description.",
 };
 
-const PARENT_TOOLS = [
-	"read_file",
-	"list_directory",
-	"write_file",
-	"edit_file",
-	"grep_search",
-	"bash",
-	"sqlite3",
-	"web_fetch",
-	"task",
-	"skill",
-];
-const SUBAGENT_TOOLS = [
-	"read_file",
-	"list_directory",
-	"write_file",
-	"edit_file",
-	"grep_search",
-	"bash",
-	"sqlite3",
-	"web_fetch",
-	"skill",
-];
+const PARENT_SHARED_TOOLS = ["read_file", "list_directory", "write_file", "edit_file", "sqlite3", "web_fetch", "task", "skill"];
+const SUBAGENT_SHARED_TOOLS = ["read_file", "list_directory", "write_file", "edit_file", "sqlite3", "web_fetch", "skill"];
 
 const SUBAGENT_NOTE = `
 Note: You are running as a subagent (spawned by the \`task\` tool). The \`task\` tool is not available in this context — you cannot create nested subagents. Complete your work directly using the tools listed above.`;
 
-function buildBasePrompt(options?: { subagent?: boolean }): string {
+function buildBasePrompt(options?: { subagent?: boolean; toolNames?: string[] }): string {
 	const isSubagent = options?.subagent === true;
-	const tools = isSubagent ? SUBAGENT_TOOLS : PARENT_TOOLS;
-	const toolList = tools.map((t) => `- ${t}: ${TOOL_DESCRIPTIONS[t]}`).join("\n");
+	const sharedTools = isSubagent ? SUBAGENT_SHARED_TOOLS : PARENT_SHARED_TOOLS;
+
+	// Merge shared tools with caller-provided platform-specific tool names.
+	// Deduplicate so the same tool isn't listed twice.
+	const seen = new Set(sharedTools);
+	const allToolNames = [...sharedTools];
+	for (const name of options?.toolNames ?? []) {
+		if (!seen.has(name)) {
+			seen.add(name);
+			allToolNames.push(name);
+		}
+	}
+
+	const toolList = allToolNames.map((t) => `- ${t}: ${TOOL_DESCRIPTIONS[t] ?? `Use the ${t} tool.`}`).join("\n");
 	const taskGuidance = isSubagent
 		? ""
 		: "\n- Use the task tool for complex multi-step work that can be delegated to a subagent.";
@@ -79,6 +74,8 @@ export interface SystemPromptMetadata {
 	date: string;
 	projectDir: string;
 	gitBranch?: string;
+	/** Platform identifier, e.g. "linux-x64", "darwin-arm64", "win32-x64-native". */
+	platform?: string;
 }
 
 export interface SystemPromptDebug {
@@ -90,6 +87,8 @@ export interface SystemPromptOptions {
 	subagent?: boolean;
 	metadata?: SystemPromptMetadata;
 	debug?: SystemPromptDebug;
+	/** Platform-specific tool names to include in the prompt (e.g. ["bash", "grep_search"] or ["cmd", "powershell", "findstr"]). */
+	toolNames?: string[];
 }
 
 export function buildSystemPrompt(
@@ -97,13 +96,18 @@ export function buildSystemPrompt(
 	instructions: InstructionFile[] = [],
 	options?: SystemPromptOptions,
 ): string {
-	const parts: string[] = [`<base>\n${buildBasePrompt(options)}\n</base>`];
+	const parts: string[] = [
+		`<base>\n${buildBasePrompt({ subagent: options?.subagent, toolNames: options?.toolNames })}\n</base>`,
+	];
 
 	if (options?.metadata) {
-		const { date, projectDir, gitBranch } = options.metadata;
+		const { date, projectDir, gitBranch, platform } = options.metadata;
 		const lines = [`- Date: ${date}`, `- Project: ${projectDir}`];
 		if (gitBranch !== undefined) {
 			lines.push(`- Branch: ${gitBranch}`);
+		}
+		if (platform !== undefined) {
+			lines.push(`- Platform: ${platform}`);
 		}
 		parts.push(`<metadata>\n${lines.join("\n")}\n</metadata>`);
 	}
