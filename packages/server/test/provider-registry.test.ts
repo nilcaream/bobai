@@ -15,13 +15,21 @@ describe("provider registry", () => {
 	});
 
 	test("lists supported auth providers separately from runtime providers", () => {
-		expect(SUPPORTED_AUTH_PROVIDERS).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
+		expect(SUPPORTED_AUTH_PROVIDERS).toEqual([
+			"github-copilot",
+			"openrouter",
+			"opencode-go",
+			"opencode-zen",
+			"amazon-bedrock",
+			"deepseek",
+		]);
 		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual([
 			"github-copilot",
 			"openrouter",
 			"opencode-go",
 			"opencode-zen",
 			"amazon-bedrock",
+			"deepseek",
 		]);
 	});
 
@@ -34,6 +42,8 @@ describe("provider registry", () => {
 		expect(isSupportedProvider("openrouter")).toBe(true);
 		expect(isSupportedProvider("opencode-go")).toBe(true);
 		expect(isSupportedProvider("opencode-zen")).toBe(true);
+		expect(isSupportedProvider("amazon-bedrock")).toBe(true);
+		expect(isSupportedProvider("deepseek")).toBe(true);
 		expect(isSupportedProvider("anything-else")).toBe(false);
 	});
 
@@ -43,6 +53,7 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("opencode-go")).toBe(true);
 		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
 		expect(isSupportedAuthProvider("amazon-bedrock")).toBe(true);
+		expect(isSupportedAuthProvider("deepseek")).toBe(true);
 		expect(isSupportedAuthProvider("anything-else")).toBe(false);
 	});
 
@@ -69,6 +80,12 @@ describe("provider registry", () => {
 		expect(getDefaultModelForProvider("amazon-bedrock")).toBe("anthropic.claude-opus-4-7");
 	});
 
+	test("recognizes deepseek as a runtime and auth provider", () => {
+		expect(isSupportedProvider("deepseek")).toBe(true);
+		expect(isSupportedAuthProvider("deepseek")).toBe(true);
+		expect(getDefaultModelForProvider("deepseek")).toBe("deepseek-v4-flash");
+	});
+
 	test("exposes provider descriptor metadata through the registry", () => {
 		expect(getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
 		expect(getProviderDescriptor("github-copilot")?.getApiFamily("claude-haiku-4.5")).toBe("anthropic-messages");
@@ -80,6 +97,9 @@ describe("provider registry", () => {
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("minimax-m2.5-free")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
+		expect(getProviderDescriptor("deepseek")?.defaultModel).toBe("deepseek-v4-flash");
+		expect(getProviderDescriptor("deepseek")?.getApiFamily("deepseek-v4-flash")).toBe("openai-chat-completions");
+		expect(getProviderDescriptor("deepseek")?.getApiFamily("deepseek-v4-pro")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("amazon-bedrock")?.defaultModel).toBe("anthropic.claude-opus-4-7");
 		expect(getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-opus-4-7")).toBe("anthropic-messages");
 		expect(getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-haiku-4-5")).toBe("anthropic-messages");

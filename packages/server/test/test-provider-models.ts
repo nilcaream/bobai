@@ -126,6 +126,24 @@ export function createProviderModelsTempDir(): string {
 				outputPrice: 1.5,
 			},
 		],
+		deepseek: [
+			{
+				id: "deepseek-v4-flash",
+				name: "DeepSeek V4 Flash",
+				contextWindow: 1000000,
+				maxOutput: 384000,
+				inputPrice: 0.14,
+				outputPrice: 0.28,
+			},
+			{
+				id: "deepseek-v4-pro",
+				name: "DeepSeek V4 Pro",
+				contextWindow: 1000000,
+				maxOutput: 384000,
+				inputPrice: 1.74,
+				outputPrice: 3.48,
+			},
+		],
 	});
 	return tmpDir;
 }

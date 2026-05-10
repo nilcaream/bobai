@@ -160,4 +160,33 @@ describe("provider factory", () => {
 
 		expect(result).toBe(provider);
 	});
+
+	test("creates deepseek provider from auth store entry", async () => {
+		const store = {
+			version: 1,
+			providers: {
+				deepseek: { apiKey: "ds-key" },
+			},
+		} as AuthStore;
+		const provider: Provider = {
+			id: "deepseek",
+			async *stream() {
+				yield { type: "finish" as const, reason: "stop" as const };
+			},
+		};
+
+		const result = await createConfiguredProvider(
+			{ providerId: "deepseek", configDir: "/cfg" },
+			{
+				providerModelsConfigExists: () => true,
+				loadAuthStore: () => store,
+				createDeepSeekProvider: (auth) => {
+					expect(auth).toEqual({ apiKey: "ds-key" });
+					return provider;
+				},
+			},
+		);
+
+		expect(result).toBe(provider);
+	});
 });

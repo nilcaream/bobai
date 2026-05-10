@@ -137,6 +137,7 @@ describe("unified model catalog", () => {
 		expect(typeof file.generatedAt).toBe("string");
 		expect(Object.keys(file.providers).sort()).toEqual([
 			"amazon-bedrock",
+			"deepseek",
 			"github-copilot",
 			"opencode-go",
 			"opencode-zen",

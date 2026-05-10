@@ -38,6 +38,7 @@ const PROVIDER_SOURCE_MAP: Record<ProviderId, string> = {
 	"opencode-go": "opencode-go",
 	"opencode-zen": "opencode",
 	"amazon-bedrock": "amazon-bedrock",
+	deepseek: "deepseek",
 };
 
 const COPILOT_MULTIPLIER_MODEL_ID_MAP: Record<string, string> = {
@@ -205,6 +206,7 @@ export async function refreshUnifiedModelCatalog(
 			openrouter: normalizeProviderModels("openrouter", catalog, copilotMultipliers),
 			"opencode-go": normalizeProviderModels("opencode-go", catalog, copilotMultipliers),
 			"opencode-zen": normalizeProviderModels("opencode-zen", catalog, copilotMultipliers),
+			deepseek: normalizeProviderModels("deepseek", catalog, copilotMultipliers),
 			"amazon-bedrock": bedrockModels,
 		},
 	};
@@ -344,6 +346,7 @@ export async function refreshBedrockModelsFromFoundation(
 				openrouter: [],
 				"opencode-go": [],
 				"opencode-zen": [],
+				deepseek: [],
 				"amazon-bedrock": [],
 			},
 		};

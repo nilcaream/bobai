@@ -9,6 +9,7 @@ describe("auth provider registry", () => {
 			"opencode-go",
 			"opencode-zen",
 			"amazon-bedrock",
+			"deepseek",
 		]);
 	});
 });

@@ -169,3 +169,72 @@ describe("GET /bobai/models for amazon-bedrock", () => {
 		expect(body.defaultStatus).toBe("amazon-bedrock | anthropic.claude-opus-4-7 [$15.00 $75.00] | $0.00 | 0 / 1000000 | 0%");
 	});
 });
+
+describe("GET /bobai/models for deepseek", () => {
+	let tmpDir: string;
+	let server: ReturnType<typeof Bun.serve>;
+	let baseUrl: string;
+
+	beforeAll(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-models-deepseek-"));
+		saveAuthStore(tmpDir, {
+			version: 1,
+			providers: {
+				deepseek: { apiKey: "ds-key" },
+			},
+		});
+		writeUnifiedModelsConfig(tmpDir, {
+			deepseek: [
+				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 1000000,
+					maxOutput: 384000,
+					inputPrice: 0.14,
+					outputPrice: 0.28,
+				},
+				{
+					id: "deepseek-v4-pro",
+					name: "DeepSeek V4 Pro",
+					contextWindow: 1000000,
+					maxOutput: 384000,
+					inputPrice: 1.74,
+					outputPrice: 3.48,
+				},
+			],
+		});
+		server = createServer({ port: 0, configDir: tmpDir, providerId: "deepseek" });
+		baseUrl = `http://localhost:${server.port}`;
+	});
+
+	afterAll(() => {
+		server.stop(true);
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("returns deepseek model list with cost and context window", async () => {
+		const res = await fetch(`${baseUrl}/bobai/models?provider=deepseek`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			providerId: string;
+			models: { index: number; id: string; cost: string; contextWindow: number }[];
+			defaultModel: string;
+			defaultStatus: string;
+		};
+		expect(body.providerId).toBe("deepseek");
+		expect(body.models).toContainEqual({
+			index: expect.any(Number),
+			id: "deepseek-v4-flash",
+			cost: "[$0.14 $0.28]",
+			contextWindow: 1000000,
+		});
+		expect(body.models).toContainEqual({
+			index: expect.any(Number),
+			id: "deepseek-v4-pro",
+			cost: "[$1.74 $3.48]",
+			contextWindow: 1000000,
+		});
+		expect(body.defaultModel).toBe("deepseek-v4-flash");
+		expect(body.defaultStatus).toBe("deepseek | deepseek-v4-flash [$0.14 $0.28] | $0.00 | 0 / 1000000 | 0%");
+	});
+});

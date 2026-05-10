@@ -1,6 +1,7 @@
 import { exchangeToken } from "../provider/copilot";
 import { refreshBedrockModelsFromFoundation } from "../provider/unified-model-catalog";
 import { AMAZON_BEDROCK_DEFAULT_REGION, fetchBedrockFoundationModels } from "./amazon-bedrock";
+import { validateDeepSeekKey } from "./deepseek";
 import { pollForToken, requestDeviceCode } from "./device-flow";
 import { validateOpenCodeGoKey } from "./opencode-go";
 import { validateOpenCodeZenKey } from "./opencode-zen";
@@ -15,6 +16,7 @@ import {
 	saveAuthStore,
 	setAmazonBedrockAuth,
 	setCopilotAuth,
+	setDeepSeekAuth,
 	setOpenCodeGoAuth,
 	setOpenCodeZenAuth,
 	setOpenRouterAuth,
@@ -112,6 +114,22 @@ export async function authorizeOpenCodeZen(
 	});
 }
 
+export async function authorizeDeepSeek(
+	configDir: string,
+	deps: {
+		promptSecret?: (prompt: string) => Promise<string>;
+		validateDeepSeekKey?: (apiKey: string) => Promise<void>;
+	} = {},
+): Promise<void> {
+	await authorizeApiKeyProvider(configDir, {
+		prompt: "Paste DeepSeek API key: ",
+		readSecret: deps.promptSecret ?? promptSecret,
+		validateKey: deps.validateDeepSeekKey ?? validateDeepSeekKey,
+		setAuth: setDeepSeekAuth,
+		successMessage: "DeepSeek key saved",
+	});
+}
+
 export async function authorizeAmazonBedrock(
 	configDir: string,
 	deps: {
@@ -179,6 +197,12 @@ const AUTH_PROVIDERS: AuthProviderEntry[] = [
 		id: "amazon-bedrock",
 		authorize: async (configDir: string) => {
 			await authorizeAmazonBedrock(configDir);
+		},
+	},
+	{
+		id: "deepseek",
+		authorize: async (configDir: string) => {
+			await authorizeDeepSeek(configDir);
 		},
 	},
 ];

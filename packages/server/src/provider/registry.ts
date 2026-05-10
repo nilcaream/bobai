@@ -1,4 +1,12 @@
-import type { AmazonBedrockAuth, AuthStore, CopilotAuth, OpenCodeGoAuth, OpenCodeZenAuth, OpenRouterAuth } from "../auth/store";
+import type {
+	AmazonBedrockAuth,
+	AuthStore,
+	CopilotAuth,
+	DeepSeekAuth,
+	OpenCodeGoAuth,
+	OpenCodeZenAuth,
+	OpenRouterAuth,
+} from "../auth/store";
 import type { Logger } from "../log/logger";
 import type { Provider } from "./provider";
 import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
@@ -9,6 +17,7 @@ export const SUPPORTED_RUNTIME_PROVIDER_IDS = [
 	"opencode-go",
 	"opencode-zen",
 	"amazon-bedrock",
+	"deepseek",
 ] as const;
 export const SUPPORTED_AUTH_PROVIDER_IDS = [
 	"github-copilot",
@@ -16,6 +25,7 @@ export const SUPPORTED_AUTH_PROVIDER_IDS = [
 	"opencode-go",
 	"opencode-zen",
 	"amazon-bedrock",
+	"deepseek",
 ] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
@@ -93,6 +103,7 @@ export interface ProviderDescriptor {
 			fetchFn?: typeof fetch,
 			configDir?: string,
 		) => Provider;
+		createDeepSeekProvider?: (auth: DeepSeekAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -182,6 +193,7 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 			fetchFn?: typeof fetch,
 			configDir?: string,
 		) => Provider;
+		createDeepSeekProvider?: (auth: DeepSeekAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	}): Promise<Provider>;
 }
 
@@ -241,6 +253,7 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 				createOpenCodeGoProvider: providerOptions.createOpenCodeGoProvider,
 				createOpenCodeZenProvider: providerOptions.createOpenCodeZenProvider,
 				createAmazonBedrockProvider: providerOptions.createAmazonBedrockProvider,
+				createDeepSeekProvider: providerOptions.createDeepSeekProvider,
 			});
 		},
 	};
@@ -396,11 +409,34 @@ const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 	},
 });
 
+const deepseekDescriptor = createApiKeyProviderDescriptor<DeepSeekAuth>({
+	id: "deepseek",
+	defaultModel: "deepseek-v4-flash",
+	auth: {
+		cliCommand: "bobai auth deepseek",
+		missingAuthMessage: "DeepSeek authentication not found. Please run: bobai auth deepseek",
+		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth deepseek` to re-authenticate.",
+	},
+	getApiFamily(): ApiFamily {
+		return "openai-chat-completions";
+	},
+	getAuth(store) {
+		return store?.providers.deepseek;
+	},
+	missingAuthMessage: "DeepSeek authentication not found. Please run: bobai auth deepseek",
+	async createProvider(options): Promise<Provider> {
+		const deepseekModule = await import("./deepseek");
+		const createDeepSeekProvider = options.createDeepSeekProvider ?? deepseekModule.createDeepSeekProvider;
+		return createDeepSeekProvider(options.auth, options.logger, options.fetch, options.configDir);
+	},
+});
+
 const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
 	"github-copilot": githubCopilotDescriptor,
 	openrouter: openRouterDescriptor,
 	"opencode-go": openCodeGoDescriptor,
 	"opencode-zen": openCodeZenDescriptor,
+	deepseek: deepseekDescriptor,
 	"amazon-bedrock": createApiKeyProviderDescriptor<AmazonBedrockAuth>({
 		id: "amazon-bedrock",
 		defaultModel: "anthropic.claude-opus-4-7",

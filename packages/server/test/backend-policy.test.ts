@@ -76,4 +76,9 @@ describe("backend policy", () => {
 	test("maps amazon-bedrock non-anthropic models to openai-chat-completions backend", () => {
 		expect(getApiFamilyForModel("amazon-bedrock", "deepseek.v3-v1:0")).toBe("openai-chat-completions");
 	});
+
+	test("maps deepseek models to openai-chat-completions backend", () => {
+		expect(getApiFamilyForModel("deepseek", "deepseek-v4-flash")).toBe("openai-chat-completions");
+		expect(getApiFamilyForModel("deepseek", "deepseek-v4-pro")).toBe("openai-chat-completions");
+	});
 });

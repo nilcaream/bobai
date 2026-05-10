@@ -6,6 +6,7 @@ import { AMAZON_BEDROCK_DEFAULT_REGION } from "../src/auth/amazon-bedrock";
 import {
 	authorizeAmazonBedrock,
 	authorizeCopilot,
+	authorizeDeepSeek,
 	authorizeOpenCodeGo,
 	authorizeOpenCodeZen,
 	authorizeOpenRouter,
@@ -181,6 +182,41 @@ describe("authorizeCopilot", () => {
 	});
 });
 
+describe("authorizeDeepSeek", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-auth-deepseek-"));
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("saves validated DeepSeek key into auth store", async () => {
+		await authorizeDeepSeek(tmpDir, {
+			promptSecret: async () => "ds-key-123",
+			validateDeepSeekKey: async () => {},
+		});
+
+		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
+		expect(raw.providers.deepseek).toEqual({ apiKey: "ds-key-123" });
+	});
+
+	test("does not save DeepSeek key when validation fails", async () => {
+		await expect(
+			authorizeDeepSeek(tmpDir, {
+				promptSecret: async () => "bad-ds-key",
+				validateDeepSeekKey: async () => {
+					throw new Error("DeepSeek validation failed: 401 Unauthorized");
+				},
+			}),
+		).rejects.toThrow(/401|Unauthorized/);
+
+		expect(fs.existsSync(path.join(tmpDir, "auth.json"))).toBe(false);
+	});
+});
+
 describe("amazon-bedrock auth store", () => {
 	test("can persist and retrieve amazon-bedrock auth", () => {
 		const store: AuthStore = { version: 1, providers: {} };
@@ -261,6 +297,6 @@ describe("listSupportedAuthProviders / getAuthProvider", () => {
 
 	test("listSupportedAuthProviders returns providers in stable canonical order", () => {
 		const ids = listSupportedAuthProviders().map((p) => p.id);
-		expect(ids).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock"]);
+		expect(ids).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock", "deepseek"]);
 	});
 });

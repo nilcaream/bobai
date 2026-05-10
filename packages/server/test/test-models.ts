@@ -8,6 +8,7 @@ export function writeUnifiedModelsConfig(
 		openrouter?: unknown[];
 		"opencode-go"?: unknown[];
 		"opencode-zen"?: unknown[];
+		deepseek?: unknown[];
 		"amazon-bedrock"?: unknown[];
 	},
 ): void {
@@ -23,6 +24,7 @@ export function writeUnifiedModelsConfig(
 					openrouter: providers.openrouter ?? [],
 					"opencode-go": providers["opencode-go"] ?? [],
 					"opencode-zen": providers["opencode-zen"] ?? [],
+					deepseek: providers.deepseek ?? [],
 					"amazon-bedrock": providers["amazon-bedrock"] ?? [],
 				},
 			},

@@ -3,6 +3,7 @@ import {
 	type AmazonBedrockAuth,
 	type AuthStore,
 	type CopilotAuth,
+	type DeepSeekAuth,
 	loadAuthStore as defaultLoadAuthStore,
 	type OpenCodeGoAuth,
 	type OpenCodeZenAuth,
@@ -11,6 +12,7 @@ import {
 import type { Logger } from "../log/logger";
 import { createAmazonBedrockProvider as defaultCreateAmazonBedrockProvider } from "./amazon-bedrock";
 import { createCopilotProvider as defaultCreateCopilotProvider } from "./copilot";
+import { createDeepSeekProvider as defaultCreateDeepSeekProvider } from "./deepseek";
 import { providerModelsConfigExists as defaultProviderModelsConfigExists } from "./models";
 import { createOpenCodeGoProvider as defaultCreateOpenCodeGoProvider } from "./opencode-go";
 import { createOpenCodeZenProvider as defaultCreateOpenCodeZenProvider } from "./opencode-zen";
@@ -40,6 +42,7 @@ export interface CreateProviderDeps {
 		fetchFn?: typeof fetch,
 		configDir?: string,
 	) => Provider;
+	createDeepSeekProvider?: (auth: DeepSeekAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 }
 
 export async function createConfiguredProvider(
@@ -68,5 +71,6 @@ export async function createConfiguredProvider(
 		createOpenCodeGoProvider: deps.createOpenCodeGoProvider ?? defaultCreateOpenCodeGoProvider,
 		createOpenCodeZenProvider: deps.createOpenCodeZenProvider ?? defaultCreateOpenCodeZenProvider,
 		createAmazonBedrockProvider: deps.createAmazonBedrockProvider ?? defaultCreateAmazonBedrockProvider,
+		createDeepSeekProvider: deps.createDeepSeekProvider ?? defaultCreateDeepSeekProvider,
 	});
 }

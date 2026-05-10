@@ -27,6 +27,10 @@ export interface AmazonBedrockAuth {
 	region: string;
 }
 
+export interface DeepSeekAuth {
+	apiKey: string;
+}
+
 export interface AuthStore {
 	version: 1;
 	providers: {
@@ -35,6 +39,7 @@ export interface AuthStore {
 		"opencode-go"?: OpenCodeGoAuth;
 		"opencode-zen"?: OpenCodeZenAuth;
 		"amazon-bedrock"?: AmazonBedrockAuth;
+		deepseek?: DeepSeekAuth;
 	};
 }
 
@@ -77,6 +82,10 @@ export function getOpenCodeZenAuth(store: AuthStore): OpenCodeZenAuth | undefine
 
 export function getAmazonBedrockAuth(store: AuthStore): AmazonBedrockAuth | undefined {
 	return store.providers["amazon-bedrock"];
+}
+
+export function getDeepSeekAuth(store: AuthStore): DeepSeekAuth | undefined {
+	return store.providers.deepseek;
 }
 
 export function setCopilotAuth(store: AuthStore, auth: CopilotAuth): AuthStore {
@@ -125,6 +134,16 @@ export function setAmazonBedrockAuth(store: AuthStore, auth: AmazonBedrockAuth):
 		providers: {
 			...store.providers,
 			"amazon-bedrock": auth,
+		},
+	};
+}
+
+export function setDeepSeekAuth(store: AuthStore, auth: DeepSeekAuth): AuthStore {
+	return {
+		...store,
+		providers: {
+			...store.providers,
+			deepseek: auth,
 		},
 	};
 }
