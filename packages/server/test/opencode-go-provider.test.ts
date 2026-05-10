@@ -162,6 +162,42 @@ describe("opencode-go provider", () => {
 		]);
 	});
 
+	test("ignores null reasoning termination chunk — does not append 'null' to reasoning text", async () => {
+		// Real APIs send a final chunk with reasoning: null to signal end of reasoning.
+		// Before the fix, `!== undefined` let null through and "null" was appended to the text.
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { reasoning: "step 1" } }] },
+					{ choices: [{ delta: { reasoning: null } }] },
+					{ choices: [{ delta: { content: "Answer" } }] },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "kimi-k2.6",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(events).toEqual([
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "step 1" } },
+			{ type: "text", text: "Answer" },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "step 1" },
+			},
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
 	test("throws ProviderError on non-OK response", async () => {
 		globalThis.fetch = mock(async () => new Response("Unauthorized", { status: 401 })) as typeof fetch;
 		const provider = createOpenCodeGoProvider({ apiKey: "bad" }, undefined, globalThis.fetch, configDir);
