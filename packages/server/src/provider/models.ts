@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { getAssistantMessagesWithTurnMetrics, getDescendantSessionIds } from "../session/repository";
+import { computeTurnCostDollars, formatPremiumRequests } from "./cost-utils";
 import type { ProviderId } from "./providers";
 import { getProviderDescriptor, type ProviderModelConfig, type SortedProviderModelListItem } from "./registry";
 
@@ -44,15 +45,6 @@ export function formatProviderModelDisplay(
 	return getDescriptor(providerId).formatModelDisplay(modelId, promptTokens, configDir, contextLimit, sessionCostDisplay);
 }
 
-export function formatPremiumRequests(total: number): string {
-	const formatted = total.toFixed(2);
-	if (formatted.endsWith(".00")) {
-		return String(Number.parseInt(formatted, 10));
-	}
-	// Trim trailing zeros after decimal, but keep at least one decimal digit
-	return String(Number.parseFloat(formatted));
-}
-
 export function computeDollarSessionTotal(db: Database, rootSessionId: string, configDir?: string): string {
 	const descendantIds = getDescendantSessionIds(db, rootSessionId);
 	const allSessionIds = [rootSessionId, ...descendantIds];
@@ -67,18 +59,13 @@ export function computeDollarSessionTotal(db: Database, rootSessionId: string, c
 		const modelConfig = getProviderModelConfig(providerId, turn.turnModel as string, configDir);
 		if (!modelConfig || modelConfig.inputPrice == null || modelConfig.outputPrice == null) continue;
 
-		const cachedRead = turn.cachedInputTokensTotal ?? 0;
-		const cachedWrite = turn.cacheCreationInputTokensTotal ?? 0;
-		const regularInput = Math.max(0, turn.inputTokensTotal - cachedRead - cachedWrite);
-		const cacheReadPrice = modelConfig.cacheReadPrice ?? modelConfig.inputPrice;
-		const cacheWritePrice = modelConfig.cacheWritePrice ?? modelConfig.inputPrice;
-
-		total +=
-			(regularInput * modelConfig.inputPrice +
-				cachedRead * cacheReadPrice +
-				cachedWrite * cacheWritePrice +
-				turn.outputTokensTotal * modelConfig.outputPrice) /
-			1_000_000;
+		total += computeTurnCostDollars(
+			turn.inputTokensTotal,
+			turn.outputTokensTotal,
+			turn.cachedInputTokensTotal ?? 0,
+			turn.cacheCreationInputTokensTotal ?? 0,
+			modelConfig,
+		);
 	}
 
 	return `$${total.toFixed(2)}`;

@@ -424,6 +424,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 										input_tokens_last: turnMetrics.inputTokensLast,
 										output_tokens_last: turnMetrics.outputTokensLast,
 										context_delta: turnMetrics.contextDelta,
+										cached_input_tokens_total: turnMetrics.cachedInputTokensTotal,
+										cache_creation_input_tokens_total: turnMetrics.cacheCreationInputTokensTotal,
 									},
 								}
 							: {}),
@@ -463,6 +465,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 									input_tokens_last: turnMetrics.inputTokensLast,
 									output_tokens_last: turnMetrics.outputTokensLast,
 									context_delta: turnMetrics.contextDelta,
+									cached_input_tokens_total: turnMetrics.cachedInputTokensTotal,
+									cache_creation_input_tokens_total: turnMetrics.cacheCreationInputTokensTotal,
 								},
 							}
 						: {}),

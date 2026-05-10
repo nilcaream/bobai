@@ -8,6 +8,7 @@ import type {
 	OpenRouterAuth,
 } from "../auth/store";
 import type { Logger } from "../log/logger";
+import { computeTurnCostDollars, formatPremiumRequests } from "./cost-utils";
 import type { Provider } from "./provider";
 import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
 
@@ -56,7 +57,8 @@ export interface ProviderSummaryParts {
 	modelName: string;
 	pricingLabel?: string;
 	costEstimate?: string;
-	premiumRequests?: string;
+	/** 'estimate' for computed dollar costs, 'exact' for Copilot PR costs. */
+	costLabelType?: "estimate" | "exact";
 }
 
 export interface ProviderAuthMetadata {
@@ -86,6 +88,9 @@ export interface ProviderDescriptor {
 		modelId: string;
 		inputTokens: number;
 		outputTokens: number;
+		cachedInputTokens?: number;
+		cacheCreationInputTokens?: number;
+		premiumRequests?: number;
 		configDir?: string;
 		billable?: boolean;
 	}): ProviderSummaryParts;
@@ -176,6 +181,9 @@ interface ApiKeyProviderDescriptorOptions<Auth> {
 		modelId: string;
 		inputTokens: number;
 		outputTokens: number;
+		cachedInputTokens?: number;
+		cacheCreationInputTokens?: number;
+		premiumRequests?: number;
 		configDir?: string;
 		billable?: boolean;
 	}) => ProviderSummaryParts;
@@ -239,7 +247,31 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 			);
 		},
 		buildTurnSummaryParts(summaryOptions): ProviderSummaryParts {
-			return options.buildTurnSummaryParts?.(summaryOptions) ?? { modelName: defaultModelName(summaryOptions.modelId) };
+			if (options.buildTurnSummaryParts) {
+				return options.buildTurnSummaryParts(summaryOptions);
+			}
+			const modelName = defaultModelName(summaryOptions.modelId);
+			const modelConfig = loadProviderModelsFromUnifiedCatalog(options.id, summaryOptions.configDir).find(
+				(model) => model.id === summaryOptions.modelId,
+			);
+			if (
+				modelConfig?.inputPrice !== undefined &&
+				modelConfig.outputPrice !== undefined &&
+				(summaryOptions.inputTokens > 0 || summaryOptions.outputTokens > 0)
+			) {
+				const cost = computeTurnCostDollars(
+					summaryOptions.inputTokens,
+					summaryOptions.outputTokens,
+					summaryOptions.cachedInputTokens ?? 0,
+					summaryOptions.cacheCreationInputTokens ?? 0,
+					modelConfig,
+				);
+				return { modelName, costEstimate: `$${cost.toFixed(2)}`, costLabelType: "estimate" };
+			}
+			if (options.id === "openrouter" && modelConfig?.inputPrice === 0 && modelConfig.outputPrice === 0) {
+				return { modelName, costEstimate: "free" };
+			}
+			return { modelName };
 		},
 		async createConfiguredProvider(providerOptions): Promise<Provider> {
 			const auth = options.getAuth(providerOptions.store);
@@ -309,6 +341,14 @@ const githubCopilotDescriptor: ProviderDescriptor = {
 		);
 	},
 	buildTurnSummaryParts(options): ProviderSummaryParts {
+		const totalPremium = options.premiumRequests ?? 0;
+		if (totalPremium > 0) {
+			return {
+				modelName: options.modelId,
+				costEstimate: `${formatPremiumRequests(totalPremium)} PR`,
+				costLabelType: "exact",
+			};
+		}
 		const modelConfig = this.loadModels(options.configDir).find((model) => model.id === options.modelId);
 		return {
 			modelName: options.modelId,
@@ -348,9 +388,19 @@ const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 		if (staticEstimate) {
 			return { modelName, costEstimate: staticEstimate };
 		}
-		if (modelConfig?.inputPrice !== undefined && modelConfig.outputPrice !== undefined) {
-			const cost = (options.inputTokens * modelConfig.inputPrice + options.outputTokens * modelConfig.outputPrice) / 1_000_000;
-			return { modelName, costEstimate: `$${cost.toFixed(2)}` };
+		if (
+			modelConfig?.inputPrice !== undefined &&
+			modelConfig.outputPrice !== undefined &&
+			(options.inputTokens > 0 || options.outputTokens > 0)
+		) {
+			const cost = computeTurnCostDollars(
+				options.inputTokens,
+				options.outputTokens,
+				options.cachedInputTokens ?? 0,
+				options.cacheCreationInputTokens ?? 0,
+				modelConfig,
+			);
+			return { modelName, costEstimate: `$${cost.toFixed(2)}`, costLabelType: "estimate" };
 		}
 		return { modelName };
 	},

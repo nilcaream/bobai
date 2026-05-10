@@ -108,6 +108,8 @@ export interface StreamMetrics {
 	cachedInputTokens?: number;
 	/** Tokens written to the cache (billed at cacheWritePrice). Anthropic-specific. */
 	cacheCreationInputTokens?: number;
+	/** Premium request multiplier for this LLM call. Copilot-only. */
+	premiumRequests?: number;
 }
 
 export interface ProviderOptions {

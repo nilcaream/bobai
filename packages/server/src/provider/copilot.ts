@@ -339,6 +339,8 @@ export function createCopilotProvider(
 							),
 						};
 						if (options.onMetrics) {
+							const multiplier =
+								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.premiumRequestMultiplier ?? 0;
 							options.onMetrics({
 								model: options.model,
 								promptTokens: usageEvent.tokenCount,
@@ -347,7 +349,7 @@ export function createCopilotProvider(
 								totalTokens: usageEvent.totalTokens ?? usageEvent.tokenCount,
 								cachedInputTokens: event.cachedInputTokens,
 								cacheCreationInputTokens: event.cacheCreationInputTokens,
-								initiator: effectiveInitiator,
+								premiumRequests: effectiveInitiator === "user" ? multiplier : 0,
 							});
 						} else {
 							turnModel = options.model;
@@ -544,6 +546,8 @@ export function createCopilotProvider(
 							),
 						};
 						if (options.onMetrics) {
+							const multiplier =
+								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.premiumRequestMultiplier ?? 0;
 							options.onMetrics({
 								model: options.model,
 								promptTokens: usageEvent.tokenCount,
@@ -551,7 +555,7 @@ export function createCopilotProvider(
 								promptChars: callChars,
 								totalTokens: usageEvent.totalTokens ?? usageEvent.tokenCount,
 								cachedInputTokens: event.cachedInputTokens,
-								initiator: effectiveInitiator,
+								premiumRequests: effectiveInitiator === "user" ? multiplier : 0,
 							});
 						} else {
 							turnModel = options.model;
@@ -633,11 +637,17 @@ export function createCopilotProvider(
 				turnModel,
 				`agent: ${turnAgentCalls}`,
 				`user: ${turnUserCalls}`,
-				`premium: ${turnPremiumCost.toFixed(2)}`,
+				`cost: ${turnPremiumCost.toFixed(2)} PR`,
 				`tokens: ${turnTokens}`,
-				contextDisplay,
-				`${elapsed.toFixed(2)}s`,
 			];
+			if (turnCachedInputTokens > 0) {
+				parts.push(`cache-read: ${turnCachedInputTokens}`);
+			}
+			if (turnCacheCreationInputTokens > 0) {
+				parts.push(`cache-write: ${turnCacheCreationInputTokens}`);
+			}
+			parts.push(contextDisplay);
+			parts.push(`${elapsed.toFixed(2)}s`);
 			return ` | ${parts.join(" | ")}`;
 		},
 
@@ -895,6 +905,8 @@ export function createCopilotProvider(
 							// Accumulate per-turn stats — route to external callback if provided,
 							// otherwise update the provider's own closure-scoped variables.
 							if (options.onMetrics) {
+								const multiplier =
+									getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.premiumRequestMultiplier ?? 0;
 								options.onMetrics({
 									model: options.model,
 									promptTokens,
@@ -902,7 +914,7 @@ export function createCopilotProvider(
 									promptChars: callChars,
 									totalTokens,
 									cachedInputTokens: cachedTokens,
-									initiator: effectiveInitiator,
+									premiumRequests: effectiveInitiator === "user" ? multiplier : 0,
 								});
 							} else {
 								turnModel = options.model;

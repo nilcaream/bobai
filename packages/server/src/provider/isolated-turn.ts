@@ -19,6 +19,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 	let turnTotalOutputTokens = 0;
 	let turnCachedInputTokens = 0;
 	let turnCacheCreationInputTokens = 0;
+	let turnPremiumRequests = 0;
 	let turnLastCallChars = 0;
 	let baselineTokens = 0;
 
@@ -37,6 +38,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 					turnTotalOutputTokens += metrics.outputTokens;
 					turnCachedInputTokens += metrics.cachedInputTokens ?? 0;
 					turnCacheCreationInputTokens += metrics.cacheCreationInputTokens ?? 0;
+					turnPremiumRequests += metrics.premiumRequests ?? 0;
 					turnLastCallChars = metrics.promptChars;
 					options.onMetrics?.(metrics);
 				},
@@ -52,6 +54,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 			turnTotalOutputTokens = 0;
 			turnCachedInputTokens = 0;
 			turnCacheCreationInputTokens = 0;
+			turnPremiumRequests = 0;
 			turnLastCallChars = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
@@ -66,18 +69,28 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 				modelId: turnModel,
 				inputTokens: turnTotalInputTokens,
 				outputTokens: turnTotalOutputTokens,
+				cachedInputTokens: turnCachedInputTokens,
+				cacheCreationInputTokens: turnCacheCreationInputTokens,
+				premiumRequests: turnPremiumRequests,
 				configDir: configDir ?? original.configDir,
 			}) ?? {
 				modelName: turnModel.includes("/") ? (turnModel.split("/").at(-1) ?? turnModel) : turnModel,
 			};
 			const parts = [summaryParts.modelName];
-			if (summaryParts.pricingLabel) {
+			if (summaryParts.pricingLabel && !summaryParts.costEstimate) {
 				parts.push(summaryParts.pricingLabel);
 			}
 			parts.push(`in: ${turnTotalInputTokens}`);
 			parts.push(`out: ${turnTotalOutputTokens}`);
+			if (turnCachedInputTokens > 0) {
+				parts.push(`cache-read: ${turnCachedInputTokens}`);
+			}
+			if (turnCacheCreationInputTokens > 0) {
+				parts.push(`cache-write: ${turnCacheCreationInputTokens}`);
+			}
 			if (summaryParts.costEstimate) {
-				parts.push(summaryParts.costEstimate === "free" ? "free" : `estimate: ${summaryParts.costEstimate}`);
+				const prefix = summaryParts.costLabelType === "exact" ? "cost" : "estimate";
+				parts.push(summaryParts.costEstimate === "free" ? "free" : `${prefix}: ${summaryParts.costEstimate}`);
 			}
 			parts.push(`context: ${contextSign}${contextDelta}`);
 			parts.push(`${elapsed.toFixed(2)}s`);
@@ -114,6 +127,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 				turnTotalOutputTokens,
 				turnCachedInputTokens,
 				turnCacheCreationInputTokens,
+				turnPremiumRequests,
 				turnLastCallChars,
 				baselineTokens,
 			};
@@ -129,6 +143,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 				turnTotalOutputTokens?: number;
 				turnCachedInputTokens?: number;
 				turnCacheCreationInputTokens?: number;
+				turnPremiumRequests?: number;
 				turnLastCallChars?: number;
 				baselineTokens: number;
 			};
@@ -140,6 +155,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 			turnTotalOutputTokens = s.turnTotalOutputTokens ?? s.turnOutputTokens;
 			turnCachedInputTokens = s.turnCachedInputTokens ?? 0;
 			turnCacheCreationInputTokens = s.turnCacheCreationInputTokens ?? 0;
+			turnPremiumRequests = s.turnPremiumRequests ?? 0;
 			turnLastCallChars = s.turnLastCallChars ?? 0;
 			baselineTokens = s.baselineTokens;
 		},

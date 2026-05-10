@@ -721,7 +721,8 @@ describe("Turn tracking", () => {
 		expect(summary).toContain("gpt-4o");
 		expect(summary).toContain("agent: 0");
 		expect(summary).toContain("user: 1");
-		expect(summary).toContain("premium:");
+		expect(summary).toContain("cost:");
+		expect(summary).toContain("PR");
 		expect(summary).toContain("tokens: 1050");
 		expect(summary).toContain("context: 1000");
 		expect(summary).toMatch(/\d+\.\d+s/);
@@ -2460,7 +2461,7 @@ describe("Anthropic routing for Claude models", () => {
 		expect(summary).toBeDefined();
 		expect(summary).toContain("claude-sonnet-4.6");
 		expect(summary).toContain("user: 1");
-		expect(summary).toContain("premium: 1.00");
+		expect(summary).toContain("cost: 1.00 PR");
 	});
 });
 

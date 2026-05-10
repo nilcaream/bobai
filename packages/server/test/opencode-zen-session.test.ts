@@ -137,11 +137,13 @@ describe("OpenCode Zen session flow", () => {
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("opencode-zen");
 		expect(done?.model).toBe("gpt-5.4");
-		expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/);
+		expect(done?.summary).toMatch(
+			/^ \| gpt-5\.4 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
+		);
 		const stored = getMessages(db, session.id);
 		expect(stored.at(-1)?.metadata?.turn_model).toBe("gpt-5.4");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| gpt-5\.4 \| in: 7473 \| out: 3123 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| gpt-5\.4 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 });

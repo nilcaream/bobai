@@ -166,7 +166,7 @@ export function groupParts(parts: MessagePart[]): Panel[] {
 
 export function formatMsgSummary(msg: { summary?: string; model?: string }): string {
 	if (msg.summary) {
-		return msg.summary.replace(/context: ([+-]\d+)/g, "context: Δ$1");
+		return msg.summary;
 	}
 	return msg.model ? ` | ${msg.model}` : "";
 }
