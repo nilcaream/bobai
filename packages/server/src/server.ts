@@ -18,7 +18,12 @@ import { getProjectInfo } from "./project-info";
 import type { ClientMessage } from "./protocol";
 import { send } from "./protocol";
 import { isRuntimeSupportedProvider } from "./provider/backend-policy";
-import { buildSortedProviderModelList, formatProviderModelDisplay, getProviderModelConfig } from "./provider/models";
+import {
+	buildSortedProviderModelList,
+	formatProviderModelDisplay,
+	formatSessionCostDisplay,
+	getProviderModelConfig,
+} from "./provider/models";
 import type { AssistantMessage, Provider } from "./provider/provider";
 import {
 	getDefaultModelForProvider,
@@ -484,6 +489,10 @@ export function createServer(options: ServerOptions) {
 				const session = getMostRecentParentSession(options.db);
 				if (!session) return Response.json(null);
 				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
+				const sessionCost =
+					sessionProviderId && session.model
+						? formatSessionCostDisplay(options.db, sessionProviderId, session.id, options.configDir)
+						: undefined;
 				const status =
 					sessionProviderId && session.model
 						? formatProviderModelDisplay(
@@ -492,6 +501,7 @@ export function createServer(options: ServerOptions) {
 								session.promptTokens,
 								options.configDir,
 								session.contextLimit,
+								sessionCost,
 							)
 						: (options.defaultStatus ?? "select provider and model");
 				return Response.json({
@@ -536,6 +546,10 @@ export function createServer(options: ServerOptions) {
 					// once all legacy sessions are gone.
 					.filter((m) => m.role !== "system");
 				const sessionProviderId = resolveSessionProviderId(session.provider, configuredProviderId);
+				const sessionCost =
+					sessionProviderId && session.model
+						? formatSessionCostDisplay(options.db, sessionProviderId, sessionId, options.configDir)
+						: undefined;
 				const status =
 					sessionProviderId && session.model
 						? formatProviderModelDisplay(
@@ -544,6 +558,7 @@ export function createServer(options: ServerOptions) {
 								session.promptTokens,
 								options.configDir,
 								session.contextLimit,
+								sessionCost,
 							)
 						: (options.defaultStatus ?? "select provider and model");
 				return Response.json({
