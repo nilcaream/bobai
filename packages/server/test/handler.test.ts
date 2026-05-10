@@ -623,6 +623,8 @@ describe("handlePrompt", () => {
 				input_tokens_last: 5948,
 				output_tokens_last: 731,
 				context_delta: 5948,
+				cached_input_tokens_total: 0,
+				cache_creation_input_tokens_total: 0,
 			});
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });

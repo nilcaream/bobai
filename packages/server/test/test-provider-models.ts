@@ -134,6 +134,7 @@ export function createProviderModelsTempDir(): string {
 				maxOutput: 384000,
 				inputPrice: 0.14,
 				outputPrice: 0.28,
+				cacheReadPrice: 0.028,
 			},
 			{
 				id: "deepseek-v4-pro",

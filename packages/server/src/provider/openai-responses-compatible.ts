@@ -40,7 +40,12 @@ export function createOpenAIResponsesCompatibleProvider(
 			const tools = options.tools?.length ? convertToolsToResponses(options.tools) : undefined;
 			const promptChars = estimatePromptChars(options.messages);
 			const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
-			let completedUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+			let completedUsage = {
+				inputTokens: 0,
+				outputTokens: 0,
+				totalTokens: 0,
+				cachedInputTokens: undefined as number | undefined,
+			};
 
 			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
@@ -108,6 +113,7 @@ export function createOpenAIResponsesCompatibleProvider(
 						outputTokens: completedUsage.outputTokens,
 						promptChars,
 						totalTokens: completedUsage.totalTokens,
+						cachedInputTokens: completedUsage.cachedInputTokens,
 					});
 				} else {
 					yield event;

@@ -17,6 +17,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 	let turnOutputTokens = 0;
 	let turnTotalInputTokens = 0;
 	let turnTotalOutputTokens = 0;
+	let turnCachedInputTokens = 0;
+	let turnCacheCreationInputTokens = 0;
 	let turnLastCallChars = 0;
 	let baselineTokens = 0;
 
@@ -33,6 +35,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 					turnOutputTokens = metrics.outputTokens;
 					turnTotalInputTokens += metrics.promptTokens;
 					turnTotalOutputTokens += metrics.outputTokens;
+					turnCachedInputTokens += metrics.cachedInputTokens ?? 0;
+					turnCacheCreationInputTokens += metrics.cacheCreationInputTokens ?? 0;
 					turnLastCallChars = metrics.promptChars;
 					options.onMetrics?.(metrics);
 				},
@@ -46,6 +50,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 			turnOutputTokens = 0;
 			turnTotalInputTokens = 0;
 			turnTotalOutputTokens = 0;
+			turnCachedInputTokens = 0;
+			turnCacheCreationInputTokens = 0;
 			turnLastCallChars = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
@@ -93,6 +99,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 				inputTokensLast: turnInputTokens,
 				outputTokensLast: turnOutputTokens,
 				contextDelta: turnInputTokens - baselineTokens,
+				cachedInputTokensTotal: turnCachedInputTokens,
+				cacheCreationInputTokensTotal: turnCacheCreationInputTokens,
 			};
 		},
 
@@ -104,6 +112,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 				turnOutputTokens,
 				turnTotalInputTokens,
 				turnTotalOutputTokens,
+				turnCachedInputTokens,
+				turnCacheCreationInputTokens,
 				turnLastCallChars,
 				baselineTokens,
 			};
@@ -117,6 +127,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 				turnOutputTokens: number;
 				turnTotalInputTokens?: number;
 				turnTotalOutputTokens?: number;
+				turnCachedInputTokens?: number;
+				turnCacheCreationInputTokens?: number;
 				turnLastCallChars?: number;
 				baselineTokens: number;
 			};
@@ -126,6 +138,8 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 			turnOutputTokens = s.turnOutputTokens;
 			turnTotalInputTokens = s.turnTotalInputTokens ?? s.turnInputTokens;
 			turnTotalOutputTokens = s.turnTotalOutputTokens ?? s.turnOutputTokens;
+			turnCachedInputTokens = s.turnCachedInputTokens ?? 0;
+			turnCacheCreationInputTokens = s.turnCacheCreationInputTokens ?? 0;
 			turnLastCallChars = s.turnLastCallChars ?? 0;
 			baselineTokens = s.baselineTokens;
 		},

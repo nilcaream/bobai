@@ -122,6 +122,8 @@ export function createAnthropicCompatibleProvider(
 			const promptChars = estimatePromptChars(options.messages);
 			let inputTokens = 0;
 			let outputTokens = 0;
+			let cachedInputTokens = 0;
+			let cacheCreationInputTokens = 0;
 			let stopReason: string | undefined;
 			let didEmitFinish = false;
 			let hasReceivedContent = false;
@@ -131,7 +133,9 @@ export function createAnthropicCompatibleProvider(
 				const raw = event as {
 					type?: string;
 					index?: number;
-					message?: { usage?: { input_tokens?: number } };
+					message?: {
+						usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+					};
 					content_block?: { type?: string; id?: string; name?: string };
 					delta?: {
 						type?: string;
@@ -145,6 +149,8 @@ export function createAnthropicCompatibleProvider(
 				switch (raw.type) {
 					case "message_start": {
 						inputTokens = raw.message?.usage?.input_tokens ?? 0;
+						cachedInputTokens = raw.message?.usage?.cache_read_input_tokens ?? 0;
+						cacheCreationInputTokens = raw.message?.usage?.cache_creation_input_tokens ?? 0;
 						break;
 					}
 					case "content_block_start": {
@@ -205,6 +211,8 @@ export function createAnthropicCompatibleProvider(
 							outputTokens,
 							promptChars,
 							totalTokens: inputTokens + outputTokens,
+							cachedInputTokens,
+							cacheCreationInputTokens,
 						});
 						yield { type: "finish", reason: stopReason === "tool_use" ? "tool_calls" : "stop" };
 						didEmitFinish = true;

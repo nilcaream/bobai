@@ -66,7 +66,19 @@ export function computeDollarSessionTotal(db: Database, rootSessionId: string, c
 		if (!providerId) continue;
 		const modelConfig = getProviderModelConfig(providerId, turn.turnModel as string, configDir);
 		if (!modelConfig || modelConfig.inputPrice == null || modelConfig.outputPrice == null) continue;
-		total += (turn.inputTokensTotal * modelConfig.inputPrice + turn.outputTokensTotal * modelConfig.outputPrice) / 1_000_000;
+
+		const cachedRead = turn.cachedInputTokensTotal ?? 0;
+		const cachedWrite = turn.cacheCreationInputTokensTotal ?? 0;
+		const regularInput = Math.max(0, turn.inputTokensTotal - cachedRead - cachedWrite);
+		const cacheReadPrice = modelConfig.cacheReadPrice ?? modelConfig.inputPrice;
+		const cacheWritePrice = modelConfig.cacheWritePrice ?? modelConfig.inputPrice;
+
+		total +=
+			(regularInput * modelConfig.inputPrice +
+				cachedRead * cacheReadPrice +
+				cachedWrite * cacheWritePrice +
+				turn.outputTokensTotal * modelConfig.outputPrice) /
+			1_000_000;
 	}
 
 	return `$${total.toFixed(2)}`;

@@ -7,7 +7,12 @@ export interface ResponsesStreamOptions {
 	display?: string;
 	contextLimit?: number | null;
 	sessionCostDisplay?: string;
-	onCompletedUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
+	onCompletedUsage?: (usage: {
+		inputTokens: number;
+		outputTokens: number;
+		totalTokens: number;
+		cachedInputTokens?: number;
+	}) => void;
 }
 
 function getOutputIndex(parsed: Record<string, unknown>, fallback: number): number {
@@ -145,12 +150,14 @@ export async function* parseResponsesSSE(
 							input_tokens?: number;
 							output_tokens?: number;
 							total_tokens?: number;
+							input_tokens_details?: { cached_tokens?: number };
 					  }
 					| undefined;
 				const inputTokens = usage?.input_tokens ?? 0;
 				const outputTokens = usage?.output_tokens ?? 0;
 				const totalTokens = usage?.total_tokens ?? inputTokens + outputTokens;
-				options.onCompletedUsage?.({ inputTokens, outputTokens, totalTokens });
+				const cachedInputTokens = usage?.input_tokens_details?.cached_tokens;
+				options.onCompletedUsage?.({ inputTokens, outputTokens, totalTokens, cachedInputTokens });
 
 				const providerId = options.providerId ?? "github-copilot";
 				const contextWindow =
@@ -173,6 +180,7 @@ export async function* parseResponsesSSE(
 					display,
 					outputTokens,
 					totalTokens,
+					cachedInputTokens,
 				};
 				yield {
 					type: "finish",

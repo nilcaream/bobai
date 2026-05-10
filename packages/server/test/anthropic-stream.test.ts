@@ -53,6 +53,8 @@ describe("parseAnthropicStream", () => {
 				display: "github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 10 / 128000 | 0%",
 				outputTokens: 5,
 				totalTokens: 15,
+				cachedInputTokens: 0,
+				cacheCreationInputTokens: 0,
 			},
 			{ type: "finish", reason: "stop" },
 		]);
@@ -82,6 +84,8 @@ describe("parseAnthropicStream", () => {
 				display: "github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 20 / 128000 | 0%",
 				outputTokens: 8,
 				totalTokens: 28,
+				cachedInputTokens: 0,
+				cacheCreationInputTokens: 0,
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -113,6 +117,8 @@ describe("parseAnthropicStream", () => {
 				display: "github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 15 / 128000 | 0%",
 				outputTokens: 12,
 				totalTokens: 27,
+				cachedInputTokens: 0,
+				cacheCreationInputTokens: 0,
 			},
 			{ type: "finish", reason: "tool_calls" },
 		]);
@@ -142,6 +148,8 @@ describe("parseAnthropicStream", () => {
 				display: "github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 10 / 128000 | 0%",
 				outputTokens: 3,
 				totalTokens: 13,
+				cachedInputTokens: 0,
+				cacheCreationInputTokens: 0,
 			},
 			{ type: "finish", reason: "stop" },
 		]);

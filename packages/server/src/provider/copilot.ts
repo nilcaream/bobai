@@ -125,6 +125,8 @@ export function createCopilotProvider(
 	let turnTokens = 0;
 	let turnLastCallTokens = 0;
 	let turnLastCallChars = 0;
+	let turnCachedInputTokens = 0;
+	let turnCacheCreationInputTokens = 0;
 	let baselineTokens = 0;
 	const warnedContextWindow = new Set<string>();
 
@@ -343,6 +345,8 @@ export function createCopilotProvider(
 								outputTokens: usageEvent.outputTokens ?? 0,
 								promptChars: callChars,
 								totalTokens: usageEvent.totalTokens ?? usageEvent.tokenCount,
+								cachedInputTokens: event.cachedInputTokens,
+								cacheCreationInputTokens: event.cacheCreationInputTokens,
 								initiator: effectiveInitiator,
 							});
 						} else {
@@ -350,6 +354,8 @@ export function createCopilotProvider(
 							turnTokens += usageEvent.tokenCount;
 							turnLastCallTokens = usageEvent.tokenCount;
 							turnLastCallChars = callChars;
+							turnCachedInputTokens += event.cachedInputTokens ?? 0;
+							turnCacheCreationInputTokens += event.cacheCreationInputTokens ?? 0;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
 							const multiplier =
@@ -544,6 +550,7 @@ export function createCopilotProvider(
 								outputTokens: usageEvent.outputTokens ?? 0,
 								promptChars: callChars,
 								totalTokens: usageEvent.totalTokens ?? usageEvent.tokenCount,
+								cachedInputTokens: event.cachedInputTokens,
 								initiator: effectiveInitiator,
 							});
 						} else {
@@ -551,6 +558,7 @@ export function createCopilotProvider(
 							turnTokens += usageEvent.tokenCount;
 							turnLastCallTokens = usageEvent.tokenCount;
 							turnLastCallChars = callChars;
+							turnCachedInputTokens += event.cachedInputTokens ?? 0;
 							if (effectiveInitiator === "agent") turnAgentCalls++;
 							else turnUserCalls++;
 							const multiplier =
@@ -604,6 +612,8 @@ export function createCopilotProvider(
 			turnTokens = 0;
 			turnLastCallTokens = 0;
 			turnLastCallChars = 0;
+			turnCachedInputTokens = 0;
+			turnCacheCreationInputTokens = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
 
@@ -639,6 +649,18 @@ export function createCopilotProvider(
 			return turnLastCallChars;
 		},
 
+		getTurnMetrics() {
+			return {
+				inputTokensTotal: turnTokens,
+				outputTokensTotal: 0, // Copilot doesn't track output tokens separately
+				inputTokensLast: turnLastCallTokens,
+				outputTokensLast: 0,
+				contextDelta: turnLastCallTokens - baselineTokens,
+				cachedInputTokensTotal: turnCachedInputTokens,
+				cacheCreationInputTokensTotal: turnCacheCreationInputTokens,
+			};
+		},
+
 		saveTurnState(): unknown {
 			return {
 				turnStartTime,
@@ -649,6 +671,8 @@ export function createCopilotProvider(
 				turnTokens,
 				turnLastCallTokens,
 				turnLastCallChars,
+				turnCachedInputTokens,
+				turnCacheCreationInputTokens,
 				baselineTokens,
 			};
 		},
@@ -663,6 +687,8 @@ export function createCopilotProvider(
 				turnTokens: number;
 				turnLastCallTokens: number;
 				turnLastCallChars: number;
+				turnCachedInputTokens?: number;
+				turnCacheCreationInputTokens?: number;
 				baselineTokens: number;
 			};
 			turnStartTime = s.turnStartTime;
@@ -673,6 +699,8 @@ export function createCopilotProvider(
 			turnTokens = s.turnTokens;
 			turnLastCallTokens = s.turnLastCallTokens;
 			turnLastCallChars = s.turnLastCallChars ?? 0;
+			turnCachedInputTokens = s.turnCachedInputTokens ?? 0;
+			turnCacheCreationInputTokens = s.turnCacheCreationInputTokens ?? 0;
 			baselineTokens = s.baselineTokens;
 		},
 
@@ -833,7 +861,12 @@ export function createCopilotProvider(
 								};
 								finish_reason?: string | null;
 							}[];
-							usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+							usage?: {
+								prompt_tokens: number;
+								completion_tokens: number;
+								total_tokens: number;
+								prompt_tokens_details?: { cached_tokens?: number };
+							};
 						};
 
 						const choice = data.choices?.[0];
@@ -841,6 +874,7 @@ export function createCopilotProvider(
 						if (choice?.finish_reason) {
 							const promptTokens = data.usage?.prompt_tokens ?? 0;
 							const totalTokens = data.usage?.total_tokens ?? 0;
+							const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
 							const contextWindow =
 								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.contextWindow ?? 0;
 							if (contextWindow <= 0 && !warnedContextWindow.has(options.model)) {
@@ -867,6 +901,7 @@ export function createCopilotProvider(
 									outputTokens: Math.max(0, totalTokens - promptTokens),
 									promptChars: callChars,
 									totalTokens,
+									cachedInputTokens: cachedTokens,
 									initiator: effectiveInitiator,
 								});
 							} else {
@@ -874,6 +909,7 @@ export function createCopilotProvider(
 								turnTokens += totalTokens;
 								turnLastCallTokens = promptTokens;
 								turnLastCallChars = callChars;
+								turnCachedInputTokens += cachedTokens ?? 0;
 								if (effectiveInitiator === "agent") turnAgentCalls++;
 								else turnUserCalls++;
 								const multiplier =

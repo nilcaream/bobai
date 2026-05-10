@@ -12,7 +12,7 @@ export interface ModelsDevModel {
 	name: string;
 	tool_call?: boolean;
 	limit?: { context?: number; output?: number };
-	cost?: { input?: number; output?: number };
+	cost?: { input?: number; output?: number; cache_read?: number; cache_write?: number };
 }
 
 export interface ModelsDevProvider {

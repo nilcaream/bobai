@@ -43,6 +43,8 @@ export function createCopilotModels(
 		premiumRequestMultiplier?: number;
 		inputPrice?: number;
 		outputPrice?: number;
+		cacheReadPrice?: number;
+		cacheWritePrice?: number;
 	}>,
 ): unknown[] {
 	return models.map((model) => ({
@@ -53,5 +55,7 @@ export function createCopilotModels(
 		inputPrice: model.inputPrice ?? 0,
 		outputPrice: model.outputPrice ?? 0,
 		...(model.premiumRequestMultiplier !== undefined ? { premiumRequestMultiplier: model.premiumRequestMultiplier } : {}),
+		...(model.cacheReadPrice !== undefined ? { cacheReadPrice: model.cacheReadPrice } : {}),
+		...(model.cacheWritePrice !== undefined ? { cacheWritePrice: model.cacheWritePrice } : {}),
 	}));
 }

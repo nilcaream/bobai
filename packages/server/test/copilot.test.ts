@@ -2299,6 +2299,8 @@ describe("Anthropic routing for Claude models", () => {
 			display: "github-copilot | claude-sonnet-4.6 [1x] | 0 PR | 42 / 200000 | 0%",
 			outputTokens: 5,
 			totalTokens: 47,
+			cachedInputTokens: 0,
+			cacheCreationInputTokens: 0,
 		});
 	});
 

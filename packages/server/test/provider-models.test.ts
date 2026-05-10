@@ -55,6 +55,7 @@ function writeModelsConfig(tmpDir: string) {
 							maxOutput: 64000,
 							inputPrice: 0.5,
 							outputPrice: 5.12,
+							cacheReadPrice: 0.05,
 						},
 					],
 					"opencode-go": [

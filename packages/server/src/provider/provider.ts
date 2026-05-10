@@ -84,7 +84,16 @@ export type StreamEvent =
 	  }
 	| { type: "tool_call_start"; index: number; id: string; name: string }
 	| { type: "tool_call_delta"; index: number; arguments: string }
-	| { type: "usage"; tokenCount: number; tokenLimit: number; display: string; outputTokens?: number; totalTokens?: number }
+	| {
+			type: "usage";
+			tokenCount: number;
+			tokenLimit: number;
+			display: string;
+			outputTokens?: number;
+			totalTokens?: number;
+			cachedInputTokens?: number;
+			cacheCreationInputTokens?: number;
+	  }
 	| { type: "finish"; reason: "stop" | "tool_calls" };
 
 // --- Provider interface ---
@@ -95,6 +104,10 @@ export interface StreamMetrics {
 	outputTokens: number;
 	promptChars: number;
 	totalTokens: number;
+	/** Input tokens that were cache hits (billed at cacheReadPrice). */
+	cachedInputTokens?: number;
+	/** Tokens written to the cache (billed at cacheWritePrice). Anthropic-specific. */
+	cacheCreationInputTokens?: number;
 }
 
 export interface ProviderOptions {
@@ -142,6 +155,8 @@ export interface Provider {
 		inputTokensLast: number;
 		outputTokensLast: number;
 		contextDelta: number;
+		cachedInputTokensTotal: number;
+		cacheCreationInputTokensTotal: number;
 	};
 	/** Save current turn tracking state (so it can be restored after a subagent run). */
 	saveTurnState?(): unknown;

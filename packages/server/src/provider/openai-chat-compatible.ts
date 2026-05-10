@@ -184,7 +184,12 @@ export function createOpenAIChatCompatibleProvider(
 						};
 						finish_reason?: string | null;
 					}[];
-					usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+					usage?: {
+						prompt_tokens?: number;
+						completion_tokens?: number;
+						total_tokens?: number;
+						prompt_tokens_details?: { cached_tokens?: number };
+					};
 				};
 
 				const choice = data.choices?.[0];
@@ -240,6 +245,7 @@ export function createOpenAIChatCompatibleProvider(
 				if (choice?.finish_reason) {
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
+					const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
 					finishReason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
 					const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
 					const display = formatProviderModelDisplay(
@@ -261,6 +267,7 @@ export function createOpenAIChatCompatibleProvider(
 						outputTokens: Math.max(0, totalTokens - promptTokens),
 						promptChars,
 						totalTokens,
+						cachedInputTokens: cachedTokens,
 					});
 					yield { type: "finish", reason: finishReason };
 					sawFinish = true;

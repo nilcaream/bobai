@@ -336,6 +336,8 @@ export interface AssistantTurnRecord {
 	turnModel: string | null;
 	inputTokensTotal: number | null;
 	outputTokensTotal: number | null;
+	cachedInputTokensTotal: number | null;
+	cacheCreationInputTokensTotal: number | null;
 }
 
 export function getAssistantMessagesWithTurnMetrics(db: Database, sessionIds: string[]): AssistantTurnRecord[] {
@@ -360,6 +362,8 @@ export function getAssistantMessagesWithTurnMetrics(db: Database, sessionIds: st
 				turnModel,
 				inputTokensTotal: turnMetrics?.input_tokens_total ?? null,
 				outputTokensTotal: turnMetrics?.output_tokens_total ?? null,
+				cachedInputTokensTotal: turnMetrics?.cached_input_tokens_total ?? null,
+				cacheCreationInputTokensTotal: turnMetrics?.cache_creation_input_tokens_total ?? null,
 			};
 		})
 		.filter((r) => r.turnModel !== null);

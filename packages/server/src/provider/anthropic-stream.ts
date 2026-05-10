@@ -15,6 +15,8 @@ export async function* parseAnthropicStream(
 ): AsyncGenerator<StreamEvent> {
 	let inputTokens = 0;
 	let outputTokens = 0;
+	let cachedInputTokens = 0;
+	let cacheCreationInputTokens = 0;
 	let stopReason: string | undefined;
 	let didEmitFinish = false;
 
@@ -22,6 +24,8 @@ export async function* parseAnthropicStream(
 		switch (event.type) {
 			case "message_start": {
 				inputTokens = event.message?.usage?.input_tokens ?? 0;
+				cachedInputTokens = event.message?.usage?.cache_read_input_tokens ?? 0;
+				cacheCreationInputTokens = event.message?.usage?.cache_creation_input_tokens ?? 0;
 				break;
 			}
 
@@ -85,6 +89,8 @@ export async function* parseAnthropicStream(
 					display,
 					outputTokens,
 					totalTokens,
+					cachedInputTokens,
+					cacheCreationInputTokens,
 				};
 
 				// Emit finish event

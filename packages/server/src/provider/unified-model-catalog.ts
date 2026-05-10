@@ -13,6 +13,8 @@ export interface UnifiedProviderModel {
 	maxOutput: number;
 	inputPrice: number;
 	outputPrice: number;
+	cacheReadPrice?: number;
+	cacheWritePrice?: number;
 	premiumRequestMultiplier?: number;
 }
 
@@ -158,6 +160,14 @@ function normalizeProviderModels(
 				inputPrice: providerId === "github-copilot" ? 0 : model.cost.input,
 				outputPrice: providerId === "github-copilot" ? 0 : model.cost.output,
 			};
+			if (providerId !== "github-copilot") {
+				if (typeof model.cost.cache_read === "number") {
+					base.cacheReadPrice = model.cost.cache_read;
+				}
+				if (typeof model.cost.cache_write === "number") {
+					base.cacheWritePrice = model.cost.cache_write;
+				}
+			}
 			if (providerId === "github-copilot") {
 				const multiplier = copilotMultipliers.get(model.id);
 				if (multiplier !== undefined) {

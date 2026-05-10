@@ -41,6 +41,8 @@ export interface ProviderModelConfig {
 	label?: string;
 	inputPrice?: number;
 	outputPrice?: number;
+	cacheReadPrice?: number;
+	cacheWritePrice?: number;
 	premiumRequestMultiplier?: number;
 }
 
