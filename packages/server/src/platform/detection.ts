@@ -47,10 +47,9 @@ function getGrepCandidates(info: PlatformInfo): GrepCandidate[] {
  * Check whether a command exists.
  *
  * For known paths: stat the file directly.
- * For PATH lookups: use the platform-appropriate resolver
- *   (command -v on Unix, where on Windows).
+ * For PATH lookups: use Bun.which (native, cross-platform, no shell required).
  */
-async function commandExists(resolve: string, knownPath: boolean, isUnix: boolean): Promise<boolean> {
+async function commandExists(resolve: string, knownPath: boolean): Promise<boolean> {
 	if (knownPath) {
 		try {
 			fs.statSync(resolve);
@@ -60,63 +59,32 @@ async function commandExists(resolve: string, knownPath: boolean, isUnix: boolea
 		}
 	}
 
-	if (isUnix) {
-		return commandExistsViaShell(resolve);
-	}
-	return commandExistsViaWhere(resolve);
-}
-
-async function commandExistsViaShell(name: string): Promise<boolean> {
-	try {
-		const proc = Bun.spawn(["sh", "-c", `command -v "${name}"`], {
-			stdout: "null",
-			stderr: "null",
-		});
-		const code = await proc.exited;
-		return code === 0;
-	} catch {
-		return false;
-	}
-}
-
-async function commandExistsViaWhere(name: string): Promise<boolean> {
-	try {
-		const proc = Bun.spawn(["where", name], {
-			stdout: "null",
-			stderr: "null",
-		});
-		const code = await proc.exited;
-		return code === 0;
-	} catch {
-		return false;
-	}
+	return Bun.which(resolve) !== null;
 }
 
 export async function detectAvailableTools(info: PlatformInfo): Promise<AvailableTools> {
-	const isUnix = info.os !== "win32" || info.variant === "wsl";
-
 	const shellCandidates = getShellCandidates(info);
 	const grepCandidates = getGrepCandidates(info);
 
-	const [shellResults, grepResults, gitResult] = await Promise.all([
+	const [shellResults, grepResults, gitAvailable] = await Promise.all([
 		Promise.all(
 			shellCandidates.map(async (c) => ({
 				kind: c.kind,
-				available: await commandExists(c.resolve, c.knownPath, isUnix),
+				available: await commandExists(c.resolve, c.knownPath),
 			})),
 		),
 		Promise.all(
 			grepCandidates.map(async (c) => ({
 				kind: c.kind,
-				available: await commandExists(c.resolve, c.knownPath, isUnix),
+				available: await commandExists(c.resolve, c.knownPath),
 			})),
 		),
-		isUnix ? commandExistsViaShell("git") : commandExistsViaWhere("git"),
+		commandExists("git", false),
 	]);
 
 	return {
 		shells: shellResults.filter((r) => r.available).map((r) => r.kind),
 		grepTools: grepResults.filter((r) => r.available).map((r) => r.kind),
-		git: gitResult,
+		git: gitAvailable,
 	};
 }

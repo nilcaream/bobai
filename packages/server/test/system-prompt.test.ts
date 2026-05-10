@@ -328,6 +328,25 @@ describe("buildSystemPrompt", () => {
 		expect(skillsIdx).toBeGreaterThan(debugIdx);
 	});
 
+	// --- Content search guidance (conditional on grep_search availability) ---
+
+	test("includes grep_search guidance when grep_search tool is available", () => {
+		const result = buildSystemPrompt([], [], { toolNames: ["bash", "grep_search"] });
+		expect(result).toContain("Use grep_search to find relevant code before reading entire files.");
+	});
+
+	test("falls back to bash+grep guidance when bash is available but grep_search is not", () => {
+		const result = buildSystemPrompt([], [], { toolNames: ["bash"] });
+		expect(result).not.toContain("Use grep_search");
+		expect(result).toContain("Use bash with grep to find relevant code before reading entire files.");
+	});
+
+	test("omits search guidance when neither grep_search nor bash is available", () => {
+		const result = buildSystemPrompt([], []);
+		expect(result).not.toContain("Use grep_search");
+		expect(result).not.toContain("Use bash with grep");
+	});
+
 	test("subagent prompt includes metadata and debug blocks", () => {
 		const metadata: SystemPromptMetadata = {
 			date: "2025-07-14 Mon",

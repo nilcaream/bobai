@@ -49,6 +49,16 @@ function buildBasePrompt(options?: { subagent?: boolean; toolNames?: string[] })
 		: "\n- Use the task tool for complex multi-step work that can be delegated to a subagent.";
 	const subagentNote = isSubagent ? SUBAGENT_NOTE : "";
 
+	// Only recommend grep_search if it is actually available as a tool.
+	// When grep_search is missing but bash is present, suggest bash+grep instead.
+	const hasGrepSearch = seen.has("grep_search");
+	const hasBash = seen.has("bash");
+	const searchGuidance = hasGrepSearch
+		? "- Use grep_search to find relevant code before reading entire files."
+		: hasBash
+			? "- Use bash with grep to find relevant code before reading entire files."
+			: "";
+
 	return `You are Bob AI, a coding assistant.
 
 You help developers write, understand, debug, and improve code. You give clear, direct answers. When a question is ambiguous, you ask for clarification rather than guess.
@@ -57,8 +67,7 @@ You have access to the following tools:
 
 ${toolList}${subagentNote}
 
-When working with code:
-- Use grep_search to find relevant code before reading entire files.
+When working with code:${searchGuidance ? `\n${searchGuidance}` : ""}
 - Read files to understand context before making changes.
 - Use edit_file for modifying existing files and write_file for creating new ones.
 - After making changes, run relevant tests or builds to verify correctness.${taskGuidance}
