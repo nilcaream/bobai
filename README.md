@@ -14,25 +14,63 @@ Its defining feature is **radical context transparency**. You can inspect the sy
 
 ## Installation
 
-**Requirements:** Linux x86_64, `git`, `curl`, `unzip`.
+**Requirements:** `git`, `curl`, `unzip`. Platform-specific requirements listed below.
 
 The installer downloads its own Bun runtime. You do not need a global Node.js or Bun installation.
 
-**One-liner (recommended):**
+### Linux x86_64
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/linux-x64.sh | bash
 ```
 
-**From a cloned repo:**
+### Linux ARM64
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/linux-arm64.sh | bash
+```
+
+### macOS (Intel)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/darwin-x64.sh | bash
+```
+
+### macOS (Apple Silicon)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/darwin-arm64.sh | bash
+```
+
+### Windows (WSL)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/win32-x64-wsl.sh | bash
+```
+
+### Windows (native)
+
+Requires Windows 10+ and PowerShell.
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/nilcaream/bobai/main/install/win32-x64-native.ps1" | Invoke-Expression
+```
+
+Or using Command Prompt:
+
+```cmd
+curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/win32-x64-native.cmd -o %TEMP%\bobai-install.cmd && %TEMP%\bobai-install.cmd
+```
+
+### From a cloned repo
 
 ```bash
 git clone https://github.com/nilcaream/bobai.git
 cd bobai
-./install.sh
+./install/linux-x64.sh
 ```
 
-The installer builds the server and UI, then places everything under `~/.local/share/bobai/`. It installs the `bobai` command at `~/.local/bin/bobai`.
+The installer builds the server and UI, then places everything under the platform-appropriate data directory. It installs the `bobai` command (or `bobai.cmd` on Windows) in the user's PATH.
 
 ## Getting Started
 
