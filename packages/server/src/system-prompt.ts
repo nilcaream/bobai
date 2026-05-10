@@ -28,7 +28,7 @@ const SUBAGENT_SHARED_TOOLS = ["read_file", "list_directory", "write_file", "edi
 const SUBAGENT_NOTE = `
 Note: You are running as a subagent (spawned by the \`task\` tool). The \`task\` tool is not available in this context — you cannot create nested subagents. Complete your work directly using the tools listed above.`;
 
-function buildBasePrompt(options?: { subagent?: boolean; toolNames?: string[] }): string {
+function buildBasePrompt(options?: { subagent?: boolean; toolNames?: string[]; projectDir?: string }): string {
 	const isSubagent = options?.subagent === true;
 	const sharedTools = isSubagent ? SUBAGENT_SHARED_TOOLS : PARENT_SHARED_TOOLS;
 
@@ -59,6 +59,12 @@ function buildBasePrompt(options?: { subagent?: boolean; toolNames?: string[] })
 			? "- Use bash with grep to find relevant code before reading entire files."
 			: "";
 
+	// Shell commands already run in the project directory (cwd is set).
+	// Tell the model explicitly so it doesn't waste tokens on "cd <project> &&".
+	const cwdGuidance = options?.projectDir
+		? `- Commands run in the project root directory — you never need to cd ${options.projectDir}.`
+		: "";
+
 	return `You are Bob AI, a coding assistant.
 
 You help developers write, understand, debug, and improve code. You give clear, direct answers. When a question is ambiguous, you ask for clarification rather than guess.
@@ -67,7 +73,7 @@ You have access to the following tools:
 
 ${toolList}${subagentNote}
 
-When working with code:${searchGuidance ? `\n${searchGuidance}` : ""}
+When working with code:${searchGuidance ? `\n${searchGuidance}` : ""}${cwdGuidance ? `\n${cwdGuidance}` : ""}
 - Read files to understand context before making changes.
 - Use edit_file for modifying existing files and write_file for creating new ones.
 - After making changes, run relevant tests or builds to verify correctness.${taskGuidance}
@@ -106,7 +112,7 @@ export function buildSystemPrompt(
 	options?: SystemPromptOptions,
 ): string {
 	const parts: string[] = [
-		`<base>\n${buildBasePrompt({ subagent: options?.subagent, toolNames: options?.toolNames })}\n</base>`,
+		`<base>\n${buildBasePrompt({ subagent: options?.subagent, toolNames: options?.toolNames, projectDir: options?.metadata?.projectDir })}\n</base>`,
 	];
 
 	if (options?.metadata) {

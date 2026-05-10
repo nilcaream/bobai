@@ -347,6 +347,22 @@ describe("buildSystemPrompt", () => {
 		expect(result).not.toContain("Use bash with grep");
 	});
 
+	// --- CWD guidance ---
+
+	test("includes cwd guidance with concrete path when projectDir is set", () => {
+		const metadata: SystemPromptMetadata = {
+			date: "2025-07-14 Mon",
+			projectDir: "/home/user/projects/bobai",
+		};
+		const result = buildSystemPrompt([], [], { metadata, toolNames: ["bash"] });
+		expect(result).toContain("Commands run in the project root directory — you never need to cd /home/user/projects/bobai.");
+	});
+
+	test("omits cwd guidance when projectDir is not provided", () => {
+		const result = buildSystemPrompt([], [], { toolNames: ["bash"] });
+		expect(result).not.toContain("you never need to cd");
+	});
+
 	test("subagent prompt includes metadata and debug blocks", () => {
 		const metadata: SystemPromptMetadata = {
 			date: "2025-07-14 Mon",
