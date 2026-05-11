@@ -122,7 +122,7 @@ describe("DotCommandPanel", () => {
 		const parsed = dot({ command: "model", args: "" });
 		const models = [makeModel(1, "b-model", "1x", 100000), makeModel(2, "a-model", "1x", 200000)];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
-		const rows = Array.from(container.querySelectorAll(".panel--dot > div")).map((row) => row.textContent ?? "");
+		const rows = Array.from(container.querySelectorAll(".dot-scroll > div")).map((row) => row.textContent ?? "");
 		expect(rows[0]).toContain("b-model");
 		expect(rows[1]).toContain("a-model");
 	});
@@ -136,13 +136,13 @@ describe("DotCommandPanel", () => {
 		expect(text).toContain("10: model-10 (1x, 100k)");
 	});
 
-	test("model panel: text results are truncated to the first 20 visible rows", () => {
+	test("model panel: text results show all matching rows", () => {
 		const parsed = dot({ command: "model", args: "mod" });
 		const models = Array.from({ length: 25 }, (_, i) => makeModel(i + 1, `model-${i + 1}`, "1x", 100000));
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
-		const rows = container.querySelectorAll(".panel--dot > div");
-		expect(rows.length).toBe(20);
-		expect(container.textContent ?? "").not.toContain("model-25");
+		const rows = container.querySelectorAll(".dot-scroll > div");
+		expect(rows.length).toBe(25);
+		expect(container.textContent ?? "").toContain("model-25");
 	});
 
 	test("provider panel lists authenticated providers with runtime support note", () => {
@@ -265,7 +265,7 @@ describe("DotCommandPanel", () => {
 		const text = container.textContent ?? "";
 		expect(text).toContain("run tests");
 		// Session 1 has null title, should not appear
-		const lines = container.querySelectorAll(".panel--dot > div");
+		const lines = container.querySelectorAll(".dot-scroll > div");
 		const lineTexts = Array.from(lines).map((l) => l.textContent ?? "");
 		expect(lineTexts.every((t) => !t.startsWith("1:"))).toBe(true);
 	});
@@ -296,7 +296,7 @@ describe("DotCommandPanel", () => {
 		expect(text).not.toContain("Session Two");
 	});
 
-	test("session panel: text results preserve original order for equal scores and are truncated to 20 rows", () => {
+	test("session panel: text results preserve original order for equal scores and show all rows", () => {
 		const parsed = dot({ command: "session", args: "task" });
 		const sessions = Array.from({ length: 25 }, (_, i) => ({
 			index: i + 1,
@@ -306,11 +306,10 @@ describe("DotCommandPanel", () => {
 			owned: false,
 		}));
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
-		const rows = Array.from(container.querySelectorAll(".panel--dot > div")).map((row) => row.textContent ?? "");
-		expect(rows).toHaveLength(20);
+		const rows = Array.from(container.querySelectorAll(".dot-scroll > div")).map((row) => row.textContent ?? "");
+		expect(rows).toHaveLength(25);
 		expect(rows[0]).toContain("Task 1");
-		expect(rows[19]).toContain("Task 20");
-		expect(container.textContent ?? "").not.toContain("Task 25");
+		expect(rows[24]).toContain("Task 25");
 	});
 
 	// --- Subagent panel ---
@@ -353,7 +352,7 @@ describe("DotCommandPanel", () => {
 		expect(text).not.toContain("Follow up");
 	});
 
-	test("subagent panel: text results preserve original order for equal scores and are truncated to 20 rows", () => {
+	test("subagent panel: text results preserve original order for equal scores and show all rows", () => {
 		const parsed = dot({ command: "subagent", args: "task" });
 		const subagents = Array.from({ length: 25 }, (_, i) => ({
 			index: i + 1,
@@ -361,11 +360,10 @@ describe("DotCommandPanel", () => {
 			sessionId: `sub${i + 1}`,
 		}));
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} subagentList={subagents} />);
-		const rows = Array.from(container.querySelectorAll(".panel--dot > div")).map((row) => row.textContent ?? "");
-		expect(rows).toHaveLength(20);
+		const rows = Array.from(container.querySelectorAll(".dot-scroll > div")).map((row) => row.textContent ?? "");
+		expect(rows).toHaveLength(25);
 		expect(rows[0]).toContain("Task 1");
-		expect(rows[19]).toContain("Task 20");
-		expect(container.textContent ?? "").not.toContain("Task 25");
+		expect(rows[24]).toContain("Task 25");
 	});
 
 	// --- View panel ---

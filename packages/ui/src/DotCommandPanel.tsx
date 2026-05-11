@@ -85,7 +85,11 @@ export function DotCommandPanel({
 		return null;
 	}
 
-	return <div className="panel panel--dot">{content}</div>;
+	return (
+		<div className="panel panel--dot">
+			<div className="dot-scroll">{content}</div>
+		</div>
+	);
 }
 
 function renderSelectMode(matches: DotCommand[]) {
@@ -109,7 +113,7 @@ function renderModelPanel(args: string, modelList: ModelListItem[] | null) {
 		? firstToken
 			? modelList.filter((m) => String(m.index).includes(firstToken))
 			: modelList
-		: fuzzyFilterAndSort(modelList, argText, (m) => m.id).slice(0, 20);
+		: fuzzyFilterAndSort(modelList, argText, (m) => m.id);
 	if (filtered.length === 0) return <div>No matching models</div>;
 	const maxIndex = Math.max(...filtered.map((m) => m.index));
 	const padWidth = String(maxIndex).length;
@@ -138,7 +142,7 @@ function renderProviderPanel(args: string, providerList: ProviderListItem[] | nu
 		? firstToken
 			? providerList.filter((provider) => String(provider.index).includes(firstToken))
 			: providerList
-		: fuzzyFilterAndSort(providerList, argText, (provider) => provider.id).slice(0, 20);
+		: fuzzyFilterAndSort(providerList, argText, (provider) => provider.id);
 	if (filtered.length === 0) return <div>No matching providers</div>;
 	const maxIndex = Math.max(...filtered.map((provider) => provider.index));
 	const padWidth = String(maxIndex).length;
@@ -162,7 +166,6 @@ function renderSessionPanel(
 	if (!sessionList) return "Loading sessions...";
 	if (sessionList.length === 0) return "No sessions";
 
-	const SESSION_DISPLAY_LIMIT = 20;
 	const argText = (args ?? "").trim();
 	const isNumeric = !argText || /^\d+$/.test(argText.split(/\s+/)[0] ?? "");
 
@@ -184,7 +187,7 @@ function renderSessionPanel(
 		}
 
 		const filtered = indexPart ? sessionList.filter((s) => String(s.index).includes(indexPart)) : sessionList;
-		return renderSessionList(filtered, SESSION_DISPLAY_LIMIT, getSessionId, sessionLocked);
+		return renderSessionList(filtered, getSessionId, sessionLocked);
 	}
 
 	// Text mode: fuzzy rank by title
@@ -192,21 +195,19 @@ function renderSessionPanel(
 		sessionList.filter((s) => s.title),
 		argText,
 		(s) => s.title ?? "",
-	).slice(0, SESSION_DISPLAY_LIMIT);
-	return renderSessionList(filtered, SESSION_DISPLAY_LIMIT, getSessionId, sessionLocked);
+	);
+	return renderSessionList(filtered, getSessionId, sessionLocked);
 }
 
 function renderSessionList(
 	filtered: { index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[],
-	limit: number,
 	getSessionId: () => string | null,
 	sessionLocked: boolean,
 ) {
-	const display = filtered.slice(0, limit);
-	if (display.length === 0) return <div>No matching sessions</div>;
-	const maxIndex = Math.max(...display.map((s) => s.index));
+	if (filtered.length === 0) return <div>No matching sessions</div>;
+	const maxIndex = Math.max(...filtered.map((s) => s.index));
 	const padWidth = String(maxIndex).length;
-	return display.map((s) => {
+	return filtered.map((s) => {
 		const isCurrentSession = s.id === getSessionId();
 		const isOwnedBySelf = isCurrentSession && !sessionLocked;
 		const isOwnedByOther = s.owned && !isOwnedBySelf;
@@ -236,7 +237,6 @@ function renderSubagentPanel(args: string, subagentList: { index: number; title:
 	if (!subagentList) return "Loading subagents...";
 	if (subagentList.length === 0) return "No subagent sessions";
 
-	const SUBAGENT_DISPLAY_LIMIT = 20;
 	const argText = (args ?? "").trim();
 	const firstToken = argText.split(/\s+/)[0] ?? "";
 	const isNumeric = !argText || /^\d+$/.test(firstToken);
@@ -244,12 +244,11 @@ function renderSubagentPanel(args: string, subagentList: { index: number; title:
 		? firstToken
 			? subagentList.filter((s) => String(s.index).includes(firstToken))
 			: subagentList
-		: fuzzyFilterAndSort(subagentList, argText, (s) => s.title).slice(0, SUBAGENT_DISPLAY_LIMIT);
-	const display = filtered.slice(0, SUBAGENT_DISPLAY_LIMIT);
-	const maxIndex = display.length > 0 ? Math.max(...display.map((s) => s.index)) : 0;
+		: fuzzyFilterAndSort(subagentList, argText, (s) => s.title);
+	const maxIndex = filtered.length > 0 ? Math.max(...filtered.map((s) => s.index)) : 0;
 	const padWidth = String(maxIndex).length;
-	return display.length > 0 ? (
-		display.map((s) => {
+	return filtered.length > 0 ? (
+		filtered.map((s) => {
 			const paddedIndex = String(s.index).padStart(padWidth, " ");
 			return (
 				<div key={s.sessionId}>

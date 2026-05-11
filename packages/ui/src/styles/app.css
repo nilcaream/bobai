@@ -49,6 +49,36 @@ body,
 /* Dot command panel — sits between messages and prompt */
 .panel--dot {
 	margin: 1em 1em 0;
+	max-height: 22em;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.dot-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-width: thin;
+	scrollbar-color: var(--text-muted) var(--bg-panel);
+}
+
+.dot-scroll::-webkit-scrollbar {
+	width: 6px;
+}
+
+.dot-scroll::-webkit-scrollbar-track {
+	background: var(--bg-panel);
+}
+
+.dot-scroll::-webkit-scrollbar-thumb {
+	background: var(--text-muted);
+	border-radius: 3px;
+}
+
+.dot-scroll::-webkit-scrollbar-thumb:hover {
+	background: var(--text-status);
 }
 
 /* Slash skill rows — always one line, truncated */

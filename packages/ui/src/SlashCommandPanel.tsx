@@ -14,5 +14,9 @@ export function SlashCommandPanel({ parsed }: { parsed: ParsedSlashInput | null 
 			<div>No matching skills</div>
 		);
 
-	return <div className="panel panel--dot">{content}</div>;
+	return (
+		<div className="panel panel--dot">
+			<div className="dot-scroll">{content}</div>
+		</div>
+	);
 }
