@@ -49,6 +49,21 @@ export function applyStreamingEvent(messages: Message[], msg: ServerMessage, now
 	}
 
 	if (msg.type === "reasoning_end") {
+		// Clean up empty reasoning parts that received no text tokens
+		const last = messages.at(-1);
+		if (last?.role === "assistant") {
+			const lastPart = last.parts.at(-1);
+			if (lastPart?.type === "reasoning" && lastPart.content === "") {
+				const cleaned = last.parts.slice(0, -1);
+				if (cleaned.length === 0) {
+					const prev = messages.at(-2);
+					if (prev?.role === "user") {
+						return messages.slice(0, -1);
+					}
+				}
+				return [...messages.slice(0, -1), { ...last, parts: cleaned }];
+			}
+		}
 		return messages;
 	}
 

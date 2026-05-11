@@ -78,10 +78,33 @@ describe("applyStreamingEvent", () => {
 		expect(messages).toEqual([{ role: "assistant", parts: [{ type: "reasoning", content: "Let me think about this." }] }]);
 	});
 
-	test("reasoning_end does not mutate messages", () => {
-		const initial: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "thinking complete" }] }];
-		const result = applyStreamingEvent(initial, { type: "reasoning_end" }, "2026-05-06 10:00:01");
-		expect(result).toEqual(initial);
+	test("reasoning_end removes empty reasoning parts", () => {
+		const withContent: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "thinking complete" }] }];
+		// Non-empty reasoning — no cleanup
+		expect(applyStreamingEvent(withContent, { type: "reasoning_end" }, "")).toEqual(withContent);
+
+		// Empty reasoning at end of parts — remove it
+		const withEmpty: Message[] = [
+			{
+				role: "assistant",
+				parts: [
+					{ type: "text", content: "answer" },
+					{ type: "reasoning", content: "" },
+				],
+			},
+		];
+		expect(applyStreamingEvent(withEmpty, { type: "reasoning_end" }, "")).toEqual([
+			{ role: "assistant", parts: [{ type: "text", content: "answer" }] },
+		]);
+
+		// Only an empty reasoning part — remove the whole assistant if preceded by user
+		const onlyEmpty: Message[] = [
+			{ role: "user", text: "prompt", timestamp: "" },
+			{ role: "assistant", parts: [{ type: "reasoning", content: "" }] },
+		];
+		expect(applyStreamingEvent(onlyEmpty, { type: "reasoning_end" }, "")).toEqual([
+			{ role: "user", text: "prompt", timestamp: "" },
+		]);
 	});
 
 	test("reasoning tokens stream interleaved with text tokens", () => {
