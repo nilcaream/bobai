@@ -49,19 +49,27 @@ export function applyStreamingEvent(messages: Message[], msg: ServerMessage, now
 	}
 
 	if (msg.type === "reasoning_end") {
-		// Clean up empty reasoning parts that received no text tokens
+		// Clean up empty reasoning parts that received no text tokens.
+		// Scan backward through parts — tool_call/tool_result may have been
+		// appended after the reasoning part, so the last part may not be reasoning.
 		const last = messages.at(-1);
 		if (last?.role === "assistant") {
-			const lastPart = last.parts.at(-1);
-			if (lastPart?.type === "reasoning" && lastPart.content === "") {
-				const cleaned = last.parts.slice(0, -1);
-				if (cleaned.length === 0) {
-					const prev = messages.at(-2);
-					if (prev?.role === "user") {
-						return messages.slice(0, -1);
+			for (let i = last.parts.length - 1; i >= 0; i--) {
+				const part = last.parts[i];
+				if (part?.type === "reasoning") {
+					if (part.content === "") {
+						const cleaned = [...last.parts.slice(0, i), ...last.parts.slice(i + 1)];
+						if (cleaned.length === 0) {
+							const prev = messages.at(-2);
+							if (prev?.role === "user") {
+								return messages.slice(0, -1);
+							}
+							return [...messages.slice(0, -1), { ...last, parts: [] }];
+						}
+						return [...messages.slice(0, -1), { ...last, parts: cleaned }];
 					}
+					break;
 				}
-				return [...messages.slice(0, -1), { ...last, parts: cleaned }];
 			}
 		}
 		return messages;

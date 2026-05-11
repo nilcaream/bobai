@@ -105,6 +105,36 @@ describe("applyStreamingEvent", () => {
 		expect(applyStreamingEvent(onlyEmpty, { type: "reasoning_end" }, "")).toEqual([
 			{ role: "user", text: "prompt", timestamp: "" },
 		]);
+
+		// Empty reasoning followed by tool_call — reasoning not last part, must scan backward
+		const emptyBeforeTool: Message[] = [
+			{
+				role: "assistant",
+				parts: [
+					{ type: "reasoning", content: "" },
+					{ type: "tool_call", id: "t1", content: "output" },
+				],
+			},
+		];
+		expect(applyStreamingEvent(emptyBeforeTool, { type: "reasoning_end" }, "")).toEqual([
+			{ role: "assistant", parts: [{ type: "tool_call", id: "t1", content: "output" }] },
+		]);
+
+		// Empty reasoning with tool_call and user preceding — reasoning removed, tool_call stays
+		const emptyToolUser: Message[] = [
+			{ role: "user", text: "prompt", timestamp: "" },
+			{
+				role: "assistant",
+				parts: [
+					{ type: "reasoning", content: "" },
+					{ type: "tool_call", id: "t1", content: "output" },
+				],
+			},
+		];
+		expect(applyStreamingEvent(emptyToolUser, { type: "reasoning_end" }, "")).toEqual([
+			{ role: "user", text: "prompt", timestamp: "" },
+			{ role: "assistant", parts: [{ type: "tool_call", id: "t1", content: "output" }] },
+		]);
 	});
 
 	test("reasoning tokens stream interleaved with text tokens", () => {
