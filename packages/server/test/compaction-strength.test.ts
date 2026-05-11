@@ -55,12 +55,14 @@ describe("computeCharBudget", () => {
 		expect(computeCharBudget(0, 0.8, 1000, 3500)).toBe(0);
 	});
 
-	test("returns 0 when promptTokens is 0", () => {
-		expect(computeCharBudget(100000, 0.8, 0, 0)).toBe(0);
+	test("falls back to FALLBACK_CHARS_PER_TOKEN when promptTokens is 0", () => {
+		// fallback ratio = 3, budget = 100000 * 0.8 * 3 = 240000
+		expect(computeCharBudget(100000, 0.8, 0, 0)).toBe(240000);
 	});
 
-	test("returns 0 when promptChars is 0", () => {
-		expect(computeCharBudget(100000, 0.8, 1000, 0)).toBe(0);
+	test("falls back to FALLBACK_CHARS_PER_TOKEN when promptChars is 0", () => {
+		// fallback ratio = 3, budget = 100000 * 0.8 * 3 = 240000
+		expect(computeCharBudget(100000, 0.8, 1000, 0)).toBe(240000);
 	});
 
 	test("computes budget from measured ratio", () => {

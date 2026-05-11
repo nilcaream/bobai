@@ -93,14 +93,18 @@ describe("shouldEmergencyCompact", () => {
 		expect(shouldEmergencyCompact(1000, 3500, 0, messages)).toBe(false);
 	});
 
-	test("returns false when promptTokens is 0", () => {
+	test("uses fallback ratio when promptTokens is 0", () => {
+		// With fallback ratio=3, charBudget = 100000 * 0.9 * 3 = 270000
+		// 320000 chars > 270000 → should return true
 		const messages = [{ content: "x".repeat(320000) }];
-		expect(shouldEmergencyCompact(0, 3500, 100000, messages)).toBe(false);
+		expect(shouldEmergencyCompact(0, 3500, 100000, messages)).toBe(true);
 	});
 
-	test("returns false when promptChars is 0", () => {
+	test("uses fallback ratio when promptChars is 0", () => {
+		// With fallback ratio=3, charBudget = 100000 * 0.9 * 3 = 270000
+		// 320000 chars > 270000 → should return true
 		const messages = [{ content: "x".repeat(320000) }];
-		expect(shouldEmergencyCompact(1000, 0, 100000, messages)).toBe(false);
+		expect(shouldEmergencyCompact(1000, 0, 100000, messages)).toBe(true);
 	});
 
 	test("edge case: content exactly at budget does not trigger", () => {

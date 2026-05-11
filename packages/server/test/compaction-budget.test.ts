@@ -41,7 +41,9 @@ const TRAILING_CONTEXT: Message[] = Array.from({ length: 100 }, (_, i) =>
 );
 
 describe("compactToBudget", () => {
-	test("returns unchanged when charBudget is 0 (no ratio available)", () => {
+	test("uses fallback ratio when no measured ratio is available", () => {
+		// With fallback ratio=3, charBudget = 100000 * 0.8 * 3 = 240000
+		// 29 chars (system + hello) is well within budget → unchanged
 		const messages = [
 			{ role: "system" as const, content: "system prompt" },
 			{ role: "user" as const, content: "hello" },
@@ -56,10 +58,8 @@ describe("compactToBudget", () => {
 			type: "pre-prompt",
 			tools,
 		});
-		expect(result.messages).toBe(messages); // same reference
-		expect(result.multiplier).toBe(0);
-		expect(result.iterations).toBe(0);
-		expect(result.charBudget).toBe(0);
+		expect(result.messages).toBe(messages); // same reference, fits budget
+		expect(result.charBudget).toBeGreaterThan(0);
 	});
 
 	test("returns unchanged when content fits within budget", () => {

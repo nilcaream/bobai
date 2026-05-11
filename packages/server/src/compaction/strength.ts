@@ -29,15 +29,22 @@ export const EMERGENCY_TARGET = 0.9;
 export const COMPACTION_OUTPUT_TARGET = 0.5;
 
 /**
+ * Character-per-token fallback used when no measured ratio is available
+ * (e.g. fresh session with no prior API call). Must stay consistent with
+ * DEFAULT_FALLBACK_CHARS_PER_TOKEN in provider/output-budget.ts.
+ */
+const FALLBACK_CHARS_PER_TOKEN = 3;
+
+/**
  * Compute the character budget for a given context window and target fraction.
  *
  * Uses the session's measured charsPerToken ratio (prompt_chars / prompt_tokens).
- * Returns 0 when no valid ratio is available (signals "skip compaction").
+ * Falls back to a conservative estimate when no measurement is available
+ * (fresh session, first turn) so that compaction is never entirely disabled.
  */
 export function computeCharBudget(contextWindow: number, target: number, promptTokens: number, promptChars: number): number {
 	if (contextWindow <= 0) return 0;
-	const charsPerToken = promptTokens > 0 && promptChars > 0 ? promptChars / promptTokens : 0;
-	if (charsPerToken <= 0) return 0;
+	const charsPerToken = promptTokens > 0 && promptChars > 0 ? promptChars / promptTokens : FALLBACK_CHARS_PER_TOKEN;
 	return Math.round(contextWindow * target * charsPerToken);
 }
 

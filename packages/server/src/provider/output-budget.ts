@@ -57,11 +57,27 @@ export function computeSafeMaxOutputTokens(options: SafeMaxOutputTokensOptions):
 	if (configuredMaxOutput <= 0) return 1;
 	if (contextWindow <= 0) return configuredMaxOutput;
 
-	const estimatedPromptTokens = computeConservativePromptTokenEstimate({
+	const charsPerToken =
+		sessionPromptTokens > 0 && sessionPromptChars > 0
+			? sessionPromptChars / sessionPromptTokens
+			: DEFAULT_FALLBACK_CHARS_PER_TOKEN;
+
+	let estimatedPromptTokens = computeConservativePromptTokenEstimate({
 		messageChars,
 		sessionPromptTokens,
 		sessionPromptChars,
 	});
+
+	// When the estimate (pushed up by a stale sessionPromptTokens floor from
+	// a previous turn's larger uncompacted payload) exceeds the context window,
+	// fall back to a pure chars-based estimate of the current compacted payload.
+	// This preserves the floor in the normal case (where it guards against
+	// undercounting) but ignores it when it would consume the entire output budget.
+	if (estimatedPromptTokens >= contextWindow - headroom) {
+		const charsBased = Math.ceil(messageChars / charsPerToken);
+		estimatedPromptTokens = Math.min(estimatedPromptTokens, charsBased);
+	}
+
 	const remaining = contextWindow - estimatedPromptTokens - headroom;
 	return Math.max(1, Math.min(configuredMaxOutput, remaining));
 }
