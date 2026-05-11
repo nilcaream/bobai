@@ -178,4 +178,56 @@ describe("replayBufferToMessages", () => {
 		}
 		expect(msgs[1].role).toBe("assistant");
 	});
+
+	test("reasoning_start → creates an empty reasoning part", () => {
+		const events = [{ type: "reasoning_start" as const, sessionId: "c1" }];
+		const msgs = replayBufferToMessages(events);
+		expect(msgs).toHaveLength(1);
+		if (msgs[0].role === "assistant") {
+			expect(msgs[0].parts).toEqual([{ type: "reasoning", content: "" }]);
+		}
+	});
+
+	test("reasoning_token → appends to reasoning part", () => {
+		const events = [
+			{ type: "reasoning_start" as const, sessionId: "c1" },
+			{ type: "reasoning_token" as const, text: "I need to ", sessionId: "c1" },
+			{ type: "reasoning_token" as const, text: "analyze this.", sessionId: "c1" },
+		];
+		const msgs = replayBufferToMessages(events);
+		if (msgs[0].role === "assistant") {
+			expect(msgs[0].parts).toHaveLength(1);
+			expect(msgs[0].parts[0]).toEqual({ type: "reasoning", content: "I need to analyze this." });
+		}
+	});
+
+	test("reasoning_end → reasoning part is already complete (no-op)", () => {
+		const events = [
+			{ type: "reasoning_start" as const, sessionId: "c1" },
+			{ type: "reasoning_token" as const, text: "done", sessionId: "c1" },
+			{ type: "reasoning_end" as const, sessionId: "c1" },
+		];
+		const msgs = replayBufferToMessages(events);
+		if (msgs[0].role === "assistant") {
+			expect(msgs[0].parts).toHaveLength(1);
+			expect(msgs[0].parts[0]).toEqual({ type: "reasoning", content: "done" });
+		}
+	});
+
+	test("reasoning events interleaved with text and tools", () => {
+		const events = [
+			{ type: "reasoning_start" as const, sessionId: "c1" },
+			{ type: "reasoning_token" as const, text: "hmm", sessionId: "c1" },
+			{ type: "reasoning_end" as const, sessionId: "c1" },
+			{ type: "token" as const, text: "Let me check", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", sessionId: "c1" },
+		];
+		const msgs = replayBufferToMessages(events);
+		if (msgs[0].role === "assistant") {
+			expect(msgs[0].parts).toHaveLength(3);
+			expect(msgs[0].parts[0]).toEqual({ type: "reasoning", content: "hmm" });
+			expect(msgs[0].parts[1].type).toBe("text");
+			expect(msgs[0].parts[2].type).toBe("tool_call");
+		}
+	});
 });

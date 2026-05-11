@@ -9,8 +9,15 @@ import { parseResponsesSSE } from "./responses-stream";
 
 function estimatePromptChars(messages: ProviderOptions["messages"]): number {
 	return messages.reduce((sum, message) => {
-		if (typeof message.content === "string") return sum + message.content.length;
-		return sum;
+		let s = sum;
+		if (typeof message.content === "string") s += message.content.length;
+		if ("reasoning" in message && Array.isArray(message.reasoning)) {
+			for (const r of message.reasoning) {
+				if (r.text) s += r.text.length;
+				if (r.summary) s += r.summary.length;
+			}
+		}
+		return s;
 	}, 0);
 }
 

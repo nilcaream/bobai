@@ -16,6 +16,27 @@ function escapeMarkdown(text: string): string {
 	return text.replace(/([*_`~\\[\]|#>])/g, "\\$1");
 }
 
+/** Extract text from a Qwen-style reasoning_details array. */
+function extractReasoningTextFromDetails(details: unknown): string | undefined {
+	if (Array.isArray(details)) {
+		const parts: string[] = [];
+		for (const item of details) {
+			if (
+				item &&
+				typeof item === "object" &&
+				"type" in item &&
+				item.type === "text" &&
+				"text" in item &&
+				typeof item.text === "string"
+			) {
+				parts.push(item.text);
+			}
+		}
+		return parts.length > 0 ? parts.join("") : undefined;
+	}
+	return undefined;
+}
+
 export function reconstructMessages(stored: StoredMessage[]): Message[] {
 	const messages: Message[] = [];
 	let currentAssistant: (Message & { role: "assistant" }) | null = null;
@@ -39,6 +60,23 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 				| Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 				| undefined;
 			const hasVisibleContent = msg.content.trim().length > 0;
+
+			// Reasoning before text — matches streaming order where reasoning
+			// blocks are emitted before text tokens.
+			const reasoning = msg.metadata?.reasoning as
+				| Array<{ kind: string; text?: string; summary?: string; details?: unknown }>
+				| undefined;
+			if (reasoning && reasoning.length > 0) {
+				for (const r of reasoning) {
+					let reasoningText = r.text ?? r.summary ?? "";
+					if (!reasoningText && r.details) {
+						reasoningText = extractReasoningTextFromDetails(r.details) ?? "";
+					}
+					if (reasoningText) {
+						newParts.push({ type: "reasoning", content: reasoningText });
+					}
+				}
+			}
 
 			// Text before tool_calls — matches streaming order where the provider
 			// emits text tokens first, then fires tool_call events.

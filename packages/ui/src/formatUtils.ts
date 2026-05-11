@@ -2,6 +2,7 @@ import type { MessagePart } from "./protocol";
 
 export type Panel =
 	| { type: "text"; content: string }
+	| { type: "reasoning"; content: string }
 	| {
 			type: "tool";
 			id: string;
@@ -115,6 +116,8 @@ export function groupParts(parts: MessagePart[]): Panel[] {
 	for (const part of parts) {
 		if (part.type === "text") {
 			raw.push({ type: "text", content: part.content });
+		} else if (part.type === "reasoning") {
+			raw.push({ type: "reasoning", content: part.content });
 		} else if (part.type === "tool_call") {
 			const panel: Panel & { type: "tool" } = {
 				type: "tool",

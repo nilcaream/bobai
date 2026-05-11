@@ -94,6 +94,12 @@ function resolveConfiguredSessionBackend(defaultProviderId: ProviderId | null, d
 function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent & { sessionId?: string }) {
 	if (event.type === "text") {
 		send(ws, { type: "token", text: event.text, sessionId: event.sessionId });
+	} else if (event.type === "reasoning_start") {
+		send(ws, { type: "reasoning_start", sessionId: event.sessionId });
+	} else if (event.type === "reasoning_token") {
+		send(ws, { type: "reasoning_token", text: event.text, sessionId: event.sessionId });
+	} else if (event.type === "reasoning_end") {
+		send(ws, { type: "reasoning_end", sessionId: event.sessionId });
 	} else if (event.type === "tool_call") {
 		send(ws, { type: "tool_call", id: event.id, output: event.output, sessionId: event.sessionId });
 	} else if (event.type === "tool_result") {

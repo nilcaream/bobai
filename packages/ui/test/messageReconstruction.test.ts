@@ -766,6 +766,194 @@ describe("reconstructMessages", () => {
 		}
 	});
 
+	test("reconstructs reasoning parts from metadata before text", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "question",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "final answer",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					reasoning: [{ kind: "interleaved-chat", field: "reasoning_content", text: "let me think..." }],
+					summary: "done",
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		expect(result).toHaveLength(2);
+		if (result[1].role === "assistant") {
+			expect(result[1].parts).toHaveLength(2);
+			expect(result[1].parts[0].type).toBe("reasoning");
+			expect(result[1].parts[0].content).toBe("let me think...");
+			expect(result[1].parts[1].type).toBe("text");
+			expect(result[1].parts[1].content).toBe("final answer");
+		}
+	});
+
+	test("reconstructs responses-item reasoning using summary field", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "question",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "answer",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					reasoning: [{ kind: "responses-item", id: "rs_1", summary: "**Inspecting state**\n\nLet me check..." }],
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[1].role === "assistant") {
+			expect(result[1].parts).toHaveLength(2);
+			expect(result[1].parts[0].type).toBe("reasoning");
+			expect(result[1].parts[0].content).toBe("**Inspecting state**\n\nLet me check...");
+			expect(result[1].parts[1].type).toBe("text");
+		}
+	});
+
+	test("skips reasoning entries with no text or summary", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "question",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "answer",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					reasoning: [{ kind: "responses-item", id: "rs_1", encryptedContent: "abc123" }],
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[1].role === "assistant") {
+			// No reasoning part — only encrypted content, no text/summary
+			expect(result[1].parts).toHaveLength(1);
+			expect(result[1].parts[0].type).toBe("text");
+		}
+	});
+
+	test("reconstructs reasoning from multi-step turn with tool calls", () => {
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "read a file",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					reasoning: [{ kind: "interleaved-chat", field: "reasoning_content", text: "I need to read this file." }],
+					tool_calls: [{ id: "call_1", type: "function", function: { name: "read_file", arguments: '{"path":"x.ts"}' } }],
+				},
+			},
+			{
+				id: "4",
+				sessionId: "s",
+				role: "tool" as const,
+				content: "file contents",
+				createdAt: "2026-03-06T01:00:02Z",
+				sortOrder: 3,
+				metadata: { tool_call_id: "call_1" },
+			},
+			{
+				id: "5",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "Here is the file.",
+				createdAt: "2026-03-06T01:00:03Z",
+				sortOrder: 4,
+				metadata: { summary: "done", turn_model: "deepseek-v4-pro" },
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[1].role === "assistant") {
+			// reasoning → tool_call → tool_result → text
+			expect(result[1].parts).toHaveLength(4);
+			expect(result[1].parts[0].type).toBe("reasoning");
+			expect(result[1].parts[0].content).toBe("I need to read this file.");
+			expect(result[1].parts[1].type).toBe("tool_call");
+			expect(result[1].parts[2].type).toBe("tool_result");
+			expect(result[1].parts[3].type).toBe("text");
+		}
+	});
+
 	test("handles mixed text and tool calls in sequence", () => {
 		const stored = [
 			{

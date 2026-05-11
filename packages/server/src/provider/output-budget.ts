@@ -30,6 +30,12 @@ export function estimateMessageChars(messages: Message[]): number {
 				total += toolCall.function.arguments.length;
 			}
 		}
+		if ("reasoning" in message && Array.isArray(message.reasoning)) {
+			for (const r of message.reasoning) {
+				if (r.text) total += r.text.length;
+				if (r.summary) total += r.summary.length;
+			}
+		}
 	}
 	return total;
 }

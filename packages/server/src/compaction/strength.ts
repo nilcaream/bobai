@@ -48,20 +48,49 @@ export function computeCharBudget(contextWindow: number, target: number, promptT
 	return Math.round(contextWindow * target * charsPerToken);
 }
 
+function extractReasoningText(reasoning: { kind: string; text?: string; summary?: string; details?: unknown }): string {
+	if (reasoning.text) return reasoning.text;
+	if (reasoning.summary) return reasoning.summary;
+	if (reasoning.details) {
+		if (Array.isArray(reasoning.details)) {
+			const parts: string[] = [];
+			for (const item of reasoning.details) {
+				if (
+					item &&
+					typeof item === "object" &&
+					"type" in item &&
+					(item as Record<string, unknown>).type === "text" &&
+					"text" in item &&
+					typeof (item as Record<string, unknown>).text === "string"
+				) {
+					parts.push((item as Record<string, string>).text);
+				}
+			}
+			return parts.join("");
+		}
+	}
+	return "";
+}
+
 /**
  * Compute the total character length of all message data in an array.
  *
- * Counts both the `content` string and any `tool_calls[].function.arguments`
- * on assistant messages — these are the two main variable-size payloads we
- * send to the API. This is consistent with the provider's `turnLastCallChars`
- * measurement, so the derived `charsPerToken` ratio is self-consistent.
+ * Counts content, tool_call arguments, and reasoning text on assistant
+ * messages — these are the main variable-size payloads we send to the API.
+ * This is consistent with the provider's `turnLastCallChars` measurement,
+ * so the derived `charsPerToken` ratio is self-consistent.
  *
  * Does not include tool definitions or per-message framing (role strings,
  * tool_call IDs, JSON structure). Those are roughly constant within a
  * session and contribute a fixed offset to the API's token count.
  */
 export function totalContentChars(
-	messages: { role?: string; content: string | null | undefined; tool_calls?: { function: { arguments: string } }[] }[],
+	messages: {
+		role?: string;
+		content: string | null | undefined;
+		tool_calls?: { function: { arguments: string } }[];
+		reasoning?: { kind: string; text?: string; summary?: string; details?: unknown }[];
+	}[],
 ): number {
 	let total = 0;
 	for (const msg of messages) {
@@ -69,6 +98,11 @@ export function totalContentChars(
 		if (msg.tool_calls) {
 			for (const tc of msg.tool_calls) {
 				total += tc.function.arguments.length;
+			}
+		}
+		if (msg.reasoning) {
+			for (const r of msg.reasoning) {
+				total += extractReasoningText(r).length;
 			}
 		}
 	}

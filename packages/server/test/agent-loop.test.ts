@@ -163,7 +163,10 @@ describe("provider reasoning types", () => {
 		});
 
 		expect(events).toEqual([
+			{ type: "reasoning_start" },
+			{ type: "reasoning_token", text: " harder" },
 			{ type: "text", text: "Hello" },
+			{ type: "reasoning_end" },
 			{ type: "text", text: " world" },
 		]);
 		expect(messages).toEqual([
@@ -224,6 +227,9 @@ describe("provider reasoning types", () => {
 		});
 
 		expect(events).toEqual([
+			{ type: "reasoning_start" },
+			{ type: "reasoning_token", text: " about tool" },
+			{ type: "reasoning_end" },
 			{ type: "tool_call", id: "call-1", output: "▸ Echo hi" },
 			{
 				type: "tool_result",

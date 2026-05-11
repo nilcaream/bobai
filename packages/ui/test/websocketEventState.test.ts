@@ -52,6 +52,56 @@ describe("applyStreamingEvent", () => {
 		]);
 	});
 
+	test("reasoning_start creates a new reasoning part in the current assistant message", () => {
+		let messages: Message[] = [{ role: "assistant", parts: [] }];
+		messages = applyStreamingEvent(messages, { type: "reasoning_start" }, "2026-05-06 10:00:00");
+		expect(messages).toEqual([{ role: "assistant", parts: [{ type: "reasoning", content: "" }] }]);
+	});
+
+	test("reasoning_start starts a second reasoning block when already in one", () => {
+		let messages: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "first block" }] }];
+		messages = applyStreamingEvent(messages, { type: "reasoning_start" }, "2026-05-06 10:00:01");
+		expect(messages).toEqual([
+			{
+				role: "assistant",
+				parts: [
+					{ type: "reasoning", content: "first block" },
+					{ type: "reasoning", content: "" },
+				],
+			},
+		]);
+	});
+
+	test("reasoning_token appends to the last reasoning part", () => {
+		let messages: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "Let me think" }] }];
+		messages = applyStreamingEvent(messages, { type: "reasoning_token", text: " about this." }, "2026-05-06 10:00:01");
+		expect(messages).toEqual([{ role: "assistant", parts: [{ type: "reasoning", content: "Let me think about this." }] }]);
+	});
+
+	test("reasoning_end does not mutate messages", () => {
+		const initial: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "thinking complete" }] }];
+		const result = applyStreamingEvent(initial, { type: "reasoning_end" }, "2026-05-06 10:00:01");
+		expect(result).toEqual(initial);
+	});
+
+	test("reasoning tokens stream interleaved with text tokens", () => {
+		let messages: Message[] = [];
+		messages = applyStreamingEvent(messages, { type: "reasoning_start" }, "2026-05-06 10:00:00");
+		messages = applyStreamingEvent(messages, { type: "reasoning_token", text: "hmm" }, "2026-05-06 10:00:01");
+		messages = applyStreamingEvent(messages, { type: "reasoning_end" }, "2026-05-06 10:00:02");
+		messages = applyStreamingEvent(messages, { type: "token", text: "Answer." }, "2026-05-06 10:00:03");
+
+		expect(messages).toEqual([
+			{
+				role: "assistant",
+				parts: [
+					{ type: "reasoning", content: "hmm" },
+					{ type: "text", content: "Answer." },
+				],
+			},
+		]);
+	});
+
 	test("error event is converted into assistant text part", () => {
 		const messages = applyStreamingEvent([], { type: "error", message: "Oops" }, "2026-05-06 10:00:00");
 		expect(messages).toEqual([{ role: "assistant", parts: [{ type: "text", content: "Error: Oops" }] }]);

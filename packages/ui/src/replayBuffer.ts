@@ -1,5 +1,5 @@
 import { formatTimestamp } from "./format";
-import { appendPart, appendText } from "./messageBuilder";
+import { appendPart, appendReasoning, appendText, startReasoning } from "./messageBuilder";
 import type { Message } from "./protocol";
 
 type BufferedEvent = { type: string; [key: string]: unknown };
@@ -16,6 +16,12 @@ export function replayBufferToMessages(events: BufferedEvent[]): Message[] {
 			messages = [...messages, { role: "user", text: event.text as string, timestamp: formatTimestamp() }];
 		} else if (event.type === "token") {
 			messages = appendText(messages, event.text as string);
+		} else if (event.type === "reasoning_start") {
+			messages = startReasoning(messages);
+		} else if (event.type === "reasoning_token") {
+			messages = appendReasoning(messages, event.text as string);
+		} else if (event.type === "reasoning_end") {
+			// reasoning_end — no structural change needed; the reasoning part is already complete
 		} else if (event.type === "tool_call") {
 			messages = appendPart(messages, { type: "tool_call", id: event.id as string, content: event.output as string });
 		} else if (event.type === "tool_result") {

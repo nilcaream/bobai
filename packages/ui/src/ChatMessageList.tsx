@@ -57,6 +57,12 @@ export function ChatMessageList({
 						)}
 					</div>,
 				);
+			} else if (panel.type === "reasoning") {
+				elements.push(
+					<div key={key++} className="panel panel--reasoning">
+						<Markdown>{panel.content}</Markdown>
+					</div>,
+				);
 			} else {
 				const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
 				const subagentSessionId = linkedSubagent?.sessionId ?? panel.subagentSessionId;

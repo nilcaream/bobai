@@ -124,7 +124,7 @@ describe("parseAnthropicStream", () => {
 		]);
 	});
 
-	test("ignores thinking_delta events", async () => {
+	test("emits reasoning events from thinking blocks", async () => {
 		const stream = mockAnthropicEvents([
 			{ type: "message_start", message: { id: "msg_5", usage: { input_tokens: 10, output_tokens: 0 } } },
 			{ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
@@ -140,6 +140,9 @@ describe("parseAnthropicStream", () => {
 		const events = await collect(parseAnthropicStream(stream, "claude-haiku-4.5", configDir));
 
 		expect(events).toEqual([
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "text-summary", text: "" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "hmm let me think" } },
+			{ type: "reasoning_end", index: 0 },
 			{ type: "text", text: "Answer" },
 			{
 				type: "usage",

@@ -1,12 +1,26 @@
-import { appendPart, appendText } from "./messageBuilder";
+import { appendPart, appendReasoning, appendText, startReasoning } from "./messageBuilder";
 import type { Message, MessagePart, ServerMessage, SubagentInfo } from "./protocol";
 
-function isStreamingMessage(
-	msg: ServerMessage,
-): msg is Extract<ServerMessage, { type: "prompt_echo" | "token" | "tool_call" | "tool_result" | "error" }> {
+function isStreamingMessage(msg: ServerMessage): msg is Extract<
+	ServerMessage,
+	{
+		type:
+			| "prompt_echo"
+			| "token"
+			| "reasoning_start"
+			| "reasoning_token"
+			| "reasoning_end"
+			| "tool_call"
+			| "tool_result"
+			| "error";
+	}
+> {
 	return (
 		msg.type === "prompt_echo" ||
 		msg.type === "token" ||
+		msg.type === "reasoning_start" ||
+		msg.type === "reasoning_token" ||
+		msg.type === "reasoning_end" ||
 		msg.type === "tool_call" ||
 		msg.type === "tool_result" ||
 		msg.type === "error"
@@ -24,6 +38,18 @@ export function applyStreamingEvent(messages: Message[], msg: ServerMessage, now
 
 	if (msg.type === "token") {
 		return appendText(messages, msg.text);
+	}
+
+	if (msg.type === "reasoning_start") {
+		return startReasoning(messages);
+	}
+
+	if (msg.type === "reasoning_token") {
+		return appendReasoning(messages, msg.text);
+	}
+
+	if (msg.type === "reasoning_end") {
+		return messages;
 	}
 
 	if (msg.type === "tool_call") {

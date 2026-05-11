@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { appendPart, appendText } from "../src/messageBuilder";
+import { appendPart, appendReasoning, appendText, startReasoning } from "../src/messageBuilder";
 import type { Message, MessagePart } from "../src/protocol";
 
 describe("appendPart", () => {
@@ -104,5 +104,91 @@ describe("appendText", () => {
 		expect(result).toHaveLength(2);
 		expect(result[0]).toEqual({ role: "assistant", parts: [] });
 		expect(result[1]).toEqual({ role: "assistant", parts: [{ type: "text", content: "text" }] });
+	});
+});
+
+describe("startReasoning", () => {
+	test("empty message list → creates a new assistant message with an empty reasoning part", () => {
+		const result = startReasoning([]);
+		expect(result).toHaveLength(1);
+		expect(result[0]).toEqual({ role: "assistant", parts: [{ type: "reasoning", content: "" }] });
+	});
+
+	test("last message is user → creates a new assistant message with reasoning", () => {
+		const prev: Message[] = [{ role: "user", text: "hello", timestamp: "2025-01-01 00:00:00" }];
+		const result = startReasoning(prev);
+		expect(result).toHaveLength(2);
+		expect(result[0]).toEqual(prev[0]);
+		expect(result[1]).toEqual({ role: "assistant", parts: [{ type: "reasoning", content: "" }] });
+	});
+
+	test("last message is assistant with text part → appends reasoning part", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "text", content: "hello" }] }];
+		const result = startReasoning(prev);
+		expect(result).toHaveLength(1);
+		if (result[0].role === "assistant") {
+			expect(result[0].parts).toHaveLength(2);
+			expect(result[0].parts[0]).toEqual({ type: "text", content: "hello" });
+			expect(result[0].parts[1]).toEqual({ type: "reasoning", content: "" });
+		}
+	});
+
+	test("last message is assistant with reasoning part already → starts a new reasoning part", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "thinking..." }] }];
+		const result = startReasoning(prev);
+		expect(result).toHaveLength(1);
+		if (result[0].role === "assistant") {
+			expect(result[0].parts).toHaveLength(2);
+			expect(result[0].parts[0]).toEqual({ type: "reasoning", content: "thinking..." });
+			expect(result[0].parts[1]).toEqual({ type: "reasoning", content: "" });
+		}
+	});
+});
+
+describe("appendReasoning", () => {
+	test("empty message list → creates assistant message with reasoning part", () => {
+		const result = appendReasoning([], "thinking...");
+		expect(result).toHaveLength(1);
+		expect(result[0]).toEqual({ role: "assistant", parts: [{ type: "reasoning", content: "thinking..." }] });
+	});
+
+	test("last message is user → creates new assistant message with reasoning part", () => {
+		const prev: Message[] = [{ role: "user", text: "hello", timestamp: "2025-01-01 00:00:00" }];
+		const result = appendReasoning(prev, "thinking...");
+		expect(result).toHaveLength(2);
+		expect(result[0]).toEqual(prev[0]);
+		expect(result[1]).toEqual({ role: "assistant", parts: [{ type: "reasoning", content: "thinking..." }] });
+	});
+
+	test("last part is reasoning → appends text to it", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "reasoning", content: "I should " }] }];
+		const result = appendReasoning(prev, "check the code");
+		expect(result).toHaveLength(1);
+		if (result[0].role === "assistant") {
+			expect(result[0].parts).toHaveLength(1);
+			expect(result[0].parts[0]).toEqual({ type: "reasoning", content: "I should check the code" });
+		}
+	});
+
+	test("last part is not reasoning → creates a new reasoning part via appendPart", () => {
+		const prev: Message[] = [{ role: "assistant", parts: [{ type: "text", content: "Let me think" }] }];
+		const result = appendReasoning(prev, "analyzing...");
+		expect(result).toHaveLength(1);
+		if (result[0].role === "assistant") {
+			expect(result[0].parts).toHaveLength(2);
+			expect(result[0].parts[0]).toEqual({ type: "text", content: "Let me think" });
+			expect(result[0].parts[1]).toEqual({ type: "reasoning", content: "analyzing..." });
+		}
+	});
+
+	test("multiple consecutive tokens → concatenated", () => {
+		let messages: Message[] = [];
+		messages = appendReasoning(messages, "a");
+		messages = appendReasoning(messages, "b");
+		messages = appendReasoning(messages, "c");
+		if (messages[0].role === "assistant") {
+			expect(messages[0].parts).toHaveLength(1);
+			expect(messages[0].parts[0]).toEqual({ type: "reasoning", content: "abc" });
+		}
 	});
 });

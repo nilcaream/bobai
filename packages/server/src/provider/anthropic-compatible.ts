@@ -9,8 +9,15 @@ import { parseSSE } from "./sse";
 
 function estimatePromptChars(messages: ProviderOptions["messages"]): number {
 	return messages.reduce((sum, message) => {
-		if (typeof message.content === "string") return sum + message.content.length;
-		return sum;
+		let s = sum;
+		if (typeof message.content === "string") s += message.content.length;
+		if ("reasoning" in message && Array.isArray(message.reasoning)) {
+			for (const r of message.reasoning) {
+				if (r.text) s += r.text.length;
+				if (r.summary) s += r.summary.length;
+			}
+		}
+		return s;
 	}, 0);
 }
 
@@ -37,7 +44,7 @@ export interface AnthropicReasoningDefaults {
 
 const DEFAULT_ANTHROPIC_REASONING_DEFAULTS: Required<AnthropicReasoningDefaults> = {
 	budgetTokens: 1024,
-	display: "omitted",
+	display: "summarized",
 };
 
 export function getAnthropicReasoningOptions(
@@ -128,6 +135,7 @@ export function createAnthropicCompatibleProvider(
 			let didEmitFinish = false;
 			let hasReceivedContent = false;
 			let sawToolCalls = false;
+			const thinkingBlockIndices = new Set<number>();
 
 			for await (const event of parseSSE(response.body)) {
 				const raw = event as {
@@ -167,6 +175,13 @@ export function createAnthropicCompatibleProvider(
 								id: raw.content_block.id,
 								name: raw.content_block.name,
 							};
+						} else if (raw.content_block?.type === "thinking" && typeof raw.index === "number") {
+							thinkingBlockIndices.add(raw.index);
+							yield {
+								type: "reasoning_start",
+								index: raw.index,
+								reasoning: { kind: "text-summary", text: "" },
+							};
 						}
 						break;
 					}
@@ -180,6 +195,22 @@ export function createAnthropicCompatibleProvider(
 								type: "tool_call_delta",
 								index: raw.index,
 								arguments: raw.delta.partial_json,
+							};
+						} else if (raw.delta?.type === "thinking_delta" && raw.delta.thinking && typeof raw.index === "number") {
+							yield {
+								type: "reasoning_delta",
+								index: raw.index,
+								delta: { kind: "text", text: raw.delta.thinking },
+							};
+						}
+						break;
+					}
+					case "content_block_stop": {
+						if (typeof raw.index === "number" && thinkingBlockIndices.has(raw.index)) {
+							thinkingBlockIndices.delete(raw.index);
+							yield {
+								type: "reasoning_end",
+								index: raw.index,
 							};
 						}
 						break;

@@ -29,3 +29,34 @@ export function appendText(prev: Message[], text: string): Message[] {
 	}
 	return [...prev, { role: "assistant", parts: [{ type: "text", content: text }] }];
 }
+
+/** Start a new reasoning block — creates a new reasoning part if the last part isn't already reasoning. */
+export function startReasoning(prev: Message[]): Message[] {
+	const last = prev.at(-1);
+	if (last?.role === "assistant" && last.parts.length > 0) {
+		const lastPart = last.parts.at(-1);
+		if (lastPart?.type === "reasoning") {
+			// Already in a reasoning block — start a new one
+			return appendPart(prev, { type: "reasoning", content: "" });
+		}
+	}
+	// Start a new reasoning part
+	if (last?.role === "assistant") {
+		const updated: Message = { ...last, parts: [...last.parts, { type: "reasoning", content: "" }] };
+		return [...prev.slice(0, -1), updated];
+	}
+	return [...prev, { role: "assistant", parts: [{ type: "reasoning", content: "" }] }];
+}
+
+/** Append reasoning text to the last reasoning part of the last assistant message, or create one. */
+export function appendReasoning(prev: Message[], text: string): Message[] {
+	const last = prev.at(-1);
+	if (last?.role === "assistant" && last.parts.length > 0) {
+		const lastPart = last.parts.at(-1);
+		if (lastPart?.type === "reasoning") {
+			const updatedParts = [...last.parts.slice(0, -1), { type: "reasoning" as const, content: lastPart.content + text }];
+			return [...prev.slice(0, -1), { ...last, parts: updatedParts }];
+		}
+	}
+	return appendPart(prev, { type: "reasoning", content: text });
+}

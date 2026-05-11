@@ -127,6 +127,7 @@ export function createCopilotProvider(
 	let turnLastCallChars = 0;
 	let turnCachedInputTokens = 0;
 	let turnCacheCreationInputTokens = 0;
+	let turnReasoningTokens = 0;
 	let baselineTokens = 0;
 	const warnedContextWindow = new Set<string>();
 
@@ -618,6 +619,7 @@ export function createCopilotProvider(
 			turnLastCallChars = 0;
 			turnCachedInputTokens = 0;
 			turnCacheCreationInputTokens = 0;
+			turnReasoningTokens = 0;
 			baselineTokens = sessionPromptTokens || 0;
 		},
 
@@ -683,6 +685,7 @@ export function createCopilotProvider(
 				turnLastCallChars,
 				turnCachedInputTokens,
 				turnCacheCreationInputTokens,
+				turnReasoningTokens,
 				baselineTokens,
 			};
 		},
@@ -699,6 +702,7 @@ export function createCopilotProvider(
 				turnLastCallChars: number;
 				turnCachedInputTokens?: number;
 				turnCacheCreationInputTokens?: number;
+				turnReasoningTokens?: number;
 				baselineTokens: number;
 			};
 			turnStartTime = s.turnStartTime;
@@ -711,6 +715,7 @@ export function createCopilotProvider(
 			turnLastCallChars = s.turnLastCallChars ?? 0;
 			turnCachedInputTokens = s.turnCachedInputTokens ?? 0;
 			turnCacheCreationInputTokens = s.turnCacheCreationInputTokens ?? 0;
+			turnReasoningTokens = s.turnReasoningTokens ?? 0;
 			baselineTokens = s.baselineTokens;
 		},
 
@@ -719,9 +724,9 @@ export function createCopilotProvider(
 			await ensureValidSession();
 			const initiator = copilotOptions.initiator ?? resolveInitiator(options.messages);
 
-			// Compute total content + tool_call argument chars for the messages
-			// being sent. Must stay consistent with totalContentChars() in
-			// compaction/strength.ts — both count the same message payloads so
+			// Compute total content + tool_call argument chars + reasoning chars
+			// for the messages being sent. Must stay consistent with totalContentChars()
+			// in compaction/strength.ts — both count the same message payloads so
 			// the derived charsPerToken ratio is self-consistent.
 			let callChars = 0;
 			for (const msg of options.messages) {
@@ -731,6 +736,12 @@ export function createCopilotProvider(
 				if ("tool_calls" in msg && Array.isArray(msg.tool_calls)) {
 					for (const tc of msg.tool_calls) {
 						callChars += tc.function.arguments.length;
+					}
+				}
+				if ("reasoning" in msg && Array.isArray(msg.reasoning)) {
+					for (const r of msg.reasoning) {
+						if (r.text) callChars += r.text.length;
+						if (r.summary) callChars += r.summary.length;
 					}
 				}
 			}
@@ -875,6 +886,7 @@ export function createCopilotProvider(
 								prompt_tokens: number;
 								completion_tokens: number;
 								total_tokens: number;
+								reasoning_tokens?: number;
 								prompt_tokens_details?: { cached_tokens?: number };
 							};
 						};
@@ -885,6 +897,7 @@ export function createCopilotProvider(
 							const promptTokens = data.usage?.prompt_tokens ?? 0;
 							const totalTokens = data.usage?.total_tokens ?? 0;
 							const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
+							const reasoningTokens = data.usage?.reasoning_tokens ?? 0;
 							const contextWindow =
 								getProviderModelConfig("github-copilot", options.model, resolvedConfigDir)?.contextWindow ?? 0;
 							if (contextWindow <= 0 && !warnedContextWindow.has(options.model)) {
@@ -915,6 +928,7 @@ export function createCopilotProvider(
 									totalTokens,
 									cachedInputTokens: cachedTokens,
 									premiumRequests: effectiveInitiator === "user" ? multiplier : 0,
+									reasoningTokens,
 								});
 							} else {
 								turnModel = options.model;
@@ -922,6 +936,7 @@ export function createCopilotProvider(
 								turnLastCallTokens = promptTokens;
 								turnLastCallChars = callChars;
 								turnCachedInputTokens += cachedTokens ?? 0;
+								turnReasoningTokens += reasoningTokens;
 								if (effectiveInitiator === "agent") turnAgentCalls++;
 								else turnUserCalls++;
 								const multiplier =

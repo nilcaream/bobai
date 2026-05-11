@@ -2149,7 +2149,7 @@ describe("Anthropic routing for Claude models", () => {
 		expect(capturedBody.thinking).toEqual({
 			type: "enabled",
 			budget_tokens: 1024,
-			display: "omitted",
+			display: "summarized",
 		});
 		// Anthropic format: no "choices", no "messages" wrapping in OpenAI style
 		expect(capturedBody.messages).toBeDefined();

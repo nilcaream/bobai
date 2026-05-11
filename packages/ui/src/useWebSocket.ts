@@ -149,11 +149,14 @@ export function useWebSocket() {
 				return;
 			}
 
-			// result.target === "parent" — handle token, tool_call, tool_result, done, error, status, prompt_echo
+			// result.target === "parent" — handle streaming events, done, error, status
 			const isPeeking = viewingSubagentIdRef.current !== null;
 
 			if (
 				msg.type === "token" ||
+				msg.type === "reasoning_start" ||
+				msg.type === "reasoning_token" ||
+				msg.type === "reasoning_end" ||
 				msg.type === "tool_call" ||
 				msg.type === "tool_result" ||
 				msg.type === "error" ||

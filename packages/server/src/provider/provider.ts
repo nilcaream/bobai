@@ -110,6 +110,8 @@ export interface StreamMetrics {
 	cacheCreationInputTokens?: number;
 	/** Premium request multiplier for this LLM call. Copilot-only. */
 	premiumRequests?: number;
+	/** Tokens consumed by the reasoner model. Copilot Chat Completions only. */
+	reasoningTokens?: number;
 }
 
 export interface ProviderOptions {

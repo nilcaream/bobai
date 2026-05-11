@@ -56,6 +56,26 @@ const QUIRKS: ReasoningQuirk[] = [
 			assistantField: "reasoning_details",
 		},
 	},
+	// OpenRouter-proxied models — no providerId constraint so they match
+	// regardless of which provider routes the request.
+	{
+		apiFamily: "openai-chat-completions",
+		modelPattern: /(^|\/)kimi-/,
+		capabilities: {
+			family: "openai-chat-interleaved",
+			supportsReplay: true,
+			assistantField: "reasoning",
+		},
+	},
+	{
+		apiFamily: "openai-chat-completions",
+		modelPattern: /(^|\/)qwen/,
+		capabilities: {
+			family: "openai-chat-interleaved",
+			supportsReplay: true,
+			assistantField: "reasoning_details",
+		},
+	},
 ];
 
 export function getReasoningCapabilities(options: ReasoningCapabilityResolverOptions): ReasoningCapabilities {

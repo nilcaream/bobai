@@ -19,6 +19,7 @@ export async function* parseAnthropicStream(
 	let cacheCreationInputTokens = 0;
 	let stopReason: string | undefined;
 	let didEmitFinish = false;
+	const thinkingBlockIndices = new Set<number>();
 
 	for await (const event of stream) {
 		switch (event.type) {
@@ -38,8 +39,15 @@ export async function* parseAnthropicStream(
 						id: block.id,
 						name: block.name,
 					};
+				} else if (block?.type === "thinking") {
+					thinkingBlockIndices.add(event.index);
+					yield {
+						type: "reasoning_start",
+						index: event.index,
+						reasoning: { kind: "text-summary", text: "" },
+					};
 				}
-				// text blocks and thinking blocks: nothing to emit at start
+				// text blocks: nothing to emit at start
 				break;
 			}
 
@@ -53,13 +61,24 @@ export async function* parseAnthropicStream(
 						index: event.index,
 						arguments: delta.partial_json,
 					};
+				} else if (delta?.type === "thinking_delta" && delta.thinking) {
+					yield {
+						type: "reasoning_delta",
+						index: event.index,
+						delta: { kind: "text", text: delta.thinking },
+					};
 				}
-				// thinking_delta and other delta types: ignored
 				break;
 			}
 
 			case "content_block_stop": {
-				// Nothing to emit
+				if (thinkingBlockIndices.has(event.index)) {
+					thinkingBlockIndices.delete(event.index);
+					yield {
+						type: "reasoning_end",
+						index: event.index,
+					};
+				}
 				break;
 			}
 

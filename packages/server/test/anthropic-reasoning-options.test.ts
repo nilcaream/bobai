@@ -18,7 +18,7 @@ describe("anthropic reasoning options", () => {
 			thinking: {
 				type: "enabled",
 				budget_tokens: 1024,
-				display: "omitted",
+				display: "summarized",
 			},
 		});
 	});

@@ -82,6 +82,9 @@ export function emergencyCompactConversation(
 
 export type AgentEvent =
 	| { type: "text"; text: string }
+	| { type: "reasoning_start" }
+	| { type: "reasoning_token"; text: string }
+	| { type: "reasoning_end" }
 	| { type: "tool_call"; id: string; output: string }
 	| {
 			type: "tool_result";
@@ -172,6 +175,26 @@ function applyReasoningDelta(reasoning: ReasoningState, delta: ReasoningDelta): 
 	}
 }
 
+function extractReasoningTextFromDetails(details: unknown): string | undefined {
+	if (Array.isArray(details)) {
+		const parts: string[] = [];
+		for (const item of details) {
+			if (
+				item &&
+				typeof item === "object" &&
+				"type" in item &&
+				item.type === "text" &&
+				"text" in item &&
+				typeof item.text === "string"
+			) {
+				parts.push(item.text);
+			}
+		}
+		return parts.length > 0 ? parts.join("") : undefined;
+	}
+	return undefined;
+}
+
 async function consumeProviderStream(
 	stream: AsyncIterable<import("./provider/provider").StreamEvent>,
 	onEvent: (event: AgentEvent) => void,
@@ -194,16 +217,34 @@ async function consumeProviderStream(
 				break;
 			case "reasoning_start":
 				reasoningAccumulator.active.set(event.index, cloneReasoningState(event.reasoning));
+				onEvent({ type: "reasoning_start" });
 				break;
 			case "reasoning_delta": {
 				const reasoning = reasoningAccumulator.active.get(event.index);
 				if (reasoning) {
 					reasoningAccumulator.active.set(event.index, applyReasoningDelta(reasoning, event.delta));
 				}
+				if (event.delta.kind === "text") {
+					onEvent({ type: "reasoning_token", text: event.delta.text });
+				} else if (event.delta.kind === "details") {
+					const text = extractReasoningTextFromDetails(event.delta.details);
+					if (text) {
+						onEvent({ type: "reasoning_token", text });
+					}
+				} else if (event.delta.kind === "summary" && event.delta.summary) {
+					// Responses API summary deltas are cumulative (each event carries the full text).
+					// Emit only the new portion to match the UI's append semantics.
+					const prevSummary = reasoning?.kind === "responses-item" ? (reasoning.summary ?? "") : "";
+					const newText = event.delta.summary.slice(prevSummary.length);
+					if (newText) {
+						onEvent({ type: "reasoning_token", text: newText });
+					}
+				}
 				break;
 			}
 			case "reasoning_end":
 				endReasoning(reasoningAccumulator, event.index, event.reasoning);
+				onEvent({ type: "reasoning_end" });
 				break;
 			case "tool_call_start":
 				toolCalls.set(event.index, { id: event.id, name: event.name, arguments: "" });

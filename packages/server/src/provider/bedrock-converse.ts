@@ -58,8 +58,15 @@ export function createBedrockConverseProvider(
 			// We collect stopReason from messageStop and emit finish after metadata.
 
 			const promptChars = options.messages.reduce((sum, m) => {
-				if (typeof m.content === "string") return sum + m.content.length;
-				return sum;
+				let s = sum;
+				if (typeof m.content === "string") s += m.content.length;
+				if ("reasoning" in m && Array.isArray(m.reasoning)) {
+					for (const r of m.reasoning) {
+						if (r.text) s += r.text.length;
+						if (r.summary) s += r.summary.length;
+					}
+				}
+				return s;
 			}, 0);
 
 			let stopReason: string | undefined;
@@ -68,6 +75,7 @@ export function createBedrockConverseProvider(
 
 			// Track active content block types so tool_call_delta knows the right index
 			const blockTypes = new Map<number, "text" | "toolUse">();
+			const thinkingBlockIndices = new Set<number>();
 
 			for await (const event of parseBedrockEventStream(response.body)) {
 				const { eventType, payload } = event;
@@ -86,6 +94,13 @@ export function createBedrockConverseProvider(
 								index,
 								id: toolUse.toolUseId,
 								name: toolUse.name,
+							};
+						} else if (start?.reasoningContent) {
+							thinkingBlockIndices.add(index);
+							yield {
+								type: "reasoning_start",
+								index,
+								reasoning: { kind: "text-summary", text: "" },
 							};
 						} else {
 							blockTypes.set(index, "text");
@@ -107,12 +122,28 @@ export function createBedrockConverseProvider(
 								index,
 								arguments: toolUseDelta.input,
 							};
+						} else if (delta?.reasoningContent) {
+							const reasoningDelta = delta.reasoningContent as { text?: string };
+							if (reasoningDelta.text) {
+								yield {
+									type: "reasoning_delta",
+									index,
+									delta: { kind: "text", text: reasoningDelta.text },
+								};
+							}
 						}
 						break;
 					}
 
 					case "contentBlockStop": {
-						// Nothing to emit — tool_call_end is not a thing in our StreamEvent type
+						const index = raw.contentBlockIndex as number;
+						if (thinkingBlockIndices.has(index)) {
+							thinkingBlockIndices.delete(index);
+							yield {
+								type: "reasoning_end",
+								index,
+							};
+						}
 						break;
 					}
 

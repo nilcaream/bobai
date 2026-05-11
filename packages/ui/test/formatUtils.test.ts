@@ -105,6 +105,37 @@ describe("groupParts", () => {
 		const panel = result[0] as { type: "tool"; subagentSessionId?: string };
 		expect(panel.subagentSessionId).toBe("sub-123");
 	});
+
+	test("single reasoning part → single reasoning panel", () => {
+		const parts: MessagePart[] = [{ type: "reasoning", content: "let me think..." }];
+		expect(groupParts(parts)).toEqual([{ type: "reasoning", content: "let me think..." }]);
+	});
+
+	test("reasoning panels are not merged (pass through unchanged)", () => {
+		const parts: MessagePart[] = [
+			{ type: "reasoning", content: "thinking step 1" },
+			{ type: "reasoning", content: "thinking step 2" },
+		];
+		const result = groupParts(parts);
+		expect(result).toHaveLength(2);
+		expect(result[0]).toEqual({ type: "reasoning", content: "thinking step 1" });
+		expect(result[1]).toEqual({ type: "reasoning", content: "thinking step 2" });
+	});
+
+	test("reasoning between tools prevents tool merging", () => {
+		const parts: MessagePart[] = [
+			{ type: "tool_call", id: "tc1", content: "r1" },
+			{ type: "tool_result", id: "tc1", content: "r1", mergeable: true },
+			{ type: "reasoning", content: "intermediate thought" },
+			{ type: "tool_call", id: "tc2", content: "r2" },
+			{ type: "tool_result", id: "tc2", content: "r2", mergeable: true },
+		];
+		const result = groupParts(parts);
+		expect(result).toHaveLength(3);
+		expect(result[0]?.type).toBe("tool");
+		expect(result[1]).toEqual({ type: "reasoning", content: "intermediate thought" });
+		expect(result[2]?.type).toBe("tool");
+	});
 });
 
 // ---------------------------------------------------------------------------
