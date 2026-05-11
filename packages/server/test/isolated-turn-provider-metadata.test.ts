@@ -32,9 +32,7 @@ describe("isolated turn provider metadata", () => {
 		provider.beginTurn?.(0);
 		for await (const _ of provider.stream({ model: "gpt-5-mini", messages: [] })) {
 		}
-		expect(provider.getTurnSummary?.()).toMatch(
-			/^ \| gpt-5-mini \| \[0x\] \| in: 1000 \| out: 500 \| context: \+1000 \| \d+\.\d{2}s$/,
-		);
+		expect(provider.getTurnSummary?.()).toMatch(/^ \| gpt-5-mini \| \[0x\] \| in: 1000 \| out: 500 \| \+1000 \| \d+\.\d{2}s$/);
 	});
 
 	test("formats openrouter summaries from provider descriptor metadata", async () => {
@@ -42,6 +40,6 @@ describe("isolated turn provider metadata", () => {
 		provider.beginTurn?.(0);
 		for await (const _ of provider.stream({ model: "openrouter/free", messages: [] })) {
 		}
-		expect(provider.getTurnSummary?.()).toMatch(/^ \| free \| in: 1000 \| out: 500 \| free \| context: \+1000 \| \d+\.\d{2}s$/);
+		expect(provider.getTurnSummary?.()).toMatch(/^ \| free \| in: 1000 \| out: 500 \| free \| \+1000 \| \d+\.\d{2}s$/);
 	});
 });

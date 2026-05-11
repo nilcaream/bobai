@@ -131,13 +131,11 @@ describe("OpenCode Go session flow", () => {
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("opencode-go");
 		expect(done?.model).toBe("deepseek-v4-flash");
-		expect(done?.summary).toMatch(
-			/^ \| deepseek-v4-flash \| in: 7473 \| out: 3123 \| estimate: \$0\.01 \| context: \+7473 \| \d+\.\d{2}s$/,
-		);
+		expect(done?.summary).toMatch(/^ \| deepseek-v4-flash \| in: 7473 \| out: 3123 \| \$0\.01 \| \+7473 \| \d+\.\d{2}s$/);
 		const stored = getMessages(db, session.id);
 		expect(stored.at(-1)?.metadata?.turn_model).toBe("deepseek-v4-flash");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| deepseek-v4-flash \| in: 7473 \| out: 3123 \| estimate: \$0\.01 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| deepseek-v4-flash \| in: 7473 \| out: 3123 \| \$0\.01 \| \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 });

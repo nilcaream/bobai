@@ -83,16 +83,16 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 			parts.push(`in: ${turnTotalInputTokens}`);
 			parts.push(`out: ${turnTotalOutputTokens}`);
 			if (turnCachedInputTokens > 0) {
-				parts.push(`cache-read: ${turnCachedInputTokens}`);
+				parts.push(`hit: ${turnCachedInputTokens}`);
+				parts.push(`miss: ${turnTotalInputTokens - turnCachedInputTokens}`);
 			}
 			if (turnCacheCreationInputTokens > 0) {
-				parts.push(`cache-write: ${turnCacheCreationInputTokens}`);
+				parts.push(`write: ${turnCacheCreationInputTokens}`);
 			}
 			if (summaryParts.costEstimate) {
-				const prefix = summaryParts.costLabelType === "exact" ? "cost" : "estimate";
-				parts.push(summaryParts.costEstimate === "free" ? "free" : `${prefix}: ${summaryParts.costEstimate}`);
+				parts.push(summaryParts.costEstimate === "free" ? "free" : summaryParts.costEstimate);
 			}
-			parts.push(`context: ${contextSign}${contextDelta}`);
+			parts.push(`${contextSign}${contextDelta}`);
 			parts.push(`${elapsed.toFixed(2)}s`);
 			return ` | ${parts.join(" | ")}`;
 		},

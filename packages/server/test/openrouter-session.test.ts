@@ -129,13 +129,11 @@ describe("OpenRouter session flow", () => {
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("openrouter");
 		expect(done?.model).toBe("openrouter/free");
-		expect(done?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
-		);
+		expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| \$0\.02 \| \+7473 \| \d+\.\d{2}s$/);
 		const stored = getMessages(db, session.id);
 		expect(stored.at(-1)?.metadata?.turn_model).toBe("openrouter/free");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+7473 \| \d+\.\d{2}s$/,
+			/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| \$0\.02 \| \+7473 \| \d+\.\d{2}s$/,
 		);
 	});
 });

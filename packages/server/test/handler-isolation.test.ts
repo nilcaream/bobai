@@ -58,13 +58,13 @@ describe("handler-level session isolation", () => {
 		// Session A: new session (baseline=0)
 		expect(sessionA.summary).toContain("in: 1500");
 		expect(sessionA.summary).toContain("out: 750");
-		expect(sessionA.summary).toContain("context: +500");
+		expect(sessionA.summary).toContain("+500");
 		expect(sessionA.promptTokens).toBe(500);
 
 		// Session B: existing session (baseline=10000)
 		expect(sessionB.summary).toContain("in: 1000");
 		expect(sessionB.summary).toContain("out: 500");
-		expect(sessionB.summary).toContain("context: -9500");
+		expect(sessionB.summary).toContain("-9500");
 		expect(sessionB.promptTokens).toBe(500);
 	});
 
@@ -97,13 +97,13 @@ describe("handler-level session isolation", () => {
 		const parentSummary = parentA.getTurnSummary?.();
 		expect(parentSummary).toContain("in: 500");
 		expect(parentSummary).toContain("out: 250");
-		expect(parentSummary).toContain("context: -4500");
-		expect(childSummary).toContain("context: +500");
+		expect(parentSummary).toContain("-4500");
+		expect(childSummary).toContain("+500");
 
 		// Session B should be completely independent
 		const bSummary = sessionB.getTurnSummary?.();
 		expect(bSummary).toContain("in: 500");
 		expect(bSummary).toContain("out: 250");
-		expect(bSummary).toContain("context: -49500");
+		expect(bSummary).toContain("-49500");
 	});
 });

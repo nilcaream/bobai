@@ -129,13 +129,11 @@ describe("DeepSeek session flow", () => {
 		const done = messages.find((m) => m.type === "done");
 		expect(done?.provider).toBe("deepseek");
 		expect(done?.model).toBe("deepseek-v4-flash");
-		expect(done?.summary).toMatch(
-			/^ \| deepseek-v4-flash \| in: 5000 \| out: 1500 \| estimate: \$0\.00 \| context: \+5000 \| \d+\.\d{2}s$/,
-		);
+		expect(done?.summary).toMatch(/^ \| deepseek-v4-flash \| in: 5000 \| out: 1500 \| \$0\.00 \| \+5000 \| \d+\.\d{2}s$/);
 		const stored = getMessages(db, session.id);
 		expect(stored.at(-1)?.metadata?.turn_model).toBe("deepseek-v4-flash");
 		expect(stored.at(-1)?.metadata?.summary).toMatch(
-			/^ \| deepseek-v4-flash \| in: 5000 \| out: 1500 \| estimate: \$0\.00 \| context: \+5000 \| \d+\.\d{2}s$/,
+			/^ \| deepseek-v4-flash \| in: 5000 \| out: 1500 \| \$0\.00 \| \+5000 \| \d+\.\d{2}s$/,
 		);
 	});
 });

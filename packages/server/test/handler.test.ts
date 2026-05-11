@@ -389,12 +389,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
-			);
+			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| \+3713 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, session.id);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| context: \+3713 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| \+3713 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -437,12 +435,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
-			);
+			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| \$0\.02 \| \+3713 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, session.id);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| estimate: \$0\.02 \| context: \+3713 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| in: 7473 \| out: 3123 \| \$0\.02 \| \+3713 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -485,10 +481,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| context: \+2439 \| \d+\.\d{2}s$/);
+			expect(done?.summary).toMatch(/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| \+2439 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, session.id);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| context: \+2439 \| \d+\.\d{2}s$/,
+				/^ \| hy3-preview:free \| in: 7446 \| out: 279 \| \+2439 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -525,10 +521,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/);
+			expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| \+27478 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| context: \+27478 \| \d+\.\d{2}s$/,
+				/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| \+27478 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -565,12 +561,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
-			);
+			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| \+5948 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| context: \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| \+5948 \| \d+\.\d{2}s$/,
 			);
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -610,12 +604,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
-			);
+			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| \+5948 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| context: \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| \+5948 \| \d+\.\d{2}s$/,
 			);
 			expect(stored.at(-1)?.metadata?.turn_metrics).toEqual({
 				input_tokens_total: 10948,

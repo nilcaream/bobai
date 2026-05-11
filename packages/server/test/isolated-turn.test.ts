@@ -171,7 +171,7 @@ describe("createIsolatedTurnProvider", () => {
 		expect(summary).toContain("gpt-4o");
 		expect(summary).toContain("in: 8000");
 		expect(summary).toContain("out: 4000");
-		expect(summary).toContain("context: +2000");
+		expect(summary).toContain("+2000");
 	});
 
 	test("stream routes metrics to isolated provider via onMetrics", async () => {
@@ -189,7 +189,7 @@ describe("createIsolatedTurnProvider", () => {
 		expect(summary).toContain("test-model");
 		expect(summary).toContain("in: 500");
 		expect(summary).toContain("out: 250");
-		expect(summary).toContain("context: +500"); // promptTokens=500, baselineTokens=0
+		expect(summary).toContain("+500"); // promptTokens=500, baselineTokens=0
 
 		// The original should NOT have been affected
 		expect(original.getTurnSummary?.()).not.toContain("test-model");
@@ -260,7 +260,7 @@ describe("createIsolatedTurnProvider", () => {
 		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("in: 350");
 		expect(summary).toContain("out: 50");
-		expect(summary).toContain("context: +170");
+		expect(summary).toContain("+170");
 	});
 
 	test("restoreTurnState preserves total and last-call counters independently", () => {
@@ -281,6 +281,6 @@ describe("createIsolatedTurnProvider", () => {
 		const summary = isolated.getTurnSummary?.();
 		expect(summary).toContain("in: 350");
 		expect(summary).toContain("out: 50");
-		expect(summary).toContain("context: +170");
+		expect(summary).toContain("+170");
 	});
 });
