@@ -172,11 +172,15 @@ export function createBedrockConverseProvider(
 						const cachedInputTokens = usage?.cacheReadInputTokens ?? 0;
 						const cacheCreationInputTokens = usage?.cacheWriteInputTokens ?? 0;
 
+						// When prompt caching is active, inputTokens is only the
+						// non-cached suffix. Total input = all three buckets.
+						const totalInput = inputTokens + cachedInputTokens + cacheCreationInputTokens;
+
 						const tokenLimit = getProviderModelConfig("amazon-bedrock", options.model, configDir)?.contextWindow ?? 0;
 						const display = formatProviderModelDisplay(
 							"amazon-bedrock",
 							options.model,
-							inputTokens,
+							totalInput,
 							configDir,
 							options.contextLimit,
 							options.sessionCostDisplay,
@@ -184,21 +188,21 @@ export function createBedrockConverseProvider(
 
 						yield {
 							type: "usage",
-							tokenCount: inputTokens,
+							tokenCount: totalInput,
 							tokenLimit,
 							display,
 							outputTokens,
-							totalTokens: inputTokens + outputTokens,
+							totalTokens: totalInput + outputTokens,
 							cachedInputTokens,
 							cacheCreationInputTokens,
 						};
 
 						options.onMetrics?.({
 							model: options.model,
-							promptTokens: inputTokens,
+							promptTokens: totalInput,
 							outputTokens,
 							promptChars,
-							totalTokens: inputTokens + outputTokens,
+							totalTokens: totalInput + outputTokens,
 							cachedInputTokens,
 							cacheCreationInputTokens,
 						});

@@ -331,11 +331,12 @@ describe("amazon-bedrock provider (Converse API)", () => {
 		);
 
 		const usage = events.find((e) => e.type === "usage");
+		// tokenCount and totalTokens include cache tokens (total input = 50 + 1000 + 200 = 1250)
 		expect(usage).toMatchObject({
 			type: "usage",
-			tokenCount: 50,
+			tokenCount: 1250,
 			outputTokens: 10,
-			totalTokens: 60,
+			totalTokens: 1260,
 			cachedInputTokens: 1000,
 			cacheCreationInputTokens: 200,
 		});
@@ -374,10 +375,11 @@ describe("amazon-bedrock provider (Converse API)", () => {
 		);
 
 		expect(metrics).toHaveLength(1);
+		// promptTokens represents total input including cache (50 + 1000 + 200 = 1250)
 		expect(metrics[0]).toEqual({
 			cachedInputTokens: 1000,
 			cacheCreationInputTokens: 200,
-			promptTokens: 50,
+			promptTokens: 1250,
 			outputTokens: 10,
 		});
 	});

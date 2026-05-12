@@ -222,27 +222,30 @@ export function createAnthropicCompatibleProvider(
 						break;
 					}
 					case "message_stop": {
+						// When prompt caching is active, inputTokens is only the
+						// non-cached suffix. Total input = all three buckets.
+						const totalInput = inputTokens + cachedInputTokens + cacheCreationInputTokens;
 						const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
 						const display = formatProviderModelDisplay(
 							config.providerId,
 							options.model,
-							inputTokens,
+							totalInput,
 							configDir,
 							options.contextLimit,
 							options.sessionCostDisplay,
 						);
 						yield {
 							type: "usage",
-							tokenCount: inputTokens,
+							tokenCount: totalInput,
 							tokenLimit,
 							display,
 						};
 						options.onMetrics?.({
 							model: options.model,
-							promptTokens: inputTokens,
+							promptTokens: totalInput,
 							outputTokens,
 							promptChars,
-							totalTokens: inputTokens + outputTokens,
+							totalTokens: totalInput + outputTokens,
 							cachedInputTokens,
 							cacheCreationInputTokens,
 						});

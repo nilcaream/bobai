@@ -89,21 +89,24 @@ export async function* parseAnthropicStream(
 			}
 
 			case "message_stop": {
-				// Emit usage event
+				// Emit usage event.
+				// When prompt caching is active, inputTokens represents only the
+				// non-cached suffix.  Total input is the sum of all three buckets.
+				const totalInput = inputTokens + cachedInputTokens + cacheCreationInputTokens;
 				const tokenLimit = getProviderModelConfig("github-copilot", model, configDir)?.contextWindow ?? 0;
 				const display = formatProviderModelDisplay(
 					"github-copilot",
 					model,
-					inputTokens,
+					totalInput,
 					configDir,
 					contextLimit,
 					sessionCostDisplay,
 				);
-				const totalTokens = inputTokens + outputTokens;
+				const totalTokens = totalInput + outputTokens;
 
 				yield {
 					type: "usage",
-					tokenCount: inputTokens,
+					tokenCount: totalInput,
 					tokenLimit,
 					display,
 					outputTokens,

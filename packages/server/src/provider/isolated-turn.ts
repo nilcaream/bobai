@@ -84,7 +84,7 @@ export function createIsolatedTurnProvider(original: Provider, configDir?: strin
 			parts.push(`out: ${turnTotalOutputTokens}`);
 			if (turnCachedInputTokens > 0) {
 				parts.push(`hit: ${turnCachedInputTokens}`);
-				parts.push(`miss: ${turnTotalInputTokens - turnCachedInputTokens}`);
+				parts.push(`miss: ${turnTotalInputTokens - turnCachedInputTokens - turnCacheCreationInputTokens}`);
 			}
 			if (turnCacheCreationInputTokens > 0) {
 				parts.push(`write: ${turnCacheCreationInputTokens}`);
