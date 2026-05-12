@@ -3,14 +3,15 @@ set -euo pipefail
 
 # Bob AI installer — macOS x86_64
 # Usage:
-#   From cloned repo:  ./install/darwin-x64.sh
-#   One-liner:         curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/darwin-x64.sh | bash
+#   One-liner:  curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/darwin-x64.sh | bash
+#   From clone: ./install/darwin-x64.sh
 
 readonly BUN_VERSION="1.3.3"
 readonly BUN_SHA256="fdaf5e3c91de2f2a8c83e80a125c5111d476e5f7575b2747d71bc51d2c920bd4"
 readonly BUN_ARCHIVE="bun-darwin-x64.zip"
 readonly BOBAI_PLATFORM="darwin-x64"
-readonly REPO_URL="https://github.com/nilcaream/bobai.git"
+readonly RELEASE_ARCHIVE="bobai-${BOBAI_PLATFORM}.tar.gz"
+readonly RELEASE_URL="https://github.com/nilcaream/bobai/releases/latest/download/${RELEASE_ARCHIVE}"
 
 DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
 readonly BOBAI_HOME="${DATA_HOME}/bobai"
@@ -22,8 +23,8 @@ log_error() { echo "[ERROR] ${*}" >&2; }
 die()       { log_error "${*}"; exit 1; }
 
 cleanup() {
-	if [[ -n "${CLONE_DIR:-}" && -d "${CLONE_DIR}" ]]; then
-		rm -rf "${CLONE_DIR}"
+	if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR}" ]]; then
+		rm -rf "${TMP_DIR}"
 	fi
 }
 trap cleanup EXIT
@@ -33,7 +34,7 @@ install_bun() {
 
 	if [[ -x "${BUN}" ]]; then
 		local current_version
-		current_version=$("${BUN}" --version 2>/dev/null || echo "")
+		current_version="$("${BUN}" --version 2>/dev/null || echo "")"
 		if [[ "${current_version}" == "${BUN_VERSION}" ]]; then
 			log_info "Bun ${BUN_VERSION} already installed."
 			return
@@ -47,7 +48,7 @@ install_bun() {
 
 	log_info "Verifying checksum..."
 	local actual_sha256
-	actual_sha256=$(shasum -a 256 "${tmp_zip}" | cut -d' ' -f1)
+	actual_sha256="$(sha256sum "${tmp_zip}" | cut -d' ' -f1)"
 	if [[ "${actual_sha256}" != "${BUN_SHA256}" ]]; then
 		rm -f "${tmp_zip}"
 		die "Checksum mismatch! Expected ${BUN_SHA256}, got ${actual_sha256}"
@@ -63,36 +64,13 @@ install_bun() {
 	log_info "Bun ${BUN_VERSION} installed."
 }
 
-is_repo_root() {
-	[[ -f "package.json" ]] && grep -q '"bobai"' package.json 2>/dev/null
-}
-
-resolve_source() {
-	if is_repo_root; then
-		echo "."
-		return
-	fi
-
-	# Not inside a repo clone -- fetch the source
-	CLONE_DIR=$(mktemp -d)
-	log_info "Cloning Bob AI repository..."
-	git clone --depth 1 "${REPO_URL}" "${CLONE_DIR}"
-	echo "${CLONE_DIR}"
-}
-
-build_dist() {
-	local source_dir="${1}"
-
-	log_info "Installing dependencies..."
-	(cd "${source_dir}" && "${BUN}" install --frozen-lockfile)
-
-	log_info "Bundling server..."
-	"${BUN}" build --target=bun --minify \
-		--outfile="${source_dir}/dist/server.js" \
-		"${source_dir}/packages/server/src/index.ts"
-
-	log_info "Building UI..."
-	(cd "${source_dir}/packages/ui" && "${BUN}" x vite build)
+fetch_release() {
+	TMP_DIR=$(mktemp -d)
+	log_info "Downloading Bob AI release..."
+	curl -fsSL "${RELEASE_URL}" -o "${TMP_DIR}/bobai.tar.gz"
+	log_info "Unpacking..."
+	tar -xzf "${TMP_DIR}/bobai.tar.gz" -C "${TMP_DIR}"
+	rm "${TMP_DIR}/bobai.tar.gz"
 }
 
 deploy_dist() {
@@ -103,16 +81,14 @@ deploy_dist() {
 	mkdir -p "${dist_dir}/ui"
 
 	cp "${source_dir}/dist/server.js" "${dist_dir}/server.js"
-	cp -r "${source_dir}/packages/ui/dist/"* "${dist_dir}/ui/"
+	cp -r "${source_dir}/dist/ui/"* "${dist_dir}/ui/"
 	log_info "Dist deployed to ${dist_dir}"
 }
 
 install_runner() {
 	local source_dir="${1}"
-	local build_rev
-	local build_time
-	build_rev=$(git -C "${source_dir}" rev-parse --short HEAD)
-	build_time=$(date +"%Y-%m-%d %H:%M:%S")
+	local build_version
+	build_version="$(cat "${source_dir}/VERSION" 2>/dev/null || echo "unknown")"
 
 	mkdir -p "${BIN_DIR}"
 
@@ -121,11 +97,10 @@ install_runner() {
 set -euo pipefail
 DATA_HOME="\${XDG_DATA_HOME:-\${HOME}/.local/share}"
 BOBAI_HOME="\${DATA_HOME}/bobai"
-echo "Bob AI (${build_rev} ${build_time})"
+echo "Bob AI ${build_version}"
 export BUN_CONFIG_INSTALL_AUTO=disable
-export BOBAI_BUILD_REV="${build_rev}"
-export BOBAI_BUILD_DATE="${build_time}"
-export BOBAI_PLATFORM="${BOBAI_PLATFORM}"
+export BOBAI_VERSION="${build_version}"
+export BOBAI_PLATFORM="darwin-x64"
 exec "\${BOBAI_HOME}/bun" "\${BOBAI_HOME}/dist/server.js" "\$@"
 RUNNER
 
@@ -137,13 +112,9 @@ main() {
 	log_info "Installing Bob AI..."
 
 	install_bun
-
-	local source_dir
-	source_dir=$(resolve_source)
-
-	build_dist "${source_dir}"
-	deploy_dist "${source_dir}"
-	install_runner "${source_dir}"
+	fetch_release
+	deploy_dist "${TMP_DIR}"
+	install_runner "${TMP_DIR}"
 
 	echo ""
 	echo "Bob AI installed successfully!"
