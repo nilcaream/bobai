@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'bobai-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and publish (e.g. bobai-v0.2.0)'
+        required: true
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -36,11 +44,14 @@ jobs:
 
       - name: Package release archives
         run: |
-          VERSION="${GITHUB_REF_NAME#bobai-v}"
+          TAG="${{ inputs.tag || github.ref_name }}"
+          VERSION="${TAG#bobai-v}"
           chmod +x scripts/package-release.sh
           ./scripts/package-release.sh "${VERSION}"
 
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${GITHUB_REF_NAME}" release/* --clobber
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          gh release upload "${TAG}" release/* --clobber
