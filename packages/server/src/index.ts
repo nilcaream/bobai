@@ -92,6 +92,8 @@ const logger = createLogger({ level: debug ? "debug" : "info", logDir });
 const trackingFetch = createTrackingFetch(fetch, { logger, logDir, debug });
 
 logger.info("SERVER", `Starting bobai (debug=${debug})`);
+const bobaiVersion = process.env.BOBAI_VERSION ?? "dev";
+logger.info("SERVER", `Version: ${bobaiVersion}`);
 
 await ensureModelCatalogAvailable({
 	catalogExists: () => unifiedModelsConfigExists(globalConfigDir),

@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  ci:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint — server
+        run: cd packages/server && bun run check -- --error-on-warnings
+
+      - name: Lint — UI
+        run: cd packages/ui && bun run check -- --error-on-warnings
+
+      - name: Typecheck — UI
+        run: cd packages/ui && bunx tsc --noEmit
+
+      - name: Test — server
+        run: cd packages/server && bun test --coverage --coverage-reporter=text --coverage-reporter=lcov
+        env:
+          BOBAI_PLATFORM: linux-x64
+
+      - name: Test — UI
+        run: cd packages/ui && bun test --coverage --coverage-reporter=text --coverage-reporter=lcov
+
+      - name: Post coverage summary on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            function parseLcov(path) {
+              if (!fs.existsSync(path)) return null;
+              const text = fs.readFileSync(path, 'utf8');
+              let lf = 0, lh = 0, fnf = 0, fnh = 0;
+              for (const line of text.split('\n')) {
+                if (line.startsWith('LF:'))  lf  += parseInt(line.slice(3));
+                if (line.startsWith('LH:'))  lh  += parseInt(line.slice(3));
+                if (line.startsWith('FNF:')) fnf += parseInt(line.slice(4));
+                if (line.startsWith('FNH:')) fnh += parseInt(line.slice(4));
+              }
+              return {
+                line: lf  > 0 ? ((lh  / lf)  * 100).toFixed(1) : 'N/A',
+                fn:   fnf > 0 ? ((fnh / fnf) * 100).toFixed(1) : 'N/A',
+              };
+            }
+
+            const server = parseLcov('packages/server/coverage/lcov.info');
+            const ui     = parseLcov('packages/ui/coverage/lcov.info');
+
+            const pct = (v) => v ? `${v}%` : 'N/A';
+
+            const body = [
+              '## Coverage',
+              '',
+              '| Package | Lines | Functions |',
+              '|---------|-------|-----------|',
+              `| \`server\` | ${pct(server?.line)} | ${pct(server?.fn)} |`,
+              `| \`ui\`     | ${pct(ui?.line)}     | ${pct(ui?.fn)}     |`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.startsWith('## Coverage'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Update coverage badges
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          parse_pct() {
+            local lcov="${1}"
+            local lf=0 lh=0
+            while IFS= read -r line; do
+              case "${line}" in
+                LF:*)  lf=$(( lf + ${line#LF:} )) ;;
+                LH:*)  lh=$(( lh + ${line#LH:} )) ;;
+              esac
+            done < "${lcov}"
+            if [[ "${lf}" -gt 0 ]]; then
+              awk "BEGIN { printf \"%.0f\", (${lh}/${lf})*100 }"
+            else
+              echo "0"
+            fi
+          }
+
+          badge_color() {
+            local pct="${1}"
+            if   [[ "${pct}" -ge 90 ]]; then echo "brightgreen"
+            elif [[ "${pct}" -ge 75 ]]; then echo "yellow"
+            else echo "red"
+            fi
+          }
+
+          SERVER_PCT=$(parse_pct packages/server/coverage/lcov.info)
+          UI_PCT=$(parse_pct packages/ui/coverage/lcov.info)
+          SERVER_COLOR=$(badge_color "${SERVER_PCT}")
+          UI_COLOR=$(badge_color "${UI_PCT}")
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git fetch origin badges
+          git worktree add /tmp/badges-branch origin/badges
+
+          cat > /tmp/badges-branch/coverage-server.json << EOF
+          { "schemaVersion": 1, "label": "coverage (server)", "message": "${SERVER_PCT}%", "color": "${SERVER_COLOR}" }
+          EOF
+
+          cat > /tmp/badges-branch/coverage-ui.json << EOF
+          { "schemaVersion": 1, "label": "coverage (ui)", "message": "${UI_PCT}%", "color": "${UI_COLOR}" }
+          EOF
+
+          git -C /tmp/badges-branch add coverage-server.json coverage-ui.json
+          git -C /tmp/badges-branch diff --cached --quiet || \
+            git -C /tmp/badges-branch commit -m "chore: update coverage badges [skip ci]"
+          git -C /tmp/badges-branch push origin HEAD:badges
