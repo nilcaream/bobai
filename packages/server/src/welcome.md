@@ -11,7 +11,6 @@
       ░                ░
 ```
 
-Build: `__revision__` `__date__`  
 Version: `__version__`  
 Project: `__directory__`
 

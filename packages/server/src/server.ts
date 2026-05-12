@@ -144,8 +144,6 @@ export function createServer(options: ServerOptions) {
 
 			if (url.pathname === "/bobai/welcome") {
 				const vars: Record<string, string> = {
-					__revision__: process.env.BOBAI_BUILD_REV ?? "dev",
-					__date__: process.env.BOBAI_BUILD_DATE ?? "",
 					__version__: process.env.BOBAI_VERSION ?? "dev",
 					__directory__: options.projectRoot ?? process.cwd(),
 				};
