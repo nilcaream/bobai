@@ -1,0 +1,57 @@
+name: Bug Report
+description: Report something that is broken or behaving unexpectedly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Be specific. Include error messages, unexpected output, or a screenshot if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to trigger the bug consistently.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Bob AI version
+      description: Run `bobai --version` or check the header in the UI.
+      placeholder: e.g. 0.1.0
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Ubuntu 24.04, macOS 15.3, Windows 11
+    validations:
+      required: false
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      description: Which provider and model were you using when the bug occurred?
+      placeholder: e.g. github-copilot / gpt-4.1
+    validations:
+      required: false
