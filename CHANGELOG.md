@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.1](https://github.com/nilcaream/bobai/compare/bobai-v0.2.0...bobai-v0.2.1) (2026-05-12)
+
+
+### Features
+
+* add dev install script and version to welcome screen ([e1b0d3f](https://github.com/nilcaream/bobai/commit/e1b0d3faae69824eaee5193a353bf3d78e7a9dba))
+* enable prompt caching across all Anthropic-family providers ([64d3908](https://github.com/nilcaream/bobai/commit/64d390868716d658d5390de3d1d6db46b9161c06))
+
+
+### Bug Fixes
+
+* add workflow_dispatch to release workflow ([e85118a](https://github.com/nilcaream/bobai/commit/e85118a24fa035030480aa9c27c613623574a2bf))
+* compute total input tokens including cache reads and writes ([02b9154](https://github.com/nilcaream/bobai/commit/02b9154704e42703ebb1dac41f04297734e5d070))
+* correct release workflow tag pattern and version extraction ([5d59608](https://github.com/nilcaream/bobai/commit/5d59608f8819b1d1dae43f32150b6e6bb6d79bfc))
+* propagate cache_read and cache_write pricing for Bedrock models ([fa45cf5](https://github.com/nilcaream/bobai/commit/fa45cf5986c85c9242aff87eeb2b08a496608c66))
+* remove dead Build line from welcome screen ([fbcb0c2](https://github.com/nilcaream/bobai/commit/fbcb0c2d6c6aef0ffaa3f82efdeb2fdd31d04d9c))
+
 ## [0.2.0](https://github.com/nilcaream/bobai/compare/bobai-v0.1.0...bobai-v0.2.0) (2026-05-12)
 
 
