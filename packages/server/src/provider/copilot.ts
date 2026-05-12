@@ -268,6 +268,7 @@ export function createCopilotProvider(
 			model: options.model,
 			messages,
 			max_tokens: maxTokens,
+			cache_control: { type: "ephemeral" },
 			...(system ? { system } : {}),
 			...(tools ? { tools } : {}),
 			...(anthropicReasoningOptions ?? {}),

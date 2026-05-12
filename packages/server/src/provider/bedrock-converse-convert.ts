@@ -32,7 +32,13 @@ export interface BedrockToolResultContent {
 	};
 }
 
-export type BedrockContent = BedrockTextContent | BedrockToolUseContent | BedrockToolResultContent;
+export interface BedrockCachePointBlock {
+	cachePoint: {
+		type: "default";
+	};
+}
+
+export type BedrockContent = BedrockTextContent | BedrockToolUseContent | BedrockToolResultContent | BedrockCachePointBlock;
 
 export interface BedrockConverseMessage {
 	role: "user" | "assistant";
@@ -151,6 +157,22 @@ export function convertMessagesToConverse(messages: Message[]): {
 		messages: bedrockMessages,
 		system: system.length > 0 ? system : undefined,
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Cache point insertion
+// ---------------------------------------------------------------------------
+
+/**
+ * Appends a cachePoint block to the last message in the array.
+ * This tells the Bedrock ConverseStream API to cache all content
+ * from tools through system through messages up to this point.
+ */
+export function appendCachePoint(messages: BedrockConverseMessage[]): void {
+	const last = messages.at(-1);
+	if (last) {
+		last.content.push({ cachePoint: { type: "default" } });
+	}
 }
 
 // ---------------------------------------------------------------------------

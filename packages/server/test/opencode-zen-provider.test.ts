@@ -64,6 +64,8 @@ describe("opencode-zen provider", () => {
 		expect(headers["x-api-key"]).toBe("zen-key");
 		expect(headers["anthropic-version"]).toBe("2023-06-01");
 		expect(headers["x-opencode-session"]).toBe("12345678");
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.cache_control).toEqual({ type: "ephemeral" });
 	});
 
 	test("routes chat models to the OpenCode Zen chat completions API", async () => {

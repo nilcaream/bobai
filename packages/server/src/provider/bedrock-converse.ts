@@ -1,6 +1,6 @@
 import type { AmazonBedrockAuth } from "../auth/store";
 import type { Logger } from "../log/logger";
-import { convertMessagesToConverse, convertToolsToConverse } from "./bedrock-converse-convert";
+import { appendCachePoint, convertMessagesToConverse, convertToolsToConverse } from "./bedrock-converse-convert";
 import { parseBedrockEventStream } from "./bedrock-event-stream";
 import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
@@ -23,6 +23,12 @@ export function createBedrockConverseProvider(
 			const { messages, system } = convertMessagesToConverse(options.messages);
 			const tools = options.tools?.length ? convertToolsToConverse(options.tools) : undefined;
 			const maxTokens = options.maxOutputTokens;
+
+			// Add cache point to enable prompt caching for this request.
+			// The cachePoint marks the end of the cacheable prefix (tools → system → messages
+			// up to this point). On subsequent requests with the same prefix, cached content
+			// is reused automatically, reducing cost and latency.
+			appendCachePoint(messages);
 
 			const url = bedrockRuntimeUrl(auth.region, options.model);
 
@@ -153,9 +159,18 @@ export function createBedrockConverseProvider(
 					}
 
 					case "metadata": {
-						const usage = raw.usage as { inputTokens?: number; outputTokens?: number } | undefined;
+						const usage = raw.usage as
+							| {
+									inputTokens?: number;
+									outputTokens?: number;
+									cacheReadInputTokens?: number;
+									cacheWriteInputTokens?: number;
+							  }
+							| undefined;
 						const inputTokens = usage?.inputTokens ?? 0;
 						const outputTokens = usage?.outputTokens ?? 0;
+						const cachedInputTokens = usage?.cacheReadInputTokens ?? 0;
+						const cacheCreationInputTokens = usage?.cacheWriteInputTokens ?? 0;
 
 						const tokenLimit = getProviderModelConfig("amazon-bedrock", options.model, configDir)?.contextWindow ?? 0;
 						const display = formatProviderModelDisplay(
@@ -174,6 +189,8 @@ export function createBedrockConverseProvider(
 							display,
 							outputTokens,
 							totalTokens: inputTokens + outputTokens,
+							cachedInputTokens,
+							cacheCreationInputTokens,
 						};
 
 						options.onMetrics?.({
@@ -182,6 +199,8 @@ export function createBedrockConverseProvider(
 							outputTokens,
 							promptChars,
 							totalTokens: inputTokens + outputTokens,
+							cachedInputTokens,
+							cacheCreationInputTokens,
 						});
 
 						yield {

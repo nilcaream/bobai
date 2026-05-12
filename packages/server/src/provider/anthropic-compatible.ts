@@ -111,6 +111,7 @@ export function createAnthropicCompatibleProvider(
 					messages,
 					max_tokens: maxTokens,
 					stream: true,
+					cache_control: { type: "ephemeral" },
 					...(system ? { system } : {}),
 					...(tools ? { tools } : {}),
 					...(anthropicReasoningOptions ?? {}),

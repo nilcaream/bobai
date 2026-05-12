@@ -95,6 +95,29 @@ function simpleTextStream(): ReadableStream<Uint8Array> {
 	]);
 }
 
+function cachedTextStream(): ReadableStream<Uint8Array> {
+	return buildConverseStream([
+		{ type: "messageStart", payload: { role: "assistant" } },
+		{ type: "contentBlockStart", payload: { contentBlockIndex: 0, start: { text: "" } } },
+		{ type: "contentBlockDelta", payload: { contentBlockIndex: 0, delta: { text: "Cached response!" } } },
+		{ type: "contentBlockStop", payload: { contentBlockIndex: 0 } },
+		{ type: "messageStop", payload: { stopReason: "end_turn" } },
+		{
+			type: "metadata",
+			payload: {
+				usage: {
+					inputTokens: 50,
+					outputTokens: 10,
+					totalTokens: 60,
+					cacheReadInputTokens: 1000,
+					cacheWriteInputTokens: 200,
+				},
+				metrics: { latencyMs: 50 },
+			},
+		},
+	]);
+}
+
 function toolUseStream(): ReadableStream<Uint8Array> {
 	return buildConverseStream([
 		{ type: "messageStart", payload: { role: "assistant" } },
@@ -293,6 +316,72 @@ describe("amazon-bedrock provider (Converse API)", () => {
 		expect(usage).toMatchObject({ type: "usage", tokenCount: 10, outputTokens: 5, totalTokens: 15 });
 	});
 
+	test("forwards cache tokens from metadata usage to the usage event", async () => {
+		globalThis.fetch = mock(
+			async () =>
+				new Response(cachedTextStream(), {
+					status: 200,
+					headers: { "Content-Type": "application/vnd.amazon.eventstream" },
+				}),
+		) as typeof fetch;
+
+		const provider = createAmazonBedrockProvider({ apiKey: "key", region: "us-east-1" });
+		const events = await collect(
+			provider.stream({ model: "anthropic.claude-opus-4-7", messages: [{ role: "user", content: "hi" }] }),
+		);
+
+		const usage = events.find((e) => e.type === "usage");
+		expect(usage).toMatchObject({
+			type: "usage",
+			tokenCount: 50,
+			outputTokens: 10,
+			totalTokens: 60,
+			cachedInputTokens: 1000,
+			cacheCreationInputTokens: 200,
+		});
+	});
+
+	test("forwards cache tokens to onMetrics callback", async () => {
+		globalThis.fetch = mock(
+			async () =>
+				new Response(cachedTextStream(), {
+					status: 200,
+					headers: { "Content-Type": "application/vnd.amazon.eventstream" },
+				}),
+		) as typeof fetch;
+
+		const provider = createAmazonBedrockProvider({ apiKey: "key", region: "us-east-1" });
+		const metrics: Array<{
+			cachedInputTokens?: number;
+			cacheCreationInputTokens?: number;
+			promptTokens: number;
+			outputTokens: number;
+		}> = [];
+
+		await collect(
+			provider.stream({
+				model: "anthropic.claude-opus-4-7",
+				messages: [{ role: "user", content: "hi" }],
+				onMetrics: (m) => {
+					metrics.push({
+						cachedInputTokens: m.cachedInputTokens,
+						cacheCreationInputTokens: m.cacheCreationInputTokens,
+						promptTokens: m.promptTokens,
+						outputTokens: m.outputTokens,
+					});
+				},
+			}),
+		);
+
+		expect(metrics).toHaveLength(1);
+		expect(metrics[0]).toEqual({
+			cachedInputTokens: 1000,
+			cacheCreationInputTokens: 200,
+			promptTokens: 50,
+			outputTokens: 10,
+		});
+	});
+
 	test("uses maxOutputTokens override", async () => {
 		let capturedInit: RequestInit | undefined;
 		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -314,6 +403,68 @@ describe("amazon-bedrock provider (Converse API)", () => {
 
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.inferenceConfig).toEqual({ maxTokens: 123 });
+	});
+
+	test("includes cachePoint in the last message content block", async () => {
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(simpleTextStream(), {
+				status: 200,
+				headers: { "Content-Type": "application/vnd.amazon.eventstream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createAmazonBedrockProvider({ apiKey: "key", region: "us-east-1" });
+		await collect(
+			provider.stream({
+				model: "anthropic.claude-opus-4-7",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		const body = JSON.parse(capturedInit?.body as string);
+		const messages = body.messages as Array<{ role: string; content: Array<Record<string, unknown>> }>;
+		expect(messages.length).toBeGreaterThan(0);
+		const lastMsg = messages[messages.length - 1];
+		const lastBlock = lastMsg.content[lastMsg.content.length - 1];
+		expect(lastBlock).toEqual({ cachePoint: { type: "default" } });
+	});
+
+	test("includes cachePoint after multi-turn conversation", async () => {
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedInit = init;
+			return new Response(simpleTextStream(), {
+				status: 200,
+				headers: { "Content-Type": "application/vnd.amazon.eventstream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createAmazonBedrockProvider({ apiKey: "key", region: "us-east-1" });
+		await collect(
+			provider.stream({
+				model: "anthropic.claude-opus-4-7",
+				messages: [
+					{ role: "user", content: "hello" },
+					{ role: "assistant", content: "hi there" },
+					{ role: "user", content: "how are you?" },
+				],
+			}),
+		);
+
+		const body = JSON.parse(capturedInit?.body as string);
+		const messages = body.messages as Array<{ role: string; content: Array<Record<string, unknown>> }>;
+		// cachePoint should be on the LAST message only
+		const lastMsg = messages[messages.length - 1];
+		const lastBlock = lastMsg.content[lastMsg.content.length - 1];
+		expect(lastBlock).toEqual({ cachePoint: { type: "default" } });
+
+		// Earlier messages should NOT have cachePoint
+		const firstMsg = messages[0];
+		for (const block of firstMsg.content) {
+			expect(block).not.toHaveProperty("cachePoint");
+		}
 	});
 
 	test("throws ProviderError on non-OK HTTP response", async () => {
