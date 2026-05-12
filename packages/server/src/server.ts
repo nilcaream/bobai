@@ -146,6 +146,7 @@ export function createServer(options: ServerOptions) {
 				const vars: Record<string, string> = {
 					__revision__: process.env.BOBAI_BUILD_REV ?? "dev",
 					__date__: process.env.BOBAI_BUILD_DATE ?? "",
+					__version__: process.env.BOBAI_VERSION ?? "dev",
 					__directory__: options.projectRoot ?? process.cwd(),
 				};
 				const markdown = welcomeTemplate.replace(/__\w+__/g, (m) => vars[m] ?? m);
