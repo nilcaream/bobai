@@ -165,6 +165,55 @@ describe("refreshBedrockModelsFromFoundation", () => {
 		};
 	}
 
+	test("propagates cache_read and cache_write pricing from models.dev", async () => {
+		const modelsDevWithCache = {
+			"amazon-bedrock": {
+				id: "amazon-bedrock",
+				name: "Amazon Bedrock",
+				models: {
+					"anthropic.claude-sonnet-4-6": {
+						id: "anthropic.claude-sonnet-4-6",
+						name: "Claude Sonnet 4.6",
+						tool_call: true,
+						limit: { context: 200000, output: 64000 },
+						cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+					},
+				},
+			},
+		};
+		const sonnetSummary: BedrockFoundationModelSummary = {
+			modelId: "anthropic.claude-sonnet-4-6",
+			modelName: "Claude Sonnet 4.6",
+			providerName: "Anthropic",
+			inputModalities: ["TEXT"],
+			outputModalities: ["TEXT"],
+			responseStreamingSupported: true,
+			inferenceTypesSupported: ["ON_DEMAND"],
+		};
+		await refreshBedrockModelsFromFoundation([sonnetSummary], "us-east-1", tmpDir, {
+			fetch: async (url) => {
+				if (String(url).includes("models.dev")) {
+					return new Response(JSON.stringify(modelsDevWithCache), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					});
+				}
+				return new Response("Not found", { status: 404 });
+			},
+		});
+
+		const written = JSON.parse(fs.readFileSync(path.join(tmpDir, "models.json"), "utf8"));
+		const models = written.providers["amazon-bedrock"] as Array<{
+			id: string;
+			cacheReadPrice?: number;
+			cacheWritePrice?: number;
+		}>;
+		const sonnet = models.find((m) => m.id === "anthropic.claude-sonnet-4-6");
+		expect(sonnet).toBeDefined();
+		expect(sonnet?.cacheReadPrice).toBe(0.3);
+		expect(sonnet?.cacheWritePrice).toBe(3.75);
+	});
+
 	test("creates models.json with enriched Bedrock models", async () => {
 		const result = await refreshBedrockModelsFromFoundation([HAIKU_ON_DEMAND, DEEPSEEK_SUMMARY], "us-east-1", tmpDir, {
 			fetch: mockModelsDevFetch() as typeof fetch,

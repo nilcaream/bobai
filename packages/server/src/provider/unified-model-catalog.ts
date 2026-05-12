@@ -292,6 +292,8 @@ function buildBedrockModels(
 					maxOutput,
 					inputPrice: dev?.cost?.input ?? 0,
 					outputPrice: dev?.cost?.output ?? 0,
+					...(typeof dev?.cost?.cache_read === "number" ? { cacheReadPrice: dev.cost.cache_read } : {}),
+					...(typeof dev?.cost?.cache_write === "number" ? { cacheWritePrice: dev.cost.cache_write } : {}),
 				},
 			];
 		})
