@@ -1,22 +1,28 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { createTestDb, startTestServer } from "./helpers";
 
-const uiDist = path.resolve(import.meta.dir, "../../ui/dist");
-
 describe("HTTP server", () => {
 	let server: ReturnType<typeof Bun.serve>;
 	let baseUrl: string;
+	const tmpStatic = path.join(import.meta.dir, "server-static.tmp");
 
 	beforeAll(() => {
-		const started = startTestServer({ port: 0, staticDir: uiDist });
+		fs.mkdirSync(tmpStatic, { recursive: true });
+		fs.writeFileSync(
+			path.join(tmpStatic, "index.html"),
+			'<html><head><title>Bob AI</title></head><body><div id="root"></div></body></html>',
+		);
+		const started = startTestServer({ port: 0, staticDir: tmpStatic });
 		server = started.server;
 		baseUrl = started.baseUrl;
 	});
 
 	afterAll(() => {
 		server.stop(true);
+		fs.rmSync(tmpStatic, { recursive: true, force: true });
 	});
 
 	test("GET /bobai/health returns 200 with status ok", async () => {
