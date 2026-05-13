@@ -75,8 +75,10 @@ cd packages/ui && bunx vite build
 
 1. **Open an issue** describing the bug or the change you want to make. For bugs, include reproduction steps. For features or refactors, explain the motivation.
 2. **Wait for feedback.** A maintainer will confirm whether the change is in scope and suggest an approach if needed.
-3. **Fork and implement.** Keep the change focused — one logical change per PR.
-4. **Open a PR** referencing the issue. Fill in the PR template.
+3. **Create a feature branch** off `main` and implement your change there. Keep the change focused — one logical change per PR. Use conventional commits (`feat:`, `fix:`, `docs:`, etc.) so the changelog is generated correctly.
+4. **Push your branch and open a PR** referencing the issue. CI runs on every push and on the PR. Fill in the PR template.
+5. **Wait for review and approval.** The `main` branch is protected — changes can only land through approved PRs.
+6. Once merged, Release Please automatically accumulates your change into the next release PR. When that release PR is merged, the release is built and published.
 
 ## Adding a New Provider
 
