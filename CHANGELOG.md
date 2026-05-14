@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.3](https://github.com/nilcaream/bobai/compare/bobai-v0.2.2...bobai-v0.2.3) (2026-05-14)
+
+
+### Bug Fixes
+
+* create release atomically to avoid immutability error ([5616d8c](https://github.com/nilcaream/bobai/commit/5616d8c8ab0880d79cd0ac48d3c7a63be31e4417))
+* create release atomically to avoid immutability error ([ceeac3d](https://github.com/nilcaream/bobai/commit/ceeac3d590848933527394bf465fae0616b74a9a))
+* limit CI push trigger to main to prevent duplicate checks ([cdce6f8](https://github.com/nilcaream/bobai/commit/cdce6f8711fc18be76e8efd8ae717d9510ad50b0))
+
 ## [0.2.2](https://github.com/nilcaream/bobai/compare/bobai-v0.2.1...bobai-v0.2.2) (2026-05-14)
 
 
