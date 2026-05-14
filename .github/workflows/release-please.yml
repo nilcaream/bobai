@@ -23,6 +23,7 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-release: true
 
   build-release:
     needs: release-please
@@ -73,8 +74,10 @@ jobs:
           chmod +x scripts/package-release.sh
           ./scripts/package-release.sh "${VERSION}"
 
-      - name: Upload release assets
+      - name: Create release with assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ needs.release-please.outputs.tag_name }}" release/* --clobber
+          gh release create "${{ needs.release-please.outputs.tag_name }}" release/* \
+            --title "${{ needs.release-please.outputs.tag_name }}" \
+            --generate-notes
