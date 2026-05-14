@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2](https://github.com/nilcaream/bobai/compare/bobai-v0.2.1...bobai-v0.2.2) (2026-05-14)
+
+
+### Bug Fixes
+
+* chain release build directly off release-please workflow ([b7fb46d](https://github.com/nilcaream/bobai/commit/b7fb46d01c95d94a0f0f5a2d4304a06b27dca244))
+* remove version from release archive names to match install scripts ([42bf4df](https://github.com/nilcaream/bobai/commit/42bf4dfe6a8cf53d58db1d19cb25b5a61ce606da))
+* remove version from release archive names to match install scripts ([ff8f94d](https://github.com/nilcaream/bobai/commit/ff8f94d40f95dd3bc70fa99eae836dd86210f22b))
+
 ## [0.2.1](https://github.com/nilcaream/bobai/compare/bobai-v0.2.0...bobai-v0.2.1) (2026-05-12)
 
 
