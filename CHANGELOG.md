@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.4](https://github.com/nilcaream/bobai/compare/bobai-v0.2.2...bobai-v0.2.4) (2026-05-14)
+
+### Features
+
+- replace release-please with manual release workflow ([300925c](https://github.com/nilcaream/bobai/commit/300925cc011049e93bc38ae26b5cf19df26fafe5))
+### Bug Fixes
+
+- split release into prepare-PR and publish-phases ([b1b372f](https://github.com/nilcaream/bobai/commit/b1b372f692cdada386248090160f2576a405b1ee))
+- limit CI push trigger to main to prevent duplicate checks ([cdce6f8](https://github.com/nilcaream/bobai/commit/cdce6f8711fc18be76e8efd8ae717d9510ad50b0))
+- create release atomically to avoid immutability error ([ceeac3d](https://github.com/nilcaream/bobai/commit/ceeac3d590848933527394bf465fae0616b74a9a))
+
 ## [0.2.3](https://github.com/nilcaream/bobai/compare/bobai-v0.2.2...bobai-v0.2.3) (2026-05-14)
 
 
