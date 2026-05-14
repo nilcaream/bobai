@@ -41,7 +41,7 @@ package_unix() {
     cp dist/server.js "${staging}/dist/server.js"
     cp -r packages/ui/dist/. "${staging}/dist/ui/"
 
-    local archive="${OUTDIR}/bobai-${VERSION}-${platform}.tar.gz"
+    local archive="${OUTDIR}/bobai-${platform}.tar.gz"
     tar -czf "${archive}" -C "${staging}" .
     rm -rf "${staging}"
     log_info "Packaged ${archive}"
@@ -65,7 +65,7 @@ package_windows_native() {
     cp dist/server.js "${staging}/dist/server.js"
     cp -r packages/ui/dist/. "${staging}/dist/ui/"
 
-    local archive="${OUTDIR}/bobai-${VERSION}-win32-x64-native.zip"
+    local archive="${OUTDIR}/bobai-win32-x64-native.zip"
     (cd "${staging}" && zip -r - .) > "${archive}"
     rm -rf "${staging}"
     log_info "Packaged ${archive}"
