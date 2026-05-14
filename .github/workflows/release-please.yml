@@ -40,6 +40,23 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Lint — server
+        run: cd packages/server && bun run check -- --error-on-warnings
+
+      - name: Lint — UI
+        run: cd packages/ui && bun run check -- --error-on-warnings
+
+      - name: Typecheck — UI
+        run: cd packages/ui && bunx tsc --noEmit
+
+      - name: Test — server
+        run: cd packages/server && bun test --coverage --coverage-reporter=text --coverage-reporter=lcov
+        env:
+          BOBAI_PLATFORM: linux-x64
+
+      - name: Test — UI
+        run: cd packages/ui && bun test --coverage --coverage-reporter=text --coverage-reporter=lcov
+
       - name: Bundle server
         run: |
           bun build --target=bun --minify \
