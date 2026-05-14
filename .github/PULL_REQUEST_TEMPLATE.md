@@ -15,3 +15,4 @@
 - [ ] Tests pass locally (`./test.sh`)
 - [ ] Lint passes (`bun run check -- --error-on-warnings` in each package)
 - [ ] Related issue linked (if applicable)
+- [ ] PR title follows [conventional commits](https://www.conventionalcommits.org/) (e.g. `feat:`, `fix:`, `docs:`)
