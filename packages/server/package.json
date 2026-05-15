@@ -1,23 +1,23 @@
 {
-  "name": "@bobai/server",
-  "version": "0.2.4",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "bun run --watch src/index.ts",
-    "check": "biome check .",
-    "test": "BOBAI_PLATFORM=linux-x64 bun test"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
-    "@types/bun": "latest",
-    "@types/turndown": "^5.0.6"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.81.0",
-    "diff": "^8.0.4",
-    "gray-matter": "^4.0.3",
-    "turndown": "^7.2.4",
-    "unpdf": "^1.6.0"
-  }
+	"name": "@bobai/server",
+	"version": "0.2.4",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun run --watch src/index.ts",
+		"check": "biome check .",
+		"test": "BOBAI_PLATFORM=linux-x64 bun test"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.0.0",
+		"@types/bun": "latest",
+		"@types/turndown": "^5.0.6"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.81.0",
+		"diff": "^8.0.4",
+		"gray-matter": "^4.0.3",
+		"turndown": "^7.2.4",
+		"unpdf": "^1.6.0"
+	}
 }
