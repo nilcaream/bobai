@@ -174,11 +174,12 @@ describe("openrouter provider", () => {
 		]);
 	});
 
-	test("emits reasoning events for interleaved reasoning_content deltas", async () => {
+	test("emits reasoning events for openrouter deepseek reasoning deltas", async () => {
+		// OpenRouter normalizes deepseek reasoning to "reasoning" field, not "reasoning_content".
 		globalThis.fetch = mock(async () => {
 			return new Response(
 				sseStream([
-					{ choices: [{ delta: { reasoning_content: "thinking" } }] },
+					{ choices: [{ delta: { reasoning: "thinking" } }] },
 					{ choices: [{ delta: { content: "Answer" } }] },
 					"[DONE]",
 				]),
@@ -195,26 +196,26 @@ describe("openrouter provider", () => {
 		);
 
 		expect(events).toEqual([
-			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning_content" } },
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning" } },
 			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "thinking" } },
 			{ type: "text", text: "Answer" },
 			{
 				type: "reasoning_end",
 				index: 0,
-				reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "thinking" },
 			},
 			{ type: "finish", reason: "stop" },
 		]);
 	});
 
-	test("ignores null reasoning_content termination chunk — does not append 'null' to reasoning text", async () => {
-		// Real APIs send a final chunk with reasoning_content: null to signal end of reasoning.
+	test("ignores null reasoning termination chunk — does not append 'null' to reasoning text", async () => {
+		// Real APIs send a final chunk with reasoning: null to signal end of reasoning.
 		// Before the fix, `!== undefined` let null through and "null" was appended to the text.
 		globalThis.fetch = mock(async () => {
 			return new Response(
 				sseStream([
-					{ choices: [{ delta: { reasoning_content: "thinking hard" } }] },
-					{ choices: [{ delta: { reasoning_content: null } }] },
+					{ choices: [{ delta: { reasoning: "thinking hard" } }] },
+					{ choices: [{ delta: { reasoning: null } }] },
 					{ choices: [{ delta: { content: "Answer" } }] },
 					"[DONE]",
 				]),
@@ -231,13 +232,13 @@ describe("openrouter provider", () => {
 		);
 
 		expect(events).toEqual([
-			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning_content" } },
+			{ type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: "reasoning" } },
 			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "thinking hard" } },
 			{ type: "text", text: "Answer" },
 			{
 				type: "reasoning_end",
 				index: 0,
-				reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking hard" },
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "thinking hard" },
 			},
 			{ type: "finish", reason: "stop" },
 		]);

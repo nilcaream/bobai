@@ -27,6 +27,18 @@ interface ReasoningQuirk {
 }
 
 const QUIRKS: ReasoningQuirk[] = [
+	// OpenRouter normalizes deepseek reasoning to "reasoning" field (not "reasoning_content").
+	// Place this BEFORE the general deepseek- quirk so it matches first for openrouter provider.
+	{
+		providerId: "openrouter",
+		apiFamily: "openai-chat-completions",
+		modelPattern: /(^|\/)deepseek-/,
+		capabilities: {
+			family: "openai-chat-interleaved",
+			supportsReplay: true,
+			assistantField: "reasoning",
+		},
+	},
 	{
 		apiFamily: "openai-chat-completions",
 		modelPattern: /(^|\/)deepseek-/,

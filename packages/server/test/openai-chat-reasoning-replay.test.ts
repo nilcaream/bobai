@@ -33,7 +33,7 @@ describe("OpenAI chat reasoning replay", () => {
 		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
-	test("serializes assistant reasoning_content into the matching assistant message for replay", async () => {
+	test("serializes assistant reasoning into the matching assistant message for replay (openrouter deepseek)", async () => {
 		const capabilities = getReasoningCapabilities({
 			providerId: "openrouter",
 			modelId: "openrouter/deepseek-r1",
@@ -49,7 +49,7 @@ describe("OpenAI chat reasoning replay", () => {
 					role: "assistant",
 					content: "One",
 					reasoning: [
-						{ kind: "interleaved-chat", field: "reasoning_content", text: "think one" },
+						{ kind: "interleaved-chat", field: "reasoning", text: "think one" },
 						{ kind: "text-summary", text: "ignore me" },
 					],
 				},
@@ -57,7 +57,7 @@ describe("OpenAI chat reasoning replay", () => {
 				{
 					role: "assistant",
 					content: "Two",
-					reasoning: [{ kind: "interleaved-chat", field: "reasoning_content", text: "think two" }],
+					reasoning: [{ kind: "interleaved-chat", field: "reasoning", text: "think two" }],
 				},
 			],
 			capabilities,
@@ -66,9 +66,9 @@ describe("OpenAI chat reasoning replay", () => {
 		expect(messages).toEqual([
 			{ role: "system", content: "Be helpful." },
 			{ role: "user", content: "First" },
-			{ role: "assistant", content: "One", reasoning_content: "think one" },
+			{ role: "assistant", content: "One", reasoning: "think one" },
 			{ role: "user", content: "Second" },
-			{ role: "assistant", content: "Two", reasoning_content: "think two" },
+			{ role: "assistant", content: "Two", reasoning: "think two" },
 		]);
 	});
 
@@ -183,7 +183,7 @@ describe("OpenAI chat reasoning replay", () => {
 		]);
 	});
 
-	test("request body replays assistant reasoning on the correct assistant message", async () => {
+	test("request body replays assistant reasoning on the correct assistant message (openrouter deepseek)", async () => {
 		const { createOpenAIChatCompatibleProvider } = await getModule();
 		let capturedBody: Record<string, unknown> | undefined;
 		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -219,13 +219,13 @@ describe("OpenAI chat reasoning replay", () => {
 				{
 					role: "assistant",
 					content: "One",
-					reasoning: [{ kind: "interleaved-chat", field: "reasoning_content", text: "think one" }],
+					reasoning: [{ kind: "interleaved-chat", field: "reasoning", text: "think one" }],
 				},
 				{ role: "user", content: "Second" },
 				{
 					role: "assistant",
 					content: "Two",
-					reasoning: [{ kind: "interleaved-chat", field: "reasoning_content", text: "think two" }],
+					reasoning: [{ kind: "interleaved-chat", field: "reasoning", text: "think two" }],
 				},
 			],
 		})) {
@@ -234,9 +234,9 @@ describe("OpenAI chat reasoning replay", () => {
 
 		expect(capturedBody?.messages).toEqual([
 			{ role: "user", content: "First" },
-			{ role: "assistant", content: "One", reasoning_content: "think one" },
+			{ role: "assistant", content: "One", reasoning: "think one" },
 			{ role: "user", content: "Second" },
-			{ role: "assistant", content: "Two", reasoning_content: "think two" },
+			{ role: "assistant", content: "Two", reasoning: "think two" },
 		]);
 	});
 });

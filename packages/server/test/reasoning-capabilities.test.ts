@@ -34,7 +34,8 @@ describe("reasoning capabilities", () => {
 		expect(capabilities.assistantField).toBe("reasoning_content");
 	});
 
-	test("namespaced deepseek chat model also resolves as interleaved reasoning chat", async () => {
+	test("openrouter deepseek chat model resolves reasoning field = reasoning", async () => {
+		// OpenRouter normalizes deepseek reasoning to "reasoning" field, not "reasoning_content".
 		const capabilities = await getCapabilities({
 			providerId: "openrouter",
 			modelId: "openrouter/deepseek-r1",
@@ -43,7 +44,7 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning_content");
+		expect(capabilities.assistantField).toBe("reasoning");
 	});
 
 	test("kimi chat model resolves interleaved reasoning field = reasoning", async () => {
