@@ -560,7 +560,7 @@ export async function handlePrompt(req: PromptRequest) {
 				currentSession?.contextLimit,
 				finalSessionCost,
 			);
-			send(ws, { type: "status", text: finalStatus, sessionId: currentSessionId });
+			send(ws, { type: "status", text: finalStatus });
 		}
 		send(ws, {
 			type: "done",
@@ -648,7 +648,7 @@ export async function handlePrompt(req: PromptRequest) {
 					errSession?.contextLimit,
 					errSessionCost,
 				);
-				send(ws, { type: "status", text: errStatus, sessionId: currentSessionId });
+				send(ws, { type: "status", text: errStatus });
 			}
 			send(ws, {
 				type: "done",
