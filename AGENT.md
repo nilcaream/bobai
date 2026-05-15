@@ -48,4 +48,4 @@ faster than exploring the codebase.
 - **Never include personally identifiable information** — no names, usernames, or hostnames in tracked files, commit messages, or pull requests.
 - Use the `bobai` identifier (or `BobAI` when CamelCase is required) for directories, packages, and code symbols; avoid other spellings such as `bob-ai`.
 - **Never commit plan or design docs** (`docs/plans/`). They are local working notes that go stale fast; the directory is gitignored.
-- **Never work directly on `main`** — create a feature branch off `main` for all changes. Use [conventional commits](https://www.conventionalcommits.org/). Push the branch and open a PR. `main` is protected and accepts changes only through approved PRs. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full process.
+- Use [conventional commits](https://www.conventionalcommits.org/) — they drive automatic changelog generation during releases. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.

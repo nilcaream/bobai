@@ -15,14 +15,18 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  prepare:
-    name: Prepare release PR
+  gate:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Release
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,28 +55,37 @@ jobs:
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="bobai-v${NEW_VERSION}"
 
-          # Update all package.json files
-          jq --arg v "${NEW_VERSION}" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
-          jq --arg v "${NEW_VERSION}" '.version = $v' packages/server/package.json > packages/server/package.json.tmp && mv packages/server/package.json.tmp packages/server/package.json
-          jq --arg v "${NEW_VERSION}" '.version = $v' packages/ui/package.json > packages/ui/package.json.tmp && mv packages/ui/package.json.tmp packages/ui/package.json
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "ERROR: Tag ${TAG} already exists. Releases are immutable." >&2
+            exit 1
+          fi
 
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      - name: Bump versions
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          jq --arg v "${V}" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+          jq --arg v "${V}" '.version = $v' packages/server/package.json > packages/server/package.json.tmp && mv packages/server/package.json.tmp packages/server/package.json
+          jq --arg v "${V}" '.version = $v' packages/ui/package.json > packages/ui/package.json.tmp && mv packages/ui/package.json.tmp packages/ui/package.json
+
       - name: Generate changelog
-        id: changelog
         run: |
           chmod +x scripts/generate-changelog.sh
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+
+          PREV_TAG=$(git tag --sort=-version:refname | grep '^bobai-v' | head -1)
+          if [[ -z "${PREV_TAG}" ]]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
           echo "Comparing ${PREV_TAG}..HEAD"
+
           CHANGELOG=$(scripts/generate-changelog.sh "${PREV_TAG}" HEAD)
 
-          # Write release notes for the PR body
-          echo "${CHANGELOG}" > RELEASE_NOTES.md
-
-          # Prepend to CHANGELOG.md
           NEW_VERSION="${{ steps.version.outputs.version }}"
-          HEADER="## [${NEW_VERSION}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...bobai-v${NEW_VERSION}) ($(date +%Y-%m-%d))"
+          TAG="${{ steps.version.outputs.tag }}"
+          HEADER="## [${NEW_VERSION}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${TAG}) ($(date +%Y-%m-%d))"
+
           if [[ -f CHANGELOG.md ]]; then
             {
               head -1 CHANGELOG.md
@@ -90,22 +103,36 @@ jobs:
             echo "${CHANGELOG}" >> CHANGELOG.md
           fi
 
-          echo "prev_tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+          echo "${CHANGELOG}" > RELEASE_NOTES.md
 
-      - name: Create release pull request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build server
+        run: bun build --target=bun --minify --outfile=dist/server.js packages/server/src/index.ts
+
+      - name: Build UI
+        run: cd packages/ui && bunx vite build
+
+      - name: Package release archives
         run: |
-          BRANCH="release/${{ steps.version.outputs.tag }}"
+          chmod +x scripts/package-release.sh
+          ./scripts/package-release.sh "${{ steps.version.outputs.version }}"
+
+      - name: Commit, tag, and push
+        run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git checkout -b "${BRANCH}"
+
           git add package.json packages/server/package.json packages/ui/package.json CHANGELOG.md
           git commit -m "chore: release bobai ${{ steps.version.outputs.version }}"
-          git push origin "${BRANCH}"
 
-          gh pr create \
-            --title "chore: release bobai ${{ steps.version.outputs.version }}" \
-            --body-file RELEASE_NOTES.md \
-            --base main \
-            --head "${BRANCH}"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release bobai ${{ steps.version.outputs.version }}"
+
+          git push origin main
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" release/* \
+            --title "bobai ${{ steps.version.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md

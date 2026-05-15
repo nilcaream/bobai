@@ -3,8 +3,6 @@
 [![CI](https://github.com/nilcaream/bobai/actions/workflows/ci.yml/badge.svg)](https://github.com/nilcaream/bobai/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/nilcaream/bobai)](https://github.com/nilcaream/bobai/releases/latest)
 [![License](https://img.shields.io/github/license/nilcaream/bobai)](LICENSE)
-[![Coverage (server)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/nilcaream/bobai/badges/coverage-server.json)](https://github.com/nilcaream/bobai/actions/workflows/ci.yml)
-[![Coverage (UI)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/nilcaream/bobai/badges/coverage-ui.json)](https://github.com/nilcaream/bobai/actions/workflows/ci.yml)
 
 A browser-first coding agent that runs as a local server and exposes a chat UI with coding tools, session history, subagents, and full context transparency.
 

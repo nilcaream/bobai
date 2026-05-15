@@ -1,41 +1,15 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-permissions:
-  pull-requests: write
+  workflow_dispatch:
+  workflow_call:
 
 jobs:
-  lint-pr-title:
-    name: Lint PR title
-    runs-on: ubuntu-latest
-    steps:
-      - uses: amannn/action-semantic-pull-request@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            docs
-            refactor
-            perf
-            chore
-            test
-          requireScope: false
-
   ci:
     name: Lint, typecheck, test
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
 
@@ -56,68 +30,9 @@ jobs:
         run: cd packages/ui && bunx tsc --noEmit
 
       - name: Test — server
-        run: cd packages/server && bun test --coverage --coverage-reporter=text --coverage-reporter=lcov
+        run: cd packages/server && bun test
         env:
           BOBAI_PLATFORM: linux-x64
 
       - name: Test — UI
-        run: cd packages/ui && bun test --coverage --coverage-reporter=text --coverage-reporter=lcov
-
-      - name: Post coverage summary on PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            function parseLcov(path) {
-              if (!fs.existsSync(path)) return null;
-              const text = fs.readFileSync(path, 'utf8');
-              let lf = 0, lh = 0, fnf = 0, fnh = 0;
-              for (const line of text.split('\n')) {
-                if (line.startsWith('LF:'))  lf  += parseInt(line.slice(3));
-                if (line.startsWith('LH:'))  lh  += parseInt(line.slice(3));
-                if (line.startsWith('FNF:')) fnf += parseInt(line.slice(4));
-                if (line.startsWith('FNH:')) fnh += parseInt(line.slice(4));
-              }
-              return {
-                line: lf  > 0 ? ((lh  / lf)  * 100).toFixed(1) : 'N/A',
-                fn:   fnf > 0 ? ((fnh / fnf) * 100).toFixed(1) : 'N/A',
-              };
-            }
-
-            const server = parseLcov('packages/server/coverage/lcov.info');
-            const ui     = parseLcov('packages/ui/coverage/lcov.info');
-
-            const pct = (v) => v ? `${v}%` : 'N/A';
-
-            const body = [
-              '## Coverage',
-              '',
-              '| Package | Lines | Functions |',
-              '|---------|-------|-----------|',
-              `| \`server\` | ${pct(server?.line)} | ${pct(server?.fn)} |`,
-              `| \`ui\`     | ${pct(ui?.line)}     | ${pct(ui?.fn)}     |`,
-            ].join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const existing = comments.find(c => c.body.startsWith('## Coverage'));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner:      context.repo.owner,
-                repo:       context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner:        context.repo.owner,
-                repo:         context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+        run: cd packages/ui && bun test

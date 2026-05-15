@@ -1,20 +1,6 @@
 # Contributing to Bob AI
 
-Thanks for your interest in contributing. This guide covers what gets merged, how to set up a development environment, and how the contribution process works.
-
-## What Gets Merged
-
-These types of contributions are most likely to be accepted:
-
-- Bug fixes
-- New provider support
-- Documentation improvements
-- Test coverage improvements
-- Performance improvements
-
-Changes that affect core architecture, the UI layout, or the session/compaction model need a design discussion before implementation. Open a [GitHub Discussion](https://github.com/nilcaream/bobai/discussions) first to align on the approach.
-
-If you are unsure whether a change is in scope, open a Discussion and ask before writing code.
+Bob AI is a solo-maintained project. External contributions are welcome but rare. This guide covers the development workflow.
 
 ## Development Setup
 
@@ -73,28 +59,35 @@ cd packages/ui && bunx vite build
 
 ## Contribution Process
 
-1. **Open an issue** describing the bug or the change you want to make. For bugs, include reproduction steps. For features or refactors, explain the motivation.
-2. **Wait for feedback.** A maintainer will confirm whether the change is in scope and suggest an approach if needed.
-3. **Create a feature branch** off `main` and implement your change there. Keep the change focused — one logical change per PR. Use conventional commits (`feat:`, `fix:`, `docs:`, etc.) so the changelog is generated correctly. PR titles must follow the conventional commit format (e.g. `feat: add X`, `fix: handle Y`).
-4. **Push your branch and open a PR** referencing the issue. CI runs on every push and on the PR. Fill in the PR template.
-5. **Wait for review and approval.** The `main` branch is protected — changes can only land through approved PRs that pass CI.
-6. Once merged, a maintainer triggers a release when there are enough changes. The release workflow bumps the version, builds assets, and publishes an immutable GitHub release.
+1. **Open an issue** describing the bug or change. Include reproduction steps for bugs. For features or refactors, explain the motivation.
+2. **Wait for feedback.** A maintainer will confirm scope and suggest an approach.
+3. **Implement your change** on a branch off `main`. Use [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, etc.) — the release workflow uses commit messages to generate the changelog automatically.
+4. **Open a PR** referencing the issue.
+5. Once merged, a maintainer manually triggers a release when enough changes have accumulated. The release workflow bumps the version, builds artifacts, generates the changelog from commits, and publishes an immutable GitHub release.
 
-## Adding a New Provider
+## CI
 
-Bob AI discovers models from a generated catalog (`~/.config/bobai/models.json`). Adding a provider means:
+CI is purely manual — there are no automatic gates on push or PR. To run CI on any branch:
 
-1. Implementing the provider interface in `packages/server/src/providers/`
-2. Adding auth handling in the auth flow
-3. Adding model catalog generation for that provider
-4. Adding tests
+1. Go to the [Actions tab](https://github.com/nilcaream/bobai/actions/workflows/ci.yml)
+2. Click **Run workflow**
+3. Select the branch and run
 
-Look at an existing provider (e.g. `openrouter`) as a reference.
+The release workflow runs CI automatically as a gate before publishing.
 
 ## Code Style
 
-Bob AI uses [Biome](https://biomejs.dev) for linting and formatting. Run `bun run check -- --write` in either package to autofix. The CI gate runs with `--error-on-warnings`, so warnings are treated as errors.
+Bob AI uses [Biome](https://biomejs.dev) for linting and formatting. Run `bun run check -- --write` in either package to autofix. CI treats warnings as errors.
+
+## Adding a New Provider
+
+1. Implement the provider interface in `packages/server/src/providers/`
+2. Add auth handling in the auth flow
+3. Add model catalog generation for that provider
+4. Add tests
+
+Look at an existing provider (e.g., `openrouter`) as a reference.
 
 ## Questions?
 
-Open a [GitHub Discussion](https://github.com/nilcaream/bobai/discussions) — the Q&A category is the right place for usage questions, setup help, and general conversation.
+Open a [GitHub Discussion](https://github.com/nilcaream/bobai/discussions).
