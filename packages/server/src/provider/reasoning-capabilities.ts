@@ -27,6 +27,17 @@ interface ReasoningQuirk {
 }
 
 const QUIRKS: ReasoningQuirk[] = [
+	// Copilot o-series reasoning models (o1, o3, o4) use the "reasoning" field.
+	{
+		providerId: "github-copilot",
+		apiFamily: "openai-chat-completions",
+		modelPattern: /^o[134]/,
+		capabilities: {
+			family: "openai-chat-interleaved",
+			supportsReplay: true,
+			assistantField: "reasoning",
+		},
+	},
 	// OpenRouter normalizes deepseek reasoning to "reasoning" field (not "reasoning_content").
 	// Place this BEFORE the general deepseek- quirk so it matches first for openrouter provider.
 	{
@@ -66,6 +77,16 @@ const QUIRKS: ReasoningQuirk[] = [
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
 			assistantField: "reasoning_details",
+		},
+	},
+	// Gemini models expose reasoning through the "reasoning_text" delta field.
+	{
+		apiFamily: "openai-chat-completions",
+		modelPattern: /(^|\/)gemini-/,
+		capabilities: {
+			family: "openai-chat-interleaved",
+			supportsReplay: true,
+			assistantField: "reasoning_text",
 		},
 	},
 	// OpenRouter-proxied models — no providerId constraint so they match

@@ -16,7 +16,7 @@ export interface ToolCallContent {
 	function: { name: string; arguments: string };
 }
 
-export type InterleavedChatReasoningField = "reasoning" | "reasoning_content" | "reasoning_details";
+export type InterleavedChatReasoningField = "reasoning" | "reasoning_content" | "reasoning_details" | "reasoning_text";
 
 export interface ResponsesItemReasoningState {
 	kind: "responses-item";

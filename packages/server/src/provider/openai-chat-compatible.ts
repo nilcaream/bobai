@@ -48,7 +48,7 @@ function getInterleavedReasoningValue(
 	return undefined;
 }
 
-function appendReasoningText(
+export function appendReasoningText(
 	current: ReasoningState | undefined,
 	field: InterleavedChatReasoningField,
 	text: string,
@@ -59,7 +59,7 @@ function appendReasoningText(
 	return { kind: "interleaved-chat", field, text };
 }
 
-function setReasoningDetails(
+export function setReasoningDetails(
 	current: ReasoningState | undefined,
 	field: InterleavedChatReasoningField,
 	details: unknown,
@@ -181,6 +181,7 @@ export function createOpenAIChatCompatibleProvider(
 							content?: string;
 							reasoning?: string;
 							reasoning_content?: string;
+							reasoning_text?: string;
 							reasoning_details?: unknown;
 							tool_calls?: {
 								index: number;
@@ -207,6 +208,8 @@ export function createOpenAIChatCompatibleProvider(
 						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_content);
 					} else if (delta?.reasoning != null && reasoningField === "reasoning") {
 						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning);
+					} else if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
+						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_text);
 					} else if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
 						activeReasoning = setReasoningDetails(activeReasoning, reasoningField, delta.reasoning_details);
 					}
@@ -219,6 +222,9 @@ export function createOpenAIChatCompatibleProvider(
 					}
 					if (delta?.reasoning != null && reasoningField === "reasoning") {
 						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning } };
+					}
+					if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
+						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_text } };
 					}
 					if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
 						yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: delta.reasoning_details } };

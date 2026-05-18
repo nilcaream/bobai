@@ -13,6 +13,8 @@ interface CopilotProviderOptions extends ProviderOptions {
 	initiator?: "user" | "agent";
 }
 
+import { appendReasoningText, convertMessagesToOpenAIChat, setReasoningDetails } from "./openai-chat-compatible";
+import type { ReasoningState } from "./provider";
 import { AuthError, ProviderError, TimeoutError } from "./provider";
 import { getReasoningCapabilities } from "./reasoning-capabilities";
 import { DEFAULT_REASONING_DEFAULTS } from "./reasoning-defaults";
@@ -761,6 +763,13 @@ export function createCopilotProvider(
 
 			// ── OpenAI Chat Completions path ─────────────────────────────
 
+			const reasoningCapabilities = getReasoningCapabilities({
+				providerId: "github-copilot",
+				modelId: options.model,
+				apiFamily: "openai-chat-completions",
+			});
+			const requestMessages = convertMessagesToOpenAIChat(options.messages, reasoningCapabilities);
+
 			let lastError: unknown;
 			let retriedAuth = false;
 			let downgradeWarned = false;
@@ -793,7 +802,7 @@ export function createCopilotProvider(
 						},
 						body: JSON.stringify({
 							model: options.model,
-							messages: options.messages,
+							messages: requestMessages,
 							stream: true,
 							...(options.tools?.length ? { tools: options.tools } : {}),
 						}),
@@ -869,6 +878,14 @@ export function createCopilotProvider(
 
 				try {
 					let sawAnyToolCalls = false;
+
+					// Determine whether this model supports interleaved reasoning and which field to read.
+					const isInterleaved =
+						reasoningCapabilities.family === "openai-chat-interleaved" && reasoningCapabilities.assistantField !== undefined;
+					const reasoningField = isInterleaved ? reasoningCapabilities.assistantField : undefined;
+					let activeReasoning: ReasoningState | undefined;
+					let reasoningStarted = false;
+
 					for await (const event of parseSSE(response.body)) {
 						timer.reset(BODY_TIMEOUT_MS);
 
@@ -876,6 +893,10 @@ export function createCopilotProvider(
 							choices?: {
 								delta?: {
 									content?: string;
+									reasoning?: string | null;
+									reasoning_content?: string | null;
+									reasoning_details?: unknown;
+									reasoning_text?: string | null;
 									tool_calls?: {
 										index: number;
 										id?: string;
@@ -895,8 +916,42 @@ export function createCopilotProvider(
 						};
 
 						const choice = data.choices?.[0];
+						const delta = choice?.delta;
+
+						// ── Reasoning extraction ──────────────────────────
+						if (reasoningField) {
+							if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
+								activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_content);
+							} else if (delta?.reasoning != null && reasoningField === "reasoning") {
+								activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning);
+							} else if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
+								activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_text);
+							} else if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
+								activeReasoning = setReasoningDetails(activeReasoning, reasoningField, delta.reasoning_details);
+							}
+							if (activeReasoning && !reasoningStarted) {
+								yield { type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: reasoningField } };
+								reasoningStarted = true;
+							}
+							if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
+								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_content } };
+							}
+							if (delta?.reasoning != null && reasoningField === "reasoning") {
+								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning } };
+							}
+							if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
+								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_text } };
+							}
+							if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
+								yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: delta.reasoning_details } };
+							}
+						}
 
 						if (choice?.finish_reason) {
+							if (reasoningStarted) {
+								yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
+								reasoningStarted = false;
+							}
 							const promptTokens = data.usage?.prompt_tokens ?? 0;
 							const totalTokens = data.usage?.total_tokens ?? 0;
 							const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
@@ -953,12 +1008,12 @@ export function createCopilotProvider(
 							return;
 						}
 
-						const content = choice?.delta?.content;
+						const content = delta?.content;
 						if (content) {
 							yield { type: "text" as const, text: content };
 						}
 
-						const toolCalls = choice?.delta?.tool_calls;
+						const toolCalls = delta?.tool_calls;
 						if (toolCalls) {
 							sawAnyToolCalls = true;
 							for (const tc of toolCalls) {
@@ -972,6 +1027,9 @@ export function createCopilotProvider(
 						}
 					}
 
+					if (reasoningStarted) {
+						yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
+					}
 					timer.clear();
 					yield { type: "finish" as const, reason: "stop" as const };
 					return;

@@ -94,4 +94,64 @@ describe("reasoning capabilities", () => {
 		expect(capabilities.supportsReplay).toBe(false);
 		expect(capabilities.assistantField).toBeUndefined();
 	});
+
+	test("copilot o-series chat model resolves reasoning field = reasoning", async () => {
+		const capabilities = await getCapabilities({
+			providerId: "github-copilot",
+			modelId: "o4-mini",
+			apiFamily: "openai-chat-completions",
+		});
+
+		expect(capabilities.family).toBe("openai-chat-interleaved");
+		expect(capabilities.supportsReplay).toBe(true);
+		expect(capabilities.assistantField).toBe("reasoning");
+	});
+
+	test("copilot o1 chat model resolves reasoning field = reasoning", async () => {
+		const capabilities = await getCapabilities({
+			providerId: "github-copilot",
+			modelId: "o1",
+			apiFamily: "openai-chat-completions",
+		});
+
+		expect(capabilities.family).toBe("openai-chat-interleaved");
+		expect(capabilities.supportsReplay).toBe(true);
+		expect(capabilities.assistantField).toBe("reasoning");
+	});
+
+	test("copilot gpt-4o chat model resolves family = none", async () => {
+		const capabilities = await getCapabilities({
+			providerId: "github-copilot",
+			modelId: "gpt-4o",
+			apiFamily: "openai-chat-completions",
+		});
+
+		expect(capabilities.family).toBe("none");
+		expect(capabilities.supportsReplay).toBe(false);
+		expect(capabilities.assistantField).toBeUndefined();
+	});
+
+	test("gemini chat model resolves reasoning field = reasoning_text", async () => {
+		const capabilities = await getCapabilities({
+			providerId: "github-copilot",
+			modelId: "gemini-2.5-pro",
+			apiFamily: "openai-chat-completions",
+		});
+
+		expect(capabilities.family).toBe("openai-chat-interleaved");
+		expect(capabilities.supportsReplay).toBe(true);
+		expect(capabilities.assistantField).toBe("reasoning_text");
+	});
+
+	test("openrouter-proxied gemini resolves reasoning field = reasoning_text", async () => {
+		const capabilities = await getCapabilities({
+			providerId: "openrouter",
+			modelId: "openrouter/gemini-2.5-pro",
+			apiFamily: "openai-chat-completions",
+		});
+
+		expect(capabilities.family).toBe("openai-chat-interleaved");
+		expect(capabilities.supportsReplay).toBe(true);
+		expect(capabilities.assistantField).toBe("reasoning_text");
+	});
 });

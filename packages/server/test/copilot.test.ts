@@ -2779,3 +2779,169 @@ describe("Responses API routing for GPT-5+ models", () => {
 		expect(events.some((e) => e.type === "finish" && e.reason === "stop")).toBe(true);
 	});
 });
+
+// ── Chat completions reasoning extraction ─────────────────────────────────
+
+describe("Copilot chat completions reasoning", () => {
+	const originalFetch = globalThis.fetch;
+	let configDir: string;
+
+	beforeEach(() => {
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-reasoning-"));
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
+	});
+
+	test("emits reasoning events for o-series models with reasoning deltas", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					JSON.stringify({ choices: [{ delta: { reasoning: "Let me think" } }] }),
+					JSON.stringify({ choices: [{ delta: { reasoning: " about this" } }] }),
+					JSON.stringify({ choices: [{ delta: { content: "Answer" } }] }),
+					JSON.stringify({ choices: [{ finish_reason: "stop", delta: {} }] }),
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir);
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "o4-mini",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(t);
+		}
+
+		expect(events).toEqual([
+			{
+				type: "reasoning_start",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning" },
+			},
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "Let me think" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: " about this" } },
+			{ type: "text", text: "Answer" },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "Let me think about this" },
+			},
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | o4-mini [?x] | 0 PR | 0 / 0 | 0%" },
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
+	test("ignores null reasoning termination chunk", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					JSON.stringify({ choices: [{ delta: { reasoning: "thinking hard" } }] }),
+					JSON.stringify({ choices: [{ delta: { reasoning: null } }] }),
+					JSON.stringify({ choices: [{ delta: { content: "Answer" } }] }),
+					JSON.stringify({ choices: [{ finish_reason: "stop", delta: {} }] }),
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir);
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "o4-mini",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(t);
+		}
+
+		expect(events).toEqual([
+			{
+				type: "reasoning_start",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning" },
+			},
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "thinking hard" } },
+			{ type: "text", text: "Answer" },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "thinking hard" },
+			},
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | o4-mini [?x] | 0 PR | 0 / 0 | 0%" },
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+
+	test("does not emit reasoning events for models without reasoning capability", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					JSON.stringify({ choices: [{ delta: { content: "Just text" } }] }),
+					JSON.stringify({ choices: [{ finish_reason: "stop", delta: {} }] }),
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir);
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(t);
+		}
+
+		// No reasoning events for gpt-4o (no quirk)
+		expect(events.filter((e) => e.type.startsWith("reasoning"))).toHaveLength(0);
+	});
+
+	test("emits reasoning events for gemini models with reasoning_text deltas", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					JSON.stringify({ choices: [{ delta: { reasoning_text: "**Exploring**\n" } }] }),
+					JSON.stringify({ choices: [{ delta: { reasoning_text: "I'm thinking" } }] }),
+					JSON.stringify({ choices: [{ delta: { content: "Answer" } }] }),
+					JSON.stringify({ choices: [{ finish_reason: "stop", delta: {} }] }),
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir);
+		const events: StreamEvent[] = [];
+		for await (const t of provider.stream({
+			model: "gemini-2.5-pro",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(t);
+		}
+
+		expect(events).toEqual([
+			{
+				type: "reasoning_start",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning_text" },
+			},
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "**Exploring**\n" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "I'm thinking" } },
+			{ type: "text", text: "Answer" },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning_text", text: "**Exploring**\nI'm thinking" },
+			},
+			{ type: "usage", tokenCount: 0, tokenLimit: 0, display: "github-copilot | gemini-2.5-pro [?x] | 0 PR | 0 / 0 | 0%" },
+			{ type: "finish", reason: "stop" },
+		]);
+	});
+});
