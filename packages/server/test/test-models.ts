@@ -45,6 +45,7 @@ export function createCopilotModels(
 		outputPrice?: number;
 		cacheReadPrice?: number;
 		cacheWritePrice?: number;
+		supportsCaching?: boolean;
 	}>,
 ): unknown[] {
 	return models.map((model) => ({
@@ -57,5 +58,6 @@ export function createCopilotModels(
 		...(model.premiumRequestMultiplier !== undefined ? { premiumRequestMultiplier: model.premiumRequestMultiplier } : {}),
 		...(model.cacheReadPrice !== undefined ? { cacheReadPrice: model.cacheReadPrice } : {}),
 		...(model.cacheWritePrice !== undefined ? { cacheWritePrice: model.cacheWritePrice } : {}),
+		...(model.supportsCaching !== undefined ? { supportsCaching: model.supportsCaching } : {}),
 	}));
 }

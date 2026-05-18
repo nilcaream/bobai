@@ -44,6 +44,7 @@ export interface ProviderModelConfig {
 	outputPrice?: number;
 	cacheReadPrice?: number;
 	cacheWritePrice?: number;
+	supportsCaching?: boolean;
 	premiumRequestMultiplier?: number;
 }
 

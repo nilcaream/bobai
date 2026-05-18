@@ -93,6 +93,8 @@ export function createAnthropicCompatibleProvider(
 				options.reasoningDefaults?.anthropic,
 			);
 
+			const modelConfig = getProviderModelConfig(config.providerId, options.model, configDir);
+
 			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
 				headers: {
@@ -111,7 +113,7 @@ export function createAnthropicCompatibleProvider(
 					messages,
 					max_tokens: maxTokens,
 					stream: true,
-					cache_control: { type: "ephemeral" },
+					...(modelConfig?.supportsCaching ? { cache_control: { type: "ephemeral" } } : {}),
 					...(system ? { system } : {}),
 					...(tools ? { tools } : {}),
 					...(anthropicReasoningOptions ?? {}),

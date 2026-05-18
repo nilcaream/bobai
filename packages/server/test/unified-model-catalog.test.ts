@@ -218,4 +218,36 @@ describe("unified model catalog", () => {
 			outputPrice: 0,
 		});
 	});
+
+	test("populates supportsCaching from models.dev cache costs for all providers", async () => {
+		const modelsDev = createModelsDevResponse();
+		// Add cache costs to sonnet (caching-capable model)
+		modelsDev["github-copilot"].models["claude-sonnet-4.6"] = {
+			...modelsDev["github-copilot"].models["claude-sonnet-4.6"],
+			cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+		};
+
+		globalThis.fetch = mock((url: string | URL | Request) => {
+			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+			if (urlStr === "https://models.dev/api.json") {
+				return Promise.resolve(new Response(JSON.stringify(modelsDev)));
+			}
+			if (urlStr === "https://docs.github.com/en/copilot/concepts/billing/copilot-requests") {
+				return Promise.resolve(new Response(COPILOT_DOC_HTML));
+			}
+			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
+		}) as typeof fetch;
+
+		const { refreshUnifiedModelCatalog, loadUnifiedModelsFile } = await import("../src/provider/unified-model-catalog");
+		await refreshUnifiedModelCatalog(tmpDir);
+		const file = loadUnifiedModelsFile(tmpDir);
+
+		// Caching-capable model (has cache costs) → supportsCaching should be true
+		const sonnet = file.providers["github-copilot"]?.find((model) => model.id === "claude-sonnet-4.6");
+		expect(sonnet?.supportsCaching).toBe(true);
+
+		// Non-caching model (no cache costs) → supportsCaching should be undefined
+		const gpt = file.providers["github-copilot"]?.find((model) => model.id === "gpt-5-mini");
+		expect(gpt?.supportsCaching).toBeUndefined();
+	});
 });

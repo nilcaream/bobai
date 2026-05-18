@@ -264,11 +264,13 @@ export function createCopilotProvider(
 			options.reasoningDefaults?.anthropic ?? DEFAULT_REASONING_DEFAULTS.anthropic,
 		);
 
+		const modelConfig = getProviderModelConfig("github-copilot", options.model, resolvedConfigDir);
+
 		const params: Record<string, unknown> = {
 			model: options.model,
 			messages,
 			max_tokens: maxTokens,
-			cache_control: { type: "ephemeral" },
+			...(modelConfig?.supportsCaching ? { cache_control: { type: "ephemeral" } } : {}),
 			...(system ? { system } : {}),
 			...(tools ? { tools } : {}),
 			...(anthropicReasoningOptions ?? {}),

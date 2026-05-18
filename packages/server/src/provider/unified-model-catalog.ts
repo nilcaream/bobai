@@ -15,6 +15,7 @@ export interface UnifiedProviderModel {
 	outputPrice: number;
 	cacheReadPrice?: number;
 	cacheWritePrice?: number;
+	supportsCaching?: boolean;
 	premiumRequestMultiplier?: number;
 }
 
@@ -167,6 +168,12 @@ function normalizeProviderModels(
 				if (typeof model.cost.cache_write === "number") {
 					base.cacheWritePrice = model.cost.cache_write;
 				}
+			}
+			// supportsCaching is a capability flag derived from models.dev cache costs.
+			// It is populated for all providers (including Copilot) because it drives
+			// API parameter inclusion (cache_control), not billing.
+			if (typeof model.cost.cache_read === "number" || typeof model.cost.cache_write === "number") {
+				base.supportsCaching = true;
 			}
 			if (providerId === "github-copilot") {
 				const multiplier = copilotMultipliers.get(model.id);

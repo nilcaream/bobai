@@ -2098,6 +2098,15 @@ describe("Anthropic routing for Claude models", () => {
 				contextWindow: 200000,
 				maxOutput: 16384,
 				premiumRequestMultiplier: 1,
+				supportsCaching: true,
+				enabled: true,
+			},
+			{
+				id: "claude-haiku-4.5",
+				name: "Claude Haiku 4.5",
+				contextWindow: 128000,
+				maxOutput: 64000,
+				premiumRequestMultiplier: 0.33,
 				enabled: true,
 			},
 			{ id: "gpt-4o", name: "GPT-4o", contextWindow: 64000, maxOutput: 4096, premiumRequestMultiplier: 0, enabled: true },
@@ -2151,12 +2160,41 @@ describe("Anthropic routing for Claude models", () => {
 			budget_tokens: 1024,
 			display: "summarized",
 		});
+		// Caching-capable models include cache_control
+		expect(capturedBody.cache_control).toEqual({ type: "ephemeral" });
 		// Anthropic format: no "choices", no "messages" wrapping in OpenAI style
 		expect(capturedBody.messages).toBeDefined();
 
 		// Should yield text events
 		expect(events.some((e) => e.type === "text" && e.text === "Hello from Claude")).toBe(true);
 		expect(events.some((e) => e.type === "finish")).toBe(true);
+	});
+
+	test("excludes cache_control for models without caching support", async () => {
+		let capturedBody: Record<string, unknown> = {};
+
+		globalThis.fetch = mock(async (input: string | URL | Request, init?: RequestInit) => {
+			if (init?.body) {
+				capturedBody = JSON.parse(init.body as string);
+			} else if (input instanceof Request) {
+				capturedBody = await input.clone().json();
+			}
+			return new Response(anthropicTextResponse("Hello from Haiku"), {
+				status: 200,
+				headers: { "content-type": "text/event-stream" },
+			});
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth("test-token"), configDir);
+		for await (const _ of provider.stream({
+			model: "claude-haiku-4.5",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			/* drain */
+		}
+
+		// haiku-4.5 has no supportsCaching in config → cache_control must be absent
+		expect(capturedBody.cache_control).toBeUndefined();
 	});
 
 	test("routes gpt-4o through existing chat/completions path", async () => {

@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createOpenCodeZenProvider } from "../src/provider/opencode-zen";
 import type { StreamEvent } from "../src/provider/provider";
 import { ProviderError } from "../src/provider/provider";
+import { writeUnifiedModelsConfig } from "./test-models";
 
 function sseStream(chunks: Array<Record<string, unknown> | "[DONE]">): ReadableStream<Uint8Array> {
 	return new ReadableStream({
@@ -23,13 +27,30 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 
 describe("opencode-zen provider", () => {
 	const originalFetch = globalThis.fetch;
+	let configDir: string;
 
 	beforeEach(() => {
 		globalThis.fetch = originalFetch;
+		configDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-zen-"));
+		// Set up model config with supportsCaching for sonnet
+		writeUnifiedModelsConfig(configDir, {
+			"opencode-zen": [
+				{
+					id: "claude-sonnet-4-6",
+					name: "Claude Sonnet 4.6",
+					contextWindow: 200000,
+					maxOutput: 64000,
+					inputPrice: 3,
+					outputPrice: 15,
+					supportsCaching: true,
+				},
+			],
+		});
 	});
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		fs.rmSync(configDir, { recursive: true, force: true });
 	});
 
 	test("routes Claude models to the OpenCode Zen messages API", async () => {
@@ -48,7 +69,7 @@ describe("opencode-zen provider", () => {
 			);
 		}) as typeof fetch;
 
-		const provider = createOpenCodeZenProvider({ apiKey: "zen-key" });
+		const provider = createOpenCodeZenProvider({ apiKey: "zen-key" }, undefined, undefined, configDir);
 		await collect(
 			provider.stream({
 				model: "claude-sonnet-4-6",
