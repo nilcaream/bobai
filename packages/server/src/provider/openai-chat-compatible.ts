@@ -130,6 +130,7 @@ export function createOpenAIChatCompatibleProvider(
 				apiFamily: "openai-chat-completions",
 			});
 			const requestMessages = convertMessagesToOpenAIChat(options.messages, reasoningCapabilities);
+			const modelConfig = getProviderModelConfig(config.providerId, options.model, configDir);
 			const response = await fetchFn(config.baseUrl, {
 				method: "POST",
 				headers: {
@@ -149,6 +150,9 @@ export function createOpenAIChatCompatibleProvider(
 					stream: true,
 					stream_options: { include_usage: true },
 					...(options.tools?.length ? { tools: options.tools } : {}),
+					...(config.providerId === "openrouter" && modelConfig?.supportsCaching && options.sessionId
+						? { prompt_cache_key: options.sessionId }
+						: {}),
 				}),
 				signal: options.signal,
 			});
@@ -196,7 +200,7 @@ export function createOpenAIChatCompatibleProvider(
 						prompt_tokens?: number;
 						completion_tokens?: number;
 						total_tokens?: number;
-						prompt_tokens_details?: { cached_tokens?: number };
+						prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
 					};
 				};
 
@@ -270,6 +274,7 @@ export function createOpenAIChatCompatibleProvider(
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
 					const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
+					const cacheWriteTokens = data.usage?.prompt_tokens_details?.cache_write_tokens;
 					finishReason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
 					const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
 					const display = formatProviderModelDisplay(
@@ -284,7 +289,14 @@ export function createOpenAIChatCompatibleProvider(
 						yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
 						reasoningStarted = false;
 					}
-					yield { type: "usage", tokenCount: promptTokens, tokenLimit, display };
+					yield {
+						type: "usage",
+						tokenCount: promptTokens,
+						tokenLimit,
+						display,
+						cachedInputTokens: cachedTokens,
+						cacheCreationInputTokens: cacheWriteTokens,
+					};
 					options.onMetrics?.({
 						model: options.model,
 						promptTokens,
@@ -292,6 +304,7 @@ export function createOpenAIChatCompatibleProvider(
 						promptChars,
 						totalTokens,
 						cachedInputTokens: cachedTokens,
+						cacheCreationInputTokens: cacheWriteTokens,
 					});
 					yield { type: "finish", reason: finishReason };
 					sawFinish = true;

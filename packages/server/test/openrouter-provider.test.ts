@@ -323,4 +323,91 @@ describe("openrouter provider", () => {
 			{ type: "finish", reason: "stop" },
 		]);
 	});
+
+	test("sends prompt_cache_key when model supports caching", async () => {
+		let capturedBody: Record<string, unknown> | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedBody = JSON.parse(init?.body as string);
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { content: "hi" } }] },
+					{ choices: [{ finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		await collect(
+			provider.stream({
+				model: "openrouter/free",
+				messages: [{ role: "user", content: "hello" }],
+				sessionId: "test-session-123",
+			}),
+		);
+
+		expect(capturedBody?.prompt_cache_key).toBe("test-session-123");
+	});
+
+	test("omits prompt_cache_key when model does not support caching", async () => {
+		let capturedBody: Record<string, unknown> | undefined;
+		globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+			capturedBody = JSON.parse(init?.body as string);
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { content: "hi" } }] },
+					{ choices: [{ finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		// anthropic/claude-haiku-4.5 has supportsCaching: true, but we'll use
+		// a non-existent model that won't match any config, so supportsCaching = undefined.
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		await collect(
+			provider.stream({
+				model: "nonexistent/model",
+				messages: [{ role: "user", content: "hello" }],
+				sessionId: "test-session-123",
+			}),
+		);
+
+		expect(capturedBody?.prompt_cache_key).toBeUndefined();
+	});
+
+	test("reads cache_write_tokens from prompt_tokens_details", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { content: "hi" } }] },
+					{
+						choices: [{ finish_reason: "stop" }],
+						usage: {
+							prompt_tokens: 10,
+							completion_tokens: 2,
+							total_tokens: 12,
+							prompt_tokens_details: { cached_tokens: 8, cache_write_tokens: 2 },
+						},
+					},
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "openrouter/free",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		const usageEvent = events.find((e): e is Extract<StreamEvent, { type: "usage" }> => e.type === "usage");
+		expect(usageEvent?.cachedInputTokens).toBe(8);
+		expect(usageEvent?.cacheCreationInputTokens).toBe(2);
+	});
 });

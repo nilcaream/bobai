@@ -22,6 +22,7 @@ export function createProviderModelsTempDir(): string {
 				maxOutput: 16384,
 				inputPrice: 0,
 				outputPrice: 0,
+				supportsCaching: true,
 			},
 			{
 				id: "anthropic/claude-haiku-4.5",
@@ -30,6 +31,9 @@ export function createProviderModelsTempDir(): string {
 				maxOutput: 64000,
 				inputPrice: 0.5,
 				outputPrice: 5.12,
+				cacheReadPrice: 0.05,
+				cacheWritePrice: 0.25,
+				supportsCaching: true,
 			},
 		],
 		"opencode-go": [
