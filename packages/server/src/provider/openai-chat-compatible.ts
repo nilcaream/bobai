@@ -257,7 +257,15 @@ export function createOpenAIChatCompatibleProvider(
 
 				if (choice?.finish_reason) {
 					if (choice.finish_reason === "error") {
-						throw new ProviderError(502, `Provider returned finish_reason: error — the response could not be completed`);
+						// Model emitted a stream-level error (e.g. MALFORMED_FUNCTION_CALL).
+						// Preserve what was already accumulated — reasoning + content still has value.
+						// Skip the zeroed-out usage to avoid misleading status bar numbers.
+						if (reasoningStarted) {
+							yield { type: "reasoning_end", index: 0, reasoning: activeReasoning as ReasoningState };
+							reasoningStarted = false;
+						}
+						yield { type: "finish", reason: "stop" };
+						return;
 					}
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;

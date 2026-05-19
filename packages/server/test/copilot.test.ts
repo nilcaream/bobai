@@ -2945,7 +2945,7 @@ describe("Copilot chat completions reasoning", () => {
 		]);
 	});
 
-	test("throws ProviderError on finish_reason: error from chat completions stream", async () => {
+	test("gracefully handles finish_reason: error, preserving accumulated content", async () => {
 		globalThis.fetch = mock(async () => {
 			return new Response(
 				sseStream([
@@ -2958,13 +2958,18 @@ describe("Copilot chat completions reasoning", () => {
 		}) as typeof fetch;
 
 		const provider = createCopilotProvider(makeAuth(), configDir, undefined, { backoffBaseMs: 10 });
-		await expect(async () => {
-			for await (const _ of provider.stream({
-				model: "gpt-4o",
-				messages: [{ role: "user", content: "hello" }],
-			})) {
-				// drain
-			}
-		}).toThrow(ProviderError);
+		const events: StreamEvent[] = [];
+		for await (const e of provider.stream({
+			model: "gpt-4o",
+			messages: [{ role: "user", content: "hello" }],
+		})) {
+			events.push(e);
+		}
+
+		// Should yield the accumulated content and finish as stop, NOT throw.
+		expect(events).toEqual([
+			{ type: "text", text: "partial" },
+			{ type: "finish", reason: "stop" },
+		]);
 	});
 });

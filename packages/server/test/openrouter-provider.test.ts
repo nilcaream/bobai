@@ -297,7 +297,7 @@ describe("openrouter provider", () => {
 		]);
 	});
 
-	test("throws ProviderError on finish_reason: error from stream", async () => {
+	test("gracefully handles finish_reason: error, preserving accumulated content", async () => {
 		globalThis.fetch = mock(async () => {
 			return new Response(
 				sseStream([
@@ -310,13 +310,17 @@ describe("openrouter provider", () => {
 		}) as typeof fetch;
 
 		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
-		await expect(async () => {
-			for await (const _ of provider.stream({
+		const events = await collect(
+			provider.stream({
 				model: "openrouter/free",
 				messages: [{ role: "user", content: "hi" }],
-			})) {
-				// drain
-			}
-		}).toThrow(ProviderError);
+			}),
+		);
+
+		// Should yield the accumulated content and finish as stop, NOT throw.
+		expect(events).toEqual([
+			{ type: "text", text: "partial response" },
+			{ type: "finish", reason: "stop" },
+		]);
 	});
 });
