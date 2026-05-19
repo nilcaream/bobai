@@ -948,6 +948,9 @@ export function createCopilotProvider(
 						}
 
 						if (choice?.finish_reason) {
+							if (choice.finish_reason === "error") {
+								throw new ProviderError(502, `Provider returned finish_reason: error — the response could not be completed`);
+							}
 							if (reasoningStarted) {
 								yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
 								reasoningStarted = false;

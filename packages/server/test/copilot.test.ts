@@ -2944,4 +2944,27 @@ describe("Copilot chat completions reasoning", () => {
 			{ type: "finish", reason: "stop" },
 		]);
 	});
+
+	test("throws ProviderError on finish_reason: error from chat completions stream", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					JSON.stringify({ choices: [{ delta: { content: "partial" } }] }),
+					JSON.stringify({ choices: [{ finish_reason: "error", delta: {} }] }),
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createCopilotProvider(makeAuth(), configDir, undefined, { backoffBaseMs: 10 });
+		await expect(async () => {
+			for await (const _ of provider.stream({
+				model: "gpt-4o",
+				messages: [{ role: "user", content: "hello" }],
+			})) {
+				// drain
+			}
+		}).toThrow(ProviderError);
+	});
 });

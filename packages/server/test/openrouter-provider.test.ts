@@ -296,4 +296,27 @@ describe("openrouter provider", () => {
 			{ type: "finish", reason: "stop" },
 		]);
 	});
+
+	test("throws ProviderError on finish_reason: error from stream", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { content: "partial response" } }] },
+					{ choices: [{ finish_reason: "error", delta: {} }] },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		await expect(async () => {
+			for await (const _ of provider.stream({
+				model: "openrouter/free",
+				messages: [{ role: "user", content: "hi" }],
+			})) {
+				// drain
+			}
+		}).toThrow(ProviderError);
+	});
 });

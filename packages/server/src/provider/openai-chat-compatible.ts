@@ -256,6 +256,9 @@ export function createOpenAIChatCompatibleProvider(
 				}
 
 				if (choice?.finish_reason) {
+					if (choice.finish_reason === "error") {
+						throw new ProviderError(502, `Provider returned finish_reason: error — the response could not be completed`);
+					}
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
 					const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
