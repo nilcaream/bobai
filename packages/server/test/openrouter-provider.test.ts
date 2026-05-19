@@ -256,4 +256,44 @@ describe("openrouter provider", () => {
 			}
 		}).toThrow(ProviderError);
 	});
+
+	test("emits reasoning events for openrouter gemini reasoning deltas", async () => {
+		// OpenRouter normalizes gemini reasoning to the "reasoning" delta field.
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{ choices: [{ delta: { reasoning: "**Exploring**\n" } }] },
+					{ choices: [{ delta: { reasoning: "I'm thinking" } }] },
+					{ choices: [{ delta: { content: "Answer" } }] },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "google/gemini-2.5-pro",
+				messages: [{ role: "user", content: "hello" }],
+			}),
+		);
+
+		expect(events).toEqual([
+			{
+				type: "reasoning_start",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning" },
+			},
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "**Exploring**\n" } },
+			{ type: "reasoning_delta", index: 0, delta: { kind: "text", text: "I'm thinking" } },
+			{ type: "text", text: "Answer" },
+			{
+				type: "reasoning_end",
+				index: 0,
+				reasoning: { kind: "interleaved-chat", field: "reasoning", text: "**Exploring**\nI'm thinking" },
+			},
+			{ type: "finish", reason: "stop" },
+		]);
+	});
 });

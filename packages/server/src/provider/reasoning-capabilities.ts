@@ -79,7 +79,19 @@ const QUIRKS: ReasoningQuirk[] = [
 			assistantField: "reasoning_details",
 		},
 	},
-	// Gemini models expose reasoning through the "reasoning_text" delta field.
+	// OpenRouter normalizes gemini reasoning to the "reasoning" field (not "reasoning_text").
+	// Place this BEFORE the general gemini quirk so it matches first for openrouter provider.
+	{
+		providerId: "openrouter",
+		apiFamily: "openai-chat-completions",
+		modelPattern: /(^|\/)gemini-/,
+		capabilities: {
+			family: "openai-chat-interleaved",
+			supportsReplay: true,
+			assistantField: "reasoning",
+		},
+	},
+	// Gemini models (direct / via Copilot) expose reasoning through the "reasoning_text" delta field.
 	{
 		apiFamily: "openai-chat-completions",
 		modelPattern: /(^|\/)gemini-/,

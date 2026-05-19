@@ -143,7 +143,8 @@ describe("reasoning capabilities", () => {
 		expect(capabilities.assistantField).toBe("reasoning_text");
 	});
 
-	test("openrouter-proxied gemini resolves reasoning field = reasoning_text", async () => {
+	test("openrouter-proxied gemini resolves reasoning field = reasoning", async () => {
+		// OpenRouter normalizes gemini reasoning to the "reasoning" field.
 		const capabilities = await getCapabilities({
 			providerId: "openrouter",
 			modelId: "openrouter/gemini-2.5-pro",
@@ -152,6 +153,6 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning_text");
+		expect(capabilities.assistantField).toBe("reasoning");
 	});
 });
