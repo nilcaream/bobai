@@ -160,6 +160,14 @@ function Main {
         Deploy-Dist
         Install-Runner
 
+        Write-Info "Refreshing model catalog..."
+        & "$BIN_DIR\bobai.cmd" refresh
+        if ($LASTEXITCODE -eq 0) {
+            Write-Info "Model catalog refreshed."
+        } else {
+            Write-Err "Model catalog refresh failed. Run 'bobai refresh' to retry."
+        }
+
         Write-Host ""
         Write-Host "Bob AI installed successfully!"
         Write-Host ""

@@ -28,6 +28,14 @@ call :fetch_release  || goto :error
 call :deploy_dist    || goto :error
 call :install_runner || goto :error
 
+call :log_info Refreshing model catalog...
+call "%BIN_DIR%\bobai.cmd" refresh
+if errorlevel 1 (
+    call :log_error Model catalog refresh failed. Run 'bobai refresh' to retry.
+) else (
+    call :log_info Model catalog refreshed.
+)
+
 echo.
 echo Bob AI installed successfully!
 echo.

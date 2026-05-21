@@ -189,6 +189,15 @@ RUNNER
 	chmod +x "${BIN_DIR}/bobai"
 	pass "Runner → ${BIN_DIR}/bobai"
 
+	# ── Refresh ────────────────────────────────────────────────────────
+
+	step "Refresh model catalog"
+	if "${BIN_DIR}/bobai" refresh; then
+		pass "Model catalog refreshed"
+	else
+		echo -e "${RED}✗${RESET} Model catalog refresh failed (run 'bobai refresh' to retry)" >&2
+	fi
+
 	# ── Done ──────────────────────────────────────────────────────────
 
 	echo ""

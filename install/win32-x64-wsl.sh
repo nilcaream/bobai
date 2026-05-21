@@ -121,6 +121,13 @@ main() {
 	deploy_dist "${TMP_DIR}"
 	install_runner "${TMP_DIR}"
 
+	log_info "Refreshing model catalog..."
+	if "${BIN_DIR}/bobai" refresh; then
+		log_info "Model catalog refreshed."
+	else
+		log_error "Model catalog refresh failed. Run 'bobai refresh' to retry."
+	fi
+
 	echo ""
 	echo "Bob AI installed successfully!"
 	echo ""
