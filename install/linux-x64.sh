@@ -95,6 +95,11 @@ install_runner() {
 	cat > "${BIN_DIR}/bobai" << RUNNER
 #!/bin/bash
 set -euo pipefail
+if [[ "\${1:-}" == "update" ]]; then
+	echo "Updating Bob AI..."
+	curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/linux-x64.sh | bash
+	exit 0
+fi
 DATA_HOME="\${XDG_DATA_HOME:-\${HOME}/.local/share}"
 BOBAI_HOME="\${DATA_HOME}/bobai"
 echo "Bob AI ${build_version}"

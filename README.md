@@ -141,6 +141,7 @@ All file tools are constrained to the current project plus any explicitly allowe
 | `bobai` | Start the server |
 | `bobai auth <provider>` | Authenticate a provider |
 | `bobai refresh` | Rebuild the unified model catalog |
+| `bobai update` | Update to the latest release |
 
 | Flag | Description |
 |------|-------------|

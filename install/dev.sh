@@ -174,6 +174,11 @@ main() {
 	cat > "${BIN_DIR}/bobai" << RUNNER
 #!/bin/bash
 set -euo pipefail
+if [[ "\${1:-}" == "update" ]]; then
+	echo "Updating Bob AI..."
+	curl -fsSL https://raw.githubusercontent.com/nilcaream/bobai/main/install/${platform}.sh | bash
+	exit 0
+fi
 echo "Bob AI ${version}"
 export BUN_CONFIG_INSTALL_AUTO=disable
 export BOBAI_VERSION="${version}"

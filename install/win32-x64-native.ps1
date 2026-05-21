@@ -117,6 +117,11 @@ function Install-Runner {
     $runnerContent = @"
 @echo off
 setlocal
+if "%1"=="update" (
+    echo Updating Bob AI...
+    powershell -Command "& { Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/nilcaream/bobai/main/install/win32-x64-native.ps1' | Invoke-Expression }"
+    exit /b 0
+)
 set "BOBAI_HOME=%LOCALAPPDATA%\bobai"
 echo Bob AI $buildVersion
 set BUN_CONFIG_INSTALL_AUTO=disable
