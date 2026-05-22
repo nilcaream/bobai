@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/nilcaream/bobai/compare/bobai-v0.2.5...bobai-v0.2.6) (2026-05-15)
+
+### Bug Fixes
+
+- update status bar cost immediately on conversation completion ([9410a02](https://github.com/nilcaream/bobai/commit/9410a0286b6139f8caf7f91a5f71f9af0734a124))
+- provider: detect OpenRouter deepseek reasoning in `reasoning` field ([f860384](https://github.com/nilcaream/bobai/commit/f86038404195b7a01b842c29759c11e9146e5864))
+
 ## [0.2.5](https://github.com/nilcaream/bobai/compare/bobai-v0.2.2...bobai-v0.2.5) (2026-05-15)
 
 ### Features
