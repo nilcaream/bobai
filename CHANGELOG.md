@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.7](https://github.com/nilcaream/bobai/compare/bobai-v0.2.6...bobai-v0.2.7) (2026-05-22)
+
+### Features
+
+- run bobai refresh automatically after install and update ([2099a2a](https://github.com/nilcaream/bobai/commit/2099a2aa5ef43a1d00f1d2eb50afe1df27e49575))
+- add bobai update command to runner scripts ([fbd59e1](https://github.com/nilcaream/bobai/commit/fbd59e18ba76ad1ab77ec9f793252d9c72ee75b8))
+- provider: add OpenRouter prompt_cache_key and cache_write_tokens tracking ([09bb799](https://github.com/nilcaream/bobai/commit/09bb79967f8feebbc678d933782773a6d5d040ef))
+- provider: wire reasoning into Copilot chat completions and add gemini reasoning_text support ([3a4de71](https://github.com/nilcaream/bobai/commit/3a4de7128ef9abfd57974b283e56393d06f2bbdb))
+### Bug Fixes
+
+- provider: handle finish_reason: error gracefully instead of throwing ([bb53eec](https://github.com/nilcaream/bobai/commit/bb53eecf9c7ae9c5c3b78bf1eface72cf8d576c4))
+- provider: throw ProviderError on finish_reason: error in streaming ([4259580](https://github.com/nilcaream/bobai/commit/42595800e00ca4d4c26b3fa2c2f18cd9e343076c))
+- provider: add OpenRouter-specific gemini quirk with reasoning field ([c6e5b55](https://github.com/nilcaream/bobai/commit/c6e5b552da45110dfbe9c5682eea8fa7ef958948))
+- provider: gate cache_control on model caching support ([66d225d](https://github.com/nilcaream/bobai/commit/66d225dbb4f968ecd4a6362b4584eecc986a0b8c))
+
 ## [0.2.6](https://github.com/nilcaream/bobai/compare/bobai-v0.2.5...bobai-v0.2.6) (2026-05-15)
 
 ### Bug Fixes
