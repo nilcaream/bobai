@@ -164,7 +164,13 @@ function applyReasoningDelta(reasoning: ReasoningState, delta: ReasoningDelta): 
 			return reasoning;
 		case "summary":
 			if (reasoning.kind === "responses-item") {
-				return { ...reasoning, summary: delta.summary };
+				const existing = reasoning.summary ?? "";
+				// If delta starts with the accumulated summary, it's cumulative — replace.
+				// Otherwise, it's incremental — append.
+				if (existing && delta.summary.startsWith(existing)) {
+					return { ...reasoning, summary: delta.summary };
+				}
+				return { ...reasoning, summary: existing + delta.summary };
 			}
 			return reasoning;
 		case "encrypted-content":
@@ -232,12 +238,17 @@ async function consumeProviderStream(
 						onEvent({ type: "reasoning_token", text });
 					}
 				} else if (event.delta.kind === "summary" && event.delta.summary) {
-					// Responses API summary deltas are cumulative (each event carries the full text).
-					// Emit only the new portion to match the UI's append semantics.
+					// Summary deltas may be cumulative (full text so far) or incremental (just the new chunk).
+					// Cumulative: delta starts with the accumulated summary, emit only the new portion.
+					// Incremental: delta is just the new chunk, emit it directly.
 					const prevSummary = reasoning?.kind === "responses-item" ? (reasoning.summary ?? "") : "";
-					const newText = event.delta.summary.slice(prevSummary.length);
-					if (newText) {
-						onEvent({ type: "reasoning_token", text: newText });
+					if (event.delta.summary.startsWith(prevSummary)) {
+						const newText = event.delta.summary.slice(prevSummary.length);
+						if (newText) {
+							onEvent({ type: "reasoning_token", text: newText });
+						}
+					} else {
+						onEvent({ type: "reasoning_token", text: event.delta.summary });
 					}
 				}
 				break;
