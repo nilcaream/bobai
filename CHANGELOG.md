@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.8](https://github.com/nilcaream/bobai/compare/bobai-v0.2.7...bobai-v0.2.8) (2026-05-27)
+
+### Bug Fixes
+
+- ui: hide empty reasoning panels during streaming ([012569e](https://github.com/nilcaream/bobai/commit/012569e7152dd79b628ea7f87a2c157aed117334))
+- ui: prevent tool panel flicker during merge and preserve collapsed state ([684c609](https://github.com/nilcaream/bobai/commit/684c6097a65d8b55c285fefed2b0dc7be6c20a25))
+- handle incremental reasoning summary deltas in responses API ([b5240c0](https://github.com/nilcaream/bobai/commit/b5240c03e6d918c249192909d8cc226579444551))
+
 ## [0.2.7](https://github.com/nilcaream/bobai/compare/bobai-v0.2.6...bobai-v0.2.7) (2026-05-22)
 
 ### Features
