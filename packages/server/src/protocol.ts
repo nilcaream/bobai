@@ -13,7 +13,7 @@ export type ServerMessage =
 	| { type: "reasoning_start"; sessionId?: string }
 	| { type: "reasoning_token"; text: string; sessionId?: string }
 	| { type: "reasoning_end"; sessionId?: string }
-	| { type: "tool_call"; id: string; output: string; sessionId?: string }
+	| { type: "tool_call"; id: string; output: string; mergeable: boolean; sessionId?: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
 	| { type: "status"; text: string; sessionId?: string }
 	| { type: "done"; sessionId: string; provider?: string; model: string; title?: string | null; summary?: string }

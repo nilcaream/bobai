@@ -76,7 +76,7 @@ export function applyStreamingEvent(messages: Message[], msg: ServerMessage, now
 	}
 
 	if (msg.type === "tool_call") {
-		const part: MessagePart = { type: "tool_call", id: msg.id, content: msg.output };
+		const part: MessagePart = { type: "tool_call", id: msg.id, content: msg.output, mergeable: msg.mergeable };
 		return appendPart(messages, part);
 	}
 

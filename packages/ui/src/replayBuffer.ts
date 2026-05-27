@@ -23,7 +23,12 @@ export function replayBufferToMessages(events: BufferedEvent[]): Message[] {
 		} else if (event.type === "reasoning_end") {
 			// reasoning_end — no structural change needed; the reasoning part is already complete
 		} else if (event.type === "tool_call") {
-			messages = appendPart(messages, { type: "tool_call", id: event.id as string, content: event.output as string });
+			messages = appendPart(messages, {
+				type: "tool_call",
+				id: event.id as string,
+				content: event.output as string,
+				mergeable: (event.mergeable as boolean) ?? false,
+			});
 		} else if (event.type === "tool_result") {
 			messages = appendPart(messages, {
 				type: "tool_result",

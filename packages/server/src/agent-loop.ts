@@ -85,7 +85,7 @@ export type AgentEvent =
 	| { type: "reasoning_start" }
 	| { type: "reasoning_token"; text: string }
 	| { type: "reasoning_end" }
-	| { type: "tool_call"; id: string; output: string }
+	| { type: "tool_call"; id: string; output: string; mergeable: boolean }
 	| {
 			type: "tool_result";
 			id: string;
@@ -464,7 +464,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			}
 		}
 
-		// Emit formatCall for ALL tool calls upfront so the UI shows all panels immediately
+		// Emit formatCall for ALL tool calls upfront so the UI shows all panels immediately.
+		// Include mergeable so the UI can hide panels that will be merged, preventing flicker.
 		for (const tc of toolCallContents) {
 			let args: Record<string, unknown>;
 			try {
@@ -474,7 +475,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			}
 			const tool = tools.get(tc.function.name);
 			const callOutput = tool ? tool.formatCall(args) : `[${tc.function.name}]`;
-			onEvent({ type: "tool_call", id: tc.id, output: callOutput });
+			onEvent({ type: "tool_call", id: tc.id, output: callOutput, mergeable: tool?.mergeable ?? false });
 		}
 
 		for (const group of groups) {

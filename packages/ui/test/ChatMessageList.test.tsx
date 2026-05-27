@@ -91,7 +91,7 @@ describe("ChatMessageList", () => {
 	});
 
 	test("assistant message with tool_call part renders ToolPanel", () => {
-		const msg = mkAssistantMsg([{ type: "tool_call", id: "tc_1", content: "Running bash..." }]);
+		const msg = mkAssistantMsg([{ type: "tool_call", id: "tc_1", content: "Running bash...", mergeable: false }]);
 		const { container } = render(<ChatMessageList messages={[msg]} {...defaultProps} />);
 		const toolPanel = container.querySelector(".panel--tool");
 		expect(toolPanel).not.toBeNull();

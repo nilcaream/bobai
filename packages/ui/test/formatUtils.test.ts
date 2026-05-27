@@ -25,13 +25,13 @@ describe("groupParts", () => {
 	});
 
 	test("single tool_call → single incomplete tool panel", () => {
-		const parts: MessagePart[] = [{ type: "tool_call", id: "tc1", content: "running..." }];
+		const parts: MessagePart[] = [{ type: "tool_call", id: "tc1", content: "running...", mergeable: false }];
 		expect(groupParts(parts)).toEqual([{ type: "tool", id: "tc1", content: "running...", completed: false, mergeable: false }]);
 	});
 
 	test("tool_call followed by matching tool_result → single completed tool panel with result content", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "running..." },
+			{ type: "tool_call", id: "tc1", content: "running...", mergeable: false },
 			{ type: "tool_result", id: "tc1", content: "done!", mergeable: false },
 		];
 		expect(groupParts(parts)).toEqual([{ type: "tool", id: "tc1", content: "done!", completed: true, mergeable: false }]);
@@ -39,7 +39,7 @@ describe("groupParts", () => {
 
 	test("tool_call followed by tool_result with null content → completed panel keeps tool_call content", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "running..." },
+			{ type: "tool_call", id: "tc1", content: "running...", mergeable: false },
 			{ type: "tool_result", id: "tc1", content: null, mergeable: false },
 		];
 		expect(groupParts(parts)).toEqual([{ type: "tool", id: "tc1", content: "running...", completed: true, mergeable: false }]);
@@ -47,9 +47,9 @@ describe("groupParts", () => {
 
 	test("two adjacent completed+mergeable tool panels → merged into one panel", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "result1" },
+			{ type: "tool_call", id: "tc1", content: "result1", mergeable: true },
 			{ type: "tool_result", id: "tc1", content: "result1", mergeable: true },
-			{ type: "tool_call", id: "tc2", content: "result2" },
+			{ type: "tool_call", id: "tc2", content: "result2", mergeable: true },
 			{ type: "tool_result", id: "tc2", content: "result2", mergeable: true },
 		];
 		const result = groupParts(parts);
@@ -65,10 +65,10 @@ describe("groupParts", () => {
 
 	test("text between two tool panels → three panels, no merging", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "r1" },
+			{ type: "tool_call", id: "tc1", content: "r1", mergeable: true },
 			{ type: "tool_result", id: "tc1", content: "r1", mergeable: true },
 			{ type: "text", content: "separator" },
-			{ type: "tool_call", id: "tc2", content: "r2" },
+			{ type: "tool_call", id: "tc2", content: "r2", mergeable: true },
 			{ type: "tool_result", id: "tc2", content: "r2", mergeable: true },
 		];
 		const result = groupParts(parts);
@@ -80,7 +80,7 @@ describe("groupParts", () => {
 
 	test("tool_result with summary → panel has summary field", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "running..." },
+			{ type: "tool_call", id: "tc1", content: "running...", mergeable: false },
 			{ type: "tool_result", id: "tc1", content: "done", mergeable: false, summary: "read 5 files" },
 		];
 		const result = groupParts(parts);
@@ -91,7 +91,7 @@ describe("groupParts", () => {
 
 	test("tool_result with subagentSessionId → panel has subagentSessionId field", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "running..." },
+			{ type: "tool_call", id: "tc1", content: "running...", mergeable: false },
 			{
 				type: "tool_result",
 				id: "tc1",
@@ -124,10 +124,10 @@ describe("groupParts", () => {
 
 	test("reasoning between tools prevents tool merging", () => {
 		const parts: MessagePart[] = [
-			{ type: "tool_call", id: "tc1", content: "r1" },
+			{ type: "tool_call", id: "tc1", content: "r1", mergeable: true },
 			{ type: "tool_result", id: "tc1", content: "r1", mergeable: true },
 			{ type: "reasoning", content: "intermediate thought" },
-			{ type: "tool_call", id: "tc2", content: "r2" },
+			{ type: "tool_call", id: "tc2", content: "r2", mergeable: true },
 			{ type: "tool_result", id: "tc2", content: "r2", mergeable: true },
 		];
 		const result = groupParts(parts);

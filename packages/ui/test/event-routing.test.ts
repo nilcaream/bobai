@@ -104,7 +104,7 @@ describe("event routing", () => {
 
 	test("tool_call with sessionId is buffered", () => {
 		const router = createEventRouter();
-		const result = router.route({ type: "tool_call", id: "tc1", output: "▸ read_file", sessionId: "child-1" });
+		const result = router.route({ type: "tool_call", id: "tc1", output: "▸ read_file", mergeable: true, sessionId: "child-1" });
 		expect(result).toEqual({ target: "child", sessionId: "child-1" });
 		expect(router.getBuffer("child-1")).toHaveLength(1);
 	});

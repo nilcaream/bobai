@@ -3,7 +3,7 @@ export type ServerMessage =
 	| { type: "reasoning_start"; sessionId?: string }
 	| { type: "reasoning_token"; text: string; sessionId?: string }
 	| { type: "reasoning_end"; sessionId?: string }
-	| { type: "tool_call"; id: string; output: string; sessionId?: string }
+	| { type: "tool_call"; id: string; output: string; mergeable: boolean; sessionId?: string }
 	| { type: "tool_result"; id: string; output: string | null; mergeable: boolean; summary?: string; sessionId?: string }
 	| { type: "prompt_echo"; text: string; sessionId?: string }
 	| { type: "done"; sessionId: string; provider?: string; model: string; title?: string | null; summary?: string }
@@ -40,7 +40,7 @@ export type VolatileMessage = { text: string; kind: "error" | "success" | "info"
 export type MessagePart =
 	| { type: "text"; content: string }
 	| { type: "reasoning"; content: string }
-	| { type: "tool_call"; id: string; content: string }
+	| { type: "tool_call"; id: string; content: string; mergeable: boolean }
 	| {
 			type: "tool_result";
 			id: string;

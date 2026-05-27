@@ -26,6 +26,7 @@ export function ToolPanel({
 	content,
 	onNavigate,
 	observe,
+	hidden,
 }: {
 	children: React.ReactNode;
 	/** Raw markdown — used as a signal dep for re-measurement, not rendered. */
@@ -33,6 +34,8 @@ export function ToolPanel({
 	onNavigate?: () => void;
 	/** True while the tool is actively streaming (skip measurement). */
 	observe?: boolean;
+	/** If true, the panel is rendered with display:none (hidden until merge decision). */
+	hidden?: boolean;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [collapsed, setCollapsed] = useState<boolean | null>(null);
@@ -58,11 +61,16 @@ export function ToolPanel({
 	// re-renders so a manual expand/collapse is preserved during streaming.
 	useEffect(() => {
 		if (observe) return;
-		const contentChanged = prevContent.current !== content;
+		const oldContent = prevContent.current;
+		const contentChanged = oldContent !== content;
 		prevContent.current = content;
-		// Content swap (key reuse across views) — reset user toggle
-		// so the new content gets a fresh measurement.
-		if (contentChanged) userToggled.current = false;
+		// Reset user toggle on content REPLACEMENT (key reuse across views),
+		// but preserve it on content APPEND (merge). When consecutive mergeable
+		// tool panels are merged, the merged panel's content grows by appending
+		// — the user's manual collapse/expand choice should be preserved.
+		if (contentChanged && !content.startsWith(oldContent)) {
+			userToggled.current = false;
+		}
 		if (userToggled.current) return;
 		checkOverflow();
 	}, [observe, content, checkOverflow]);
@@ -82,10 +90,11 @@ export function ToolPanel({
 
 	const isExpanded = collapsible.current && !collapsed;
 	const cls = `panel panel--tool${collapsed ? " panel--collapsed" : ""}${isExpanded ? " panel--expanded" : ""}${onNavigate ? " panel--navigable" : ""}`;
+	const style = hidden ? { display: "none" as const } : undefined;
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: double-click fold is a convenience shortcut, not primary interaction
-		<div ref={ref} className={cls} onDoubleClick={handleDoubleClick}>
+		<div ref={ref} className={cls} style={style} onDoubleClick={handleDoubleClick}>
 			{children}
 		</div>
 	);

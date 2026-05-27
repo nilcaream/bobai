@@ -9,6 +9,7 @@ export type Panel =
 			content: string;
 			completed: boolean;
 			mergeable: boolean;
+			hidden?: boolean;
 			summary?: string;
 			subagentSessionId?: string;
 	  };
@@ -119,13 +120,21 @@ export function groupParts(parts: MessagePart[]): Panel[] {
 		} else if (part.type === "reasoning") {
 			raw.push({ type: "reasoning", content: part.content });
 		} else if (part.type === "tool_call") {
+			// Hide the panel if it is mergeable and follows another mergeable
+			// tool panel — it will likely be merged into it, so starting hidden
+			// prevents flicker. The first mergeable tool in a sequence stays
+			// visible so the user sees the base panel immediately.
+			const prevPanel = raw.at(-1);
 			const panel: Panel & { type: "tool" } = {
 				type: "tool",
 				id: part.id,
 				content: part.content,
 				completed: false,
-				mergeable: false,
+				mergeable: part.mergeable,
 			};
+			if (part.mergeable && prevPanel?.type === "tool" && prevPanel.mergeable) {
+				panel.hidden = true;
+			}
 			raw.push(panel);
 			toolPanelMap.set(part.id, panel);
 		} else if (part.type === "tool_result") {
@@ -146,7 +155,9 @@ export function groupParts(parts: MessagePart[]): Panel[] {
 		}
 	}
 
-	// Pass 2: Merge adjacent completed+mergeable tool panels
+	// Pass 2: Merge adjacent completed+mergeable tool panels.
+	// Panels that are merged were hidden (display:none) — they never appear
+	// visibly, eliminating flicker. Panels that survive the merge are unhidden.
 	const merged: Panel[] = [];
 	for (const panel of raw) {
 		const prev = merged.at(-1);
@@ -160,6 +171,10 @@ export function groupParts(parts: MessagePart[]): Panel[] {
 		) {
 			prev.content = `${prev.content}  \n${panel.content}`;
 		} else {
+			// Surviving panel — if hidden and complete, unhide it
+			if (panel.type === "tool" && panel.hidden && panel.completed) {
+				delete panel.hidden;
+			}
 			merged.push(panel);
 		}
 	}

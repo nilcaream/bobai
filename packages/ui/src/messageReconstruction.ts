@@ -90,6 +90,7 @@ export function reconstructMessages(stored: StoredMessage[]): Message[] {
 						type: "tool_call",
 						id: tc.id,
 						content: `**${tc.function.name}** ${escapeMarkdown(tc.function.arguments)}`,
+						mergeable: false,
 					});
 				}
 			}

@@ -28,11 +28,12 @@ describe("protocol", () => {
 
 	test("send encodes tool_call message", () => {
 		const ws = mockWs();
-		send(ws, { type: "tool_call", id: "call_1", output: "**Reading** `src/index.ts`" });
+		send(ws, { type: "tool_call", id: "call_1", output: "**Reading** `src/index.ts`", mergeable: true });
 		expect(ws.messages()[0]).toEqual({
 			type: "tool_call",
 			id: "call_1",
 			output: "**Reading** `src/index.ts`",
+			mergeable: true,
 		});
 	});
 

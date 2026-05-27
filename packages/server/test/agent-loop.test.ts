@@ -230,7 +230,7 @@ describe("provider reasoning types", () => {
 			{ type: "reasoning_start" },
 			{ type: "reasoning_token", text: " about tool" },
 			{ type: "reasoning_end" },
-			{ type: "tool_call", id: "call-1", output: "▸ Echo hi" },
+			{ type: "tool_call", id: "call-1", output: "▸ Echo hi", mergeable: true },
 			{
 				type: "tool_result",
 				id: "call-1",

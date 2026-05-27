@@ -78,7 +78,7 @@ export function ChatMessageList({
 				const shouldObserve = isStreaming && isLastMsg && !panel.completed;
 
 				elements.push(
-					<ToolPanel key={key++} content={panel.content} onNavigate={onNavigate} observe={shouldObserve}>
+					<ToolPanel key={key++} content={panel.content} onNavigate={onNavigate} observe={shouldObserve} hidden={panel.hidden}>
 						<Markdown>{panel.content}</Markdown>
 						{panel.summary && <div className="panel-status">{panel.summary}</div>}
 						{!panel.summary && isLast && msg.timestamp && (

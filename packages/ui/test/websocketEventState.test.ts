@@ -34,7 +34,11 @@ describe("applyStreamingEvent", () => {
 
 	test("tool_call and tool_result are appended as assistant parts", () => {
 		let messages: Message[] = [];
-		messages = applyStreamingEvent(messages, { type: "tool_call", id: "tc1", output: "▸ bash ls" }, "2026-05-06 10:00:00");
+		messages = applyStreamingEvent(
+			messages,
+			{ type: "tool_call", id: "tc1", output: "▸ bash ls", mergeable: false },
+			"2026-05-06 10:00:00",
+		);
 		messages = applyStreamingEvent(
 			messages,
 			{ type: "tool_result", id: "tc1", output: "file1\nfile2", mergeable: true, summary: "2 files" },
@@ -45,7 +49,7 @@ describe("applyStreamingEvent", () => {
 			{
 				role: "assistant",
 				parts: [
-					{ type: "tool_call", id: "tc1", content: "▸ bash ls" },
+					{ type: "tool_call", id: "tc1", content: "▸ bash ls", mergeable: false },
 					{ type: "tool_result", id: "tc1", content: "file1\nfile2", mergeable: true, summary: "2 files" },
 				],
 			},
@@ -112,12 +116,12 @@ describe("applyStreamingEvent", () => {
 				role: "assistant",
 				parts: [
 					{ type: "reasoning", content: "" },
-					{ type: "tool_call", id: "t1", content: "output" },
+					{ type: "tool_call", id: "t1", content: "output", mergeable: false },
 				],
 			},
 		];
 		expect(applyStreamingEvent(emptyBeforeTool, { type: "reasoning_end" }, "")).toEqual([
-			{ role: "assistant", parts: [{ type: "tool_call", id: "t1", content: "output" }] },
+			{ role: "assistant", parts: [{ type: "tool_call", id: "t1", content: "output", mergeable: false }] },
 		]);
 
 		// Empty reasoning with tool_call and user preceding — reasoning removed, tool_call stays
@@ -127,13 +131,13 @@ describe("applyStreamingEvent", () => {
 				role: "assistant",
 				parts: [
 					{ type: "reasoning", content: "" },
-					{ type: "tool_call", id: "t1", content: "output" },
+					{ type: "tool_call", id: "t1", content: "output", mergeable: false },
 				],
 			},
 		];
 		expect(applyStreamingEvent(emptyToolUser, { type: "reasoning_end" }, "")).toEqual([
 			{ role: "user", text: "prompt", timestamp: "" },
-			{ role: "assistant", parts: [{ type: "tool_call", id: "t1", content: "output" }] },
+			{ role: "assistant", parts: [{ type: "tool_call", id: "t1", content: "output", mergeable: false }] },
 		]);
 	});
 

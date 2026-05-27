@@ -34,18 +34,18 @@ describe("replayBufferToMessages", () => {
 	});
 
 	test("tool_call event creates a tool_call part", () => {
-		const events = [{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", sessionId: "c1" }];
+		const events = [{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", mergeable: true, sessionId: "c1" }];
 		const msgs = replayBufferToMessages(events);
 		expect(msgs).toHaveLength(1);
 		if (msgs[0].role === "assistant") {
 			expect(msgs[0].parts).toHaveLength(1);
-			expect(msgs[0].parts[0]).toEqual({ type: "tool_call", id: "tc1", content: "▸ read_file foo.ts" });
+			expect(msgs[0].parts[0]).toEqual({ type: "tool_call", id: "tc1", content: "▸ read_file foo.ts", mergeable: true });
 		}
 	});
 
 	test("tool_result creates a tool_result part", () => {
 		const events = [
-			{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ read_file foo.ts", mergeable: true, sessionId: "c1" },
 			{ type: "tool_result" as const, id: "tc1", output: "file contents", mergeable: true, sessionId: "c1" },
 		];
 		const msgs = replayBufferToMessages(events);
@@ -64,7 +64,7 @@ describe("replayBufferToMessages", () => {
 	test("interleaved text and tools produce correct part sequence", () => {
 		const events = [
 			{ type: "token" as const, text: "Let me check", sessionId: "c1" },
-			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", mergeable: false, sessionId: "c1" },
 			{ type: "tool_result" as const, id: "tc1", output: "file1\nfile2", mergeable: true, sessionId: "c1" },
 			{ type: "token" as const, text: "Found 2 files", sessionId: "c1" },
 		];
@@ -81,7 +81,7 @@ describe("replayBufferToMessages", () => {
 	test("whitespace-only token after tool_call is ignored and does not create a trailing empty text part", () => {
 		const events = [
 			{ type: "token" as const, text: "Starting analysis", sessionId: "c1" },
-			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", mergeable: false, sessionId: "c1" },
 			{ type: "token" as const, text: "\n\n", sessionId: "c1" },
 			{ type: "tool_result" as const, id: "tc1", output: "file1\nfile2", mergeable: true, sessionId: "c1" },
 		];
@@ -90,7 +90,7 @@ describe("replayBufferToMessages", () => {
 		if (msgs[0].role === "assistant") {
 			expect(msgs[0].parts).toEqual([
 				{ type: "text", content: "Starting analysis" },
-				{ type: "tool_call", id: "tc1", content: "▸ bash ls" },
+				{ type: "tool_call", id: "tc1", content: "▸ bash ls", mergeable: false },
 				{ type: "tool_result", id: "tc1", content: "file1\nfile2", mergeable: true, summary: undefined },
 			]);
 		}
@@ -112,7 +112,7 @@ describe("replayBufferToMessages", () => {
 
 	test("tool_result with null output", () => {
 		const events = [
-			{ type: "tool_call" as const, id: "tc1", output: "▸ write_file", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ write_file", mergeable: false, sessionId: "c1" },
 			{ type: "tool_result" as const, id: "tc1", output: null, mergeable: false, sessionId: "c1" },
 		];
 		const msgs = replayBufferToMessages(events);
@@ -129,7 +129,7 @@ describe("replayBufferToMessages", () => {
 
 	test("tool_result with summary", () => {
 		const events = [
-			{ type: "tool_call" as const, id: "tc1", output: "▸ task analysis", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ task analysis", mergeable: false, sessionId: "c1" },
 			{
 				type: "tool_result" as const,
 				id: "tc1",
@@ -220,7 +220,7 @@ describe("replayBufferToMessages", () => {
 			{ type: "reasoning_token" as const, text: "hmm", sessionId: "c1" },
 			{ type: "reasoning_end" as const, sessionId: "c1" },
 			{ type: "token" as const, text: "Let me check", sessionId: "c1" },
-			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", sessionId: "c1" },
+			{ type: "tool_call" as const, id: "tc1", output: "▸ bash ls", mergeable: false, sessionId: "c1" },
 		];
 		const msgs = replayBufferToMessages(events);
 		if (msgs[0].role === "assistant") {

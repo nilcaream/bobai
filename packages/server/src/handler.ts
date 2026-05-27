@@ -224,7 +224,7 @@ export async function handlePrompt(req: PromptRequest) {
 				});
 
 				// Emit events for live UI rendering
-				routeEventToWs(ws, { type: "tool_call", id: toolCallId, output: formatCall });
+				routeEventToWs(ws, { type: "tool_call", id: toolCallId, output: formatCall, mergeable: true });
 				routeEventToWs(ws, { type: "tool_result", id: toolCallId, output: uiOutput, mergeable: true });
 			}
 
