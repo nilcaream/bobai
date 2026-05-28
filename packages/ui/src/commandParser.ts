@@ -98,7 +98,7 @@ export function shouldAutoFillTitle(
 ): string | null {
 	if (alreadyFilled || !title) return null;
 	if (parsed?.mode === "args" && parsed.command === "title" && parsed.args.trim() === "") {
-		return `.title ${title}`;
+		return `.title ${title} `;
 	}
 	return null;
 }

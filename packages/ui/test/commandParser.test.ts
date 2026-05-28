@@ -229,11 +229,11 @@ describe("shouldAutoFillTitle", () => {
 	const parse = (input: string, cmds = FULL_DOT_COMMANDS) => parseDotInput(input, cmds);
 
 	test("returns filled value for .title with space and non-blank title", () => {
-		expect(shouldAutoFillTitle(parse(".title "), "abc 123", false)).toBe(".title abc 123");
+		expect(shouldAutoFillTitle(parse(".title "), "abc 123", false)).toBe(".title abc 123 ");
 	});
 
 	test("returns filled value for abbreviation .t with space", () => {
-		expect(shouldAutoFillTitle(parse(".t "), "my session", false)).toBe(".title my session");
+		expect(shouldAutoFillTitle(parse(".t "), "my session", false)).toBe(".title my session ");
 	});
 
 	test("returns null when title is null", () => {
@@ -270,6 +270,6 @@ describe("shouldAutoFillTitle", () => {
 	});
 
 	test("treats whitespace-only args as empty and fills", () => {
-		expect(shouldAutoFillTitle(parse(".title  "), "abc", false)).toBe(".title abc");
+		expect(shouldAutoFillTitle(parse(".title  "), "abc", false)).toBe(".title abc ");
 	});
 });
