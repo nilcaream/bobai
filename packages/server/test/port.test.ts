@@ -29,6 +29,18 @@ describe("resolvePort", () => {
 	test("throws when CLI port is out of range", () => {
 		expect(() => resolvePort(["--port", "99999"], {})).toThrow();
 	});
+
+	test("falls back to global port when project port is not set", () => {
+		expect(resolvePort([], {}, { port: 7777 })).toBe(7777);
+	});
+
+	test("project port takes priority over global port", () => {
+		expect(resolvePort([], { port: 5555 }, { port: 7777 })).toBe(5555);
+	});
+
+	test("returns 0 when neither project nor global port is set", () => {
+		expect(resolvePort([], {}, {})).toBe(0);
+	});
 });
 
 describe("resolvePort (fail-fast on port in use)", () => {

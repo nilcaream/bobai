@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessageList } from "./ChatMessageList";
 import { ContextMessageList } from "./ContextMessageList";
 import {
+	handleConfigurationCommand,
 	handleGenericCommand,
 	handleNewCommand,
 	handleSessionCommand,
@@ -338,6 +339,14 @@ export function App() {
 					setStagedSkills,
 					addVolatileMessage,
 				});
+			} else if (parsed.command === "configuration") {
+				handleConfigurationCommand({
+					command: parsed.command,
+					args: (parsed.args ?? "").trim(),
+					getSessionId,
+					addVolatileMessage,
+					clearVolatileMessages,
+				});
 			} else {
 				handleGenericCommand({
 					command: parsed.command,
@@ -410,6 +419,14 @@ export function App() {
 					modelListProvider,
 					modelList,
 					providerList,
+				});
+			} else if (name === "configuration") {
+				handleConfigurationCommand({
+					command: "configuration",
+					args: "",
+					getSessionId,
+					addVolatileMessage,
+					clearVolatileMessages,
 				});
 			}
 			clearInput();

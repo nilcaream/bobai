@@ -58,6 +58,8 @@ export interface ServerOptions {
 	maxIterations?: number;
 	projectRoot?: string;
 	configDir?: string;
+	projectConfig?: { debug?: boolean; port?: number; provider?: string; model?: string; maxIterations?: number };
+	globalConfig?: { debug?: boolean; port?: number; provider?: string; model?: string; maxIterations?: number };
 	skills?: SkillRegistry;
 	skillDirectories?: string[];
 	logger?: Logger;
@@ -452,6 +454,9 @@ export function createServer(options: ServerOptions) {
 						defaultModel: options.model ?? null,
 						configDir: options.configDir,
 						listAuthenticatedProviders: () => authenticatedProviders,
+						projectRoot: options.projectRoot,
+						projectConfig: options.projectConfig,
+						globalConfig: options.globalConfig,
 					});
 					return Response.json(result);
 				} catch (err) {

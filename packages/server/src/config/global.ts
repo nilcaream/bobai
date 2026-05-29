@@ -6,6 +6,7 @@ export interface GlobalPreferences {
 	model?: string;
 	maxIterations?: number;
 	debug?: boolean;
+	port?: number;
 }
 
 export interface GlobalConfig {

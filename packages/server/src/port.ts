@@ -2,10 +2,11 @@ export interface PortConfig {
 	port?: number;
 }
 
-export function resolvePort(argv: string[], config: PortConfig): number {
+export function resolvePort(argv: string[], projectConfig: PortConfig, globalConfig?: PortConfig): number {
 	const cliPort = parseCLIPort(argv);
 	if (cliPort !== undefined) return cliPort;
-	if (config.port !== undefined) return config.port;
+	if (projectConfig.port !== undefined) return projectConfig.port;
+	if (globalConfig?.port !== undefined) return globalConfig.port;
 	return 0;
 }
 

@@ -384,4 +384,106 @@ describe("DotCommandPanel", () => {
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
 		expect(container.innerHTML).toBe("");
 	});
+
+	// --- Configuration panel ---
+
+	test("configuration panel: shows scopes when no args", () => {
+		const parsed = dot({ command: "configuration", args: "" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("project");
+		expect(text).toContain("global");
+	});
+
+	test("configuration panel: with unambiguous scope shows fields only after space", () => {
+		// No trailing space — still filtering scopes
+		const parsed = dot({ command: "configuration", args: "project" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("project");
+		expect(text).not.toContain("debug");
+	});
+
+	test("configuration panel: with scope and trailing space shows fields", () => {
+		const parsed = dot({ command: "configuration", args: "project " });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("debug");
+		expect(text).toContain("maxIterations");
+	});
+
+	test("configuration panel: abbreviated scope without space shows filtered scopes", () => {
+		const parsed = dot({ command: "configuration", args: "g" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("global");
+		expect(text).not.toContain("project");
+		expect(text).not.toContain("debug");
+	});
+
+	test("configuration panel: abbreviated scope with trailing space shows fields", () => {
+		const parsed = dot({ command: "configuration", args: "g " });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("debug");
+		expect(text).toContain("maxIterations");
+	});
+
+	test("configuration panel: with scope and unambiguous field debug shows field hint, not values", () => {
+		const parsed = dot({ command: "configuration", args: "project debug" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("debug");
+		expect(text).toContain("true | false");
+		// Should not jump to value hints without trailing space
+		expect(text).not.toContain("Enable debug mode");
+	});
+
+	test("configuration panel: with scope and unambiguous field port shows field hint, not value hint", () => {
+		const parsed = dot({ command: "configuration", args: "project port" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("port");
+		expect(text).toContain("Enter a port number");
+	});
+
+	test("configuration panel: with scope and ambiguous field prefix shows only matching fields", () => {
+		// "p" matches both "provider" and "port" — only those should show
+		const parsed = dot({ command: "configuration", args: "project p" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("provider");
+		expect(text).toContain("port");
+		expect(text).not.toContain("debug");
+	});
+
+	test("configuration panel: with ambiguous scope prefix shows no match", () => {
+		const parsed = dot({ command: "configuration", args: "x" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("No matching options");
+	});
+
+	test("configuration panel: value filter 't' for debug shows only true", () => {
+		const parsed = dot({ command: "configuration", args: "global debug t" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("true");
+		expect(text).not.toContain("false");
+	});
+
+	test("configuration panel: value filter 'f' for debug shows only false", () => {
+		const parsed = dot({ command: "configuration", args: "global debug f" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("false");
+		expect(text).not.toContain("true");
+	});
+
+	test("configuration panel: non-matching value filter shows 'No matching options'", () => {
+		const parsed = dot({ command: "configuration", args: "global debug z" });
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("No matching options");
+	});
 });

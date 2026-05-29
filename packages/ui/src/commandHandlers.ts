@@ -381,6 +381,41 @@ export function handleGenericCommand(params: {
 }
 
 // ---------------------------------------------------------------------------
+// handleConfigurationCommand
+// ---------------------------------------------------------------------------
+
+export function handleConfigurationCommand(params: {
+	command: string;
+	args: string;
+	getSessionId: () => string | null;
+	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	clearVolatileMessages: () => void;
+}): void {
+	const sid = params.getSessionId();
+	fetch("/bobai/command", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ command: params.command, args: params.args, sessionId: sid }),
+	})
+		.then((res) => res.json())
+		.then((result: { ok: boolean; error?: string; messages?: { text: string; kind: "info" | "success" | "error" }[] }) => {
+			if (result.ok) {
+				params.clearVolatileMessages();
+				if (result.messages) {
+					for (const msg of result.messages) {
+						params.addVolatileMessage(msg.text, msg.kind);
+					}
+				}
+			} else {
+				params.addVolatileMessage(result.error ?? "Command failed", "error");
+			}
+		})
+		.catch(() => {
+			params.addVolatileMessage("Failed to execute command", "error");
+		});
+}
+
+// ---------------------------------------------------------------------------
 // handleSessionShortcut
 // ---------------------------------------------------------------------------
 

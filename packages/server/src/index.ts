@@ -146,7 +146,7 @@ const runtimeManager = createProviderRuntimeManager({
 	logger,
 	fetch: trackingFetch,
 });
-const port = resolvePort(process.argv.slice(2), { port: project.port });
+const port = resolvePort(process.argv.slice(2), { port: project.port }, { port: globalConfig.preferences.port });
 
 // Detect platform-available tools (shell, grep, git).
 const availableTools = await detectAvailableTools(platform.info);
@@ -173,6 +173,14 @@ const server = createServer({
 	maxIterations: config.maxIterations,
 	projectRoot: process.cwd(),
 	configDir: globalConfigDir,
+	projectConfig: {
+		debug: project.debug,
+		port: project.port,
+		provider: project.provider,
+		model: project.model,
+		maxIterations: project.maxIterations,
+	},
+	globalConfig: globalConfig.preferences,
 	skills,
 	skillDirectories,
 	logger,

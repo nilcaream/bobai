@@ -1,5 +1,8 @@
 import type { DotCommand, ParsedDotInput } from "./commandParser";
 import { fuzzyFilterAndSort } from "./commandParser";
+import { DotCommandNavigator } from "./DotCommandNavigator";
+import { resolveDotTree } from "./DotCommandTree";
+import { configurationTree } from "./trees/configurationTree";
 
 export type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
 export type ProviderListItem = { index: number; id: string; runtimeSupported: boolean };
@@ -81,6 +84,9 @@ export function DotCommandPanel({
 				{v.index}: {v.name} — {v.desc}
 			</div>
 		));
+	} else if (parsed.command === "configuration") {
+		const treeState = resolveDotTree(configurationTree, parsed.args);
+		content = <DotCommandNavigator state={treeState} />;
 	} else {
 		return null;
 	}

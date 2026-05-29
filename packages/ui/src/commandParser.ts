@@ -23,6 +23,7 @@ export const VIEW_MODES = ["chat", "context", "compaction"] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
 export const ALL_DOT_COMMANDS: Record<string, DotCommand> = {
+	configuration: { name: "configuration", description: "Manage global and project configuration" },
 	limit: { name: "limit", description: "Set or clear context size limit" },
 	model: { name: "model", description: "Switch the AI model" },
 	new: { name: "new", description: "Start a new chat session" },
@@ -40,10 +41,20 @@ export const pick = (...keys: string[]): DotCommand[] =>
 		return cmd ? [cmd] : [];
 	});
 
-export const FULL_DOT_COMMANDS = pick("limit", "model", "new", "provider", "session", "subagent", "title", "view");
-export const READ_ONLY_DOT_COMMANDS = pick("new", "session", "subagent", "title", "view");
-export const LOCKED_DOT_COMMANDS = pick("new", "session");
-export const STREAMING_DOT_COMMANDS = pick("stop", "subagent");
+export const FULL_DOT_COMMANDS = pick(
+	"configuration",
+	"limit",
+	"model",
+	"new",
+	"provider",
+	"session",
+	"subagent",
+	"title",
+	"view",
+);
+export const READ_ONLY_DOT_COMMANDS = pick("configuration", "new", "session", "subagent", "title", "view");
+export const LOCKED_DOT_COMMANDS = pick("configuration", "new", "session");
+export const STREAMING_DOT_COMMANDS = pick("configuration", "stop", "subagent");
 
 export function parseDotInput(text: string, activeDotCommands: DotCommand[]): ParsedDotInput | null {
 	if (!text.startsWith(".")) return null;
