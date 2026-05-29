@@ -596,6 +596,7 @@ export function App() {
 				getSessionId={getSessionId}
 				sessionLocked={sessionLocked}
 				contextLimit={contextLimit}
+				currentTitle={title}
 			/>
 			<SlashCommandPanel parsed={parsedSlashInput} />
 

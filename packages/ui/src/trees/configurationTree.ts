@@ -1,50 +1,70 @@
 import type { DotTreeNode } from "../DotCommandTree";
 
-function fieldChildren(): DotTreeNode[] {
+/**
+ * Builds the configuration command tree.
+ *
+ * The tree has 3 levels: scope → field → value
+ * Each level's children() callback filters by prefix match.
+ */
+
+function matchesFilter(label: string, filter: string): boolean {
+	if (!filter) return true;
+	return label.toLowerCase().startsWith(filter.toLowerCase());
+}
+
+function filterNodes(nodes: DotTreeNode[], filter: string): DotTreeNode[] {
+	if (!filter) return nodes;
+	return nodes.filter((n) => matchesFilter(n.label, filter));
+}
+
+function valueNodes(values: [string, string][]): DotTreeNode[] {
+	return values.map(([label, desc]) => ({
+		id: `config.value.${label}`,
+		label,
+		description: desc,
+		kind: "action" as const,
+	}));
+}
+
+function fieldNodes(): DotTreeNode[] {
 	return [
 		{
-			id: "config.debug",
+			id: "config.field.debug",
 			label: "debug",
 			description: "Enable or disable debug mode (true | false)",
-			kind: "menu",
-			children: () => [
-				{
-					id: "config.debug.true",
-					label: "true",
-					description: "Enable debug mode",
-					kind: "action",
-				},
-				{
-					id: "config.debug.false",
-					label: "false",
-					description: "Disable debug mode",
-					kind: "action",
-				},
-			],
+			kind: "menu" as const,
+			children: (f: string) =>
+				filterNodes(
+					valueNodes([
+						["true", "Enable debug mode"],
+						["false", "Disable debug mode"],
+					]),
+					f,
+				),
 		},
 		{
-			id: "config.provider",
+			id: "config.field.provider",
 			label: "provider",
 			description: "Enter a provider name or index",
-			kind: "text",
+			kind: "text" as const,
 		},
 		{
-			id: "config.model",
+			id: "config.field.model",
 			label: "model",
 			description: "Enter a model name or index",
-			kind: "text",
+			kind: "text" as const,
 		},
 		{
-			id: "config.port",
+			id: "config.field.port",
 			label: "port",
 			description: "Enter a port number (1–65535)",
-			kind: "text",
+			kind: "text" as const,
 		},
 		{
-			id: "config.maxIterations",
+			id: "config.field.maxIterations",
 			label: "maxIterations",
-			description: "Enter a positive integer",
-			kind: "text",
+			description: "Enter the maximum number of agent loop iterations",
+			kind: "text" as const,
 		},
 	];
 }
@@ -54,20 +74,24 @@ export const configurationTree: DotTreeNode = {
 	label: "configuration",
 	description: "Manage global and project configuration",
 	kind: "menu",
-	children: () => [
-		{
-			id: "config.project",
-			label: "project",
-			description: "Manage project-level configuration",
-			kind: "menu",
-			children: fieldChildren,
-		},
-		{
-			id: "config.global",
-			label: "global",
-			description: "Manage global configuration",
-			kind: "menu",
-			children: fieldChildren,
-		},
-	],
+	children: (filter: string) =>
+		filterNodes(
+			[
+				{
+					id: "config.project",
+					label: "project",
+					description: "Manage project-level configuration",
+					kind: "menu" as const,
+					children: (f: string) => filterNodes(fieldNodes(), f),
+				},
+				{
+					id: "config.global",
+					label: "global",
+					description: "Manage global configuration",
+					kind: "menu" as const,
+					children: (f: string) => filterNodes(fieldNodes(), f),
+				},
+			],
+			filter,
+		),
 };
