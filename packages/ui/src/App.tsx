@@ -92,6 +92,7 @@ export function App() {
 	} | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const titleAutoFilledRef = useRef(false);
+	const committedArgsRef = useRef<string | null>(null);
 
 	// Reset auto-fill flag whenever the session title changes so the next
 	// .title invocation always shows the up-to-date title.
@@ -269,11 +270,20 @@ export function App() {
 		}
 	}, [input, parentId, getSessionId]);
 
+	function handleDotCommit(commitPath: string) {
+		committedArgsRef.current = commitPath;
+		submit();
+	}
+
 	function submit() {
 		const text = input.trim();
 		if (!text || !connected) return;
 
 		const parsed = parseDotInput(text, activeDotCommands);
+
+		// Allow dot panel click to override args with the tree-resolved commit path
+		const effectiveArgs = (committedArgsRef.current ?? parsed?.args ?? "").trim();
+		committedArgsRef.current = null;
 
 		// When session is locked, only .new and .session commands are allowed
 		if (sessionLocked) {
@@ -306,11 +316,11 @@ export function App() {
 					setTitle,
 					pendingNewTitle,
 					setWelcomeMarkdown,
-					newTitle: (parsed.args ?? "").trim(),
+					newTitle: effectiveArgs,
 				});
 			} else if (parsed.command === "view") {
 				handleViewCommand({
-					arg: (parsed.args ?? "").trim(),
+					arg: effectiveArgs,
 					setView,
 					fetchContext,
 					fetchCompactedContext,
@@ -318,7 +328,7 @@ export function App() {
 				});
 			} else if (parsed.command === "session") {
 				handleSessionCommand({
-					arg: (parsed.args ?? "").trim(),
+					arg: effectiveArgs,
 					sessionList,
 					getSessionId,
 					loadSession,
@@ -331,7 +341,7 @@ export function App() {
 				});
 			} else if (parsed.command === "subagent") {
 				handleSubagentCommand({
-					arg: (parsed.args ?? "").trim(),
+					arg: effectiveArgs,
 					subagentList,
 					subagents,
 					peekSubagentWithScroll,
@@ -342,7 +352,7 @@ export function App() {
 			} else if (parsed.command === "configuration") {
 				handleConfigurationCommand({
 					command: parsed.command,
-					args: (parsed.args ?? "").trim(),
+					args: effectiveArgs,
 					getSessionId,
 					addVolatileMessage,
 					clearVolatileMessages,
@@ -350,7 +360,7 @@ export function App() {
 			} else {
 				handleGenericCommand({
 					command: parsed.command,
-					args: (parsed.args ?? "").trim(),
+					args: effectiveArgs,
 					getSessionId,
 					setSessionId,
 					setProvider,
@@ -597,6 +607,7 @@ export function App() {
 				sessionLocked={sessionLocked}
 				contextLimit={contextLimit}
 				currentTitle={title}
+				onCommit={handleDotCommit}
 			/>
 			<SlashCommandPanel parsed={parsedSlashInput} />
 

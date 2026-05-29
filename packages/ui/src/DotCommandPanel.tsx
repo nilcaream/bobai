@@ -27,6 +27,7 @@ export function DotCommandPanel({
 	sessionLocked,
 	contextLimit,
 	currentTitle,
+	onCommit,
 }: {
 	parsed: ParsedDotInput | null;
 	modelList: ModelListItem[] | null;
@@ -37,6 +38,7 @@ export function DotCommandPanel({
 	sessionLocked: boolean;
 	contextLimit: number | null;
 	currentTitle: string | null;
+	onCommit?: (commitPath: string) => void;
 }) {
 	if (!parsed) return null;
 
@@ -58,7 +60,7 @@ export function DotCommandPanel({
 		);
 		if (tree) {
 			const treeState = resolveDotTree(tree, parsed.args);
-			content = <DotCommandNavigator state={treeState} />;
+			content = <DotCommandNavigator state={treeState} onCommit={onCommit} />;
 		} else {
 			return null;
 		}

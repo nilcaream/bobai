@@ -18,9 +18,21 @@ export const viewTree: DotTreeNode = {
 	children: (f: string) =>
 		pf(
 			[
-				{ id: "view.1", label: "1: Chat", description: "Grouped panels, markdown", kind: "action" as const },
-				{ id: "view.2", label: "2: Context", description: "Raw DB messages, plain text", kind: "action" as const },
-				{ id: "view.3", label: "3: Compaction", description: "Compacted view (what LLM sees)", kind: "action" as const },
+				{ id: "view.1", label: "1: Chat", description: "Grouped panels, markdown", commitValue: "1", kind: "action" as const },
+				{
+					id: "view.2",
+					label: "2: Context",
+					description: "Raw DB messages, plain text",
+					commitValue: "2",
+					kind: "action" as const,
+				},
+				{
+					id: "view.3",
+					label: "3: Compaction",
+					description: "Compacted view (what LLM sees)",
+					commitValue: "3",
+					kind: "action" as const,
+				},
 			],
 			f,
 		),
@@ -77,6 +89,7 @@ export function createModelTree(modelList: ModelListItem[] | null): DotTreeNode 
 				id: `model.${m.index}`,
 				label: `${String(m.index).padStart(padWidth, " ")}: ${m.id}`,
 				description: m.contextWindow > 0 ? `(${m.cost}, ${formatContextWindow(m.contextWindow)})` : `(${m.cost})`,
+				commitValue: String(m.index),
 				kind: "action" as const,
 			}));
 		},
@@ -106,6 +119,7 @@ export function createProviderTree(providerList: ProviderListItem[] | null): Dot
 				id: `provider.${p.index}`,
 				label: `${p.index}: ${p.id}`,
 				description: p.runtimeSupported ? undefined : "runtime not supported yet",
+				commitValue: String(p.index),
 				kind: "action" as const,
 			}));
 		},
@@ -163,6 +177,7 @@ export function createSessionTree(
 					id: `session.${s.index}`,
 					label: `${s.index}: ${s.title ?? ""}`,
 					description: desc,
+					commitValue: String(s.index),
 					kind: "action" as const,
 				};
 			});
@@ -197,6 +212,7 @@ export function createSubagentTree(subagents: SubagentItem[] | null): DotTreeNod
 			return filtered.map((s) => ({
 				id: `subagent.${s.index}`,
 				label: `${s.index}: ${s.title}`,
+				commitValue: String(s.index),
 				kind: "action" as const,
 			}));
 		},

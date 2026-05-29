@@ -7,6 +7,8 @@ export interface DotTreeNode {
 	/** Returns children matching the filter. Call with "" to get all children. */
 	children?: (filter: string) => DotTreeNode[];
 	kind: DotNodeKind;
+	/** Value submitted when this node is selected. Defaults to the first word of label. */
+	commitValue?: string;
 }
 
 export interface ResolvedDotState {
@@ -70,4 +72,21 @@ export function resolveDotTree(root: DotTreeNode, args: string): ResolvedDotStat
 
 	const children = currentNode.children?.("") ?? [];
 	return { visible: children, filter: "", value: "", path, currentNode };
+}
+
+/** Extracts the commit value from a node — its commitValue field, or the first word of its label. */
+export function nodeCommitValue(node: DotTreeNode): string {
+	if (node.commitValue !== undefined) return node.commitValue;
+	return node.label.split(/\s+/)[0] ?? node.label;
+}
+
+/** Builds the full commit path from a resolved state plus an optional selected child. */
+export function commitPath(state: ResolvedDotState, selected?: DotTreeNode): string {
+	const parts = [...state.path];
+	if (state.value) {
+		parts.push(state.value);
+	} else if (selected) {
+		parts.push(nodeCommitValue(selected));
+	}
+	return parts.join(" ");
 }
