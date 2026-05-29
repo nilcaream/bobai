@@ -3,13 +3,15 @@ import { ChatMessageList } from "./ChatMessageList";
 import { ContextMessageList } from "./ContextMessageList";
 import {
 	handleConfigurationCommand,
-	handleGenericCommand,
+	handleLimitCommand,
+	handleModelCommand,
 	handleNewCommand,
+	handleProviderCommand,
 	handleSessionCommand,
 	handleSessionShortcut,
 	handleSlashCommand,
-	handleStopCommand,
 	handleSubagentCommand,
+	handleTitleCommand,
 	handleViewCommand,
 } from "./commandHandlers";
 import type { ViewMode } from "./commandParser";
@@ -301,7 +303,7 @@ export function App() {
 
 		if (parsed?.mode === "args" && parsed.command) {
 			if (parsed.command === "stop") {
-				handleStopCommand({ sendCancel });
+				sendCancel();
 			} else if (parsed.command === "new") {
 				handleNewCommand({
 					newChat,
@@ -357,23 +359,54 @@ export function App() {
 					addVolatileMessage,
 					clearVolatileMessages,
 				});
-			} else {
-				handleGenericCommand({
-					command: parsed.command,
+			} else if (parsed.command === "model") {
+				handleModelCommand({
 					args: effectiveArgs,
+					currentProvider: provider,
+					modelListProvider,
+					modelList,
 					getSessionId,
 					setSessionId,
 					setProvider,
 					setModel,
-					setTitle,
 					setStatus,
 					setContextLimit,
 					addVolatileMessage,
 					clearVolatileMessages,
+				});
+			} else if (parsed.command === "provider") {
+				handleProviderCommand({
+					args: effectiveArgs,
 					currentProvider: provider,
-					modelListProvider,
-					modelList,
 					providerList,
+					modelList,
+					getSessionId,
+					setSessionId,
+					setProvider,
+					setModel,
+					setStatus,
+					setContextLimit,
+					addVolatileMessage,
+					clearVolatileMessages,
+				});
+			} else if (parsed.command === "title") {
+				handleTitleCommand({
+					args: effectiveArgs,
+					getSessionId,
+					setSessionId,
+					setTitle,
+					addVolatileMessage,
+					clearVolatileMessages,
+				});
+			} else if (parsed.command === "limit") {
+				handleLimitCommand({
+					args: effectiveArgs,
+					getSessionId,
+					setSessionId,
+					setStatus,
+					setContextLimit,
+					addVolatileMessage,
+					clearVolatileMessages,
 				});
 			}
 			clearInput();
@@ -411,24 +444,16 @@ export function App() {
 					newTitle: "",
 				});
 			} else if (name === "stop") {
-				handleStopCommand({ sendCancel });
+				sendCancel();
 			} else if (name === "limit") {
-				handleGenericCommand({
-					command: "limit",
+				handleLimitCommand({
 					args: "",
 					getSessionId,
 					setSessionId,
-					setProvider,
-					setModel,
-					setTitle,
 					setStatus,
 					setContextLimit,
 					addVolatileMessage,
 					clearVolatileMessages,
-					currentProvider: provider,
-					modelListProvider,
-					modelList,
-					providerList,
 				});
 			} else if (name === "configuration") {
 				handleConfigurationCommand({

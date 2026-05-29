@@ -15,7 +15,6 @@ import {
 	countSessionMessages,
 	createSession,
 	getSession,
-	listSubagentSessions,
 	updateSessionBackend,
 	updateSessionContextLimit,
 	updateSessionTitle,
@@ -99,10 +98,6 @@ export function handleCommand(db: Database, req: CommandRequest, options: Comman
 				handleLimitCommand(db, sessionId, args, { defaultProviderId, defaultModel, configDir: options.configDir }),
 				sessionId,
 			);
-		case "subagent":
-			return withSessionId(handleSubagentCommand(db, sessionId), sessionId);
-		case "session":
-			return { ok: true, sessionId };
 		case "configuration":
 			return handleConfigurationCommand(args, options);
 		default:
@@ -237,19 +232,6 @@ function handleProviderCommand(
 		model: transition.next.model,
 		status: formatProviderModelDisplay(transition.next.provider, transition.next.model, promptTokens, options.configDir),
 	};
-}
-
-function handleSubagentCommand(db: Database, sessionId: string): CommandResult {
-	// Session existence already validated by handleCommand
-	const session = getSession(db, sessionId);
-	if (!session) return { ok: false, error: "Session not found" };
-	const parentId = session.parentId ?? sessionId;
-	const subagents = listSubagentSessions(db, parentId);
-	if (subagents.length === 0) {
-		return { ok: true, status: "No subagent sessions" };
-	}
-	const lines = subagents.map((s, i) => `${i + 1}: ${s.title ?? "(untitled)"}`).join("\n");
-	return { ok: true, status: lines };
 }
 
 function handleTitleCommand(db: Database, sessionId: string, args: string): CommandResult {

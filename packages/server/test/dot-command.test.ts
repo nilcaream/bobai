@@ -306,16 +306,6 @@ describe("handleCommand", () => {
 		if (!result.ok) expect(result.error).toContain("Title cannot be empty");
 	});
 
-	test("session command returns ok (no-op)", () => {
-		const session = createSession(db);
-		const result = handleCommand(
-			db,
-			{ command: "session", args: "", sessionId: session.id },
-			{ defaultProviderId: providerId, configDir: tmpDir },
-		);
-		expect(result.ok).toBe(true);
-	});
-
 	test("unknown command returns error", () => {
 		const session = createSession(db);
 		const result = handleCommand(
@@ -325,36 +315,6 @@ describe("handleCommand", () => {
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Unknown command");
-	});
-
-	test("subagent command lists recent subagent sessions", () => {
-		const freshDb = createTestDb();
-		const parent = createSession(freshDb, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
-			apiFamily: "openai-chat-completions",
-		});
-		createSubagentSession(freshDb, parent.id, "Task Alpha", "gpt-5-mini", "github-copilot", "openai-chat-completions");
-		createSubagentSession(freshDb, parent.id, "Task Beta", "gpt-5-mini", "github-copilot", "openai-chat-completions");
-
-		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.status).toContain("Task Beta");
-			expect(result.status).toContain("Task Alpha");
-		}
-		freshDb.close();
-	});
-
-	test("subagent command returns empty message when no subagents", () => {
-		const freshDb = createTestDb();
-		const parent = createSession(freshDb);
-		const result = handleCommand(freshDb, { command: "subagent", args: "", sessionId: parent.id });
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.status).toContain("No subagent sessions");
-		}
-		freshDb.close();
 	});
 
 	test("limit command sets context limit on session", () => {

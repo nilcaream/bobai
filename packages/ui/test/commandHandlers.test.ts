@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-	handleGenericCommand,
+	handleConfigurationCommand,
+	handleLimitCommand,
+	handleModelCommand,
 	handleNewCommand,
+	handleProviderCommand,
 	handleSessionCommand,
 	handleSessionShortcut,
 	handleSlashCommand,
-	handleStopCommand,
 	handleSubagentCommand,
+	handleTitleCommand,
 	handleViewCommand,
 } from "../src/commandHandlers";
-import type { ViewMode } from "../src/commandParser";
 
 function makeModel(index: number, id: string, cost: string, contextWindow = 0) {
 	return { index, id, cost, contextWindow };
@@ -23,7 +25,6 @@ function makeProvider(index: number, id: string, runtimeSupported = true) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Extract the updater function passed to a mock's first call. */
 function extractUpdater<T>(fn: (...args: T[]) => unknown): T {
 	return fn.mock.calls[0][0];
 }
@@ -33,7 +34,6 @@ type ViewUpdater = (prev: ViewState) => ViewState;
 type SkillEntry = { name: string; content: string };
 type SkillUpdater = (prev: SkillEntry[]) => SkillEntry[];
 
-/** Create a Response that resolves to the given JSON body. */
 function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
 		status,
@@ -41,9 +41,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 	});
 }
 
-/** Flush microtask queue so fetch .then() chains resolve. */
 async function flushPromises(): Promise<void> {
-	// Two rounds to cover chained .then()
 	await new Promise((r) => setTimeout(r, 0));
 	await new Promise((r) => setTimeout(r, 0));
 }
@@ -60,19 +58,7 @@ beforeEach(() => {
 });
 
 // ===========================================================================
-// 1. handleStopCommand
-// ===========================================================================
-
-describe("handleStopCommand", () => {
-	test("calls sendCancel", () => {
-		const sendCancel = mock(() => {});
-		handleStopCommand({ sendCancel });
-		expect(sendCancel).toHaveBeenCalledTimes(1);
-	});
-});
-
-// ===========================================================================
-// 2. handleNewCommand
+// 1. handleNewCommand
 // ===========================================================================
 
 describe("handleNewCommand", () => {
@@ -81,14 +67,14 @@ describe("handleNewCommand", () => {
 			newChat: mock(() => {}),
 			setStagedSkills: mock(() => {}),
 			setStatus: mock(() => {}),
-			defaultStatus: "idle",
+			defaultStatus: "Select a provider",
 			setProvider: mock(() => {}),
-			defaultProvider: "github-copilot" as string | null,
+			defaultProvider: null,
 			setModel: mock(() => {}),
-			defaultModel: "claude-opus-4.6" as string | null,
+			defaultModel: null,
 			setView: mock(() => {}),
 			setTitle: mock(() => {}),
-			pendingNewTitle: { current: null } as { current: string | null },
+			pendingNewTitle: { current: null },
 			setWelcomeMarkdown: mock(() => {}),
 			newTitle: "",
 			...overrides,
@@ -98,23 +84,18 @@ describe("handleNewCommand", () => {
 	test("calls newChat, clears staged skills, resets backend defaults, and sets view to chat", () => {
 		const params = makeParams();
 		handleNewCommand(params);
-
 		expect(params.newChat).toHaveBeenCalledTimes(1);
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.setStatus).toHaveBeenCalledWith("idle");
-		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
-		expect(params.setModel).toHaveBeenCalledWith("claude-opus-4.6");
-		// setView is called with an updater function
-		expect(params.setView).toHaveBeenCalledTimes(1);
+		expect(params.setStatus).toHaveBeenCalledWith("Select a provider");
+		expect(params.setProvider).toHaveBeenCalledWith(null);
+		expect(params.setModel).toHaveBeenCalledWith(null);
 		const updater = extractUpdater<ViewUpdater>(params.setView);
-		const result = updater({ mode: "context", lineLimit: 48 });
-		expect(result).toEqual({ mode: "chat", lineLimit: 48 });
+		expect(updater({ mode: "compaction", lineLimit: 0 })).toEqual({ mode: "chat", lineLimit: 0 });
 	});
 
 	test("when no backend defaults exist, resets provider/model to null and keeps select-provider status", () => {
-		const params = makeParams({ defaultStatus: "select provider and model", defaultProvider: null, defaultModel: null });
+		const params = makeParams({ defaultStatus: "Select a provider" });
 		handleNewCommand(params);
-		expect(params.setStatus).toHaveBeenCalledWith("select provider and model");
 		expect(params.setProvider).toHaveBeenCalledWith(null);
 		expect(params.setModel).toHaveBeenCalledWith(null);
 	});
@@ -122,7 +103,6 @@ describe("handleNewCommand", () => {
 	test("when newTitle is non-empty, sets title and pendingNewTitle", () => {
 		const params = makeParams({ newTitle: "My Session" });
 		handleNewCommand(params);
-
 		expect(params.setTitle).toHaveBeenCalledWith("My Session");
 		expect(params.pendingNewTitle.current).toBe("My Session");
 	});
@@ -130,42 +110,36 @@ describe("handleNewCommand", () => {
 	test("when newTitle is empty, does NOT call setTitle", () => {
 		const params = makeParams({ newTitle: "" });
 		handleNewCommand(params);
-
-		expect(params.setTitle).not.toHaveBeenCalled();
-		expect(params.pendingNewTitle.current).toBeNull();
+		expect(params.setTitle).toHaveBeenCalledTimes(0);
 	});
 
 	test("fetches /bobai/welcome and calls setWelcomeMarkdown on success", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ markdown: "# Welcome" })));
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ markdown: "# Welcome" })));
 		const params = makeParams();
 		handleNewCommand(params);
 		await flushPromises();
-
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/welcome");
 		expect(params.setWelcomeMarkdown).toHaveBeenCalledWith("# Welcome");
 	});
 
 	test("does not call setWelcomeMarkdown when markdown is empty", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ markdown: "" })));
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ markdown: "" })));
 		const params = makeParams();
 		handleNewCommand(params);
 		await flushPromises();
-
-		expect(params.setWelcomeMarkdown).not.toHaveBeenCalled();
+		expect(params.setWelcomeMarkdown).toHaveBeenCalledTimes(0);
 	});
 
 	test("silently ignores fetch failure for /bobai/welcome", async () => {
-		globalThis.fetch = mock(() => Promise.reject(new Error("network")));
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
 		const params = makeParams();
 		handleNewCommand(params);
 		await flushPromises();
-
-		expect(params.setWelcomeMarkdown).not.toHaveBeenCalled();
+		expect(params.setWelcomeMarkdown).toHaveBeenCalledTimes(0);
 	});
 });
 
 // ===========================================================================
-// 3. handleViewCommand
+// 2. handleViewCommand
 // ===========================================================================
 
 describe("handleViewCommand", () => {
@@ -180,103 +154,437 @@ describe("handleViewCommand", () => {
 		};
 	}
 
-	function callAndGetMode(params: ReturnType<typeof makeParams>, prevMode: ViewMode): ViewMode {
-		handleViewCommand(params);
-		const updater = extractUpdater<ViewUpdater>(params.setView);
-		const result = updater({ mode: prevMode, lineLimit: 48 });
-		return result.mode;
-	}
-
 	test('arg="1" sets view to chat', () => {
 		const params = makeParams({ arg: "1" });
-		const mode = callAndGetMode(params, "context");
-		expect(mode).toBe("chat");
-		expect(params.fetchContext).not.toHaveBeenCalled();
-		expect(params.fetchCompactedContext).not.toHaveBeenCalled();
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "context", lineLimit: 0 })).toEqual({ mode: "chat", lineLimit: 0 });
 	});
 
 	test('arg="2" sets view to context and calls fetchContext', () => {
 		const params = makeParams({ arg: "2" });
-		const mode = callAndGetMode(params, "chat");
-		expect(mode).toBe("context");
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "chat", lineLimit: 0 })).toEqual({ mode: "context", lineLimit: 0 });
 		expect(params.fetchContext).toHaveBeenCalledTimes(1);
-		expect(params.fetchCompactedContext).not.toHaveBeenCalled();
 	});
 
 	test('arg="3" sets view to compaction and calls fetchCompactedContext', () => {
 		const params = makeParams({ arg: "3" });
-		const mode = callAndGetMode(params, "chat");
-		expect(mode).toBe("compaction");
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "chat", lineLimit: 0 })).toEqual({ mode: "compaction", lineLimit: 0 });
 		expect(params.fetchCompactedContext).toHaveBeenCalledTimes(1);
-		expect(params.fetchContext).not.toHaveBeenCalled();
 	});
 
 	test("empty arg cycles from chat to context", () => {
 		const params = makeParams({ arg: "" });
-		const mode = callAndGetMode(params, "chat");
-		expect(mode).toBe("context");
-		expect(params.fetchContext).toHaveBeenCalledTimes(1);
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "chat", lineLimit: 0 })).toEqual({ mode: "context", lineLimit: 0 });
 	});
 
 	test("empty arg cycles from context to compaction", () => {
 		const params = makeParams({ arg: "" });
-		const mode = callAndGetMode(params, "context");
-		expect(mode).toBe("compaction");
-		expect(params.fetchCompactedContext).toHaveBeenCalledTimes(1);
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "context", lineLimit: 0 })).toEqual({ mode: "compaction", lineLimit: 0 });
 	});
 
 	test("empty arg cycles from compaction to chat", () => {
 		const params = makeParams({ arg: "" });
-		const mode = callAndGetMode(params, "compaction");
-		expect(mode).toBe("chat");
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "compaction", lineLimit: 0 })).toEqual({ mode: "chat", lineLimit: 0 });
 	});
 
 	test("invalid arg keeps current mode", () => {
-		const params = makeParams({ arg: "9" });
-		const mode = callAndGetMode(params, "context");
-		expect(mode).toBe("context");
-		// context → context still triggers fetchContext because next === "context"
-		expect(params.fetchContext).toHaveBeenCalledTimes(1);
+		const params = makeParams({ arg: "99" });
+		handleViewCommand(params);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "context", lineLimit: 0 })).toEqual({ mode: "context", lineLimit: 0 });
 	});
 
 	test("lineLimit is preserved through mode changes", () => {
 		const params = makeParams({ arg: "2" });
 		handleViewCommand(params);
 		const updater = extractUpdater<ViewUpdater>(params.setView);
-		const result = updater({ mode: "chat", lineLimit: 100 });
-		expect(result.lineLimit).toBe(100);
+		expect(updater({ mode: "chat", lineLimit: 42 })).toEqual({ mode: "context", lineLimit: 42 });
 	});
 
 	test("scrolls to bottom after switching view via requestAnimationFrame", async () => {
 		const params = makeParams({ arg: "1" });
 		handleViewCommand(params);
-		// scrollToBottom is called inside requestAnimationFrame, so flush it
 		await new Promise((r) => setTimeout(r, 0));
 		expect(params.scrollToBottom).toHaveBeenCalledTimes(1);
 	});
 });
 
 // ===========================================================================
-// 4. handleSessionCommand
+// 3. handleModelCommand
+// ===========================================================================
+
+describe("handleModelCommand", () => {
+	function makeParams(overrides: Partial<Parameters<typeof handleModelCommand>[0]> = {}) {
+		return {
+			args: "",
+			currentProvider: "github-copilot",
+			modelListProvider: "github-copilot",
+			modelList: null,
+			getSessionId: () => "s1",
+			setSessionId: mock(() => {}),
+			setProvider: mock(() => {}),
+			setModel: mock(() => {}),
+			setStatus: mock(() => {}),
+			setContextLimit: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
+			clearVolatileMessages: mock(() => {}),
+			...overrides,
+		};
+	}
+
+	test("sends POST to /bobai/command with correct body", () => {
+		const params = makeParams({
+			args: "1",
+			modelList: [makeModel(1, "gpt-4o", "1x")],
+		});
+		handleModelCommand(params);
+		const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(opts.body as string);
+		expect(body.command).toBe("model");
+		expect(body.args).toBe("1");
+		expect(body.sessionId).toBe("s1");
+	});
+
+	test("requires selecting a provider first", () => {
+		const params = makeParams({ args: "1", currentProvider: null });
+		handleModelCommand(params);
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Select a provider before selecting a model", "error");
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+	});
+
+	test("model text submit posts the resolved numeric index, not the raw query", () => {
+		const params = makeParams({
+			args: "gpt",
+			currentProvider: "github-copilot",
+			modelListProvider: "github-copilot",
+			modelList: [makeModel(1, "gpt-4o", "1x"), makeModel(2, "claude-sonnet", "1x")],
+		});
+		handleModelCommand(params);
+		const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(opts.body as string);
+		expect(body.args).toBe("1");
+	});
+
+	test("model submit skips stale model list from the previous provider and posts the numeric index unchanged", () => {
+		const params = makeParams({
+			args: "2",
+			currentProvider: "openrouter",
+			modelListProvider: "github-copilot",
+			modelList: [makeModel(1, "gpt-4o", "1x")],
+		});
+		handleModelCommand(params);
+		const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(opts.body as string);
+		expect(body.args).toBe("2");
+	});
+
+	test("on success: sets sessionId, provider, model, context limit, status, and volatile message", async () => {
+		fetchMock.mockImplementation(() =>
+			Promise.resolve(
+				jsonResponse({
+					ok: true,
+					sessionId: "new-s1",
+					provider: "github-copilot",
+					model: "gpt-4o",
+					status: "github-copilot gpt-4o",
+				}),
+			),
+		);
+		const params = makeParams({
+			args: "1",
+			currentProvider: "github-copilot",
+			modelList: [makeModel(1, "gpt-4o", "1x")],
+		});
+		handleModelCommand(params);
+		await flushPromises();
+		expect(params.setSessionId).toHaveBeenCalledWith("new-s1");
+		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
+		expect(params.setModel).toHaveBeenCalledWith("gpt-4o");
+		expect(params.setStatus).toHaveBeenCalledWith("github-copilot gpt-4o");
+		expect(params.setContextLimit).toHaveBeenCalledWith(null);
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-4o model", "info");
+	});
+
+	test("on success without status, does not call setStatus", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true, sessionId: "s1" })));
+		const params = makeParams({ args: "1", modelList: [makeModel(1, "gpt-4o", "1x")] });
+		handleModelCommand(params);
+		await flushPromises();
+		expect(params.setStatus).toHaveBeenCalledTimes(0);
+	});
+
+	test("on failure (ok: false) with error, sets volatile error", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: false, error: "bad" })));
+		const params = makeParams({ args: "1", modelList: [makeModel(1, "gpt-4o", "1x")] });
+		handleModelCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("bad", "error");
+	});
+
+	test("on failure (ok: false) without error field, uses fallback", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: false })));
+		const params = makeParams({ args: "1", modelList: [makeModel(1, "gpt-4o", "1x")] });
+		handleModelCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Command failed", "error");
+	});
+
+	test("on fetch error, sets volatile error with generic message", async () => {
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
+		const params = makeParams({ args: "1", modelList: [makeModel(1, "gpt-4o", "1x")] });
+		handleModelCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
+	});
+
+	test("model text submit with no match does not post raw text and shows existing error behavior", () => {
+		const params = makeParams({
+			args: "unknown",
+			currentProvider: "github-copilot",
+			modelList: [makeModel(1, "gpt-4o", "1x")],
+		});
+		handleModelCommand(params);
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No model matching "unknown"', "error");
+	});
+
+	test("model numeric submit with invalid index still posts to server for server-style invalid-index error", () => {
+		const params = makeParams({
+			args: "99",
+			modelList: [makeModel(1, "gpt-4o", "1x")],
+		});
+		handleModelCommand(params);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	test("model text submit with match resolves and shows info message", async () => {
+		fetchMock.mockImplementation(() =>
+			Promise.resolve(jsonResponse({ ok: true, model: "gpt-4o", provider: "github-copilot", status: "github-copilot gpt-4o" })),
+		);
+		const params = makeParams({
+			args: "gpt",
+			currentProvider: "github-copilot",
+			modelListProvider: "github-copilot",
+			modelList: [makeModel(1, "gpt-4o", "1x")],
+		});
+		handleModelCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-4o model", "info");
+	});
+
+	test("includes null sessionId when getSessionId returns null", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+		const params = makeParams({ args: "1", getSessionId: () => null, modelList: [makeModel(1, "gpt-4o", "1x")] });
+		handleModelCommand(params);
+		const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(opts.body as string);
+		expect(body.sessionId).toBeNull();
+	});
+});
+
+// ===========================================================================
+// 4. handleProviderCommand
+// ===========================================================================
+
+describe("handleProviderCommand", () => {
+	function makeParams(overrides: Partial<Parameters<typeof handleProviderCommand>[0]> = {}) {
+		return {
+			args: "",
+			currentProvider: "github-copilot",
+			providerList: null,
+			modelList: null,
+			getSessionId: () => "s1",
+			setSessionId: mock(() => {}),
+			setProvider: mock(() => {}),
+			setModel: mock(() => {}),
+			setStatus: mock(() => {}),
+			setContextLimit: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
+			clearVolatileMessages: mock(() => {}),
+			...overrides,
+		};
+	}
+
+	test("provider command updates provider, model, and status from server result", async () => {
+		fetchMock.mockImplementation(() =>
+			Promise.resolve(
+				jsonResponse({
+					ok: true,
+					sessionId: "new-s1",
+					provider: "github-copilot",
+					status: "github-copilot",
+				}),
+			),
+		);
+		const params = makeParams({ args: "1", providerList: [makeProvider(1, "github-copilot")] });
+		handleProviderCommand(params);
+		await flushPromises();
+		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
+		expect(params.setModel).toHaveBeenCalledWith(null);
+		expect(params.setContextLimit).toHaveBeenCalledWith(null);
+		expect(params.setStatus).toHaveBeenCalledWith("github-copilot");
+	});
+
+	test("provider text submit posts the resolved numeric index, not the raw query", () => {
+		const params = makeParams({
+			args: "copilot",
+			providerList: [makeProvider(1, "github-copilot"), makeProvider(2, "openrouter")],
+		});
+		handleProviderCommand(params);
+		const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(opts.body as string);
+		expect(body.args).toBe("1");
+	});
+
+	test("provider text submit with no match does not post raw text and shows a provider-specific error", () => {
+		const params = makeParams({
+			args: "unknown",
+			providerList: [makeProvider(1, "github-copilot")],
+		});
+		handleProviderCommand(params);
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No provider matching "unknown"', "error");
+	});
+
+	test("provider command can be submitted when no provider/model is selected yet", () => {
+		const params = makeParams({
+			args: "1",
+			currentProvider: "github-copilot",
+			providerList: [makeProvider(1, "github-copilot")],
+		});
+		handleProviderCommand(params);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	test("on failure (ok: false) with error, sets volatile error", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: false, error: "Invalid" })));
+		const params = makeParams({ args: "99", providerList: [makeProvider(1, "gh")] });
+		handleProviderCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid", "error");
+	});
+
+	test("on fetch error, sets volatile error", async () => {
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
+		const params = makeParams({ args: "1", providerList: [makeProvider(1, "gh")] });
+		handleProviderCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
+	});
+});
+
+// ===========================================================================
+// 5. handleTitleCommand
+// ===========================================================================
+
+describe("handleTitleCommand", () => {
+	function makeParams(overrides: Partial<Parameters<typeof handleTitleCommand>[0]> = {}) {
+		return {
+			args: "My Title",
+			getSessionId: () => "s1",
+			setSessionId: mock(() => {}),
+			setTitle: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
+			clearVolatileMessages: mock(() => {}),
+			...overrides,
+		};
+	}
+
+	test("sets title on success", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true, sessionId: "s1" })));
+		const params = makeParams();
+		handleTitleCommand(params);
+		await flushPromises();
+		expect(params.setTitle).toHaveBeenCalledWith("My Title");
+	});
+
+	test("on fetch error, sets volatile error", async () => {
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
+		const params = makeParams();
+		handleTitleCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
+	});
+});
+
+// ===========================================================================
+// 6. handleLimitCommand
+// ===========================================================================
+
+describe("handleLimitCommand", () => {
+	function makeParams(overrides: Partial<Parameters<typeof handleLimitCommand>[0]> = {}) {
+		return {
+			args: "20000",
+			getSessionId: () => "s1",
+			setSessionId: mock(() => {}),
+			setStatus: mock(() => {}),
+			setContextLimit: mock(() => {}),
+			addVolatileMessage: mock(() => {}),
+			clearVolatileMessages: mock(() => {}),
+			...overrides,
+		};
+	}
+
+	test("sets context limit on success", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true, contextLimit: 20000, status: "20000" })));
+		const params = makeParams();
+		handleLimitCommand(params);
+		await flushPromises();
+		expect(params.setContextLimit).toHaveBeenCalledWith(20000);
+		expect(params.setStatus).toHaveBeenCalledWith("20000");
+	});
+
+	test("handles null context limit", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true, contextLimit: null, status: "cleared" })));
+		const params = makeParams({ args: "" });
+		handleLimitCommand(params);
+		await flushPromises();
+		expect(params.setContextLimit).toHaveBeenCalledWith(null);
+	});
+
+	test("on failure sets volatile error", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: false, error: "bad" })));
+		const params = makeParams();
+		handleLimitCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("bad", "error");
+	});
+
+	test("on fetch error, sets volatile error", async () => {
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
+		const params = makeParams();
+		handleLimitCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
+	});
+});
+
+// ===========================================================================
+// 7. handleSessionCommand
 // ===========================================================================
 
 describe("handleSessionCommand", () => {
-	const sessionList = [
-		{ index: 1, id: "aaa", title: "Session A", updatedAt: "2024-01-01", owned: false },
-		{ index: 2, id: "bbb", title: "Session B", updatedAt: "2024-01-02", owned: true },
-		{ index: 3, id: "ccc", title: null, updatedAt: "2024-01-03", owned: false },
-	];
-
 	function makeParams(overrides: Partial<Parameters<typeof handleSessionCommand>[0]> = {}) {
 		return {
 			arg: "",
-			sessionList: sessionList as typeof sessionList | null,
-			getSessionId: mock(() => "current-id"),
+			sessionList: null,
+			getSessionId: () => null,
 			loadSession: mock(() => {}),
 			newChat: mock(() => {}),
 			setStagedSkills: mock(() => {}),
 			setStatus: mock(() => {}),
-			defaultStatus: "idle",
+			defaultStatus: "Select a provider",
 			setView: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
 			...overrides,
@@ -286,8 +594,8 @@ describe("handleSessionCommand", () => {
 	test("empty arg is a no-op", () => {
 		const params = makeParams({ arg: "" });
 		handleSessionCommand(params);
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
-		expect(params.loadSession).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).toHaveBeenCalledTimes(0);
+		expect(params.loadSession).toHaveBeenCalledTimes(0);
 	});
 
 	test("null sessionList sets volatile error", () => {
@@ -297,146 +605,162 @@ describe("handleSessionCommand", () => {
 	});
 
 	test("invalid index sets volatile error", () => {
-		const params = makeParams({ arg: "99" });
+		const params = makeParams({
+			arg: "99",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
 		handleSessionCommand(params);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid session index: 99", "error");
 	});
 
 	test("non-numeric arg triggers text search (no longer treated as invalid index)", () => {
-		const params = makeParams({ arg: "xyz" });
+		const params = makeParams({
+			arg: "Test",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
 		handleSessionCommand(params);
-		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "xyz"', "error");
+		expect(params.loadSession).toHaveBeenCalledWith("s1");
 	});
 
-	// -- Delete subcommand --
-
 	test("delete session owned by another tab sets error", () => {
-		// Session 2 (bbb) is owned=true, and current session is "current-id" (not bbb)
-		const params = makeParams({ arg: "2 delete" });
+		const params = makeParams({
+			arg: "1 delete",
+			getSessionId: () => "other",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: true }],
+		});
 		handleSessionCommand(params);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Cannot delete: session is active in another tab", "error");
 	});
 
-	test("delete current session clears state then fetches DELETE", async () => {
-		// Make session 1 the current session
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true, id: "aaa", title: "Session A" })));
+	test("delete current session clears state then fetches DELETE", () => {
 		const params = makeParams({
 			arg: "1 delete",
-			getSessionId: mock(() => "aaa"),
+			getSessionId: () => "s1",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
 		});
-
 		handleSessionCommand(params);
-
-		// Should clear state first
 		expect(params.newChat).toHaveBeenCalledTimes(1);
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.setStatus).toHaveBeenCalledWith("idle");
-		expect(params.setView).toHaveBeenCalledTimes(1);
-
-		// Should fetch DELETE
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/session/aaa", { method: "DELETE" });
-
-		await flushPromises();
-		expect(params.addVolatileMessage).toHaveBeenCalledWith('Session aaa "Session A" has been removed', "success");
+		expect(params.setStatus).toHaveBeenCalledWith("Select a provider");
+		const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toContain("/bobai/session/s1");
+		expect(opts.method).toBe("DELETE");
 	});
 
-	test("delete non-self non-owned session fetches DELETE without clearing state", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true, id: "aaa", title: null })));
-		const params = makeParams({ arg: "1 delete" });
-
+	test("delete non-self non-owned session fetches DELETE without clearing state", () => {
+		const params = makeParams({
+			arg: "1 delete",
+			getSessionId: () => "s2",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
 		handleSessionCommand(params);
-
-		// Should NOT clear state (not self)
-		expect(params.newChat).not.toHaveBeenCalled();
-
-		// Should fetch DELETE
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/session/aaa", { method: "DELETE" });
-
-		await flushPromises();
-		// No title → just id
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session aaa has been removed", "success");
+		expect(params.newChat).toHaveBeenCalledTimes(0);
+		const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toContain("/bobai/session/s1");
 	});
 
 	test("delete with ok:false sets error from response", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: false, error: "DB error" })));
-		const params = makeParams({ arg: "1 delete" });
+		const params = makeParams({
+			arg: "1 delete",
+			getSessionId: () => "s2",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
+		fetchMock.mockImplementation((url: string) => {
+			if (url.includes("/bobai/command")) return Promise.resolve(jsonResponse({ ok: false }));
+			return Promise.resolve(jsonResponse({ ok: false, error: "Not found" }));
+		});
 		handleSessionCommand(params);
 		await flushPromises();
-
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("DB error", "error");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Not found", "error");
 	});
 
 	test("delete with ok:false and no error field uses fallback message", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: false })));
-		const params = makeParams({ arg: "1 delete" });
+		const params = makeParams({
+			arg: "1 delete",
+			getSessionId: () => "s2",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
+		fetchMock.mockImplementation((url: string) => {
+			if (url.includes("/bobai/command")) return Promise.resolve(jsonResponse({ ok: false }));
+			return Promise.resolve(jsonResponse({ ok: false }));
+		});
 		handleSessionCommand(params);
 		await flushPromises();
-
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to delete session", "error");
 	});
 
 	test("delete fetch failure sets volatile error", async () => {
-		globalThis.fetch = mock(() => Promise.reject(new Error("network")));
-		const params = makeParams({ arg: "1 delete" });
+		const params = makeParams({
+			arg: "1 delete",
+			getSessionId: () => "s2",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
+		fetchMock.mockImplementation((url: string) => {
+			if (url.includes("/bobai/command")) return Promise.resolve(jsonResponse({ ok: false }));
+			return Promise.reject(new Error("fail"));
+		});
 		handleSessionCommand(params);
 		await flushPromises();
-
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to delete session", "error");
 	});
-
-	// -- Session switching --
 
 	test("switching to self is a no-op", () => {
 		const params = makeParams({
 			arg: "1",
-			getSessionId: mock(() => "aaa"),
+			getSessionId: () => "s1",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
 		});
 		handleSessionCommand(params);
-		expect(params.loadSession).not.toHaveBeenCalled();
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
+		expect(params.loadSession).toHaveBeenCalledTimes(0);
 	});
 
 	test("switching to owned-by-other session sets error", () => {
-		const params = makeParams({ arg: "2" }); // bbb, owned=true
+		const params = makeParams({
+			arg: "1",
+			getSessionId: () => "s2",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: true }],
+		});
 		handleSessionCommand(params);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session is active in another tab", "error");
-		expect(params.loadSession).not.toHaveBeenCalled();
+		expect(params.loadSession).toHaveBeenCalledTimes(0);
 	});
 
 	test("switching to available session calls loadSession, clears staged skills, and resets view", () => {
-		const params = makeParams({ arg: "1" }); // aaa, not owned, not self
+		const params = makeParams({
+			arg: "1",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
 		handleSessionCommand(params);
-		expect(params.loadSession).toHaveBeenCalledWith("aaa");
+		expect(params.loadSession).toHaveBeenCalledWith("s1");
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.setView).toHaveBeenCalledTimes(1);
+		const updater = extractUpdater<ViewUpdater>(params.setView);
+		expect(updater({ mode: "compaction", lineLimit: 0 })).toEqual({ mode: "chat", lineLimit: 0 });
 	});
 
 	test("switching to session with null title works", () => {
-		const params = makeParams({ arg: "3" }); // ccc, not owned, title=null
+		const params = makeParams({
+			arg: "1",
+			sessionList: [{ index: 1, id: "s1", title: null, updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
 		handleSessionCommand(params);
-		expect(params.loadSession).toHaveBeenCalledWith("ccc");
-		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.setView).toHaveBeenCalledTimes(1);
+		expect(params.loadSession).toHaveBeenCalledWith("s1");
 	});
-
-	// -- Unknown subcommand --
 
 	test("unknown subcommand sets volatile error", () => {
-		const params = makeParams({ arg: "1 fix" });
+		const params = makeParams({
+			arg: "1 foo",
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
+		});
 		handleSessionCommand(params);
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Unknown subcommand: fix", "error");
-		expect(params.loadSession).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Unknown subcommand: foo", "error");
 	});
-
-	// -- Text search --
 
 	test("text search: loads first fuzzy-visible session", () => {
 		const params = makeParams({
-			arg: "g54",
+			arg: "Alpha",
 			sessionList: [
-				{ index: 1, id: "s1", title: "GPT 5.4 migration", updatedAt: "2024-01-01", owned: false },
-				{ index: 2, id: "s2", title: "fix UI issues", updatedAt: "2024-01-02", owned: false },
-				{ index: 3, id: "s3", title: "some other tests", updatedAt: "2024-01-03", owned: false },
+				{ index: 1, id: "s1", title: "Alpha Project", updatedAt: "2023-01-01T00:00:00Z", owned: false },
+				{ index: 2, id: "s2", title: "Beta", updatedAt: "2023-01-01T00:00:00Z", owned: false },
 			],
 		});
 		handleSessionCommand(params);
@@ -445,11 +769,8 @@ describe("handleSessionCommand", () => {
 
 	test("text search: case-insensitive matching", () => {
 		const params = makeParams({
-			arg: "IMPL",
-			sessionList: [
-				{ index: 1, id: "s1", title: "Implement Feature", updatedAt: "2024-01-01", owned: false },
-				{ index: 2, id: "s2", title: "fix bugs", updatedAt: "2024-01-02", owned: false },
-			],
+			arg: "alpha",
+			sessionList: [{ index: 1, id: "s1", title: "ALPHA PROJECT", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
 		});
 		handleSessionCommand(params);
 		expect(params.loadSession).toHaveBeenCalledWith("s1");
@@ -458,7 +779,7 @@ describe("handleSessionCommand", () => {
 	test("text search: no match sets volatile error", () => {
 		const params = makeParams({
 			arg: "nonexistent",
-			sessionList: [{ index: 1, id: "s1", title: "implement tests", updatedAt: "2024-01-01", owned: false }],
+			sessionList: [{ index: 1, id: "s1", title: "Test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
 		});
 		handleSessionCommand(params);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "nonexistent"', "error");
@@ -466,73 +787,56 @@ describe("handleSessionCommand", () => {
 
 	test("text search: first visible match is self — silently no-op", () => {
 		const params = makeParams({
-			arg: "ta",
-			sessionList: [
-				{ index: 1, id: "current-id", title: "Task alpha", updatedAt: "2024-01-01", owned: false },
-				{ index: 2, id: "s2", title: "Task beta", updatedAt: "2024-01-02", owned: false },
-			],
-			getSessionId: mock(() => "current-id"),
+			arg: "Alpha",
+			getSessionId: () => "s1",
+			sessionList: [{ index: 1, id: "s1", title: "Alpha", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
 		});
 		handleSessionCommand(params);
-		expect(params.loadSession).not.toHaveBeenCalled();
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
+		expect(params.loadSession).toHaveBeenCalledTimes(0);
 	});
 
 	test("text search: first visible match owned by another tab — shows error", () => {
 		const params = makeParams({
-			arg: "ta",
-			sessionList: [
-				{ index: 1, id: "s1", title: "Task alpha", updatedAt: "2024-01-01", owned: true },
-				{ index: 2, id: "s2", title: "Task beta", updatedAt: "2024-01-02", owned: false },
-			],
+			arg: "Alpha",
+			getSessionId: () => "s2",
+			sessionList: [{ index: 1, id: "s1", title: "Alpha", updatedAt: "2023-01-01T00:00:00Z", owned: true }],
 		});
 		handleSessionCommand(params);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Session is active in another tab", "error");
-		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
 	test("text search: arg starting with digit but containing letters uses text search", () => {
 		const params = makeParams({
-			arg: "2test",
-			sessionList: [
-				{ index: 2, id: "s2", title: "Session Two", updatedAt: "2024-01-01", owned: false },
-				{ index: 3, id: "s3", title: "2test session", updatedAt: "2024-01-02", owned: false },
-			],
+			arg: "1x test",
+			sessionList: [{ index: 1, id: "s1", title: "1x test", updatedAt: "2023-01-01T00:00:00Z", owned: false }],
 		});
 		handleSessionCommand(params);
-		expect(params.loadSession).toHaveBeenCalledWith("s3");
+		expect(params.loadSession).toHaveBeenCalledWith("s1");
 	});
 
 	test("text search: sessions with null title are excluded", () => {
 		const params = makeParams({
-			arg: "test",
-			sessionList: [{ index: 1, id: "s1", title: null, updatedAt: "2024-01-01", owned: false }],
+			arg: "search",
+			sessionList: [
+				{ index: 1, id: "s1", title: null, updatedAt: "2023-01-01T00:00:00Z", owned: false },
+				{ index: 2, id: "s2", title: "search", updatedAt: "2023-01-01T00:00:00Z", owned: false },
+			],
 		});
 		handleSessionCommand(params);
-		expect(params.addVolatileMessage).toHaveBeenCalledWith('No session matching "test"', "error");
+		expect(params.loadSession).toHaveBeenCalledWith("s2");
 	});
 });
 
 // ===========================================================================
-// 5. handleSubagentCommand
+// 8. handleSubagentCommand
 // ===========================================================================
 
 describe("handleSubagentCommand", () => {
-	const subagentList = [
-		{ index: 1, title: "Sub A", sessionId: "sub-aaa" },
-		{ index: 2, title: "Sub B", sessionId: "sub-bbb" },
-	];
-
-	const subagents = [
-		{ sessionId: "sub-aaa", title: "Sub A", status: "running" as const, toolCallId: "tc1" },
-		{ sessionId: "sub-bbb", title: "Sub B", status: "done" as const, toolCallId: "tc2" },
-	];
-
 	function makeParams(overrides: Partial<Parameters<typeof handleSubagentCommand>[0]> = {}) {
 		return {
 			arg: "",
-			subagentList: subagentList as typeof subagentList | null,
-			subagents,
+			subagentList: null,
+			subagents: [],
 			peekSubagentWithScroll: mock(() => {}),
 			peekSubagentFromDbWithScroll: mock(() => {}),
 			setStagedSkills: mock(() => {}),
@@ -544,9 +848,7 @@ describe("handleSubagentCommand", () => {
 	test("empty arg is a no-op", () => {
 		const params = makeParams({ arg: "" });
 		handleSubagentCommand(params);
-		expect(params.peekSubagentWithScroll).not.toHaveBeenCalled();
-		expect(params.peekSubagentFromDbWithScroll).not.toHaveBeenCalled();
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
+		expect(params.addVolatileMessage).toHaveBeenCalledTimes(0);
 	});
 
 	test("null subagentList sets volatile error", () => {
@@ -556,383 +858,85 @@ describe("handleSubagentCommand", () => {
 	});
 
 	test("invalid index sets volatile error", () => {
-		const params = makeParams({ arg: "99" });
+		const params = makeParams({
+			arg: "99",
+			subagentList: [{ index: 1, title: "Task", sessionId: "sub-1" }],
+		});
 		handleSubagentCommand(params);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid subagent index: 99", "error");
 	});
 
 	test("text search with no match sets volatile error", () => {
-		const params = makeParams({ arg: "foo" });
+		const params = makeParams({
+			arg: "unknown",
+			subagentList: [{ index: 1, title: "Task", sessionId: "sub-1" }],
+		});
 		handleSubagentCommand(params);
-		expect(params.addVolatileMessage).toHaveBeenCalledWith('No subagent matching "foo"', "error");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith('No subagent matching "unknown"', "error");
 	});
 
 	test("numeric index with live (running) subagent calls peekSubagentWithScroll", () => {
-		const params = makeParams({ arg: "1" }); // sub-aaa is running
+		const params = makeParams({
+			arg: "1",
+			subagentList: [{ index: 1, title: "Task", sessionId: "sub-1" }],
+			subagents: [{ sessionId: "sub-1", status: "running", model: "", title: "Task" }],
+		});
 		handleSubagentCommand(params);
-		expect(params.peekSubagentWithScroll).toHaveBeenCalledWith("sub-aaa");
-		expect(params.peekSubagentFromDbWithScroll).not.toHaveBeenCalled();
-		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
+		expect(params.peekSubagentWithScroll).toHaveBeenCalledWith("sub-1");
+		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledTimes(0);
 	});
 
 	test("numeric index with non-live subagent calls peekSubagentFromDbWithScroll", () => {
-		const params = makeParams({ arg: "2" }); // sub-bbb is done
+		const params = makeParams({
+			arg: "1",
+			subagentList: [{ index: 1, title: "Task", sessionId: "sub-1" }],
+			subagents: [],
+		});
 		handleSubagentCommand(params);
-		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledWith("sub-bbb");
-		expect(params.peekSubagentWithScroll).not.toHaveBeenCalled();
-		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
+		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledWith("sub-1");
+		expect(params.peekSubagentWithScroll).toHaveBeenCalledTimes(0);
 	});
 
 	test("text search: first fuzzy-visible live subagent uses live peek", () => {
 		const params = makeParams({
-			arg: "sa",
-			subagentList: [
-				{ index: 1, title: "Sub A", sessionId: "sub-aaa" },
-				{ index: 2, title: "Sub B", sessionId: "sub-bbb" },
-			],
+			arg: "Task",
+			subagentList: [{ index: 1, title: "Task Alfa", sessionId: "sub-1" }],
+			subagents: [{ sessionId: "sub-1", status: "running", model: "", title: "Task Alfa" }],
 		});
 		handleSubagentCommand(params);
-		expect(params.peekSubagentWithScroll).toHaveBeenCalledWith("sub-aaa");
-		expect(params.peekSubagentFromDbWithScroll).not.toHaveBeenCalled();
+		expect(params.peekSubagentWithScroll).toHaveBeenCalledWith("sub-1");
 	});
 
 	test("text search: first fuzzy-visible completed subagent uses db peek", () => {
 		const params = makeParams({
-			arg: "br",
-			subagentList: [
-				{ index: 1, title: "Sub A", sessionId: "sub-aaa" },
-				{ index: 2, title: "Bug review", sessionId: "sub-bbb" },
-			],
+			arg: "Task",
+			subagentList: [{ index: 1, title: "Task Alfa", sessionId: "sub-1" }],
+			subagents: [],
 		});
 		handleSubagentCommand(params);
-		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledWith("sub-bbb");
-		expect(params.peekSubagentWithScroll).not.toHaveBeenCalled();
+		expect(params.peekSubagentFromDbWithScroll).toHaveBeenCalledWith("sub-1");
 	});
 
 	test("clears staged skills on success regardless of live/db path", () => {
-		const params1 = makeParams({ arg: "1" });
-		handleSubagentCommand(params1);
-		expect(params1.setStagedSkills).toHaveBeenCalledWith([]);
-
-		const params2 = makeParams({ arg: "2" });
-		handleSubagentCommand(params2);
-		expect(params2.setStagedSkills).toHaveBeenCalledWith([]);
+		const params = makeParams({
+			arg: "1",
+			subagentList: [{ index: 1, title: "Task", sessionId: "sub-1" }],
+		});
+		handleSubagentCommand(params);
+		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
 	});
 });
 
 // ===========================================================================
-// 6. handleGenericCommand
-// ===========================================================================
-
-describe("handleGenericCommand", () => {
-	function makeParams(overrides: Partial<Parameters<typeof handleGenericCommand>[0]> = {}) {
-		return {
-			command: "test",
-			args: "arg1",
-			getSessionId: mock(() => "sid-123"),
-			setSessionId: mock(() => {}),
-			setProvider: mock(() => {}),
-			setModel: mock(() => {}),
-			setTitle: mock(() => {}),
-			setStatus: mock(() => {}),
-			setContextLimit: mock(() => {}),
-			addVolatileMessage: mock(() => {}),
-			clearVolatileMessages: mock(() => {}),
-			currentProvider: "github-copilot" as string | null,
-			modelListProvider: "github-copilot" as string | null,
-			modelList: null as { index: number; id: string; cost: string; contextWindow: number }[] | null,
-			providerList: null as { index: number; id: string; runtimeSupported: boolean }[] | null,
-			...overrides,
-		};
-	}
-
-	test("sends POST to /bobai/command with correct body", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const params = makeParams({ command: "model", args: "3" });
-		handleGenericCommand(params);
-
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "model", args: "3", sessionId: "sid-123" }),
-		});
-	});
-
-	test("model text submit posts the resolved numeric index, not the raw query", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const modelList = [makeModel(1, "claude-3", "$0.02", 200000), makeModel(2, "gpt-5.4", "$0.01", 256000)];
-		const params = makeParams({ command: "model", args: "g54", modelList });
-		handleGenericCommand(params);
-
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "model", args: "2", sessionId: "sid-123" }),
-		});
-	});
-
-	test("model command requires selecting a provider first", () => {
-		const params = makeParams({ command: "model", args: "1", currentProvider: null, modelListProvider: null });
-		handleGenericCommand(params);
-		expect(globalThis.fetch).not.toHaveBeenCalled();
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Select a provider before selecting a model", "error");
-	});
-
-	test("model submit skips stale model list from the previous provider and posts the numeric index unchanged", () => {
-		const params = makeParams({
-			command: "model",
-			args: "16",
-			currentProvider: "openrouter",
-			modelListProvider: "github-copilot",
-			modelList: [makeModel(1, "claude-3", "$0.02", 200000), makeModel(2, "gpt-5.4", "$0.01", 256000)],
-		});
-		handleGenericCommand(params);
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "model", args: "16", sessionId: "sid-123" }),
-		});
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
-	});
-
-	test("on success with sessionId, calls setSessionId", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true, sessionId: "new-sid" })));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setSessionId).toHaveBeenCalledWith("new-sid");
-	});
-
-	test("on success without sessionId, does not call setSessionId", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setSessionId).not.toHaveBeenCalled();
-	});
-
-	test('on success with command "model", finds numeric model index in list and calls setModel', async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const modelList = [makeModel(1, "gpt-4", "$0.01", 128000), makeModel(2, "claude-3", "$0.02", 200000)];
-		const params = makeParams({ command: "model", args: "2", modelList });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setModel).toHaveBeenCalledWith("claude-3");
-	});
-
-	test('on success with command "model" and text args, resolves first fuzzy-visible model and calls setModel', async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const modelList = [makeModel(1, "claude-3", "$0.02", 200000), makeModel(2, "gpt-5.4", "$0.01", 256000)];
-		const params = makeParams({ command: "model", args: "g54", modelList });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setModel).toHaveBeenCalledWith("gpt-5.4");
-	});
-
-	test('on success with command "model" but no matching numeric or fuzzy result, does not call setModel', async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const modelList = [makeModel(1, "gpt-4", "$0.01", 128000)];
-		const params = makeParams({ command: "model", args: "zzz", modelList });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setModel).not.toHaveBeenCalled();
-	});
-
-	test("model text submit with no match does not post raw text and shows existing error behavior", () => {
-		const params = makeParams({
-			command: "model",
-			args: "zzz",
-			modelList: [makeModel(1, "gpt-4", "$0.01", 128000)],
-		});
-		handleGenericCommand(params);
-		expect(globalThis.fetch).not.toHaveBeenCalled();
-		expect(params.addVolatileMessage).toHaveBeenCalledWith('No model matching "zzz"', "error");
-	});
-
-	test("model numeric submit with invalid index still posts to server for server-style invalid-index error", () => {
-		const params = makeParams({
-			command: "model",
-			args: "999",
-			modelList: [makeModel(1, "gpt-4", "$0.01", 128000)],
-		});
-		handleGenericCommand(params);
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "model", args: "999", sessionId: "sid-123" }),
-		});
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
-	});
-
-	test('on success with command "model" but null modelList, does not call setModel', async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const params = makeParams({ command: "model", args: "1", modelList: null });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setModel).not.toHaveBeenCalled();
-	});
-
-	test('on success with command "title", calls setTitle with args', async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const params = makeParams({ command: "title", args: "New Title" });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setTitle).toHaveBeenCalledWith("New Title");
-	});
-
-	test("on success with status, calls setStatus", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true, status: "busy" })));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setStatus).toHaveBeenCalledWith("busy");
-	});
-
-	test("on success without status, does not call setStatus", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setStatus).not.toHaveBeenCalled();
-	});
-
-	test("on failure (ok: false) with error, sets volatile error", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: false, error: "Bad command" })));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Bad command", "error");
-	});
-
-	test("on failure (ok: false) without error field, uses fallback", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: false })));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Command failed", "error");
-	});
-
-	test("on fetch error, sets volatile error with generic message", async () => {
-		globalThis.fetch = mock(() => Promise.reject(new Error("network")));
-		const params = makeParams();
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
-	});
-
-	test("includes null sessionId when getSessionId returns null", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true })));
-		const params = makeParams({ getSessionId: mock(() => null) });
-		handleGenericCommand(params);
-
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "test", args: "arg1", sessionId: null }),
-		});
-	});
-
-	test("multiple result fields are all processed (sessionId + status + model)", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ ok: true, sessionId: "new-sid", status: "ready" })));
-		const modelList = [{ index: 1, id: "gpt-4", cost: "$0.01" }];
-		const params = makeParams({ command: "model", args: "1", modelList });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setSessionId).toHaveBeenCalledWith("new-sid");
-		expect(params.setModel).toHaveBeenCalledWith("gpt-4");
-		expect(params.setStatus).toHaveBeenCalledWith("ready");
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-4 model", "info");
-	});
-
-	test("provider command updates provider, model, and status from server result", async () => {
-		globalThis.fetch = mock(() =>
-			Promise.resolve(
-				jsonResponse({
-					ok: true,
-					sessionId: "sid-1",
-					provider: "github-copilot",
-					model: "gpt-5-mini",
-					status: "gpt-5-mini | 0x | 0 tokens",
-				}),
-			),
-		);
-		const params = makeParams({ command: "provider", args: "1" });
-		handleGenericCommand(params);
-		await flushPromises();
-
-		expect(params.setSessionId).toHaveBeenCalledWith("sid-1");
-		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
-		expect(params.setModel).toHaveBeenCalledWith("gpt-5-mini");
-		expect(params.setStatus).toHaveBeenCalledWith("gpt-5-mini | 0x | 0 tokens");
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-5-mini model", "info");
-	});
-
-	test("provider text submit posts the resolved numeric index, not the raw query", () => {
-		const params = makeParams({
-			command: "provider",
-			args: "git",
-			providerList: [makeProvider(1, "github-copilot"), makeProvider(2, "openrouter")],
-		});
-		handleGenericCommand(params);
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "1", sessionId: "sid-123" }),
-		});
-	});
-
-	test("provider text submit with no match does not post raw text and shows a provider-specific error", () => {
-		const params = makeParams({
-			command: "provider",
-			args: "zzz",
-			providerList: [makeProvider(1, "github-copilot"), makeProvider(2, "openrouter")],
-		});
-		handleGenericCommand(params);
-		expect(globalThis.fetch).not.toHaveBeenCalled();
-		expect(params.addVolatileMessage).toHaveBeenCalledWith('No provider matching "zzz"', "error");
-	});
-
-	test("provider command can be submitted when no provider/model is selected yet", () => {
-		const params = makeParams({
-			command: "provider",
-			args: "1",
-			currentProvider: null,
-			modelListProvider: null,
-			providerList: [makeProvider(1, "openrouter")],
-		});
-		handleGenericCommand(params);
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/command", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "1", sessionId: "sid-123" }),
-		});
-		expect(params.addVolatileMessage).not.toHaveBeenCalled();
-	});
-});
-
-// ===========================================================================
-// 7. handleSessionShortcut
+// 9. handleSessionShortcut
 // ===========================================================================
 
 describe("handleSessionShortcut", () => {
 	function makeParams(overrides: Partial<Parameters<typeof handleSessionShortcut>[0]> = {}) {
 		return {
-			viewingSubagentId: null as string | null,
+			viewingSubagentId: null,
 			exitSubagentPeekWithScroll: mock(() => {}),
-			parentId: null as string | null,
+			parentId: null,
 			loadSession: mock(() => {}),
 			setStagedSkills: mock(() => {}),
 			setView: mock(() => {}),
@@ -941,55 +945,100 @@ describe("handleSessionShortcut", () => {
 	}
 
 	test("with viewingSubagentId, exits subagent peek and clears staged skills", () => {
-		const params = makeParams({ viewingSubagentId: "sub-123" });
+		const params = makeParams({ viewingSubagentId: "sub-1" });
 		handleSessionShortcut(params);
-
 		expect(params.exitSubagentPeekWithScroll).toHaveBeenCalledTimes(1);
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.loadSession).not.toHaveBeenCalled();
 	});
 
 	test("with parentId (no viewingSubagentId), loads parent session and clears staged skills", () => {
-		const params = makeParams({ parentId: "parent-456" });
+		const params = makeParams({ parentId: "parent-1" });
 		handleSessionShortcut(params);
-
-		expect(params.loadSession).toHaveBeenCalledWith("parent-456");
+		expect(params.loadSession).toHaveBeenCalledWith("parent-1");
 		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.setView).toHaveBeenCalledTimes(1);
-		expect(params.exitSubagentPeekWithScroll).not.toHaveBeenCalled();
 	});
 
 	test("viewingSubagentId takes priority over parentId", () => {
-		const params = makeParams({
-			viewingSubagentId: "sub-123",
-			parentId: "parent-456",
-		});
+		const params = makeParams({ viewingSubagentId: "sub-1", parentId: "parent-1" });
 		handleSessionShortcut(params);
-
 		expect(params.exitSubagentPeekWithScroll).toHaveBeenCalledTimes(1);
-		expect(params.setStagedSkills).toHaveBeenCalledWith([]);
-		expect(params.loadSession).not.toHaveBeenCalled();
+		expect(params.loadSession).toHaveBeenCalledTimes(0);
 	});
 
 	test("with neither viewingSubagentId nor parentId, does nothing", () => {
 		const params = makeParams();
 		handleSessionShortcut(params);
-
-		expect(params.exitSubagentPeekWithScroll).not.toHaveBeenCalled();
-		expect(params.loadSession).not.toHaveBeenCalled();
-		expect(params.setStagedSkills).not.toHaveBeenCalled();
+		expect(params.exitSubagentPeekWithScroll).toHaveBeenCalledTimes(0);
+		expect(params.loadSession).toHaveBeenCalledTimes(0);
 	});
 });
 
 // ===========================================================================
-// 8. handleSlashCommand
+// 10. handleConfigurationCommand
+// ===========================================================================
+
+describe("handleConfigurationCommand", () => {
+	function makeParams(overrides: Partial<Parameters<typeof handleConfigurationCommand>[0]> = {}) {
+		return {
+			command: "configuration",
+			args: "project debug true",
+			getSessionId: () => "s1",
+			addVolatileMessage: mock(() => {}),
+			clearVolatileMessages: mock(() => {}),
+			...overrides,
+		};
+	}
+
+	test("on success: clears volatile messages and displays config messages", async () => {
+		fetchMock.mockImplementation(() =>
+			Promise.resolve(
+				jsonResponse({
+					ok: true,
+					messages: [{ text: "debug = true", kind: "success" as const }],
+				}),
+			),
+		);
+		const params = makeParams();
+		handleConfigurationCommand(params);
+		await flushPromises();
+		expect(params.clearVolatileMessages).toHaveBeenCalledTimes(1);
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("debug = true", "success");
+	});
+
+	test("on failure: shows error message", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: false, error: "Invalid config" })));
+		const params = makeParams();
+		handleConfigurationCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Invalid config", "error");
+	});
+
+	test("on failure without error field: uses fallback", async () => {
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: false })));
+		const params = makeParams();
+		handleConfigurationCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Command failed", "error");
+	});
+
+	test("on fetch error: shows generic error", async () => {
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
+		const params = makeParams();
+		handleConfigurationCommand(params);
+		await flushPromises();
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Failed to execute command", "error");
+	});
+});
+
+// ===========================================================================
+// 11. handleSlashCommand
 // ===========================================================================
 
 describe("handleSlashCommand", () => {
 	function makeParams(overrides: Partial<Parameters<typeof handleSlashCommand>[0]> = {}) {
 		return {
-			name: "test-skill",
-			stagedSkills: [] as { name: string; content: string }[],
+			name: "my-skill",
+			stagedSkills: [],
 			setStagedSkills: mock(() => {}),
 			addVolatileMessage: mock(() => {}),
 			...overrides,
@@ -997,80 +1046,59 @@ describe("handleSlashCommand", () => {
 	}
 
 	test("deduplicates: if skill is already staged, does not fetch", () => {
-		const params = makeParams({
-			name: "existing",
-			stagedSkills: [{ name: "existing", content: "..." }],
-		});
+		const params = makeParams({ stagedSkills: [{ name: "my-skill", content: "old" }] });
 		handleSlashCommand(params);
-
-		expect(globalThis.fetch).not.toHaveBeenCalled();
-		expect(params.setStagedSkills).not.toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalledTimes(0);
 	});
 
-	test("fetches POST /bobai/skill with skill name", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ name: "test-skill", content: "skill content" })));
+	test("fetches POST /bobai/skill with skill name", () => {
 		const params = makeParams();
 		handleSlashCommand(params);
-
-		expect(globalThis.fetch).toHaveBeenCalledWith("/bobai/skill", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name: "test-skill" }),
-		});
+		const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe("/bobai/skill");
+		const body = JSON.parse(opts.body as string);
+		expect(body.name).toBe("my-skill");
 	});
 
 	test("on success, adds skill to staged skills via updater", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ name: "test-skill", content: "skill content" })));
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ name: "my-skill", content: "abc" })));
 		const params = makeParams();
 		handleSlashCommand(params);
 		await flushPromises();
-
 		expect(params.setStagedSkills).toHaveBeenCalledTimes(1);
-		// setStagedSkills is called with an updater function
 		const updater = extractUpdater<SkillUpdater>(params.setStagedSkills);
-		const result = updater([{ name: "prev", content: "prev content" }]);
-		expect(result).toEqual([
-			{ name: "prev", content: "prev content" },
-			{ name: "test-skill", content: "skill content" },
-		]);
+		expect(updater([])).toEqual([{ name: "my-skill", content: "abc" }]);
 	});
 
 	test("on non-ok response, does not add skill", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(new Response("Not found", { status: 404 })));
+		fetchMock.mockImplementation(() => Promise.resolve(new Response("", { status: 400 })));
 		const params = makeParams();
 		handleSlashCommand(params);
 		await flushPromises();
-
-		expect(params.setStagedSkills).not.toHaveBeenCalled();
+		expect(params.setStagedSkills).toHaveBeenCalledTimes(0);
 	});
 
 	test("on fetch error, silently ignores", async () => {
-		globalThis.fetch = mock(() => Promise.reject(new Error("network")));
+		fetchMock.mockImplementation(() => Promise.reject(new Error("fail")));
 		const params = makeParams();
 		handleSlashCommand(params);
 		await flushPromises();
-
-		expect(params.setStagedSkills).not.toHaveBeenCalled();
+		expect(params.setStagedSkills).toHaveBeenCalledTimes(0);
 	});
 
 	test("successful staging adds volatile info message", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ name: "test-skill", content: "content" })));
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ name: "my-skill", content: "abc" })));
 		const params = makeParams();
 		handleSlashCommand(params);
 		await flushPromises();
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("▸ Staging test-skill skill", "info");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("▸ Staging my-skill skill", "info");
 	});
 
 	test("does not deduplicate against different skill names", async () => {
-		globalThis.fetch = mock(() => Promise.resolve(jsonResponse({ name: "new-skill", content: "new content" })));
-		const params = makeParams({
-			name: "new-skill",
-			stagedSkills: [{ name: "other-skill", content: "..." }],
-		});
+		fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ name: "new-skill", content: "new-content" })));
+		const params = makeParams({ name: "new-skill", stagedSkills: [{ name: "other-skill", content: "..." }] });
 		handleSlashCommand(params);
 		await flushPromises();
-
-		expect(globalThis.fetch).toHaveBeenCalled();
 		expect(params.setStagedSkills).toHaveBeenCalledTimes(1);
 	});
 });

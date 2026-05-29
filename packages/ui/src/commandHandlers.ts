@@ -4,44 +4,62 @@ import type { ModelListItem } from "./DotCommandPanel";
 import type { StagedSkill, SubagentInfo } from "./protocol";
 
 // ---------------------------------------------------------------------------
-// Shared context types
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-interface VolatileMessageSetter {
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+type PostResult =
+	| {
+			ok: true;
+			status?: string;
+			sessionId?: string;
+			provider?: string;
+			model?: string;
+			contextLimit?: number | null;
+			messages?: { text: string; kind: "info" | "success" | "error" }[];
+	  }
+	| { ok: false; error?: string };
+
+function postDotCommand(
+	command: string,
+	args: string,
+	sessionId: string | null,
+	onSuccess: (result: PostResult & { ok: true }) => void,
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void,
+): void {
+	fetch("/bobai/command", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ command, args, sessionId }),
+	})
+		.then((res) => res.json())
+		.then((result: PostResult) => {
+			if (result.ok) {
+				onSuccess(result);
+			} else {
+				addVolatileMessage(result.error ?? "Command failed", "error");
+			}
+		})
+		.catch(() => {
+			addVolatileMessage("Failed to execute command", "error");
+		});
 }
 
-function resolveVisibleModel(modelList: ModelListItem[], arg: string): ModelListItem | undefined {
-	const trimmed = arg.trim();
-	const firstToken = trimmed.split(/\s+/)[0] ?? "";
-	if (!trimmed) return undefined;
-	if (/^\d+$/.test(firstToken)) {
-		const idx = Number.parseInt(firstToken, 10);
-		return modelList.find((m) => m.index === idx);
-	}
-	return fuzzyFilterAndSort(modelList, trimmed, (m) => m.id)[0];
-}
-
-function resolveVisibleProvider(
-	providerList: { index: number; id: string; runtimeSupported: boolean }[],
+/**
+ * Resolve an arg against a list by numeric index or fuzzy text search.
+ * Returns the matching item or undefined.
+ */
+function resolveByIndexOrFuzzy<T extends { index: number }>(
+	list: T[],
 	arg: string,
-): { index: number; id: string; runtimeSupported: boolean } | undefined {
+	getSearchText: (item: T) => string,
+): T | undefined {
 	const trimmed = arg.trim();
-	const firstToken = trimmed.split(/\s+/)[0] ?? "";
 	if (!trimmed) return undefined;
+	const firstToken = trimmed.split(/\s+/)[0] ?? "";
 	if (/^\d+$/.test(firstToken)) {
-		const idx = Number.parseInt(firstToken, 10);
-		return providerList.find((provider) => provider.index === idx);
+		return list.find((item) => item.index === Number.parseInt(firstToken, 10));
 	}
-	return fuzzyFilterAndSort(providerList, trimmed, (provider) => provider.id)[0];
-}
-
-// ---------------------------------------------------------------------------
-// handleStopCommand
-// ---------------------------------------------------------------------------
-
-export function handleStopCommand(params: { sendCancel: () => void }): void {
-	params.sendCancel();
+	return fuzzyFilterAndSort(list, trimmed, getSearchText)[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -100,10 +118,172 @@ export function handleViewCommand(params: {
 		if (next === "compaction") params.fetchCompactedContext();
 		return { ...prev, mode: next };
 	});
-	// After switching view mode, scroll to the bottom so the user sees the
-	// latest content. Uses requestAnimationFrame to wait for React to render
-	// the new view content before scrolling.
 	requestAnimationFrame(() => params.scrollToBottom());
+}
+
+// ---------------------------------------------------------------------------
+// handleModelCommand
+// ---------------------------------------------------------------------------
+
+export function handleModelCommand(params: {
+	args: string;
+	currentProvider: string | null;
+	modelListProvider: string | null;
+	modelList: ModelListItem[] | null;
+	getSessionId: () => string | null;
+	setSessionId: (id: string) => void;
+	setProvider: (id: string) => void;
+	setModel: (id: string | null) => void;
+	setStatus: (status: string) => void;
+	setContextLimit: (cl: number | null) => void;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	clearVolatileMessages: () => void;
+}): void {
+	if (!params.currentProvider) {
+		params.addVolatileMessage("Select a provider before selecting a model", "error");
+		return;
+	}
+	const currentModelList = params.modelListProvider === params.currentProvider ? params.modelList : null;
+	const resolvedModel = currentModelList ? resolveByIndexOrFuzzy(currentModelList, params.args, (m) => m.id) : undefined;
+	const firstToken = (params.args ?? "").trim().split(/\s+/)[0] ?? "";
+	const isNumeric = /^\d+$/.test(firstToken);
+
+	if (currentModelList && params.args.trim() && !resolvedModel && !isNumeric) {
+		params.addVolatileMessage(`No model matching "${params.args}"`, "error");
+		return;
+	}
+
+	const submittedArgs = resolvedModel ? String(resolvedModel.index) : params.args;
+
+	postDotCommand(
+		"model",
+		submittedArgs,
+		params.getSessionId(),
+		(result) => {
+			params.clearVolatileMessages();
+			if (result.sessionId) params.setSessionId(result.sessionId);
+			if (result.provider) params.setProvider(result.provider);
+			const selectedModel =
+				result.model ??
+				(resolvedModel ?? (currentModelList ? resolveByIndexOrFuzzy(currentModelList, submittedArgs, (m) => m.id) : undefined))
+					?.id;
+			if (result.model) {
+				params.setModel(result.model);
+			} else if (selectedModel) {
+				params.setModel(selectedModel);
+			}
+			if (result.status) params.setStatus(result.status);
+			if (selectedModel) {
+				params.setContextLimit(null);
+				const effectiveProvider = result.provider ?? params.currentProvider;
+				if (effectiveProvider) {
+					params.addVolatileMessage(`Using ${effectiveProvider} ${selectedModel} model`, "info");
+				}
+			}
+		},
+		params.addVolatileMessage,
+	);
+}
+
+// ---------------------------------------------------------------------------
+// handleProviderCommand
+// ---------------------------------------------------------------------------
+
+export function handleProviderCommand(params: {
+	args: string;
+	currentProvider: string | null;
+	providerList: { index: number; id: string; runtimeSupported: boolean }[] | null;
+	modelList: ModelListItem[] | null;
+	getSessionId: () => string | null;
+	setSessionId: (id: string) => void;
+	setProvider: (id: string) => void;
+	setModel: (id: string | null) => void;
+	setStatus: (status: string) => void;
+	setContextLimit: (cl: number | null) => void;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	clearVolatileMessages: () => void;
+}): void {
+	const resolvedProvider = params.providerList
+		? resolveByIndexOrFuzzy(params.providerList, params.args, (p) => p.id)
+		: undefined;
+	const firstToken = (params.args ?? "").trim().split(/\s+/)[0] ?? "";
+	const isNumeric = /^\d+$/.test(firstToken);
+
+	if (params.providerList && params.args.trim() && !resolvedProvider && !isNumeric) {
+		params.addVolatileMessage(`No provider matching "${params.args}"`, "error");
+		return;
+	}
+
+	const submittedArgs = resolvedProvider ? String(resolvedProvider.index) : params.args;
+
+	postDotCommand(
+		"provider",
+		submittedArgs,
+		params.getSessionId(),
+		(result) => {
+			params.clearVolatileMessages();
+			if (result.sessionId) params.setSessionId(result.sessionId);
+			if (result.provider) {
+				params.setProvider(result.provider);
+				params.setModel(null);
+				params.setContextLimit(null);
+			}
+			if (result.status) params.setStatus(result.status);
+		},
+		params.addVolatileMessage,
+	);
+}
+
+// ---------------------------------------------------------------------------
+// handleTitleCommand
+// ---------------------------------------------------------------------------
+
+export function handleTitleCommand(params: {
+	args: string;
+	getSessionId: () => string | null;
+	setSessionId: (id: string) => void;
+	setTitle: (title: string | null) => void;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	clearVolatileMessages: () => void;
+}): void {
+	postDotCommand(
+		"title",
+		params.args,
+		params.getSessionId(),
+		(result) => {
+			params.clearVolatileMessages();
+			if (result.sessionId) params.setSessionId(result.sessionId);
+			params.setTitle(params.args);
+		},
+		params.addVolatileMessage,
+	);
+}
+
+// ---------------------------------------------------------------------------
+// handleLimitCommand
+// ---------------------------------------------------------------------------
+
+export function handleLimitCommand(params: {
+	args: string;
+	getSessionId: () => string | null;
+	setSessionId: (id: string) => void;
+	setStatus: (status: string) => void;
+	setContextLimit: (cl: number | null) => void;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	clearVolatileMessages: () => void;
+}): void {
+	postDotCommand(
+		"limit",
+		params.args,
+		params.getSessionId(),
+		(result) => {
+			params.clearVolatileMessages();
+			if (result.sessionId) params.setSessionId(result.sessionId);
+			if (result.status) params.setStatus(result.status);
+			params.setContextLimit(result.contextLimit ?? null);
+		},
+		params.addVolatileMessage,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,12 +300,9 @@ export function handleSessionCommand(params: {
 	setStatus: (status: string) => void;
 	defaultStatus: string;
 	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
-	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 }): void {
-	if (!params.arg) {
-		// .session with space but no number — no-op (list is in dot panel)
-		return;
-	}
+	if (!params.arg) return;
 	if (!params.sessionList) {
 		params.addVolatileMessage("Session list not loaded", "error");
 		return;
@@ -145,13 +322,9 @@ export function handleSessionCommand(params: {
 			params.addVolatileMessage(`No session matching "${params.arg}"`, "error");
 			return;
 		}
-		// Pick the first match, applying self/owned rules
 		const currentId = params.getSessionId();
 		const first = matches[0] as (typeof matches)[0];
-		if (first.id === currentId) {
-			// Self — silently no-op (idempotent)
-			return;
-		}
+		if (first.id === currentId) return;
 		if (first.owned) {
 			params.addVolatileMessage("Session is active in another tab", "error");
 			return;
@@ -162,7 +335,6 @@ export function handleSessionCommand(params: {
 		return;
 	}
 
-	// Numeric mode: index-based selection
 	const index = Number.parseInt(firstWord, 10);
 	const subcommand = parts[1];
 	const targetSession = params.sessionList.find((s) => s.index === index);
@@ -171,19 +343,16 @@ export function handleSessionCommand(params: {
 		return;
 	}
 
-	// Delete subcommand: .session N delete (only recognized subcommand)
 	if (subcommand) {
 		if (subcommand !== "delete") {
 			params.addVolatileMessage(`Unknown subcommand: ${subcommand}`, "error");
 			return;
 		}
 		const isTargetSelf = targetSession.id === params.getSessionId();
-		const isOwnedByOther = targetSession.owned && !isTargetSelf;
-		if (isOwnedByOther) {
+		if (targetSession.owned && !isTargetSelf) {
 			params.addVolatileMessage("Cannot delete: session is active in another tab", "error");
 			return;
 		}
-		// If deleting current session, clear it first (releases ownership)
 		if (isTargetSelf) {
 			params.newChat();
 			params.setStagedSkills([]);
@@ -206,12 +375,7 @@ export function handleSessionCommand(params: {
 		return;
 	}
 
-	// Session switching (no subcommand)
-	const isTargetSelf = targetSession.id === params.getSessionId();
-	if (isTargetSelf) {
-		// Already viewing this session — no-op
-		return;
-	}
+	if (targetSession.id === params.getSessionId()) return;
 	if (targetSession.owned) {
 		params.addVolatileMessage("Session is active in another tab", "error");
 		return;
@@ -232,30 +396,22 @@ export function handleSubagentCommand(params: {
 	peekSubagentWithScroll: (sessionId: string) => void;
 	peekSubagentFromDbWithScroll: (sessionId: string) => void;
 	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
-	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 }): void {
-	if (!params.arg) {
-		// .subagent with space but no number — no-op
-		return;
-	}
+	if (!params.arg) return;
 	if (!params.subagentList) {
 		params.addVolatileMessage("Subagent list not loaded", "error");
 		return;
 	}
-	const trimmedArg = params.arg.trim();
-	const firstWord = trimmedArg.split(/\s+/)[0] ?? "";
-	const isNumeric = /^\d+$/.test(firstWord);
-	const targetSubagent = isNumeric
-		? params.subagentList.find((s) => s.index === Number.parseInt(firstWord, 10))
-		: fuzzyFilterAndSort(params.subagentList, trimmedArg, (s) => s.title)[0];
+	const targetSubagent = resolveByIndexOrFuzzy(params.subagentList, params.arg, (s) => s.title);
 	if (!targetSubagent) {
+		const isNumeric = /^\d+$/.test(params.arg.trim().split(/\s+/)[0] ?? "");
 		params.addVolatileMessage(
 			isNumeric ? `Invalid subagent index: ${params.arg}` : `No subagent matching "${params.arg}"`,
 			"error",
 		);
 		return;
 	}
-	// Check if this subagent is currently live (running) — use peek instead of DB load
 	const liveSubagent = params.subagents.find((s) => s.sessionId === targetSubagent.sessionId && s.status === "running");
 	if (liveSubagent) {
 		params.peekSubagentWithScroll(liveSubagent.sessionId);
@@ -266,121 +422,6 @@ export function handleSubagentCommand(params: {
 }
 
 // ---------------------------------------------------------------------------
-// handleGenericCommand
-// ---------------------------------------------------------------------------
-
-export function handleGenericCommand(params: {
-	command: string;
-	args: string;
-	getSessionId: () => string | null;
-	setSessionId: (id: string) => void;
-	setProvider: (id: string) => void;
-	setModel: (id: string) => void;
-	setTitle: (title: string | null) => void;
-	setStatus: (status: string) => void;
-	setContextLimit: (contextLimit: number | null) => void;
-	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
-	clearVolatileMessages: () => void;
-	currentProvider: string | null;
-	modelListProvider: string | null;
-	modelList: ModelListItem[] | null;
-	providerList: { index: number; id: string; runtimeSupported: boolean }[] | null;
-}): void {
-	const sid = params.getSessionId();
-	if (params.command === "model" && !params.currentProvider) {
-		params.addVolatileMessage("Select a provider before selecting a model", "error");
-		return;
-	}
-	const currentModelList =
-		params.command === "model" && params.modelListProvider === params.currentProvider ? params.modelList : null;
-	const resolvedModel =
-		params.command === "model" && currentModelList ? resolveVisibleModel(currentModelList, params.args) : undefined;
-	const resolvedProvider =
-		params.command === "provider" && params.providerList ? resolveVisibleProvider(params.providerList, params.args) : undefined;
-	const submittedArgs =
-		params.command === "model" && resolvedModel
-			? String(resolvedModel.index)
-			: params.command === "provider" && resolvedProvider
-				? String(resolvedProvider.index)
-				: params.args;
-	const firstToken = params.args.trim().split(/\s+/)[0] ?? "";
-	const isNumericModelArg = params.command === "model" && /^\d+$/.test(firstToken);
-	const isNumericProviderArg = params.command === "provider" && /^\d+$/.test(firstToken);
-	if (params.command === "model" && currentModelList && params.args.trim() && !resolvedModel && !isNumericModelArg) {
-		params.addVolatileMessage(`No model matching "${params.args}"`, "error");
-		return;
-	}
-	if (
-		params.command === "provider" &&
-		params.providerList &&
-		params.args.trim() &&
-		!resolvedProvider &&
-		!isNumericProviderArg
-	) {
-		params.addVolatileMessage(`No provider matching "${params.args}"`, "error");
-		return;
-	}
-	fetch("/bobai/command", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ command: params.command, args: submittedArgs, sessionId: sid }),
-	})
-		.then((res) => res.json())
-		.then(
-			(result: {
-				ok: boolean;
-				error?: string;
-				status?: string;
-				sessionId?: string;
-				provider?: string;
-				model?: string;
-				contextLimit?: number | null;
-			}) => {
-				if (result.ok) {
-					params.clearVolatileMessages();
-					if (result.sessionId) {
-						params.setSessionId(result.sessionId);
-					}
-					if (result.provider) {
-						params.setProvider(result.provider);
-					}
-					const selectedModel =
-						result.model ??
-						(params.command === "model"
-							? (resolvedModel ?? (currentModelList ? resolveVisibleModel(currentModelList, submittedArgs) : undefined))?.id
-							: undefined);
-					if (result.model) {
-						params.setModel(result.model);
-					} else if (params.command === "model" && selectedModel) {
-						params.setModel(selectedModel);
-					}
-					if (params.command === "title") {
-						params.setTitle(params.args);
-					}
-					if (result.status) {
-						params.setStatus(result.status);
-					}
-					if (params.command === "limit") {
-						params.setContextLimit(result.contextLimit ?? null);
-					}
-					if ((params.command === "provider" || params.command === "model") && selectedModel) {
-						params.setContextLimit(null);
-						const effectiveProvider = result.provider ?? params.currentProvider;
-						if (effectiveProvider) {
-							params.addVolatileMessage(`Using ${effectiveProvider} ${selectedModel} model`, "info");
-						}
-					}
-				} else {
-					params.addVolatileMessage(result.error ?? "Command failed", "error");
-				}
-			},
-		)
-		.catch(() => {
-			params.addVolatileMessage("Failed to execute command", "error");
-		});
-}
-
-// ---------------------------------------------------------------------------
 // handleConfigurationCommand
 // ---------------------------------------------------------------------------
 
@@ -388,31 +429,23 @@ export function handleConfigurationCommand(params: {
 	command: string;
 	args: string;
 	getSessionId: () => string | null;
-	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 	clearVolatileMessages: () => void;
 }): void {
-	const sid = params.getSessionId();
-	fetch("/bobai/command", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ command: params.command, args: params.args, sessionId: sid }),
-	})
-		.then((res) => res.json())
-		.then((result: { ok: boolean; error?: string; messages?: { text: string; kind: "info" | "success" | "error" }[] }) => {
-			if (result.ok) {
-				params.clearVolatileMessages();
-				if (result.messages) {
-					for (const msg of result.messages) {
-						params.addVolatileMessage(msg.text, msg.kind);
-					}
+	postDotCommand(
+		params.command,
+		params.args,
+		params.getSessionId(),
+		(result) => {
+			params.clearVolatileMessages();
+			if (result.messages) {
+				for (const msg of result.messages) {
+					params.addVolatileMessage(msg.text, msg.kind);
 				}
-			} else {
-				params.addVolatileMessage(result.error ?? "Command failed", "error");
 			}
-		})
-		.catch(() => {
-			params.addVolatileMessage("Failed to execute command", "error");
-		});
+		},
+		params.addVolatileMessage,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -438,16 +471,15 @@ export function handleSessionShortcut(params: {
 }
 
 // ---------------------------------------------------------------------------
-// handleSlashCommand (was stageSkill)
+// handleSlashCommand
 // ---------------------------------------------------------------------------
 
 export function handleSlashCommand(params: {
 	name: string;
 	stagedSkills: StagedSkill[];
 	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
-	addVolatileMessage: VolatileMessageSetter["addVolatileMessage"];
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 }): void {
-	// Deduplicate
 	if (params.stagedSkills.some((s) => s.name === params.name)) return;
 	fetch("/bobai/skill", {
 		method: "POST",
@@ -463,7 +495,5 @@ export function handleSlashCommand(params: {
 			params.setStagedSkills((prev) => [...prev, { name: data.name, content: data.content }]);
 			params.addVolatileMessage(`▸ Staging ${data.name} skill`, "info");
 		})
-		.catch(() => {
-			// Silently ignore
-		});
+		.catch(() => {});
 }
