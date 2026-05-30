@@ -43,15 +43,15 @@ export const viewTree: DotTreeNode = {
 export const newTree: DotTreeNode = {
 	id: "new",
 	label: "new",
-	description: "Start a new chat session",
-	kind: "action",
+	description: "Start a new session with title",
+	kind: "text",
 };
 
-export function createTitleTree(currentTitle: string | null): DotTreeNode {
+export function createTitleTree(_currentTitle: string | null): DotTreeNode {
 	return {
 		id: "title",
 		label: "title",
-		description: currentTitle ? `Current: ${currentTitle}` : "Enter session title",
+		description: "Set session title to",
 		kind: "text",
 	};
 }
@@ -88,7 +88,7 @@ export function createModelTree(modelList: ModelListItem[] | null): DotTreeNode 
 			return filtered.map((m) => ({
 				id: `model.${m.index}`,
 				label: `${String(m.index).padStart(padWidth, " ")}: ${m.id}`,
-				description: m.contextWindow > 0 ? `(${m.cost}, ${formatContextWindow(m.contextWindow)})` : `(${m.cost})`,
+				description: m.contextWindow > 0 ? `[${m.cost}], ${formatContextWindow(m.contextWindow)}` : `[${m.cost}]`,
 				commitValue: String(m.index),
 				kind: "action" as const,
 			}));
@@ -174,7 +174,7 @@ export function createSessionTree(
 				const title = s.title || "untitled";
 				const paddedIndex = String(s.index).padStart(padWidth, " ");
 				const segments: { text: string; muted?: boolean }[] = [
-					{ text: ` ${paddedIndex}: ` },
+					{ text: `${paddedIndex}: ` },
 					{ text: localTime, muted: true },
 					{ text: " — " },
 					{ text: title },

@@ -13,14 +13,13 @@ export function DotCommandNavigator({ state, onCommit }: DotCommandNavigatorProp
 	const { visible, filter, value, currentNode } = state;
 
 	if (currentNode.kind === "text") {
-		if (value) {
-			return (
-				<div>
-					{currentNode.label} = {value}
-				</div>
-			);
-		}
-		return <div>{currentNode.description ?? `Enter a value for ${currentNode.label}`}</div>;
+		const hint = currentNode.description ?? `Enter a value for ${currentNode.label}`;
+		const fullText = value ? `${hint} ${value}` : hint;
+		return (
+			<div>
+				{currentNode.label} <span className="slash-skill-desc">— {fullText}</span>
+			</div>
+		);
 	}
 
 	if (currentNode.kind === "action") {

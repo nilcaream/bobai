@@ -70,9 +70,9 @@ describe("DotCommandPanel", () => {
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		const text = container.textContent ?? "";
 		expect(text).toContain("1: gpt-4o");
-		expect(text).toContain("(0x, 128k)");
+		expect(text).toContain("[0x], 128k");
 		expect(text).toContain("2: claude-sonnet");
-		expect(text).toContain("(1x, 200k)");
+		expect(text).toContain("[1x], 200k");
 	});
 
 	test("model panel: shows 'Loading models...' when modelList is null", () => {
@@ -113,7 +113,7 @@ describe("DotCommandPanel", () => {
 		const models = [makeModel(3, "some-model", "1x", 0)];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		expect(container.textContent ?? "").toContain("3: some-model");
-		expect(container.textContent ?? "").toContain("(1x)");
+		expect(container.textContent ?? "").toContain("[1x]");
 	});
 
 	test("model panel: shows 'No matching models' when filter yields nothing", () => {
@@ -169,7 +169,7 @@ describe("DotCommandPanel", () => {
 		const parsed = dot({ command: "new", args: "" });
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
 		expect(container.textContent ?? "").toContain("new");
-		expect(container.textContent ?? "").toContain("Start a new chat session");
+		expect(container.textContent ?? "").toContain("Start a new session with title");
 	});
 
 	test("new panel: shows title when provided", () => {
@@ -177,7 +177,8 @@ describe("DotCommandPanel", () => {
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
 		const text = container.textContent ?? "";
 		expect(text).toContain("new");
-		expect(text).toContain("Start a new chat session");
+		expect(text).toContain("Start a new session with title");
+		expect(text).toContain("My Session");
 	});
 
 	// --- Title panel ---
@@ -185,13 +186,18 @@ describe("DotCommandPanel", () => {
 	test("title panel: shows title text", () => {
 		const parsed = dot({ command: "title", args: "New Title" });
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
-		expect(container.textContent ?? "").toContain("title = New Title");
+		const text = container.textContent ?? "";
+		expect(text).toContain("title");
+		expect(text).toContain("Set session title to");
+		expect(text).toContain("New Title");
 	});
 
-	test("title panel: shows 'Enter session title' when empty", () => {
+	test("title panel: shows description when empty", () => {
 		const parsed = dot({ command: "title", args: "" });
-		render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
-		expect(screen.queryByText("Enter session title")).not.toBeNull();
+		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
+		const text = container.textContent ?? "";
+		expect(text).toContain("title");
+		expect(text).toContain("Set session title to");
 	});
 
 	// --- Session panel ---
