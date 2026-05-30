@@ -170,13 +170,20 @@ export function createSessionTree(
 						hour12: false,
 					})
 					.replace(",", "");
-				let desc = `${localTime}`;
-				if (isOwnedByOther) desc += " (active in another tab)";
-				if (isCurrentSession && !sessionLocked) desc += " (this session)";
+				const title = s.title || "untitled";
+				const segments: { text: string; muted?: boolean }[] = [
+					{ text: ` ${s.index}: ` },
+					{ text: localTime, muted: true },
+					{ text: " — " },
+					{ text: title },
+				];
+				if (isOwnedByOther) segments.push({ text: " (active in another tab)", muted: true });
+				if (isCurrentSession && !sessionLocked) segments.push({ text: " (this session)", muted: true });
 				return {
 					id: `session.${s.index}`,
 					label: `${s.index}: ${s.title ?? ""}`,
-					description: desc,
+					description: `${localTime}${isOwnedByOther ? " (active in another tab)" : ""}${isCurrentSession && !sessionLocked ? " (this session)" : ""}`,
+					segments,
 					commitValue: String(s.index),
 					kind: "action" as const,
 				};

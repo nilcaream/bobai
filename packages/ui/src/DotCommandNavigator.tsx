@@ -72,8 +72,18 @@ function OptionRow({
 			role="option"
 			style={{ cursor: onCommit ? "pointer" : "default" }}
 		>
-			{node.label}
-			{node.description ? ` — ${node.description}` : ""}
+			{node.segments
+				? node.segments.map((seg, i) => {
+						const key = `${i}-${seg.text.slice(0, 20)}`;
+						return (
+							<span key={key} className={seg.muted ? "slash-skill-desc" : undefined}>
+								{seg.text}
+							</span>
+						);
+					})
+				: null}
+			{!node.segments && node.label}
+			{!node.segments && node.description ? <span className="slash-skill-desc"> — {node.description}</span> : null}
 		</div>
 	);
 }

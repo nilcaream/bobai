@@ -4,6 +4,8 @@ export interface DotTreeNode {
 	id: string;
 	label: string;
 	description?: string;
+	/** Fine-grained text segments for interleaved normal/muted styling. Takes precedence over label+description. */
+	segments?: { text: string; muted?: boolean }[];
 	/** Returns children matching the filter. Call with "" to get all children. */
 	children?: (filter: string) => DotTreeNode[];
 	kind: DotNodeKind;
