@@ -26,12 +26,12 @@ export const ALL_DOT_COMMANDS: Record<string, DotCommand> = {
 	configuration: { name: "configuration", description: "Manage global and project configuration" },
 	limit: { name: "limit", description: "Set or clear context size limit" },
 	model: { name: "model", description: "Switch the AI model" },
-	new: { name: "new", description: "Start a new chat session" },
+	new: { name: "new", description: "Start a new session" },
 	provider: { name: "provider", description: "Switch the AI provider" },
 	session: { name: "session", description: "Switch to another session" },
 	stop: { name: "stop", description: "Stop the current response" },
 	subagent: { name: "subagent", description: "View subagent sessions" },
-	title: { name: "title", description: "Rename the current session" },
+	title: { name: "title", description: "Set session title" },
 	view: { name: "view", description: "Switch view mode" },
 };
 

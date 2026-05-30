@@ -44,7 +44,7 @@ describe("DotCommandPanel", () => {
 			mode: "select",
 			matches: [
 				{ name: "model", description: "Switch the AI model" },
-				{ name: "new", description: "Start a new chat session" },
+				{ name: "new", description: "Start a new session" },
 			],
 		});
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} />);
@@ -53,7 +53,7 @@ describe("DotCommandPanel", () => {
 		expect(rows[0].textContent).toContain("model");
 		expect(rows[0].textContent).toContain("Switch the AI model");
 		expect(rows[1].textContent).toContain("new");
-		expect(rows[1].textContent).toContain("Start a new chat session");
+		expect(rows[1].textContent).toContain("Start a new session");
 	});
 
 	test("select mode with no matches: shows 'No matching commands'", () => {
@@ -70,9 +70,9 @@ describe("DotCommandPanel", () => {
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		const text = container.textContent ?? "";
 		expect(text).toContain("1: gpt-4o");
-		expect(text).toContain("[0x], 128k");
+		expect(text).toContain("0x, 128k");
 		expect(text).toContain("2: claude-sonnet");
-		expect(text).toContain("[1x], 200k");
+		expect(text).toContain("1x, 200k");
 	});
 
 	test("model panel: shows 'Loading models...' when modelList is null", () => {
@@ -113,7 +113,7 @@ describe("DotCommandPanel", () => {
 		const models = [makeModel(3, "some-model", "1x", 0)];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} modelList={models} />);
 		expect(container.textContent ?? "").toContain("3: some-model");
-		expect(container.textContent ?? "").toContain("[1x]");
+		expect(container.textContent ?? "").toContain("1x");
 	});
 
 	test("model panel: shows 'No matching models' when filter yields nothing", () => {

@@ -88,7 +88,7 @@ export function createModelTree(modelList: ModelListItem[] | null): DotTreeNode 
 			return filtered.map((m) => ({
 				id: `model.${m.index}`,
 				label: `${String(m.index).padStart(padWidth, " ")}: ${m.id}`,
-				description: m.contextWindow > 0 ? `[${m.cost}], ${formatContextWindow(m.contextWindow)}` : `[${m.cost}]`,
+				description: m.contextWindow > 0 ? `${m.cost}, ${formatContextWindow(m.contextWindow)}` : `${m.cost}`,
 				commitValue: String(m.index),
 				kind: "action" as const,
 			}));
