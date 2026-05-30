@@ -156,6 +156,7 @@ export function createSessionTree(
 				(s) => s.index,
 			);
 			if (filtered.length === 0) return [{ id: "session.none", label: "No matching sessions", kind: "action" as const }];
+			const padWidth = String(Math.max(...filtered.map((s) => s.index))).length;
 			return filtered.map((s) => {
 				const isCurrentSession = s.id === getSessionId();
 				const isOwnedByOther = s.owned && !(isCurrentSession && !sessionLocked);
@@ -171,8 +172,9 @@ export function createSessionTree(
 					})
 					.replace(",", "");
 				const title = s.title || "untitled";
+				const paddedIndex = String(s.index).padStart(padWidth, " ");
 				const segments: { text: string; muted?: boolean }[] = [
-					{ text: ` ${s.index}: ` },
+					{ text: ` ${paddedIndex}: ` },
 					{ text: localTime, muted: true },
 					{ text: " — " },
 					{ text: title },
