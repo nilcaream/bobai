@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.2.9](https://github.com/nilcaream/bobai/compare/bobai-v0.2.8...bobai-v0.2.9) (2026-05-31)
+
+### Features
+
+- ui: restyle model, new, and title dot panel entries ([76c28cb](https://github.com/nilcaream/bobai/commit/76c28cb43130dfef1068d1433f7f937eb8e23dde))
+- ui: dynamic left-padding for session indices ([a89d8d7](https://github.com/nilcaream/bobai/commit/a89d8d76409ecf8f2fd4a39a12734fe7be1f93be))
+- ui: restyle session list in dot panel ([8b0140a](https://github.com/nilcaream/bobai/commit/8b0140a40d08ee6a52c0e77ff7912aa2b94e30c8))
+- add click-to-select for all dot command panels (Phase 2b) ([3b9a937](https://github.com/nilcaream/bobai/commit/3b9a937f43479d739216bba3b7c205c7fd5b12d3))
+- migrate all dot commands to tree framework (Phase 2a) ([bd5aa12](https://github.com/nilcaream/bobai/commit/bd5aa1204aa6ff95a6e7e37c57c6d791f8d56f66))
+- wire .configuration command end-to-end ([a927201](https://github.com/nilcaream/bobai/commit/a927201ccfa5a7ae5baf7e75272e35fcea817289))
+- add dot command tree framework and .configuration command ([2a0b0bf](https://github.com/nilcaream/bobai/commit/2a0b0bfda834c72b2f268ada2df0857ef328ec04))
+- ui: add trailing space to dot-title autofill for easier suffix typing ([0a1e3ff](https://github.com/nilcaream/bobai/commit/0a1e3ffe79518b623e81903ba469f7e8d6feba13))
+- restore coverage badges to CI and README ([d95ebc2](https://github.com/nilcaream/bobai/commit/d95ebc2e8dfcd211c619c2cd2518508b7b12ba1f))
+### Bug Fixes
+
+- config: rearchitect configuration dot command with full keyboard support ([937b11a](https://github.com/nilcaream/bobai/commit/937b11a75da185522de324a85eb8e4d5cf796f65))
+- compaction: persist compaction stats so view shows accurate results ([cff5157](https://github.com/nilcaream/bobai/commit/cff515764ac6255b710db2520284ad67e1747c45))
+- adjust model cost display and dot command descriptions ([6fb0bab](https://github.com/nilcaream/bobai/commit/6fb0bab4a16ba3713eaa710c2da2d5c8daea94a2))
+### Documentation
+
+- update glossary and README for configuration dot command ([1e59a8c](https://github.com/nilcaream/bobai/commit/1e59a8cad69b015483665c4b4e62b1b6893e625c))
+### Refactoring
+
+- ui: replace ResizeObserver + MutationObserver + useEffect with useLayoutEffect for auto-scroll ([e5db621](https://github.com/nilcaream/bobai/commit/e5db62109890893d9ddc8b25336b3ad213ad3241))
+- clean dot command architecture (Phase 3) ([b79c3d1](https://github.com/nilcaream/bobai/commit/b79c3d1a99416c25d1c00783a874caa1e56fce60))
+### Other Changes
+
+- fix flaky session null-title exclusion assertion ([d042e73](https://github.com/nilcaream/bobai/commit/d042e73c171dc45707d3d96decd1b21812c0f415))
+- add fast.sh for quick dev builds without tests/model refresh ([b168539](https://github.com/nilcaream/bobai/commit/b168539a9e1eeb8bd834610bb1051feaa654cfd0))
+
 ## [0.2.8](https://github.com/nilcaream/bobai/compare/bobai-v0.2.7...bobai-v0.2.8) (2026-05-27)
 
 ### Bug Fixes
