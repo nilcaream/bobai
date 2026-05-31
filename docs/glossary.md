@@ -254,6 +254,7 @@ the LLM.
 
 | Command | Syntax | Description |
 |---------|--------|-------------|
+| `.configuration` | `.configuration [project\|global] [field] [value]` | Read or write project or global configuration |
 | `.model` | `.model <N>` | Switch the current session model |
 | `.new` | `.new [title]` | Start a new session |
 | `.provider` | `.provider <N>` | Switch the current session provider |
@@ -272,6 +273,7 @@ Trailing digits are split off as arguments automatically.
 
 | Shortcut | Resolves To | Why |
 |----------|-------------|-----|
+| `.c` | `.configuration` | only command starting with `c` |
 | `.m` | `.model` | only command starting with `m` |
 | `.m3` | `.model 3` | `m` resolves to model, `3` becomes the argument |
 | `.p` | `.provider` | only command starting with `p` |
@@ -289,10 +291,48 @@ Available commands change based on session state:
 
 | State | Available Commands |
 |-------|-------------------|
-| **Normal** | `model`, `new`, `provider`, `session`, `subagent`, `title`, `view` |
-| **Streaming** | `stop`, `subagent` |
-| **Read-only** | `new`, `session`, `subagent`, `title`, `view` |
-| **Locked** | `new`, `session` |
+| **Normal** | `configuration`, `limit`, `model`, `new`, `provider`, `session`, `subagent`, `title`, `view` |
+| **Streaming** | `configuration`, `stop`, `subagent` |
+| **Read-only** | `configuration`, `new`, `session`, `subagent`, `title`, `view` |
+| **Locked** | `configuration`, `new`, `session` |
+
+### Configuration Command Architecture
+
+The `.configuration` command uses a **three-level tree**: scope → field → value.
+Each level narrows by prefix match until the user reaches a leaf.
+
+| Level | Nodes | Kind |
+|-------|-------|------|
+| **Scope** | `project`, `global` | menu |
+| **Field** | `debug`, `provider`, `model`, `port`, `maxIterations` | menu (debug, provider, model) or text (port, maxIterations) |
+| **Value** | dynamic — depends on field | action (debug: true/false), menu (provider/model: pickable list), text (port, maxIterations: free input) |
+
+Provider and model fields use the same **dynamic pickers** as the standalone
+`.provider` and `.model` commands — fuzzy-filtered lists with cost and context
+window display. The model list is tied to the **configured** provider (from
+project or global config), not the current session's provider.
+
+#### Enter Key Commit Path
+
+When Enter is pressed, the tree-resolved commit path is built from the current
+state — not from the raw abbreviated input. Numeric filters are resolved by
+exact index match against visible children; text filters pick the first
+fuzzy-sorted child (consistent with `.session` and `.model`).
+
+The resolved path is passed to `submit()` via a ref (`commitPathRef`) populated
+by `DotCommandPanel` on every render.
+
+#### Server-Side
+
+- **Display**: `bare .c`, `.c <scope>`, and `.c <scope> <field>` read from the
+  in-memory config cache. The cache is kept in sync with disk after every write.
+- **Write**: `.c <scope> <field> <value>` validates the value (provider and
+  model exist in the catalog, port and maxIterations are in range, etc.) and
+  persists to `bobai.json`.
+- **Default backend resolution**: at server startup, the project and global
+  config layers are validated. If a configured model doesn't exist in that
+  provider's catalog, the provider's hardcoded default model is used as a
+  fallback instead of rejecting the entire layer.
 
 ---
 

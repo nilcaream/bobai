@@ -209,6 +209,7 @@ Type `.` in the prompt to open the dot-command picker. Dot commands are local UI
 
 | Command | Description |
 |---------|-------------|
+| `.configuration [project\|global] [field] [value]` | Read or write project or global config |
 | `.limit [n\|nk]` | Override context window size for the session; no argument removes the override |
 | `.model <n>` | Switch the current session model |
 | `.new [title]` | Start a new session |
@@ -309,6 +310,28 @@ Project settings override global settings.
 ```
 
 Bob AI creates the project config automatically the first time you run it in a directory.
+
+### Changing configuration from the UI
+
+Use the `.configuration` dot command (abbreviated `.c`) to read or change config
+without editing JSON files:
+
+```
+.c                  show effective config (project merged over global)
+.c p                show project config
+.c g                show global config
+.c p debug          show the debug setting for the project
+.c p debug true     enable debug mode in the project config
+.c p pro 2          set the project provider to the second authenticated provider
+.c p mod 3          set the project model to the third model in that provider's list
+```
+
+The provider and model pickers show fuzzy-filtered lists with pricing and
+context window info — the same pickers used by `.provider` and `.model`.
+
+Config values are validated before writing. Changes are persisted immediately
+to the appropriate `bobai.json`. The default provider and model take effect for
+new sessions; the current session is not affected.
 
 ## View Modes
 
