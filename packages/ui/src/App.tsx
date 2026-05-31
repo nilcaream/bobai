@@ -104,7 +104,7 @@ export function App() {
 	}, [title]);
 
 	const { messagesRef, scrollToBottom, peekSubagentWithScroll, peekSubagentFromDbWithScroll, exitSubagentPeekWithScroll } =
-		useAutoScroll(messages, autoScrollRef, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
+		useAutoScroll(autoScrollRef, peekSubagent, peekSubagentFromDb, exitSubagentPeek, setView);
 
 	const { pendingNewTitle } = useSessionRouting(
 		loadSession,
