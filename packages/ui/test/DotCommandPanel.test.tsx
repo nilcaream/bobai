@@ -280,7 +280,7 @@ describe("DotCommandPanel", () => {
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
 		const text = container.textContent ?? "";
 		expect(text).toContain("run tests");
-		expect(text).not.toContain("1:");
+		expect(text.startsWith("2: ")).toBe(true);
 	});
 
 	test("session panel: numeric arg still filters by index, not title", () => {
