@@ -10,8 +10,21 @@ export interface Session {
 	promptTokens: number;
 	promptChars: number;
 	contextLimit: number | null;
+	lastCompaction: Record<string, unknown> | null;
 	createdAt: string;
 	updatedAt: string;
+}
+
+export interface CompactionRecord {
+	multiplier: number;
+	iterations: number;
+	charsBefore: number;
+	charsAfter: number;
+	charBudget: number;
+	charsPerToken: number;
+	target: number;
+	type: string;
+	elapsedMs: number;
 }
 
 export interface StoredMessage {
@@ -34,6 +47,7 @@ type SessionRow = {
 	prompt_tokens: number;
 	prompt_chars: number;
 	context_limit: number | null;
+	last_compaction: string | null;
 	created_at: string;
 	updated_at: string;
 };
@@ -68,6 +82,7 @@ export function createSession(db: Database, options?: { provider?: string; model
 		promptTokens: 0,
 		promptChars: 0,
 		contextLimit: null,
+		lastCompaction: null,
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -128,7 +143,7 @@ export function getMessages(db: Database, sessionId: string): StoredMessage[] {
 export function getSession(db: Database, sessionId: string): Session | null {
 	const row = db
 		.prepare(
-			"SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, created_at, updated_at FROM sessions WHERE id = ?",
+			"SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, last_compaction, created_at, updated_at FROM sessions WHERE id = ?",
 		)
 		.get(sessionId) as SessionRow | null;
 
@@ -143,6 +158,7 @@ export function getSession(db: Database, sessionId: string): Session | null {
 		promptTokens: row.prompt_tokens,
 		promptChars: row.prompt_chars,
 		contextLimit: row.context_limit,
+		lastCompaction: row.last_compaction ? (JSON.parse(row.last_compaction) as Record<string, unknown>) : null,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -167,8 +183,8 @@ export function getRecentPrompts(db: Database, limit: number): string[] {
 
 export function listSessions(db: Database, limit?: number): Session[] {
 	const sql = limit
-		? "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
-		: "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
+		? "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, last_compaction, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, last_compaction, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC";
 	const rows = (limit ? db.prepare(sql).all(limit) : db.prepare(sql).all()) as SessionRow[];
 
 	return rows.map((r) => ({
@@ -181,6 +197,7 @@ export function listSessions(db: Database, limit?: number): Session[] {
 		promptTokens: r.prompt_tokens,
 		promptChars: r.prompt_chars,
 		contextLimit: r.context_limit,
+		lastCompaction: r.last_compaction ? (JSON.parse(r.last_compaction) as Record<string, unknown>) : null,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -243,6 +260,7 @@ export function createSubagentSession(
 		promptTokens: 0,
 		promptChars: 0,
 		contextLimit: null,
+		lastCompaction: null,
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -250,8 +268,8 @@ export function createSubagentSession(
 
 export function listSubagentSessions(db: Database, parentId: string, limit?: number): Session[] {
 	const sql = limit
-		? "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?"
-		: "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC";
+		? "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, last_compaction, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?"
+		: "SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, last_compaction, created_at, updated_at FROM sessions WHERE parent_id = ? ORDER BY updated_at DESC, rowid DESC";
 	const rows = (limit ? db.prepare(sql).all(parentId, limit) : db.prepare(sql).all(parentId)) as SessionRow[];
 
 	return rows.map((r) => ({
@@ -264,6 +282,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit?: num
 		promptTokens: r.prompt_tokens,
 		promptChars: r.prompt_chars,
 		contextLimit: r.context_limit,
+		lastCompaction: r.last_compaction ? (JSON.parse(r.last_compaction) as Record<string, unknown>) : null,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at,
 	}));
@@ -272,7 +291,7 @@ export function listSubagentSessions(db: Database, parentId: string, limit?: num
 export function getMostRecentParentSession(db: Database): Session | null {
 	const row = db
 		.prepare(
-			"SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
+			"SELECT id, title, model, provider, api_family, parent_id, prompt_tokens, prompt_chars, context_limit, last_compaction, created_at, updated_at FROM sessions WHERE parent_id IS NULL ORDER BY updated_at DESC, rowid DESC LIMIT 1",
 		)
 		.get() as SessionRow | null;
 
@@ -287,6 +306,7 @@ export function getMostRecentParentSession(db: Database): Session | null {
 		promptTokens: row.prompt_tokens,
 		promptChars: row.prompt_chars,
 		contextLimit: row.context_limit,
+		lastCompaction: row.last_compaction ? (JSON.parse(row.last_compaction) as Record<string, unknown>) : null,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -315,6 +335,14 @@ export function updateSessionContextLimit(db: Database, sessionId: string, conte
 
 export function clearSessionContextLimit(db: Database, sessionId: string): void {
 	db.prepare("UPDATE sessions SET context_limit = NULL, updated_at = ? WHERE id = ?").run(new Date().toISOString(), sessionId);
+}
+
+export function updateSessionCompaction(db: Database, sessionId: string, record: CompactionRecord): void {
+	db.prepare("UPDATE sessions SET last_compaction = ?, updated_at = ? WHERE id = ?").run(
+		JSON.stringify(record),
+		new Date().toISOString(),
+		sessionId,
+	);
 }
 
 export function getDescendantSessionIds(db: Database, parentId: string): string[] {

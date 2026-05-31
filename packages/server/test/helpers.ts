@@ -16,6 +16,7 @@ export function createTestDb(): Database {
 			prompt_tokens INTEGER NOT NULL DEFAULT 0,
 			prompt_chars INTEGER NOT NULL DEFAULT 0,
 			context_limit INTEGER,
+			last_compaction TEXT,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)

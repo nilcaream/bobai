@@ -2,9 +2,9 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import { listAuthenticatedProviders as listAuthProviderIds, loadAuthStore } from "./auth/store";
 import { type CommandRequest, handleCommand } from "./command";
-import { compactToBudget } from "./compaction/compact-to-budget";
+import { compactToBudget, compactWithMultiplier } from "./compaction/compact-to-budget";
 import { createCompactionRegistry } from "./compaction/registry";
-import { NON_TOOL_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
+import { COMPACTION_OUTPUT_TARGET, NON_TOOL_DISTANCE, PRE_PROMPT_TARGET } from "./compaction/strength";
 import { mapEvictedToStored } from "./compaction/view";
 import type { DbGuard } from "./db-guard";
 import { DbDisconnectedError } from "./db-guard";
@@ -277,7 +277,124 @@ export function createServer(options: ServerOptions) {
 					});
 				}
 
+				// Count messages by role before and after compaction+eviction
+				function countByRole(msgs: { role: string }[]): Record<string, number> {
+					const counts: Record<string, number> = {};
+					for (const m of msgs) {
+						counts[m.role] = (counts[m.role] ?? 0) + 1;
+					}
+					counts.total = msgs.length;
+					return counts;
+				}
+
+				function buildToolReach(toolReg: ReturnType<typeof createCompactionRegistry>, currentMultiplier: number) {
+					const reach: Array<{
+						name: string;
+						type: "output" | "arguments";
+						threshold: number;
+						baseDistance: number;
+						minimumDistance: number;
+						evictionDistance: number;
+					}> = [];
+					for (const def of toolReg.definitions) {
+						const toolName = def.function.name;
+						const tool = toolReg.get(toolName);
+						if (!tool) continue;
+						const baseDistance = tool.baseDistance;
+						const evictDist = currentMultiplier > 0 ? Math.ceil(currentMultiplier * baseDistance) : 0;
+						if (tool.outputThreshold !== undefined) {
+							const minDist = currentMultiplier > 0 ? Math.ceil(tool.outputThreshold * currentMultiplier * baseDistance) : 0;
+							reach.push({
+								name: toolName,
+								type: "output",
+								threshold: tool.outputThreshold,
+								baseDistance,
+								minimumDistance: minDist,
+								evictionDistance: evictDist,
+							});
+						}
+						if (tool.argsThreshold !== undefined) {
+							const minDist = currentMultiplier > 0 ? Math.ceil(tool.argsThreshold * currentMultiplier * baseDistance) : 0;
+							reach.push({
+								name: toolName,
+								type: "arguments",
+								threshold: tool.argsThreshold,
+								baseDistance,
+								minimumDistance: minDist,
+								evictionDistance: evictDist,
+							});
+						}
+					}
+					for (const role of ["user", "assistant", "system"]) {
+						reach.push({
+							name: role,
+							type: "output",
+							threshold: -1,
+							baseDistance: -1,
+							minimumDistance: -1,
+							evictionDistance: -1,
+						});
+					}
+					reach.sort((a, b) => {
+						if (a.minimumDistance === -1 && b.minimumDistance === -1) return 0;
+						if (a.minimumDistance === -1) return 1;
+						if (b.minimumDistance === -1) return -1;
+						return a.minimumDistance - b.minimumDistance;
+					});
+					return reach;
+				}
+
 				const tools = createCompactionRegistry(options.availableTools);
+
+				const lastCompaction = session?.lastCompaction as Record<string, unknown> | null;
+				const storedMultiplier = typeof lastCompaction?.multiplier === "number" ? lastCompaction.multiplier : undefined;
+
+				// When stored compaction stats exist, reproduce the same compaction
+				// that was actually sent to the LLM instead of re-running with stale
+				// charsPerToken from the current session.
+				if (storedMultiplier !== undefined) {
+					const {
+						messages: compactedMsgs,
+						preEviction,
+						details,
+					} = compactWithMultiplier(messages, storedMultiplier, tools, sessionId);
+
+					const compactedStored = mapEvictedToStored(preEviction, compactedMsgs, conversationMessages, sessionId);
+
+					const charsPerToken = (lastCompaction?.charsPerToken as number) ?? 0;
+					const charsBefore = (lastCompaction?.charsBefore as number) ?? 0;
+					const estimatedContextNeeded = charsPerToken > 0 ? charsBefore / (contextWindow * charsPerToken) : 0;
+					const multiplier = storedMultiplier;
+
+					// Build toolReach from the stored multiplier
+					const toolReach = buildToolReach(tools, multiplier);
+
+					return Response.json({
+						messages: compactedStored.map((m) => ({ ...m, messageIndex: m.originalIndex })),
+						stats: {
+							multiplier: lastCompaction?.multiplier ?? 0,
+							iterations: lastCompaction?.iterations ?? 0,
+							charsBefore: lastCompaction?.charsBefore ?? 0,
+							charsAfter: lastCompaction?.charsAfter ?? 0,
+							charBudget: lastCompaction?.charBudget ?? 0,
+							charsPerToken,
+							type: (lastCompaction?.type as string) ?? "pre-prompt",
+							parameters: {
+								defaultMaxDistance: NON_TOOL_DISTANCE,
+							},
+							estimatedContextNeeded,
+							target: lastCompaction?.target ?? COMPACTION_OUTPUT_TARGET,
+							elapsedMs: lastCompaction?.elapsedMs ?? 0,
+							messagesBefore: countByRole(messages),
+							messagesAfter: countByRole(compactedMsgs),
+							toolReach,
+						},
+						details: Object.fromEntries(details),
+					});
+				}
+
+				// No stored stats — fall back to running compaction with current session data.
+				// Use PRE_PROMPT_TARGET (80%) so the view shows a "what-if" preview.
 				const compactionResult = compactToBudget({
 					messages,
 					contextWindow,
@@ -289,9 +406,6 @@ export function createServer(options: ServerOptions) {
 					sessionId,
 				});
 
-				// mapEvictedToStored uses the pre-eviction array (compacted, same
-				// length as original) to build index-based identity map, and iterates
-				// the post-eviction array (messages) to produce the final output.
 				const compactedStored = mapEvictedToStored(
 					compactionResult.compacted,
 					compactionResult.messages,
@@ -301,77 +415,8 @@ export function createServer(options: ServerOptions) {
 
 				const charsPerToken = compactionResult.charsPerToken;
 				const estimatedContextNeeded = charsPerToken > 0 ? compactionResult.charsBefore / (contextWindow * charsPerToken) : 0;
-
-				// Count messages by role before and after compaction+eviction
-				function countByRole(msgs: { role: string }[]): Record<string, number> {
-					const counts: Record<string, number> = {};
-					for (const m of msgs) {
-						counts[m.role] = (counts[m.role] ?? 0) + 1;
-					}
-					counts.total = msgs.length;
-					return counts;
-				}
-
-				// Compute compaction reach for each tool at current multiplier.
-				// For a tool with a given threshold: the minimum distance where
-				// factor >= threshold is `threshold * multiplier * baseDistance`.
-				// The eviction distance (factor >= 1.0) is `multiplier * baseDistance`.
 				const multiplier = compactionResult.multiplier;
-				const toolReach: Array<{
-					name: string;
-					type: "output" | "arguments";
-					threshold: number;
-					baseDistance: number;
-					minimumDistance: number;
-					evictionDistance: number;
-				}> = [];
-				for (const def of tools.definitions) {
-					const toolName = def.function.name;
-					const tool = tools.get(toolName);
-					if (!tool) continue;
-					const baseDistance = tool.baseDistance;
-					const evictDist = multiplier > 0 ? Math.ceil(multiplier * baseDistance) : 0;
-					if (tool.outputThreshold !== undefined) {
-						const minDist = multiplier > 0 ? Math.ceil(tool.outputThreshold * multiplier * baseDistance) : 0;
-						toolReach.push({
-							name: toolName,
-							type: "output",
-							threshold: tool.outputThreshold,
-							baseDistance,
-							minimumDistance: minDist,
-							evictionDistance: evictDist,
-						});
-					}
-					if (tool.argsThreshold !== undefined) {
-						const minDist = multiplier > 0 ? Math.ceil(tool.argsThreshold * multiplier * baseDistance) : 0;
-						toolReach.push({
-							name: toolName,
-							type: "arguments",
-							threshold: tool.argsThreshold,
-							baseDistance,
-							minimumDistance: minDist,
-							evictionDistance: evictDist,
-						});
-					}
-				}
-				// Add excluded roles
-				for (const role of ["user", "assistant", "system"]) {
-					toolReach.push({
-						name: role,
-						type: "output",
-						threshold: -1,
-						baseDistance: -1,
-						minimumDistance: -1,
-						evictionDistance: -1,
-					});
-				}
-				// Sort by compaction resistance: smallest minimum distance first, excluded/never last
-				toolReach.sort((a, b) => {
-					if (a.minimumDistance === -1 && b.minimumDistance === -1) return 0;
-					if (a.minimumDistance === -1) return 1;
-					if (b.minimumDistance === -1) return -1;
-					return a.minimumDistance - b.minimumDistance;
-				});
+				const toolReach = buildToolReach(tools, multiplier);
 
 				return Response.json({
 					messages: compactedStored.map((m) => ({ ...m, messageIndex: m.originalIndex })),
@@ -384,7 +429,7 @@ export function createServer(options: ServerOptions) {
 						charsPerToken: compactionResult.charsPerToken,
 						type: "pre-prompt",
 						parameters: {
-							nonToolDistance: NON_TOOL_DISTANCE,
+							defaultMaxDistance: NON_TOOL_DISTANCE,
 						},
 						estimatedContextNeeded,
 						target: PRE_PROMPT_TARGET,

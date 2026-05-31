@@ -114,6 +114,11 @@ export async function initProject(projectRoot: string): Promise<Project> {
 		db.exec("ALTER TABLE sessions ADD COLUMN context_limit INTEGER");
 	}
 
+	// Migrate: add last_compaction column to sessions if missing (stats from most recent compaction)
+	if (!sessionColumns.some((c) => c.name === "last_compaction")) {
+		db.exec("ALTER TABLE sessions ADD COLUMN last_compaction TEXT");
+	}
+
 	return {
 		id,
 		port: config.port,

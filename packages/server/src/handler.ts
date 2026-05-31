@@ -33,6 +33,7 @@ import {
 	getMessages,
 	getSession,
 	updateMessageMetadata,
+	updateSessionCompaction,
 	updateSessionModel,
 	updateSessionPromptTokens,
 } from "./session/repository";
@@ -393,6 +394,17 @@ export async function handlePrompt(req: PromptRequest) {
 					rawMessageCount: rawMessages.length,
 					snapshotChars: totalContentChars(compactionResult.messages),
 				});
+				updateSessionCompaction(db, currentSessionId as string, {
+					multiplier: compactionResult.multiplier,
+					iterations: compactionResult.iterations,
+					charsBefore: compactionResult.charsBefore,
+					charsAfter: compactionResult.charsAfter,
+					charBudget: compactionResult.charBudget,
+					charsPerToken: compactionResult.charsPerToken,
+					target: COMPACTION_OUTPUT_TARGET,
+					type: "pre-prompt",
+					elapsedMs: compactionResult.elapsedMs,
+				});
 			}
 		} else if (charBudget80 > 0 && totalContentChars(messages) > charBudget80) {
 			// No snapshot, but over threshold — compact to 50% and cache
@@ -413,6 +425,17 @@ export async function handlePrompt(req: PromptRequest) {
 				compactedMessages: compactionResult.messages,
 				rawMessageCount: rawMessages.length,
 				snapshotChars: totalContentChars(compactionResult.messages),
+			});
+			updateSessionCompaction(db, currentSessionId as string, {
+				multiplier: compactionResult.multiplier,
+				iterations: compactionResult.iterations,
+				charsBefore: compactionResult.charsBefore,
+				charsAfter: compactionResult.charsAfter,
+				charBudget: compactionResult.charBudget,
+				charsPerToken: compactionResult.charsPerToken,
+				target: COMPACTION_OUTPUT_TARGET,
+				type: "pre-prompt",
+				elapsedMs: compactionResult.elapsedMs,
 			});
 		}
 

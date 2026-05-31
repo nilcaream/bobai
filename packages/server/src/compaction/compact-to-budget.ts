@@ -188,3 +188,35 @@ export function compactToBudget(options: CompactToBudgetOptions): CompactToBudge
 		elapsedMs: elapsed,
 	};
 }
+
+export interface CompactWithMultiplierResult {
+	messages: Message[];
+	preEviction: Message[];
+	details: Map<string, CompactionDetail>;
+}
+
+/**
+ * Run compaction at a specific multiplier without binary search.
+ *
+ * Used by the compaction view to reproduce the same compacted output
+ * that was sent to the LLM, given the stored multiplier from the last
+ * compaction run.
+ */
+export function compactWithMultiplier(
+	messages: Message[],
+	multiplier: number,
+	tools: ToolRegistry,
+	sessionId?: string,
+): CompactWithMultiplierResult {
+	const {
+		messages: finalMessages,
+		preEviction,
+		details,
+	} = compactMessagesWithStats({
+		messages,
+		multiplier,
+		tools,
+		sessionId,
+	});
+	return { messages: finalMessages, preEviction, details };
+}
