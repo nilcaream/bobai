@@ -2,7 +2,7 @@ import path from "node:path";
 import { loadAuthStore } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { buildSortedProviderModelList, providerModelsConfigExists } from "../provider/models";
-import { isSupportedProvider, type ProviderId } from "../provider/providers";
+import { getDefaultModelForProvider, isSupportedProvider, type ProviderId } from "../provider/providers";
 
 export interface BackendConfigLayer {
 	filePath: string;
@@ -43,8 +43,9 @@ function validateLayer(layer: BackendConfigLayer, configDir: string, logger?: Pi
 	}
 	const modelExists = buildSortedProviderModelList(provider, configDir).some((entry) => entry.id === model);
 	if (!modelExists) {
-		logError(logger, `Model ${model} in ${filePath} is invalid`);
-		return null;
+		const defaultModel = getDefaultModelForProvider(provider);
+		logError(logger, `Model ${model} in ${filePath} is invalid, falling back to ${defaultModel}`);
+		return { provider, model: defaultModel };
 	}
 	return { provider, model };
 }

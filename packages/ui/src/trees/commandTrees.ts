@@ -1,8 +1,8 @@
 import type { DotTreeNode } from "../DotCommandTree";
 import { fuzzyFilterAndSort } from "../fuzzySearch";
 
-type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
-type ProviderListItem = { index: number; id: string; runtimeSupported: boolean };
+export type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
+export type ProviderListItem = { index: number; id: string; runtimeSupported: boolean };
 
 function formatContextWindow(cw: number): string {
 	return `${Math.round(cw / 1000)}k`;
@@ -235,7 +235,7 @@ function pf(items: DotTreeNode[], filter: string): DotTreeNode[] {
 	return items.filter((n) => n.label.toLowerCase().startsWith(filter.toLowerCase()));
 }
 
-function filterList<T>(items: T[], filter: string, selectId: (item: T) => string, getIndex: (item: T) => number): T[] {
+export function filterList<T>(items: T[], filter: string, selectId: (item: T) => string, getIndex: (item: T) => number): T[] {
 	if (!filter) return items;
 	// Numeric filter: match by index contains
 	if (/^\d+$/.test(filter)) {

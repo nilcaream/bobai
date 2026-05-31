@@ -135,7 +135,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("debug = false");
+			expect(result.messages?.[0]?.text).toBe("configuration.project.debug = false");
 		}
 	});
 
@@ -154,7 +154,7 @@ describe("handleCommand configuration", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.messages?.[0]?.kind).toBe("success");
-			expect(result.messages?.[0]?.text).toBe("project debug = true");
+			expect(result.messages?.[0]?.text).toBe("configuration.project.debug = true");
 		}
 
 		// Verify file was written
@@ -175,7 +175,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("global port = 8080");
+			expect(result.messages?.[0]?.text).toBe("configuration.global.port = 8080");
 		}
 
 		const raw = JSON.parse(fs.readFileSync(path.join(globalConfigDir, "bobai.json"), "utf8"));
@@ -193,7 +193,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("project maxIterations = 100");
+			expect(result.messages?.[0]?.text).toBe("configuration.project.maxIterations = 100");
 		}
 
 		const raw = JSON.parse(fs.readFileSync(path.join(projectRoot, ".bobai", "bobai.json"), "utf8"));
@@ -210,7 +210,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("global provider = openrouter");
+			expect(result.messages?.[0]?.text).toBe("configuration.global.provider = openrouter");
 		}
 
 		const raw = JSON.parse(fs.readFileSync(path.join(globalConfigDir, "bobai.json"), "utf8"));
@@ -227,7 +227,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("global provider = openrouter");
+			expect(result.messages?.[0]?.text).toBe("configuration.global.provider = openrouter");
 		}
 	});
 
@@ -267,7 +267,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("project debug = true");
+			expect(result.messages?.[0]?.text).toBe("configuration.project.debug = true");
 		}
 	});
 
@@ -327,7 +327,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("project debug = true");
+			expect(result.messages?.[0]?.text).toBe("configuration.project.debug = true");
 		}
 	});
 
@@ -341,7 +341,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toBe("project debug = false");
+			expect(result.messages?.[0]?.text).toBe("configuration.project.debug = false");
 		}
 	});
 

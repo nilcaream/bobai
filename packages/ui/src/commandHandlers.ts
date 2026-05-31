@@ -431,6 +431,7 @@ export function handleConfigurationCommand(params: {
 	getSessionId: () => string | null;
 	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
 	clearVolatileMessages: () => void;
+	setResolvedDefaultProvider?: (provider: string) => void;
 }): void {
 	postDotCommand(
 		params.command,
@@ -442,6 +443,11 @@ export function handleConfigurationCommand(params: {
 				for (const msg of result.messages) {
 					params.addVolatileMessage(msg.text, msg.kind);
 				}
+			}
+			// When the provider field changes, update the configured provider state
+			// so the config tree's model list re-fetches for the new provider.
+			if (result.provider) {
+				params.setResolvedDefaultProvider?.(result.provider);
 			}
 		},
 		params.addVolatileMessage,

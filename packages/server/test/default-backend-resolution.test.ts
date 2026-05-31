@@ -162,7 +162,7 @@ describe("resolveValidatedDefaultBackend", () => {
 		expect(errors).toContain("No authentication details for provider openrouter");
 	});
 
-	test("logs an invalid model and returns null when no valid defaults remain", () => {
+	test("falls back to provider default when model is invalid", () => {
 		writeModelsConfig();
 		saveAuthStore(configDir, {
 			version: 1,
@@ -178,8 +178,8 @@ describe("resolveValidatedDefaultBackend", () => {
 			},
 			logger(),
 		);
-		expect(resolved).toBeNull();
-		expect(errors).toContain(`Model gpt-9.0 in ${projectFile} is invalid`);
-		expect(errors).toContain(`Model gpt-10.0 in ${globalFile} is invalid`);
+		// Project layer: invalid model → falls back to provider default "gpt-5-mini"
+		expect(resolved).toEqual({ provider: "github-copilot", model: "gpt-5-mini" });
+		expect(errors).toContain(`Model gpt-9.0 in ${projectFile} is invalid, falling back to gpt-5-mini`);
 	});
 });

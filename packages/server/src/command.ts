@@ -414,11 +414,13 @@ function validateConfigValue(
 
 			const models = buildSortedProviderModelList(provider as ProviderId, configDir);
 
-			// Try numeric index
+			// Try numeric index (1-based, same ordering as UI model tree)
 			if (/^\d+$/.test(rawValue)) {
 				const idx = Number.parseInt(rawValue, 10);
-				const model = models.find((m) => m.index === idx);
-				if (!model) return { ok: false, error: `Invalid model index: ${rawValue}` };
+				if (idx < 1 || idx > models.length) {
+					return { ok: false, error: `Invalid model index: ${rawValue}` };
+				}
+				const model = models[idx - 1];
 				return { ok: true, value: model.id };
 			}
 			// Try exact match
@@ -472,7 +474,7 @@ function handleConfigurationCommand(args: string, options: CommandOptions): Comm
 	if (tokens.length === 2) {
 		const config = scope === "project" ? options.projectConfig : options.globalConfig;
 		const value = config?.[field as keyof typeof config] ?? "(not set)";
-		return { ok: true, messages: [{ text: `${field} = ${value}`, kind: "info" }] };
+		return { ok: true, messages: [{ text: `configuration.${scope}.${field} = ${value}`, kind: "info" }] };
 	}
 
 	// Case 6: set value
@@ -485,9 +487,16 @@ function handleConfigurationCommand(args: string, options: CommandOptions): Comm
 		if (scope === "project") {
 			if (!options.projectRoot) return { ok: false, error: "Project root not available" };
 			updateProjectConfig(options.projectRoot, { [field]: validated.value });
+			// Keep the in-memory cache in sync so subsequent reads (.c p / .c) show the new value
+			if (options.projectConfig) {
+				(options.projectConfig as Record<string, unknown>)[field] = validated.value;
+			}
 		} else {
 			if (!options.configDir) return { ok: false, error: "Config directory not available" };
 			updateGlobalConfig(options.configDir, { [field]: validated.value });
+			if (options.globalConfig) {
+				(options.globalConfig as Record<string, unknown>)[field] = validated.value;
+			}
 		}
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -496,6 +505,7 @@ function handleConfigurationCommand(args: string, options: CommandOptions): Comm
 
 	return {
 		ok: true,
-		messages: [{ text: `${scope} ${field} = ${validated.value}`, kind: "success" }],
+		messages: [{ text: `configuration.${scope}.${field} = ${validated.value}`, kind: "success" }],
+		...(field === "provider" ? { provider: validated.value as string } : {}),
 	};
 }

@@ -79,6 +79,7 @@ export function App() {
 	const [providerList, setProviderList] = useState<ProviderListItem[] | null>(null);
 	const [resolvedDefaultProvider, setResolvedDefaultProvider] = useState<string | null>(null);
 	const [resolvedDefaultModel, setResolvedDefaultModel] = useState<string | null>(null);
+	const [configuredModelList, setConfiguredModelList] = useState<ModelListItem[] | null>(null);
 	const [skillList, setSkillList] = useState<{ name: string; description: string }[] | null>(null);
 	const [stagedSkills, setStagedSkills] = useState<StagedSkill[]>([]);
 	const defaultStatus = useRef("");
@@ -95,6 +96,7 @@ export function App() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const titleAutoFilledRef = useRef(false);
 	const committedArgsRef = useRef<string | null>(null);
+	const dotTreeCommitRef = useRef<string>("");
 
 	// Reset auto-fill flag whenever the session title changes so the next
 	// .title invocation always shows the up-to-date title.
@@ -228,6 +230,19 @@ export function App() {
 			});
 	}, [provider, setStatus]);
 
+	// Fetch models for the configured provider — used by the config tree (.c p mod / .c g mod)
+	// which needs the configured provider's models, not the session's.
+	useEffect(() => {
+		if (!resolvedDefaultProvider) {
+			setConfiguredModelList(null);
+			return;
+		}
+		fetch(`/bobai/models?provider=${encodeURIComponent(resolvedDefaultProvider)}`)
+			.then((res) => res.json())
+			.then((data: { models: ModelListItem[] }) => setConfiguredModelList(data.models))
+			.catch(() => setConfiguredModelList(null));
+	}, [resolvedDefaultProvider]);
+
 	// Fetch skills eagerly on mount — needed for slash command panel
 	useEffect(() => {
 		fetch("/bobai/skills")
@@ -283,8 +298,9 @@ export function App() {
 
 		const parsed = parseDotInput(text, activeDotCommands);
 
-		// Allow dot panel click to override args with the tree-resolved commit path
-		const effectiveArgs = (committedArgsRef.current ?? parsed?.args ?? "").trim();
+		// Allow dot panel click or Enter key to override args with the tree-resolved commit path
+		const treePath = dotTreeCommitRef.current;
+		const effectiveArgs = (committedArgsRef.current ?? (treePath || (parsed?.args ?? ""))).trim();
 		committedArgsRef.current = null;
 
 		// When session is locked, only .new and .session commands are allowed
@@ -358,6 +374,7 @@ export function App() {
 					getSessionId,
 					addVolatileMessage,
 					clearVolatileMessages,
+					setResolvedDefaultProvider,
 				});
 			} else if (parsed.command === "model") {
 				handleModelCommand({
@@ -625,6 +642,7 @@ export function App() {
 			<DotCommandPanel
 				parsed={parsedDotInput}
 				modelList={modelList}
+				configuredModelList={configuredModelList}
 				providerList={providerList}
 				sessionList={sessionList}
 				subagentList={subagentList}
@@ -633,6 +651,7 @@ export function App() {
 				contextLimit={contextLimit}
 				currentTitle={title}
 				onCommit={handleDotCommit}
+				commitPathRef={dotTreeCommitRef}
 			/>
 			<SlashCommandPanel parsed={parsedSlashInput} />
 
