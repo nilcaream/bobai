@@ -297,6 +297,14 @@ describe("listSupportedAuthProviders / getAuthProvider", () => {
 
 	test("listSupportedAuthProviders returns providers in stable canonical order", () => {
 		const ids = listSupportedAuthProviders().map((p) => p.id);
-		expect(ids).toEqual(["github-copilot", "openrouter", "opencode-go", "opencode-zen", "amazon-bedrock", "deepseek"]);
+		expect(ids).toEqual([
+			"github-copilot",
+			"openrouter",
+			"opencode-go",
+			"opencode-zen",
+			"amazon-bedrock",
+			"deepseek",
+			"tavily",
+		]);
 	});
 });

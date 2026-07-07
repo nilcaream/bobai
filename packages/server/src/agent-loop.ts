@@ -517,6 +517,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 								sessionId,
 								toolCallId: tc.id,
 								provider: isolated,
+								signal,
 							});
 							result = {
 								tc,
@@ -589,6 +590,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 								sessionId,
 								toolCallId: tc.id,
 								provider,
+								signal,
 							});
 							llmOutput = result.llmOutput;
 							uiOutput = result.uiOutput;

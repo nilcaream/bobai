@@ -24,6 +24,7 @@ import { TASK_ARGS_THRESHOLD, TASK_BASE_DISTANCE, TASK_OUTPUT_THRESHOLD } from "
 import type { Tool, ToolRegistry } from "../tool/tool";
 import { createToolRegistry } from "../tool/tool";
 import { webFetchTool } from "../tool/web-fetch";
+import { createWebSearchTool } from "../tool/web-search";
 import { writeFileTool } from "../tool/write-file";
 import { COMPACTION_MARKER } from "./default-strategy";
 
@@ -80,6 +81,17 @@ const taskCompactionStub: Tool = {
 	},
 };
 
+/** Minimal stub for the web search tool — only compaction-relevant fields. */
+const webSearchCompactionStub: Tool = {
+	...createWebSearchTool(undefined),
+	formatCall() {
+		return "";
+	},
+	async execute() {
+		throw new Error("compaction-only stub — do not call execute");
+	},
+};
+
 /** Build a ToolRegistry with all tools' compaction metadata (thresholds + compact methods). */
 export function createCompactionRegistry(availableTools?: import("../platform/types").AvailableTools): ToolRegistry {
 	const tools: Tool[] = [
@@ -90,6 +102,7 @@ export function createCompactionRegistry(availableTools?: import("../platform/ty
 		editFileTool,
 		sqlite3Tool,
 		webFetchTool,
+		webSearchCompactionStub,
 		skillCompactionStub,
 		taskCompactionStub,
 	];

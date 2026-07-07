@@ -22,6 +22,7 @@ describe("provider registry", () => {
 			"opencode-zen",
 			"amazon-bedrock",
 			"deepseek",
+			"tavily",
 		]);
 		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual([
 			"github-copilot",
@@ -54,6 +55,7 @@ describe("provider registry", () => {
 		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
 		expect(isSupportedAuthProvider("amazon-bedrock")).toBe(true);
 		expect(isSupportedAuthProvider("deepseek")).toBe(true);
+		expect(isSupportedAuthProvider("tavily")).toBe(true);
 		expect(isSupportedAuthProvider("anything-else")).toBe(false);
 	});
 

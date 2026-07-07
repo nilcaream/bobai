@@ -75,6 +75,7 @@ export interface TaskToolDeps {
 	startedAt?: number;
 	availableTools?: import("../platform/types").AvailableTools;
 	platformInfo?: import("../platform/types").PlatformInfo;
+	webSearchTool?: Tool;
 }
 
 export function createTaskTool(deps: TaskToolDeps): Tool {
@@ -97,6 +98,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		startedAt,
 		availableTools,
 		platformInfo,
+		webSearchTool,
 	} = deps;
 
 	return {
@@ -247,6 +249,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				webFetchTool,
 				skillTool,
 			];
+			if (webSearchTool) childDynamicTools.push(webSearchTool);
 			for (const kind of avail.shells) {
 				const tool = getShellTool(kind);
 				if (tool) childDynamicTools.push(tool);

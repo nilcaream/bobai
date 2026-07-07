@@ -20,7 +20,9 @@ import {
 	setOpenCodeGoAuth,
 	setOpenCodeZenAuth,
 	setOpenRouterAuth,
+	setTavilyAuth,
 } from "./store";
+import { validateTavilyKey } from "./tavily";
 
 export async function authorizeCopilot(configDir: string): Promise<CopilotAuth> {
 	console.log("Authenticating with GitHub Copilot");
@@ -163,46 +165,76 @@ export async function authorizeAmazonBedrock(
 	);
 }
 
+export async function authorizeTavily(
+	configDir: string,
+	deps: {
+		promptSecret?: (prompt: string) => Promise<string>;
+		validateTavilyKey?: (apiKey: string) => Promise<void>;
+	} = {},
+): Promise<void> {
+	await authorizeApiKeyProvider(configDir, {
+		prompt: "Paste Tavily API key: ",
+		readSecret: deps.promptSecret ?? promptSecret,
+		validateKey: deps.validateTavilyKey ?? validateTavilyKey,
+		setAuth: setTavilyAuth,
+		successMessage: "Tavily key saved",
+	});
+}
+
 export interface AuthProviderEntry {
 	id: AuthProviderId;
+	category?: "model-provider" | "web-search";
 	authorize(configDir: string): Promise<void>;
 }
 
 const AUTH_PROVIDERS: AuthProviderEntry[] = [
 	{
 		id: "github-copilot",
+		category: "model-provider",
 		authorize: async (configDir: string) => {
 			await authorizeCopilot(configDir);
 		},
 	},
 	{
 		id: "openrouter",
+		category: "model-provider",
 		authorize: async (configDir: string) => {
 			await authorizeOpenRouter(configDir);
 		},
 	},
 	{
 		id: "opencode-go",
+		category: "model-provider",
 		authorize: async (configDir: string) => {
 			await authorizeOpenCodeGo(configDir);
 		},
 	},
 	{
 		id: "opencode-zen",
+		category: "model-provider",
 		authorize: async (configDir: string) => {
 			await authorizeOpenCodeZen(configDir);
 		},
 	},
 	{
 		id: "amazon-bedrock",
+		category: "model-provider",
 		authorize: async (configDir: string) => {
 			await authorizeAmazonBedrock(configDir);
 		},
 	},
 	{
 		id: "deepseek",
+		category: "model-provider",
 		authorize: async (configDir: string) => {
 			await authorizeDeepSeek(configDir);
+		},
+	},
+	{
+		id: "tavily",
+		category: "web-search",
+		authorize: async (configDir: string) => {
+			await authorizeTavily(configDir);
 		},
 	},
 ];

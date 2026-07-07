@@ -27,6 +27,7 @@ export const SUPPORTED_AUTH_PROVIDER_IDS = [
 	"opencode-zen",
 	"amazon-bedrock",
 	"deepseek",
+	"tavily",
 ] as const;
 export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
@@ -528,7 +529,9 @@ export function listRuntimeProviders(): ProviderDescriptor[] {
 }
 
 export function listAuthProviders(): ProviderDescriptor[] {
-	return SUPPORTED_AUTH_PROVIDER_IDS.map((providerId) => PROVIDER_DESCRIPTORS[providerId]);
+	return SUPPORTED_AUTH_PROVIDER_IDS.map((providerId) => PROVIDER_DESCRIPTORS[providerId]).filter(
+		(d): d is ProviderDescriptor => d !== undefined,
+	);
 }
 
 export function getProviderAuthMetadata(providerId: string): ProviderAuthMetadata | undefined {

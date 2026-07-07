@@ -10,6 +10,7 @@ describe("auth provider registry", () => {
 			"opencode-zen",
 			"amazon-bedrock",
 			"deepseek",
+			"tavily",
 		]);
 	});
 });

@@ -31,6 +31,10 @@ export interface DeepSeekAuth {
 	apiKey: string;
 }
 
+export interface TavilyAuth {
+	apiKey: string;
+}
+
 export interface AuthStore {
 	version: 1;
 	providers: {
@@ -40,6 +44,7 @@ export interface AuthStore {
 		"opencode-zen"?: OpenCodeZenAuth;
 		"amazon-bedrock"?: AmazonBedrockAuth;
 		deepseek?: DeepSeekAuth;
+		tavily?: TavilyAuth;
 	};
 }
 
@@ -144,6 +149,20 @@ export function setDeepSeekAuth(store: AuthStore, auth: DeepSeekAuth): AuthStore
 		providers: {
 			...store.providers,
 			deepseek: auth,
+		},
+	};
+}
+
+export function getTavilyAuth(store: AuthStore): TavilyAuth | undefined {
+	return store.providers.tavily;
+}
+
+export function setTavilyAuth(store: AuthStore, auth: TavilyAuth): AuthStore {
+	return {
+		...store,
+		providers: {
+			...store.providers,
+			tavily: auth,
 		},
 	};
 }

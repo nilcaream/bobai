@@ -11,6 +11,8 @@ export interface ToolContext {
 	toolCallId?: string;
 	/** Provider override for parallel task execution (isolated turn state). */
 	provider?: import("../provider/provider").Provider;
+	/** Abort signal that fires when the user stops the session (.stop or session close). */
+	signal?: AbortSignal;
 }
 
 /** Check whether a resolved absolute path falls within the project root or any accessible directory. */
@@ -27,8 +29,8 @@ export function isPathAccessible(resolved: string, ctx: ToolContext): boolean {
 }
 
 /** Escape characters that have special meaning in Markdown so they render as literal text. */
-export function escapeMarkdown(text: string): string {
-	return text.replace(/([*_`~\\[\]|#>])/g, "\\$1");
+export function escapeMarkdown(text: string | null | undefined): string {
+	return (text ?? "").replace(/([*_`~\\[\]|#>])/g, "\\$1");
 }
 
 export interface ToolResult {

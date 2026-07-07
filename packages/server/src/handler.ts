@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import path from "node:path";
 import type { AgentEvent } from "./agent-loop";
 import { runAgentLoop } from "./agent-loop";
+import { getTavilyAuth, loadAuthStore } from "./auth/store";
 import { getSnapshot, setSnapshot } from "./compaction/cache";
 import { type CompactToBudgetResult, compactToBudget } from "./compaction/compact-to-budget";
 import { writeCompactionDump } from "./compaction/dump";
@@ -51,6 +52,7 @@ import { sqlite3Tool } from "./tool/sqlite3";
 import { createTaskTool } from "./tool/task";
 import { createToolRegistry } from "./tool/tool";
 import { webFetchTool } from "./tool/web-fetch";
+import { createWebSearchTool } from "./tool/web-search";
 import { writeFileTool } from "./tool/write-file";
 
 // TODO: Module-level singleton accumulates entries forever. Consider per-session scoping
@@ -265,6 +267,10 @@ export async function handlePrompt(req: PromptRequest) {
 			scopedLogger?.warn("REPAIR", `Repaired message ordering in session ${currentSessionId}`);
 		}
 
+		const authStore = loadAuthStore(configDir);
+		const tavilyApiKey = authStore ? getTavilyAuth(authStore)?.apiKey : undefined;
+		const webSearchTool = createWebSearchTool(tavilyApiKey);
+
 		const taskTool = createTaskTool({
 			db,
 			provider: activeProvider,
@@ -286,6 +292,7 @@ export async function handlePrompt(req: PromptRequest) {
 			subagentStatus,
 			availableTools: req.availableTools,
 			platformInfo: req.platformInfo,
+			webSearchTool,
 		});
 
 		const skillTool = createSkillTool(skills);
@@ -300,6 +307,7 @@ export async function handlePrompt(req: PromptRequest) {
 			editFileTool,
 			sqlite3Tool,
 			webFetchTool,
+			webSearchTool,
 			taskTool,
 			skillTool,
 		];

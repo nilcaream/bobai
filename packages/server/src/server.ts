@@ -444,11 +444,13 @@ export function createServer(options: ServerOptions) {
 
 			if (url.pathname === "/bobai/providers") {
 				const store = loadAuthStore(options.configDir ?? "");
-				const providers = listAuthProviderIds(store).map((id, i) => ({
-					index: i + 1,
-					id,
-					runtimeSupported: isRuntimeSupportedProvider(id),
-				}));
+				const providers = listAuthProviderIds(store)
+					.map((id, i) => ({
+						index: i + 1,
+						id,
+						runtimeSupported: isRuntimeSupportedProvider(id),
+					}))
+					.filter((p) => p.runtimeSupported);
 				return Response.json({ providers, defaultProvider: configuredProviderId });
 			}
 
@@ -489,11 +491,13 @@ export function createServer(options: ServerOptions) {
 					options.dbGuard?.assertConnected();
 					const body = (await req.json()) as CommandRequest;
 					const store = loadAuthStore(options.configDir ?? "");
-					const authenticatedProviders = listAuthProviderIds(store).map((id, i) => ({
-						index: i + 1,
-						id,
-						runtimeSupported: isRuntimeSupportedProvider(id),
-					}));
+					const authenticatedProviders = listAuthProviderIds(store)
+						.map((id, i) => ({
+							index: i + 1,
+							id,
+							runtimeSupported: isRuntimeSupportedProvider(id),
+						}))
+						.filter((p) => p.runtimeSupported);
 					const result = handleCommand(options.db, body, {
 						defaultProviderId: configuredProviderId,
 						defaultModel: options.model ?? null,

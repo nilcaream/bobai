@@ -136,7 +136,7 @@ Each tool has:
 - a **mergeable** flag for UI grouping
 
 Built-in tools: `read_file`, `list_directory`, `file_search`, `write_file`,
-`edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `task`, `skill`.
+`edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `web_search`, `task`, `skill`.
 
 ### Skill
 
@@ -169,6 +169,47 @@ Providers handle streaming, token counting, turn metrics, summaries, and auth.
 
 An **isolated turn provider** wraps a provider for parallel subagent execution
 with independent metrics.
+
+### Web Search
+
+Bob AI can search the web using the `web_search` tool. This tool requires a
+configured **search provider** — currently Tavily.
+
+**Setup:**
+
+```
+bobai auth tavily
+```
+
+Paste your Tavily API key when prompted. The key is validated and stored in
+`~/.config/bobai/auth.json`. Free tier (1,000 searches/month) is available at
+[tavily.com](https://tavily.com) — no credit card required.
+
+The `web_search` tool is always available. When no search provider is
+configured, the tool returns an error directing the user to run
+`bobai auth tavily`.
+
+**Tool parameters:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `query` | string | — | The search query |
+| `maxResults` | number | 5 | Max results (1–20) |
+| `includeSummary` | boolean | false | LLM-generated summary of results |
+| `advanced` | boolean | false | Deeper, richer content extraction (slower) |
+| `fullPages` | boolean | false | Save full page markdown to `.bobai/searches/` for `read_file` |
+| `includeImages` | boolean | false | Include image URLs in results |
+| `domains` | string[] | [] | Restrict search to these domains |
+| `timeout` | number | 15 | Timeout in seconds (5–60) |
+
+When `fullPages` is enabled, each result's full content is saved to
+`.bobai/searches/{sessionId}/{toolCallId}/{index}.md`. The LLM output includes
+`read_file` paths so the agent can pull only the pages it needs rather than
+loading everything into context. Full page extraction is not guaranteed for
+every result — Tavily may return `raw_content: null` for some URLs.
+
+The tool supports abort via `.stop` — in-progress fetches are cancelled when
+the user stops the agent loop.
 
 ### Model
 
@@ -242,6 +283,7 @@ A working directory with Bob AI initialized. Project state lives in `.bobai/`:
 - project-level instructions
 - compacted tool outputs (`compaction/`)
 - downloaded web content (`downloads/`)
+- saved search results (`searches/`)
 
 ---
 
