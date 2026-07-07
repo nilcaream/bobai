@@ -1,7 +1,12 @@
-import { formatMsgSummary, groupParts } from "./formatUtils";
+import { formatMsgSummary, groupParts, type Panel } from "./formatUtils";
 import { Markdown } from "./Markdown";
 import type { Message, SubagentInfo } from "./protocol";
 import { ToolPanel } from "./ToolPanel";
+
+/** Filter out empty reasoning panels — they produce no DOM but steal isLast from the previous panel. */
+function filterVisiblePanels(panels: Panel[]): Panel[] {
+	return panels.filter((p) => p.type !== "reasoning" || p.content.length > 0);
+}
 
 export function ChatMessageList({
 	messages,
@@ -38,8 +43,10 @@ export function ChatMessageList({
 			continue;
 		}
 
-		const panels = groupParts(msg.parts);
+		const rawPanels = groupParts(msg.parts);
+		const panels = filterVisiblePanels(rawPanels);
 		const msgSummary = formatMsgSummary(msg);
+
 		for (let i = 0; i < panels.length; i++) {
 			const panel = panels[i];
 			if (!panel) continue;
@@ -58,13 +65,19 @@ export function ChatMessageList({
 					</div>,
 				);
 			} else if (panel.type === "reasoning") {
-				if (panel.content.length > 0) {
-					elements.push(
-						<div key={key++} className="panel panel--reasoning">
-							<Markdown>{panel.content}</Markdown>
-						</div>,
-					);
-				}
+				// Non-empty reasoning panels (empty ones were filtered above).
+				// Show status line if this is the last visible panel.
+				elements.push(
+					<div key={key++} className="panel panel--reasoning">
+						<Markdown>{panel.content}</Markdown>
+						{isLast && msg.timestamp && (
+							<div className="panel-status">
+								{msg.timestamp}
+								{msgSummary}
+							</div>
+						)}
+					</div>,
+				);
 			} else {
 				const linkedSubagent = subagents.find((s) => s.toolCallId === panel.id);
 				const subagentSessionId = linkedSubagent?.sessionId ?? panel.subagentSessionId;

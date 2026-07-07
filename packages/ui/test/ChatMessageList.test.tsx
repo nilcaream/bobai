@@ -119,4 +119,35 @@ describe("ChatMessageList", () => {
 		expect(panels[1]?.textContent).toContain("Second");
 		expect(panels[2]?.textContent).toContain("Third");
 	});
+
+	test("text panel shows status line even when followed by an empty reasoning panel", () => {
+		const msg = mkAssistantMsg(
+			[
+				{ type: "text", content: "Response" },
+				{ type: "reasoning", content: "" },
+			],
+			{ timestamp: "12:00:00", summary: " | test-model | in: 100 | out: 50" },
+		);
+		const { container } = render(<ChatMessageList messages={[msg]} {...defaultProps} />);
+		// Empty reasoning panel should be filtered out — text panel remains last.
+		// The text panel should have a panel-status div.
+		const status = container.querySelector(".panel--assistant .panel-status");
+		expect(status).not.toBeNull();
+		expect(status?.textContent).toContain("12:00:00");
+		expect(status?.textContent).toContain("test-model");
+	});
+
+	test("non-empty reasoning panel as last panel shows status line", () => {
+		const msg = mkAssistantMsg(
+			[{ type: "reasoning", content: "Let me think..." }],
+			{ timestamp: "14:00:00", summary: " | test-model | in: 200 | out: 100" },
+		);
+		const { container } = render(<ChatMessageList messages={[msg]} {...defaultProps} />);
+		const reasoningPanel = container.querySelector(".panel--reasoning");
+		expect(reasoningPanel).not.toBeNull();
+		const status = reasoningPanel?.querySelector(".panel-status");
+		expect(status).not.toBeNull();
+		expect(status?.textContent).toContain("14:00:00");
+		expect(status?.textContent).toContain("test-model");
+	});
 });
