@@ -1,6 +1,5 @@
-import type { ViewMode } from "./commandParser";
-import { fuzzyFilterAndSort, VIEW_MODES } from "./commandParser";
-import type { ModelListItem } from "./DotCommandPanel";
+import type { DotCommandResult, ViewMode } from "./commandParser";
+import { VIEW_MODES } from "./commandParser";
 import type { StagedSkill, SubagentInfo } from "./protocol";
 
 // ---------------------------------------------------------------------------
@@ -44,52 +43,36 @@ function postDotCommand(
 		});
 }
 
-/**
- * Resolve an arg against a list by numeric index or fuzzy text search.
- * Returns the matching item or undefined.
- */
-function resolveByIndexOrFuzzy<T extends { index: number }>(
-	list: T[],
-	arg: string,
-	getSearchText: (item: T) => string,
-): T | undefined {
-	const trimmed = arg.trim();
-	if (!trimmed) return undefined;
-	const firstToken = trimmed.split(/\s+/)[0] ?? "";
-	if (/^\d+$/.test(firstToken)) {
-		return list.find((item) => item.index === Number.parseInt(firstToken, 10));
-	}
-	return fuzzyFilterAndSort(list, trimmed, getSearchText)[0];
-}
-
 // ---------------------------------------------------------------------------
 // handleNewCommand
 // ---------------------------------------------------------------------------
 
-export function handleNewCommand(params: {
-	newChat: () => void;
-	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
-	setStatus: (status: string) => void;
-	defaultStatus: string;
-	setProvider: (provider: string | null) => void;
-	defaultProvider: string | null;
-	setModel: (model: string | null) => void;
-	defaultModel: string | null;
-	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
-	setTitle: (title: string | null) => void;
-	pendingNewTitle: React.MutableRefObject<string | null>;
-	setWelcomeMarkdown: (md: string | null) => void;
-	newTitle: string;
-}): void {
+export function handleNewCommand(
+	result: { title: string },
+	params: {
+		newChat: () => void;
+		setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
+		setStatus: (status: string) => void;
+		defaultStatus: string;
+		setProvider: (provider: string | null) => void;
+		defaultProvider: string | null;
+		setModel: (model: string | null) => void;
+		defaultModel: string | null;
+		setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
+		setTitle: (title: string | null) => void;
+		pendingNewTitle: React.MutableRefObject<string | null>;
+		setWelcomeMarkdown: (md: string | null) => void;
+	},
+): void {
 	params.newChat();
 	params.setStagedSkills([]);
 	params.setStatus(params.defaultStatus);
 	params.setProvider(params.defaultProvider);
 	params.setModel(params.defaultModel);
 	params.setView((prev) => ({ ...prev, mode: "chat" }));
-	if (params.newTitle) {
-		params.setTitle(params.newTitle);
-		params.pendingNewTitle.current = params.newTitle;
+	if (result.title) {
+		params.setTitle(result.title);
+		params.pendingNewTitle.current = result.title;
 	}
 	fetch("/bobai/welcome")
 		.then((res) => res.json())
@@ -103,17 +86,19 @@ export function handleNewCommand(params: {
 // handleViewCommand
 // ---------------------------------------------------------------------------
 
-export function handleViewCommand(params: {
-	arg: string;
-	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
-	fetchContext: () => void;
-	fetchCompactedContext: () => void;
-	scrollToBottom: () => void;
-}): void {
+export function handleViewCommand(
+	result: { arg: string },
+	params: {
+		setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
+		fetchContext: () => void;
+		fetchCompactedContext: () => void;
+		scrollToBottom: () => void;
+	},
+): void {
 	const viewMap: Record<string, ViewMode> = { "1": "chat", "2": "context", "3": "compaction" };
 	params.setView((prev) => {
 		const currentIdx = VIEW_MODES.indexOf(prev.mode);
-		const next = params.arg ? (viewMap[params.arg] ?? prev.mode) : (VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat");
+		const next = result.arg ? (viewMap[result.arg] ?? prev.mode) : (VIEW_MODES[(currentIdx + 1) % VIEW_MODES.length] ?? "chat");
 		if (next === "context") params.fetchContext();
 		if (next === "compaction") params.fetchCompactedContext();
 		return { ...prev, mode: next };
@@ -125,59 +110,47 @@ export function handleViewCommand(params: {
 // handleModelCommand
 // ---------------------------------------------------------------------------
 
-export function handleModelCommand(params: {
-	args: string;
-	currentProvider: string | null;
-	modelListProvider: string | null;
-	modelList: ModelListItem[] | null;
-	getSessionId: () => string | null;
-	setSessionId: (id: string) => void;
-	setProvider: (id: string) => void;
-	setModel: (id: string | null) => void;
-	setStatus: (status: string) => void;
-	setContextLimit: (cl: number | null) => void;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-	clearVolatileMessages: () => void;
-}): void {
+export function handleModelCommand(
+	result: { args: string },
+	params: {
+		currentProvider: string | null;
+		getSessionId: () => string | null;
+		setSessionId: (id: string) => void;
+		setProvider: (id: string) => void;
+		setModel: (id: string | null) => void;
+		setStatus: (status: string) => void;
+		setContextLimit: (cl: number | null) => void;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+		clearVolatileMessages: () => void;
+	},
+): void {
 	if (!params.currentProvider) {
 		params.addVolatileMessage("Select a provider before selecting a model", "error");
 		return;
 	}
-	const currentModelList = params.modelListProvider === params.currentProvider ? params.modelList : null;
-	const resolvedModel = currentModelList ? resolveByIndexOrFuzzy(currentModelList, params.args, (m) => m.id) : undefined;
-	const firstToken = (params.args ?? "").trim().split(/\s+/)[0] ?? "";
-	const isNumeric = /^\d+$/.test(firstToken);
+	if (!result.args) return;
 
-	if (currentModelList && params.args.trim() && !resolvedModel && !isNumeric) {
-		params.addVolatileMessage(`No model matching "${params.args}"`, "error");
+	// Text searches that the tree couldn't resolve to an index are caught here
+	if (!/^\d+$/.test(result.args.trim())) {
+		params.addVolatileMessage(`No model matching "${result.args}"`, "error");
 		return;
 	}
 
-	const submittedArgs = resolvedModel ? String(resolvedModel.index) : params.args;
-
 	postDotCommand(
 		"model",
-		submittedArgs,
+		result.args,
 		params.getSessionId(),
-		(result) => {
+		(res) => {
 			params.clearVolatileMessages();
-			if (result.sessionId) params.setSessionId(result.sessionId);
-			if (result.provider) params.setProvider(result.provider);
-			const selectedModel =
-				result.model ??
-				(resolvedModel ?? (currentModelList ? resolveByIndexOrFuzzy(currentModelList, submittedArgs, (m) => m.id) : undefined))
-					?.id;
-			if (result.model) {
-				params.setModel(result.model);
-			} else if (selectedModel) {
-				params.setModel(selectedModel);
-			}
-			if (result.status) params.setStatus(result.status);
-			if (selectedModel) {
+			if (res.sessionId) params.setSessionId(res.sessionId);
+			if (res.provider) params.setProvider(res.provider);
+			if (res.model) params.setModel(res.model);
+			if (res.status) params.setStatus(res.status);
+			if (res.model) {
 				params.setContextLimit(null);
-				const effectiveProvider = result.provider ?? params.currentProvider;
+				const effectiveProvider = res.provider ?? params.currentProvider;
 				if (effectiveProvider) {
-					params.addVolatileMessage(`Using ${effectiveProvider} ${selectedModel} model`, "info");
+					params.addVolatileMessage(`Using ${effectiveProvider} ${res.model} model`, "info");
 				}
 			}
 		},
@@ -189,46 +162,41 @@ export function handleModelCommand(params: {
 // handleProviderCommand
 // ---------------------------------------------------------------------------
 
-export function handleProviderCommand(params: {
-	args: string;
-	currentProvider: string | null;
-	providerList: { index: number; id: string; runtimeSupported: boolean }[] | null;
-	modelList: ModelListItem[] | null;
-	getSessionId: () => string | null;
-	setSessionId: (id: string) => void;
-	setProvider: (id: string) => void;
-	setModel: (id: string | null) => void;
-	setStatus: (status: string) => void;
-	setContextLimit: (cl: number | null) => void;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-	clearVolatileMessages: () => void;
-}): void {
-	const resolvedProvider = params.providerList
-		? resolveByIndexOrFuzzy(params.providerList, params.args, (p) => p.id)
-		: undefined;
-	const firstToken = (params.args ?? "").trim().split(/\s+/)[0] ?? "";
-	const isNumeric = /^\d+$/.test(firstToken);
+export function handleProviderCommand(
+	result: { args: string },
+	params: {
+		currentProvider: string | null;
+		getSessionId: () => string | null;
+		setSessionId: (id: string) => void;
+		setProvider: (id: string) => void;
+		setModel: (id: string | null) => void;
+		setStatus: (status: string) => void;
+		setContextLimit: (cl: number | null) => void;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+		clearVolatileMessages: () => void;
+	},
+): void {
+	if (!result.args) return;
 
-	if (params.providerList && params.args.trim() && !resolvedProvider && !isNumeric) {
-		params.addVolatileMessage(`No provider matching "${params.args}"`, "error");
+	// Text searches that the tree couldn't resolve to an index are caught here
+	if (!/^\d+$/.test(result.args.trim())) {
+		params.addVolatileMessage(`No provider matching "${result.args}"`, "error");
 		return;
 	}
 
-	const submittedArgs = resolvedProvider ? String(resolvedProvider.index) : params.args;
-
 	postDotCommand(
 		"provider",
-		submittedArgs,
+		result.args,
 		params.getSessionId(),
-		(result) => {
+		(res) => {
 			params.clearVolatileMessages();
-			if (result.sessionId) params.setSessionId(result.sessionId);
-			if (result.provider) {
-				params.setProvider(result.provider);
+			if (res.sessionId) params.setSessionId(res.sessionId);
+			if (res.provider) {
+				params.setProvider(res.provider);
 				params.setModel(null);
 				params.setContextLimit(null);
 			}
-			if (result.status) params.setStatus(result.status);
+			if (res.status) params.setStatus(res.status);
 		},
 		params.addVolatileMessage,
 	);
@@ -238,22 +206,24 @@ export function handleProviderCommand(params: {
 // handleTitleCommand
 // ---------------------------------------------------------------------------
 
-export function handleTitleCommand(params: {
-	args: string;
-	getSessionId: () => string | null;
-	setSessionId: (id: string) => void;
-	setTitle: (title: string | null) => void;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-	clearVolatileMessages: () => void;
-}): void {
+export function handleTitleCommand(
+	result: { text: string },
+	params: {
+		getSessionId: () => string | null;
+		setSessionId: (id: string) => void;
+		setTitle: (title: string | null) => void;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+		clearVolatileMessages: () => void;
+	},
+): void {
 	postDotCommand(
 		"title",
-		params.args,
+		result.text,
 		params.getSessionId(),
-		(result) => {
+		(res) => {
 			params.clearVolatileMessages();
-			if (result.sessionId) params.setSessionId(result.sessionId);
-			params.setTitle(params.args);
+			if (res.sessionId) params.setSessionId(res.sessionId);
+			params.setTitle(result.text);
 		},
 		params.addVolatileMessage,
 	);
@@ -263,24 +233,26 @@ export function handleTitleCommand(params: {
 // handleLimitCommand
 // ---------------------------------------------------------------------------
 
-export function handleLimitCommand(params: {
-	args: string;
-	getSessionId: () => string | null;
-	setSessionId: (id: string) => void;
-	setStatus: (status: string) => void;
-	setContextLimit: (cl: number | null) => void;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-	clearVolatileMessages: () => void;
-}): void {
+export function handleLimitCommand(
+	result: { value: string },
+	params: {
+		getSessionId: () => string | null;
+		setSessionId: (id: string) => void;
+		setStatus: (status: string) => void;
+		setContextLimit: (cl: number | null) => void;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+		clearVolatileMessages: () => void;
+	},
+): void {
 	postDotCommand(
 		"limit",
-		params.args,
+		result.value,
 		params.getSessionId(),
-		(result) => {
+		(res) => {
 			params.clearVolatileMessages();
-			if (result.sessionId) params.setSessionId(result.sessionId);
-			if (result.status) params.setStatus(result.status);
-			params.setContextLimit(result.contextLimit ?? null);
+			if (res.sessionId) params.setSessionId(res.sessionId);
+			if (res.status) params.setStatus(res.status);
+			params.setContextLimit(res.contextLimit ?? null);
 		},
 		params.addVolatileMessage,
 	);
@@ -290,66 +262,27 @@ export function handleLimitCommand(params: {
 // handleSessionCommand
 // ---------------------------------------------------------------------------
 
-export function handleSessionCommand(params: {
-	arg: string;
-	sessionList: { index: number; id: string; title: string | null; updatedAt: string; owned: boolean }[] | null;
-	getSessionId: () => string | null;
-	loadSession: (id: string) => void;
-	newChat: () => void;
-	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
-	setStatus: (status: string) => void;
-	defaultStatus: string;
-	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-}): void {
-	if (!params.arg) return;
-	if (!params.sessionList) {
-		params.addVolatileMessage("Session list not loaded", "error");
+export function handleSessionCommand(
+	result: { action: "load" | "delete" | "shortcut"; sessionId: string; title: string | null; owned: boolean },
+	params: {
+		getSessionId: () => string | null;
+		loadSession: (id: string) => void;
+		newChat: () => void;
+		setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
+		setStatus: (status: string) => void;
+		defaultStatus: string;
+		setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	},
+): void {
+	if (!result.sessionId) {
+		params.addVolatileMessage("No session selected", "error");
 		return;
 	}
 
-	const parts = params.arg.split(/\s+/);
-	const firstWord = parts[0] ?? "";
-	const isNumeric = /^\d+$/.test(firstWord);
-
-	if (!isNumeric) {
-		const matches = fuzzyFilterAndSort(
-			params.sessionList.filter((s) => s.title),
-			params.arg,
-			(s) => s.title ?? "",
-		);
-		if (matches.length === 0) {
-			params.addVolatileMessage(`No session matching "${params.arg}"`, "error");
-			return;
-		}
-		const currentId = params.getSessionId();
-		const first = matches[0] as (typeof matches)[0];
-		if (first.id === currentId) return;
-		if (first.owned) {
-			params.addVolatileMessage("Session is active in another tab", "error");
-			return;
-		}
-		params.loadSession(first.id);
-		params.setStagedSkills([]);
-		params.setView((prev) => ({ ...prev, mode: "chat" }));
-		return;
-	}
-
-	const index = Number.parseInt(firstWord, 10);
-	const subcommand = parts[1];
-	const targetSession = params.sessionList.find((s) => s.index === index);
-	if (!targetSession) {
-		params.addVolatileMessage(`Invalid session index: ${firstWord}`, "error");
-		return;
-	}
-
-	if (subcommand) {
-		if (subcommand !== "delete") {
-			params.addVolatileMessage(`Unknown subcommand: ${subcommand}`, "error");
-			return;
-		}
-		const isTargetSelf = targetSession.id === params.getSessionId();
-		if (targetSession.owned && !isTargetSelf) {
+	if (result.action === "delete") {
+		const isTargetSelf = result.sessionId === params.getSessionId();
+		if (result.owned && !isTargetSelf) {
 			params.addVolatileMessage("Cannot delete: session is active in another tab", "error");
 			return;
 		}
@@ -359,11 +292,11 @@ export function handleSessionCommand(params: {
 			params.setStatus(params.defaultStatus);
 			params.setView((prev) => ({ ...prev, mode: "chat" }));
 		}
-		fetch(`/bobai/session/${targetSession.id}`, { method: "DELETE" })
+		fetch(`/bobai/session/${result.sessionId}`, { method: "DELETE" })
 			.then((res) => res.json())
 			.then((data: { ok: boolean; id?: string; title?: string | null; error?: string }) => {
 				if (data.ok) {
-					const label = data.title ? `${data.id} "${data.title}"` : (data.id ?? targetSession.id);
+					const label = data.title ? `${data.id} "${data.title}"` : (data.id ?? result.sessionId);
 					params.addVolatileMessage(`Session ${label} has been removed`, "success");
 				} else {
 					params.addVolatileMessage(data.error ?? "Failed to delete session", "error");
@@ -375,12 +308,13 @@ export function handleSessionCommand(params: {
 		return;
 	}
 
-	if (targetSession.id === params.getSessionId()) return;
-	if (targetSession.owned) {
+	// action === "load" or "shortcut"
+	if (result.sessionId === params.getSessionId()) return;
+	if (result.owned) {
 		params.addVolatileMessage("Session is active in another tab", "error");
 		return;
 	}
-	params.loadSession(targetSession.id);
+	params.loadSession(result.sessionId);
 	params.setStagedSkills([]);
 	params.setView((prev) => ({ ...prev, mode: "chat" }));
 }
@@ -389,34 +323,25 @@ export function handleSessionCommand(params: {
 // handleSubagentCommand
 // ---------------------------------------------------------------------------
 
-export function handleSubagentCommand(params: {
-	arg: string;
-	subagentList: { index: number; title: string; sessionId: string }[] | null;
-	subagents: SubagentInfo[];
-	peekSubagentWithScroll: (sessionId: string) => void;
-	peekSubagentFromDbWithScroll: (sessionId: string) => void;
-	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-}): void {
-	if (!params.arg) return;
-	if (!params.subagentList) {
-		params.addVolatileMessage("Subagent list not loaded", "error");
+export function handleSubagentCommand(
+	result: { sessionId: string; title: string },
+	params: {
+		subagents: SubagentInfo[];
+		peekSubagentWithScroll: (sessionId: string) => void;
+		peekSubagentFromDbWithScroll: (sessionId: string) => void;
+		setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	},
+): void {
+	if (!result.sessionId) {
+		params.addVolatileMessage("No subagent selected", "error");
 		return;
 	}
-	const targetSubagent = resolveByIndexOrFuzzy(params.subagentList, params.arg, (s) => s.title);
-	if (!targetSubagent) {
-		const isNumeric = /^\d+$/.test(params.arg.trim().split(/\s+/)[0] ?? "");
-		params.addVolatileMessage(
-			isNumeric ? `Invalid subagent index: ${params.arg}` : `No subagent matching "${params.arg}"`,
-			"error",
-		);
-		return;
-	}
-	const liveSubagent = params.subagents.find((s) => s.sessionId === targetSubagent.sessionId && s.status === "running");
+	const liveSubagent = params.subagents.find((s) => s.sessionId === result.sessionId && s.status === "running");
 	if (liveSubagent) {
 		params.peekSubagentWithScroll(liveSubagent.sessionId);
 	} else {
-		params.peekSubagentFromDbWithScroll(targetSubagent.sessionId);
+		params.peekSubagentFromDbWithScroll(result.sessionId);
 	}
 	params.setStagedSkills([]);
 }
@@ -425,29 +350,28 @@ export function handleSubagentCommand(params: {
 // handleConfigurationCommand
 // ---------------------------------------------------------------------------
 
-export function handleConfigurationCommand(params: {
-	command: string;
-	args: string;
-	getSessionId: () => string | null;
-	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
-	clearVolatileMessages: () => void;
-	setResolvedDefaultProvider?: (provider: string) => void;
-}): void {
+export function handleConfigurationCommand(
+	result: { args: string },
+	params: {
+		getSessionId: () => string | null;
+		addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+		clearVolatileMessages: () => void;
+		setResolvedDefaultProvider?: (provider: string) => void;
+	},
+): void {
 	postDotCommand(
-		params.command,
-		params.args,
+		"configuration",
+		result.args,
 		params.getSessionId(),
-		(result) => {
+		(res) => {
 			params.clearVolatileMessages();
-			if (result.messages) {
-				for (const msg of result.messages) {
+			if (res.messages) {
+				for (const msg of res.messages) {
 					params.addVolatileMessage(msg.text, msg.kind);
 				}
 			}
-			// When the provider field changes, update the configured provider state
-			// so the config tree's model list re-fetches for the new provider.
-			if (result.provider) {
-				params.setResolvedDefaultProvider?.(result.provider);
+			if (res.provider) {
+				params.setResolvedDefaultProvider?.(res.provider);
 			}
 		},
 		params.addVolatileMessage,
@@ -502,4 +426,173 @@ export function handleSlashCommand(params: {
 			params.addVolatileMessage(`▸ Staging ${data.name} skill`, "info");
 		})
 		.catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// dispatchCommandResult — single dispatch point for all dot commands
+// ---------------------------------------------------------------------------
+
+export type DispatchDeps = {
+	// new
+	newChat: () => void;
+	setStagedSkills: React.Dispatch<React.SetStateAction<StagedSkill[]>>;
+	setStatus: (status: string) => void;
+	defaultStatus: string;
+	setProvider: (provider: string | null) => void;
+	defaultProvider: string | null;
+	setModel: (model: string | null) => void;
+	defaultModel: string | null;
+	setView: React.Dispatch<React.SetStateAction<{ mode: ViewMode; lineLimit: number }>>;
+	setTitle: (title: string | null) => void;
+	pendingNewTitle: React.MutableRefObject<string | null>;
+	setWelcomeMarkdown: (md: string | null) => void;
+	// view
+	fetchContext: () => void;
+	fetchCompactedContext: () => void;
+	scrollToBottom: () => void;
+	// model / provider / title / limit / configuration
+	currentProvider: string | null;
+	getSessionId: () => string | null;
+	setSessionId: (id: string) => void;
+	setContextLimit: (cl: number | null) => void;
+	addVolatileMessage: (text: string, kind: "error" | "success" | "info") => void;
+	clearVolatileMessages: () => void;
+	// session
+	loadSession: (id: string) => void;
+	// subagent
+	subagents: SubagentInfo[];
+	peekSubagentWithScroll: (sessionId: string) => void;
+	peekSubagentFromDbWithScroll: (sessionId: string) => void;
+	// configuration
+	setResolvedDefaultProvider?: (provider: string) => void;
+};
+
+export function dispatchCommandResult(result: DotCommandResult, deps: DispatchDeps): void {
+	switch (result.command) {
+		case "new":
+			handleNewCommand(
+				{ title: result.title },
+				{
+					newChat: deps.newChat,
+					setStagedSkills: deps.setStagedSkills,
+					setStatus: deps.setStatus,
+					defaultStatus: deps.defaultStatus,
+					setProvider: deps.setProvider,
+					defaultProvider: deps.defaultProvider,
+					setModel: deps.setModel,
+					defaultModel: deps.defaultModel,
+					setView: deps.setView,
+					setTitle: deps.setTitle,
+					pendingNewTitle: deps.pendingNewTitle,
+					setWelcomeMarkdown: deps.setWelcomeMarkdown,
+				},
+			);
+			break;
+		case "view":
+			handleViewCommand(
+				{ arg: result.arg },
+				{
+					setView: deps.setView,
+					fetchContext: deps.fetchContext,
+					fetchCompactedContext: deps.fetchCompactedContext,
+					scrollToBottom: deps.scrollToBottom,
+				},
+			);
+			break;
+		case "model":
+			handleModelCommand(
+				{ args: result.args },
+				{
+					currentProvider: deps.currentProvider,
+					getSessionId: deps.getSessionId,
+					setSessionId: deps.setSessionId,
+					setProvider: deps.setProvider,
+					setModel: deps.setModel,
+					setStatus: deps.setStatus,
+					setContextLimit: deps.setContextLimit,
+					addVolatileMessage: deps.addVolatileMessage,
+					clearVolatileMessages: deps.clearVolatileMessages,
+				},
+			);
+			break;
+		case "provider":
+			handleProviderCommand(
+				{ args: result.args },
+				{
+					currentProvider: deps.currentProvider,
+					getSessionId: deps.getSessionId,
+					setSessionId: deps.setSessionId,
+					setProvider: deps.setProvider,
+					setModel: deps.setModel,
+					setStatus: deps.setStatus,
+					setContextLimit: deps.setContextLimit,
+					addVolatileMessage: deps.addVolatileMessage,
+					clearVolatileMessages: deps.clearVolatileMessages,
+				},
+			);
+			break;
+		case "title":
+			handleTitleCommand(
+				{ text: result.text },
+				{
+					getSessionId: deps.getSessionId,
+					setSessionId: deps.setSessionId,
+					setTitle: deps.setTitle,
+					addVolatileMessage: deps.addVolatileMessage,
+					clearVolatileMessages: deps.clearVolatileMessages,
+				},
+			);
+			break;
+		case "limit":
+			handleLimitCommand(
+				{ value: result.value },
+				{
+					getSessionId: deps.getSessionId,
+					setSessionId: deps.setSessionId,
+					setStatus: deps.setStatus,
+					setContextLimit: deps.setContextLimit,
+					addVolatileMessage: deps.addVolatileMessage,
+					clearVolatileMessages: deps.clearVolatileMessages,
+				},
+			);
+			break;
+		case "session":
+			handleSessionCommand(
+				{ action: result.action, sessionId: result.sessionId, title: result.title, owned: result.owned },
+				{
+					getSessionId: deps.getSessionId,
+					loadSession: deps.loadSession,
+					newChat: deps.newChat,
+					setStagedSkills: deps.setStagedSkills,
+					setStatus: deps.setStatus,
+					defaultStatus: deps.defaultStatus,
+					setView: deps.setView,
+					addVolatileMessage: deps.addVolatileMessage,
+				},
+			);
+			break;
+		case "subagent":
+			handleSubagentCommand(
+				{ sessionId: result.sessionId, title: result.title },
+				{
+					subagents: deps.subagents,
+					peekSubagentWithScroll: deps.peekSubagentWithScroll,
+					peekSubagentFromDbWithScroll: deps.peekSubagentFromDbWithScroll,
+					setStagedSkills: deps.setStagedSkills,
+					addVolatileMessage: deps.addVolatileMessage,
+				},
+			);
+			break;
+		case "configuration":
+			handleConfigurationCommand(
+				{ args: result.args },
+				{
+					getSessionId: deps.getSessionId,
+					addVolatileMessage: deps.addVolatileMessage,
+					clearVolatileMessages: deps.clearVolatileMessages,
+					setResolvedDefaultProvider: deps.setResolvedDefaultProvider,
+				},
+			);
+			break;
+	}
 }

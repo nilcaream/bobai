@@ -1,4 +1,5 @@
 import type { DotTreeNode } from "../DotCommandTree";
+import { resolvedCommitPath } from "../DotCommandTree";
 import { filterList, type ModelListItem, type ProviderListItem } from "./commandTrees";
 
 /**
@@ -155,5 +156,9 @@ export function createConfigurationTree(
 				],
 				filter,
 			),
+		extract: (state) => {
+			const path = resolvedCommitPath(state);
+			return { command: "configuration" as const, args: path.join(" ") };
+		},
 	};
 }

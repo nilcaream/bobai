@@ -1,3 +1,5 @@
+import type { DotCommandResult } from "./commandParser";
+
 export type DotNodeKind = "menu" | "text" | "action";
 
 export interface DotTreeNode {
@@ -11,6 +13,11 @@ export interface DotTreeNode {
 	kind: DotNodeKind;
 	/** Value submitted when this node is selected. Defaults to the first word of label. */
 	commitValue?: string;
+	/**
+	 * Converts a resolved tree state into a typed command result.
+	 * Present on command root nodes. Called by submit() after tree resolution.
+	 */
+	extract?: (state: ResolvedDotState) => DotCommandResult;
 }
 
 export interface ResolvedDotState {
@@ -57,7 +64,7 @@ export function resolveDotTree(root: DotTreeNode, args: string): ResolvedDotStat
 
 		if (matches.length === 1) {
 			currentNode = matches[0] as DotTreeNode;
-			path.push(currentNode.label);
+			path.push(nodeCommitValue(currentNode));
 			depth++;
 		} else {
 			return { visible: matches, filter: token, value: "", path, currentNode };
@@ -94,6 +101,22 @@ export function commitPath(state: ResolvedDotState, selected?: DotTreeNode): str
 }
 
 /**
+ * Returns the fully resolved commit path as an array of commit values.
+ * Handles both auto-committed path entries and filter-based resolution against
+ * visible children. Used by extract functions to get a clean tokenized path.
+ */
+export function resolvedCommitPath(state: ResolvedDotState): string[] {
+	const parts = [...state.path];
+	if (state.value) {
+		parts.push(state.value);
+	} else if (state.filter) {
+		const child = state.visible.length > 0 ? resolveVisibleChild(state.filter, state.visible) : undefined;
+		parts.push(child ? nodeCommitValue(child) : state.filter);
+	}
+	return parts;
+}
+
+/**
  * Builds the commit path for Enter key submission — no row was clicked, so we
  * resolve the current filter against visible children.
  *
@@ -102,14 +125,7 @@ export function commitPath(state: ResolvedDotState, selected?: DotTreeNode): str
  * Text filters fall through to the raw filter for server-side resolution.
  */
 export function buildEnterCommitPath(state: ResolvedDotState): string {
-	const parts = [...state.path];
-	if (state.value) {
-		parts.push(state.value);
-	} else if (state.filter) {
-		const child = state.visible.length > 0 ? resolveVisibleChild(state.filter, state.visible) : undefined;
-		parts.push(child ? nodeCommitValue(child) : state.filter);
-	}
-	return parts.join(" ");
+	return resolvedCommitPath(state).join(" ");
 }
 
 function resolveVisibleChild(filter: string, children: DotTreeNode[]): DotTreeNode | undefined {

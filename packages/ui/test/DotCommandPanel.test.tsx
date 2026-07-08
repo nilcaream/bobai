@@ -81,7 +81,7 @@ describe("DotCommandPanel", () => {
 		expect(screen.queryByText("Loading models...")).not.toBeNull();
 	});
 
-	test("model panel: numeric args still filter by index contains semantics", () => {
+	test("model panel: numeric arg matches by exact index", () => {
 		const parsed = dot({ command: "model", args: "2" });
 		const models = [
 			makeModel(1, "gpt-4o", "0x", 128000),
@@ -92,7 +92,7 @@ describe("DotCommandPanel", () => {
 		const text = container.textContent ?? "";
 		expect(text).not.toContain("gpt-4o");
 		expect(text).toContain("claude-sonnet");
-		expect(text).toContain("gemini-pro");
+		expect(text).not.toContain("gemini-pro");
 	});
 
 	test("model panel: text args use fuzzy search on id", () => {
@@ -230,12 +230,12 @@ describe("DotCommandPanel", () => {
 		expect(screen.queryByText("No sessions")).not.toBeNull();
 	});
 
-	test("session panel: delete preview shows session label", () => {
+	test("session panel: delete preview shows delete action", () => {
 		const parsed = dot({ command: "session", args: "1 delete" });
 		const sessions = [{ index: 1, id: "s1", title: "My Chat", updatedAt: "2025-01-15T10:30:00Z", owned: false }];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
-		// Tree framework resolves "1" to session index 1, shows the session
-		expect(container.textContent ?? "").toContain("My Chat");
+		// Tree resolves "1" to session → shows its children filtered by "delete" → shows Delete action
+		expect(container.textContent ?? "").toContain("Delete");
 	});
 
 	test("session panel: text mode uses fuzzy title search, not plain word containment", () => {
@@ -283,7 +283,7 @@ describe("DotCommandPanel", () => {
 		expect(text.startsWith("2: ")).toBe(true);
 	});
 
-	test("session panel: numeric arg still filters by index, not title", () => {
+	test("session panel: numeric arg matches by exact index", () => {
 		const parsed = dot({ command: "session", args: "2" });
 		const sessions = [
 			{ index: 1, id: "s1", title: "Session One", updatedAt: "2025-01-15T10:30:00Z", owned: false },
@@ -293,7 +293,7 @@ describe("DotCommandPanel", () => {
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} sessionList={sessions} />);
 		const text = container.textContent ?? "";
 		expect(text).toContain("Session Two");
-		expect(text).toContain("Session Twelve");
+		expect(text).not.toContain("Session Twelve");
 		expect(text).not.toContain("Session One");
 	});
 

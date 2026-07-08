@@ -22,6 +22,21 @@ export type ParsedSlashInput = {
 export const VIEW_MODES = ["chat", "context", "compaction"] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
+// ---------------------------------------------------------------------------
+// Typed command results — produced by tree extract functions, consumed by handlers
+// ---------------------------------------------------------------------------
+
+export type DotCommandResult =
+	| { command: "new"; title: string }
+	| { command: "title"; text: string }
+	| { command: "limit"; value: string }
+	| { command: "view"; arg: string }
+	| { command: "model"; args: string }
+	| { command: "provider"; args: string }
+	| { command: "session"; action: "load" | "delete" | "shortcut"; sessionId: string; title: string | null; owned: boolean }
+	| { command: "subagent"; sessionId: string; title: string }
+	| { command: "configuration"; args: string };
+
 export const ALL_DOT_COMMANDS: Record<string, DotCommand> = {
 	configuration: { name: "configuration", description: "Manage global and project configuration" },
 	limit: { name: "limit", description: "Set or clear context size limit" },

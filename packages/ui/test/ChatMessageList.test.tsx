@@ -138,10 +138,10 @@ describe("ChatMessageList", () => {
 	});
 
 	test("non-empty reasoning panel as last panel shows status line", () => {
-		const msg = mkAssistantMsg(
-			[{ type: "reasoning", content: "Let me think..." }],
-			{ timestamp: "14:00:00", summary: " | test-model | in: 200 | out: 100" },
-		);
+		const msg = mkAssistantMsg([{ type: "reasoning", content: "Let me think..." }], {
+			timestamp: "14:00:00",
+			summary: " | test-model | in: 200 | out: 100",
+		});
 		const { container } = render(<ChatMessageList messages={[msg]} {...defaultProps} />);
 		const reasoningPanel = container.querySelector(".panel--reasoning");
 		expect(reasoningPanel).not.toBeNull();

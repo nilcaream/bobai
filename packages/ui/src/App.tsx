@@ -1,19 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessageList } from "./ChatMessageList";
 import { ContextMessageList } from "./ContextMessageList";
-import {
-	handleConfigurationCommand,
-	handleLimitCommand,
-	handleModelCommand,
-	handleNewCommand,
-	handleProviderCommand,
-	handleSessionCommand,
-	handleSessionShortcut,
-	handleSlashCommand,
-	handleSubagentCommand,
-	handleTitleCommand,
-	handleViewCommand,
-} from "./commandHandlers";
+import { type DispatchDeps, dispatchCommandResult, handleSessionShortcut, handleSlashCommand } from "./commandHandlers";
 import type { ViewMode } from "./commandParser";
 import {
 	FULL_DOT_COMMANDS,
@@ -24,7 +12,8 @@ import {
 	STREAMING_DOT_COMMANDS,
 	shouldAutoFillTitle,
 } from "./commandParser";
-import { DotCommandPanel, type ModelListItem, type ProviderListItem } from "./DotCommandPanel";
+import { DotCommandPanel, type ModelListItem, type ProviderListItem, resolveCommandTree } from "./DotCommandPanel";
+import { resolveDotTree } from "./DotCommandTree";
 import type { CompactionDetail, CompactionStats, ContextMessage } from "./formatUtils";
 import { useAutoScroll } from "./hooks/useAutoScroll";
 import { useGlobalKeyboard } from "./hooks/useGlobalKeyboard";
@@ -75,7 +64,6 @@ export function App() {
 	} = useWebSocket();
 	const [input, setInput] = useState("");
 	const [modelList, setModelList] = useState<ModelListItem[] | null>(null);
-	const [modelListProvider, setModelListProvider] = useState<string | null>(null);
 	const [providerList, setProviderList] = useState<ProviderListItem[] | null>(null);
 	const [resolvedDefaultProvider, setResolvedDefaultProvider] = useState<string | null>(null);
 	const [resolvedDefaultModel, setResolvedDefaultModel] = useState<string | null>(null);
@@ -96,7 +84,6 @@ export function App() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const titleAutoFilledRef = useRef(false);
 	const committedArgsRef = useRef<string | null>(null);
-	const dotTreeCommitRef = useRef<string>("");
 
 	// Reset auto-fill flag whenever the session title changes so the next
 	// .title invocation always shows the up-to-date title.
@@ -212,22 +199,18 @@ export function App() {
 	// Fetch models for the active provider — needed for status bar and dot panel
 	useEffect(() => {
 		const url = provider ? `/bobai/models?provider=${encodeURIComponent(provider)}` : "/bobai/models";
-		setModelListProvider(null);
 		fetch(url)
 			.then((res) => res.json())
 			.then(
 				(data: { providerId: string | null; models: ModelListItem[]; defaultModel: string | null; defaultStatus: string }) => {
 					setModelList(data.models);
-					setModelListProvider(data.providerId);
 					if (!provider) {
 						defaultStatus.current = data.defaultStatus;
 						setStatus((prev) => prev || data.defaultStatus);
 					}
 				},
 			)
-			.catch(() => {
-				setModelListProvider(null);
-			});
+			.catch(() => {});
 	}, [provider, setStatus]);
 
 	// Fetch models for the configured provider — used by the config tree (.c p mod / .c g mod)
@@ -298,144 +281,84 @@ export function App() {
 
 		const parsed = parseDotInput(text, activeDotCommands);
 
-		// Allow dot panel click or Enter key to override args with the tree-resolved commit path
-		const treePath = dotTreeCommitRef.current;
-		const effectiveArgs = (committedArgsRef.current ?? (treePath || (parsed?.args ?? ""))).trim();
-		committedArgsRef.current = null;
+		// Stop is handled directly — no tree needed
+		const isStop =
+			(parsed?.mode === "args" && parsed.command === "stop") ||
+			(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "stop");
+		if (isStop) {
+			sendCancel();
+			clearInput();
+			return;
+		}
 
-		// When session is locked, only .new and .session commands are allowed
+		if (!parsed) {
+			// Not a dot command — handle slash / normal prompt
+			const slashParsed = parseSlashInput(text, skillList, isReadOnly);
+			if (slashParsed) {
+				if (slashParsed.matches.length === 1) {
+					const name = slashParsed.matches[0]?.name;
+					if (name) handleSlashCommand({ name, stagedSkills, setStagedSkills, addVolatileMessage });
+				}
+				clearInput();
+				return;
+			}
+
+			if (parentId) {
+				addVolatileMessage("Subagent sessions are read-only", "error");
+				clearInput();
+				return;
+			}
+
+			if (view.mode === "context" || view.mode === "compaction") {
+				addVolatileMessage("Read-only view", "error");
+				clearInput();
+				return;
+			}
+
+			if (!provider || !model) {
+				addVolatileMessage("Provider or model not selected", "error");
+				clearInput();
+				return;
+			}
+
+			if (isStreaming) return;
+			autoScrollRef.current = true;
+			setView((prev) => ({ ...prev, mode: "chat" }));
+			setWelcomeMarkdown(null);
+			clearVolatileMessages();
+			sendPrompt(text, stagedSkills.length > 0 ? stagedSkills : undefined);
+			setStagedSkills([]);
+			resetHistory();
+			clearInput();
+			return;
+		}
+
+		// Dot command — check lock
 		if (sessionLocked) {
 			const isNewCmd =
-				(parsed?.mode === "args" && parsed.command === "new") ||
-				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "new");
+				(parsed.mode === "args" && parsed.command === "new") ||
+				(parsed.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "new");
 			const isSessionCmd =
-				(parsed?.mode === "args" && parsed.command === "session") ||
-				(parsed?.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "session");
+				(parsed.mode === "args" && parsed.command === "session") ||
+				(parsed.mode === "select" && parsed.matches.length === 1 && parsed.matches[0]?.name === "session");
 			if (!isNewCmd && !isSessionCmd) {
 				clearInput();
 				return;
 			}
 		}
 
-		if (parsed?.mode === "args" && parsed.command) {
-			if (parsed.command === "stop") {
-				sendCancel();
-			} else if (parsed.command === "new") {
-				handleNewCommand({
-					newChat,
-					setStagedSkills,
-					setStatus,
-					defaultStatus: defaultStatus.current,
-					setProvider,
-					defaultProvider: resolvedDefaultProvider,
-					setModel,
-					defaultModel: resolvedDefaultModel,
-					setView,
-					setTitle,
-					pendingNewTitle,
-					setWelcomeMarkdown,
-					newTitle: effectiveArgs,
-				});
-			} else if (parsed.command === "view") {
-				handleViewCommand({
-					arg: effectiveArgs,
-					setView,
-					fetchContext,
-					fetchCompactedContext,
-					scrollToBottom,
-				});
-			} else if (parsed.command === "session") {
-				handleSessionCommand({
-					arg: effectiveArgs,
-					sessionList,
-					getSessionId,
-					loadSession,
-					newChat,
-					setStagedSkills,
-					setStatus,
-					defaultStatus: defaultStatus.current,
-					setView,
-					addVolatileMessage,
-				});
-			} else if (parsed.command === "subagent") {
-				handleSubagentCommand({
-					arg: effectiveArgs,
-					subagentList,
-					subagents,
-					peekSubagentWithScroll,
-					peekSubagentFromDbWithScroll,
-					setStagedSkills,
-					addVolatileMessage,
-				});
-			} else if (parsed.command === "configuration") {
-				handleConfigurationCommand({
-					command: parsed.command,
-					args: effectiveArgs,
-					getSessionId,
-					addVolatileMessage,
-					clearVolatileMessages,
-					setResolvedDefaultProvider,
-				});
-			} else if (parsed.command === "model") {
-				handleModelCommand({
-					args: effectiveArgs,
-					currentProvider: provider,
-					modelListProvider,
-					modelList,
-					getSessionId,
-					setSessionId,
-					setProvider,
-					setModel,
-					setStatus,
-					setContextLimit,
-					addVolatileMessage,
-					clearVolatileMessages,
-				});
-			} else if (parsed.command === "provider") {
-				handleProviderCommand({
-					args: effectiveArgs,
-					currentProvider: provider,
-					providerList,
-					modelList,
-					getSessionId,
-					setSessionId,
-					setProvider,
-					setModel,
-					setStatus,
-					setContextLimit,
-					addVolatileMessage,
-					clearVolatileMessages,
-				});
-			} else if (parsed.command === "title") {
-				handleTitleCommand({
-					args: effectiveArgs,
-					getSessionId,
-					setSessionId,
-					setTitle,
-					addVolatileMessage,
-					clearVolatileMessages,
-				});
-			} else if (parsed.command === "limit") {
-				handleLimitCommand({
-					args: effectiveArgs,
-					getSessionId,
-					setSessionId,
-					setStatus,
-					setContextLimit,
-					addVolatileMessage,
-					clearVolatileMessages,
-				});
-			}
-			clearInput();
-			return;
-		}
+		// Determine command and effective args
+		let command: string;
+		let args: string;
 
-		// Single-match select shortcuts: .view, .session, .new, .stop (no space)
-		if (parsed?.mode === "select" && parsed.matches.length === 1) {
+		if (parsed.mode === "args" && parsed.command) {
+			command = parsed.command;
+			args = (committedArgsRef.current ?? parsed.args).trim();
+			committedArgsRef.current = null;
+		} else if (parsed.mode === "select" && parsed.matches.length === 1) {
 			const name = parsed.matches[0]?.name;
-			if (name === "view") {
-				handleViewCommand({ arg: "", setView, fetchContext, fetchCompactedContext, scrollToBottom });
-			} else if (name === "session") {
+			if (name === "session") {
+				// Session shortcut: exit peek or load parent (not a session selection)
 				handleSessionShortcut({
 					viewingSubagentId,
 					exitSubagentPeekWithScroll,
@@ -444,87 +367,72 @@ export function App() {
 					setStagedSkills,
 					setView,
 				});
-			} else if (name === "new") {
-				handleNewCommand({
-					newChat,
-					setStagedSkills,
-					setStatus,
-					defaultStatus: defaultStatus.current,
-					setProvider,
-					defaultProvider: resolvedDefaultProvider,
-					setModel,
-					defaultModel: resolvedDefaultModel,
-					setView,
-					setTitle,
-					pendingNewTitle,
-					setWelcomeMarkdown,
-					newTitle: "",
-				});
-			} else if (name === "stop") {
-				sendCancel();
-			} else if (name === "limit") {
-				handleLimitCommand({
-					args: "",
-					getSessionId,
-					setSessionId,
-					setStatus,
-					setContextLimit,
-					addVolatileMessage,
-					clearVolatileMessages,
-				});
-			} else if (name === "configuration") {
-				handleConfigurationCommand({
-					command: "configuration",
-					args: "",
-					getSessionId,
-					addVolatileMessage,
-					clearVolatileMessages,
-				});
+				clearInput();
+				return;
 			}
+			command = name ?? "";
+			args = "";
+		} else {
+			// Ambiguous or invalid dot command — don't execute
 			clearInput();
 			return;
 		}
 
-		// Incomplete or invalid dot command — don't send as prompt
-		if (parsed) return;
-
-		// Slash command: stage a skill
-		const slashParsed = parseSlashInput(text, skillList, isReadOnly);
-		if (slashParsed) {
-			if (slashParsed.matches.length === 1) {
-				const name = slashParsed.matches[0]?.name;
-				if (name) handleSlashCommand({ name, stagedSkills, setStagedSkills, addVolatileMessage });
-			}
+		// Resolve through tree → typed result
+		const tree = resolveCommandTree(
+			command,
+			modelList,
+			providerList,
+			sessionList,
+			subagentList,
+			getSessionId,
+			sessionLocked,
+			contextLimit,
+			title,
+			configuredModelList,
+		);
+		if (!tree) {
 			clearInput();
 			return;
 		}
 
-		if (parentId) {
-			addVolatileMessage("Subagent sessions are read-only", "error");
+		const state = resolveDotTree(tree, args);
+		const result = tree.extract?.(state);
+		if (!result) {
 			clearInput();
 			return;
 		}
 
-		if (view.mode === "context" || view.mode === "compaction") {
-			addVolatileMessage("Read-only view", "error");
-			clearInput();
-			return;
-		}
+		const deps: DispatchDeps = {
+			newChat,
+			setStagedSkills,
+			setStatus,
+			defaultStatus: defaultStatus.current,
+			setProvider,
+			defaultProvider: resolvedDefaultProvider,
+			setModel,
+			defaultModel: resolvedDefaultModel,
+			setView,
+			setTitle,
+			pendingNewTitle,
+			setWelcomeMarkdown,
+			fetchContext,
+			fetchCompactedContext,
+			scrollToBottom,
+			currentProvider: provider,
+			getSessionId,
+			setSessionId,
+			setContextLimit,
+			addVolatileMessage,
+			clearVolatileMessages,
+			loadSession,
+			subagents,
+			peekSubagentWithScroll,
+			peekSubagentFromDbWithScroll,
+			setResolvedDefaultProvider,
+		};
 
-		if (!provider || !model) {
-			addVolatileMessage("Provider or model not selected", "error");
-			clearInput();
-			return;
-		}
-
-		if (isStreaming) return;
-		autoScrollRef.current = true;
-		setView((prev) => ({ ...prev, mode: "chat" }));
-		setWelcomeMarkdown(null);
-		clearVolatileMessages();
-		sendPrompt(text, stagedSkills.length > 0 ? stagedSkills : undefined);
-		setStagedSkills([]);
-		resetHistory();
+		dispatchCommandResult(result, deps);
 		clearInput();
 	}
 
@@ -651,7 +559,6 @@ export function App() {
 				contextLimit={contextLimit}
 				currentTitle={title}
 				onCommit={handleDotCommit}
-				commitPathRef={dotTreeCommitRef}
 			/>
 			<SlashCommandPanel parsed={parsedSlashInput} />
 

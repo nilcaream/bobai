@@ -1,4 +1,5 @@
 import type { DotTreeNode } from "../DotCommandTree";
+import { resolvedCommitPath } from "../DotCommandTree";
 import { fuzzyFilterAndSort } from "../fuzzySearch";
 
 export type ModelListItem = { index: number; id: string; cost: string; contextWindow: number };
@@ -36,6 +37,10 @@ export const viewTree: DotTreeNode = {
 			],
 			f,
 		),
+	extract: (state) => {
+		const path = resolvedCommitPath(state);
+		return { command: "view" as const, arg: path.join(" ") };
+	},
 };
 
 // ── new / title / limit ─────────────────────────────────────────────────────
@@ -45,6 +50,10 @@ export const newTree: DotTreeNode = {
 	label: "new",
 	description: "Start a new session with title",
 	kind: "text",
+	extract: (state) => ({
+		command: "new" as const,
+		title: state.value,
+	}),
 };
 
 export function createTitleTree(_currentTitle: string | null): DotTreeNode {
@@ -53,6 +62,10 @@ export function createTitleTree(_currentTitle: string | null): DotTreeNode {
 		label: "title",
 		description: "Set session title to",
 		kind: "text",
+		extract: (state) => ({
+			command: "title" as const,
+			text: state.value,
+		}),
 	};
 }
 
@@ -63,6 +76,10 @@ export function createLimitTree(currentLimit: number | null): DotTreeNode {
 		label: "limit",
 		description: desc,
 		kind: "text",
+		extract: (state) => ({
+			command: "limit" as const,
+			value: state.value,
+		}),
 	};
 }
 
@@ -92,6 +109,10 @@ export function createModelTree(modelList: ModelListItem[] | null): DotTreeNode 
 				commitValue: String(m.index),
 				kind: "action" as const,
 			}));
+		},
+		extract: (state) => {
+			const path = resolvedCommitPath(state);
+			return { command: "model" as const, args: path.join(" ") };
 		},
 	};
 }
@@ -123,6 +144,10 @@ export function createProviderTree(providerList: ProviderListItem[] | null): Dot
 				kind: "action" as const,
 			}));
 		},
+		extract: (state) => {
+			const path = resolvedCommitPath(state);
+			return { command: "provider" as const, args: path.join(" ") };
+		},
 	};
 }
 
@@ -134,6 +159,26 @@ interface SessionItem {
 	title: string | null;
 	updatedAt: string;
 	owned: boolean;
+}
+
+/**
+ * Children callback for an individual session node.
+ * Shows only a "Delete" option — and only when the filter is empty (user
+ * pressed space after the index) or exactly "delete" (case-sensitive).
+ * Loading is the default action when no subcommand is provided.
+ */
+function sessionDeleteChildren(sessionIndex: number, filter: string): DotTreeNode[] {
+	const deleteNode: DotTreeNode = {
+		id: `session.${sessionIndex}.delete`,
+		label: "Delete",
+		description: "Delete this session",
+		commitValue: "delete",
+		kind: "action" as const,
+	};
+	// Show the Delete option when no filter (trailing space) or exact match
+	if (!filter || filter === "delete") return [deleteNode];
+	// Any other text: no match — prevents accidental deletion via "d", "del", etc.
+	return [];
 }
 
 export function createSessionTree(
@@ -187,14 +232,39 @@ export function createSessionTree(
 					description: `${localTime}${isOwnedByOther ? " (active in another tab)" : ""}${isCurrentSession && !sessionLocked ? " (this session)" : ""}`,
 					segments,
 					commitValue: String(s.index),
-					kind: "action" as const,
+					kind: "menu" as const,
+					children: (childFilter: string) => sessionDeleteChildren(s.index, childFilter),
 				};
 			});
+		},
+		extract: (state) => {
+			const path = resolvedCommitPath(state);
+			const first = path[0];
+			if (!first) {
+				// No args — .session shortcut (handled in submit before extract)
+				return { command: "session" as const, action: "load" as const, sessionId: "", title: null, owned: false };
+			}
+			const index = Number.parseInt(first, 10);
+			const action = path[1] === "delete" ? ("delete" as const) : ("load" as const);
+			const session = (!Number.isNaN(index) ? sessions?.find((s) => s.index === index) : undefined) ?? {
+				id: "",
+				title: null,
+				owned: false,
+				index: 0,
+				updatedAt: "",
+			};
+			return {
+				command: "session" as const,
+				action,
+				sessionId: session.id,
+				title: session.title,
+				owned: session.owned,
+			};
 		},
 	};
 }
 
-// ── subagent ────────────────────────────────────────────────────────────────
+// ── subagent ─────────────────────────────────────────────────────────────────
 
 interface SubagentItem {
 	index: number;
@@ -225,6 +295,17 @@ export function createSubagentTree(subagents: SubagentItem[] | null): DotTreeNod
 				kind: "action" as const,
 			}));
 		},
+		extract: (state) => {
+			const path = resolvedCommitPath(state);
+			const first = path[0] ?? "";
+			const index = Number.parseInt(first, 10);
+			const subagent = !Number.isNaN(index) ? (subagents ?? []).find((s) => s.index === index) : undefined;
+			return {
+				command: "subagent" as const,
+				sessionId: subagent?.sessionId ?? "",
+				title: subagent?.title ?? "",
+			};
+		},
 	};
 }
 
@@ -237,9 +318,10 @@ function pf(items: DotTreeNode[], filter: string): DotTreeNode[] {
 
 export function filterList<T>(items: T[], filter: string, selectId: (item: T) => string, getIndex: (item: T) => number): T[] {
 	if (!filter) return items;
-	// Numeric filter: match by index contains
+	// Numeric filter: match by exact index
 	if (/^\d+$/.test(filter)) {
-		return items.filter((item) => String(getIndex(item)).includes(filter));
+		const target = Number.parseInt(filter, 10);
+		return items.filter((item) => getIndex(item) === target);
 	}
 	// Text filter: fuzzy match
 	return fuzzyFilterAndSort(items, filter, selectId);
