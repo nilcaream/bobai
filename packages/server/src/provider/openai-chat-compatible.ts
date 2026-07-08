@@ -168,6 +168,8 @@ export function createOpenAIChatCompatibleProvider(
 			const promptChars = estimatePromptChars(options.messages);
 			let promptTokens = 0;
 			let totalTokens = 0;
+			let cachedTokens: number | undefined;
+			let cacheWriteTokens: number | undefined;
 			let finishReason: "stop" | "tool_calls" = "stop";
 			let sawFinish = false;
 			let sawAnyToolCalls = false;
@@ -203,6 +205,22 @@ export function createOpenAIChatCompatibleProvider(
 						prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
 					};
 				};
+
+				// Accumulate usage from every chunk, not just the finish_reason chunk.
+				// Some providers (e.g. OpenCode Zen GLM-5.2) send prompt_tokens_details
+				// in a trailing chunk with no choices, after the finish_reason chunk.
+				if (data.usage?.prompt_tokens != null) {
+					promptTokens = data.usage.prompt_tokens;
+				}
+				if (data.usage?.total_tokens != null) {
+					totalTokens = data.usage.total_tokens;
+				}
+				if (data.usage?.prompt_tokens_details?.cached_tokens != null) {
+					cachedTokens = data.usage.prompt_tokens_details.cached_tokens;
+				}
+				if (data.usage?.prompt_tokens_details?.cache_write_tokens != null) {
+					cacheWriteTokens = data.usage.prompt_tokens_details.cache_write_tokens;
+				}
 
 				const choice = data.choices?.[0];
 				const delta = choice?.delta;
@@ -273,8 +291,6 @@ export function createOpenAIChatCompatibleProvider(
 					}
 					promptTokens = data.usage?.prompt_tokens ?? promptTokens;
 					totalTokens = data.usage?.total_tokens ?? totalTokens;
-					const cachedTokens = data.usage?.prompt_tokens_details?.cached_tokens;
-					const cacheWriteTokens = data.usage?.prompt_tokens_details?.cache_write_tokens;
 					finishReason = choice.finish_reason === "tool_calls" || sawAnyToolCalls ? "tool_calls" : "stop";
 					const tokenLimit = getProviderModelConfig(config.providerId, options.model, configDir)?.contextWindow ?? 0;
 					const display = formatProviderModelDisplay(
@@ -297,19 +313,22 @@ export function createOpenAIChatCompatibleProvider(
 						cachedInputTokens: cachedTokens,
 						cacheCreationInputTokens: cacheWriteTokens,
 					};
-					options.onMetrics?.({
-						model: options.model,
-						promptTokens,
-						outputTokens: Math.max(0, totalTokens - promptTokens),
-						promptChars,
-						totalTokens,
-						cachedInputTokens: cachedTokens,
-						cacheCreationInputTokens: cacheWriteTokens,
-					});
 					yield { type: "finish", reason: finishReason };
 					sawFinish = true;
 				}
 			}
+
+			// Call onMetrics after consuming all chunks so that cache tokens sent in
+			// trailing chunks (after the finish_reason chunk) are included.
+			options.onMetrics?.({
+				model: options.model,
+				promptTokens,
+				outputTokens: Math.max(0, totalTokens - promptTokens),
+				promptChars,
+				totalTokens,
+				cachedInputTokens: cachedTokens,
+				cacheCreationInputTokens: cacheWriteTokens,
+			});
 
 			if (!sawFinish) {
 				// Stream ended without a proper finish_reason - this indicates a network
