@@ -76,6 +76,10 @@ export interface TaskToolDeps {
 	availableTools?: import("../platform/types").AvailableTools;
 	platformInfo?: import("../platform/types").PlatformInfo;
 	webSearchTool?: Tool;
+	/** Subagents get browser_evaluate (read/interact with existing tabs) but not browser_connect or browser_navigate. */
+	browserEvaluateTool?: Tool;
+	/** Subagents get browser_export_session (extract cookies for download scripts). */
+	browserExportSessionTool?: Tool;
 }
 
 export function createTaskTool(deps: TaskToolDeps): Tool {
@@ -99,6 +103,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		availableTools,
 		platformInfo,
 		webSearchTool,
+		browserEvaluateTool,
+		browserExportSessionTool,
 	} = deps;
 
 	return {
@@ -250,6 +256,8 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				skillTool,
 			];
 			if (webSearchTool) childDynamicTools.push(webSearchTool);
+			if (browserEvaluateTool) childDynamicTools.push(browserEvaluateTool);
+			if (browserExportSessionTool) childDynamicTools.push(browserExportSessionTool);
 			for (const kind of avail.shells) {
 				const tool = getShellTool(kind);
 				if (tool) childDynamicTools.push(tool);

@@ -136,7 +136,9 @@ Each tool has:
 - a **mergeable** flag for UI grouping
 
 Built-in tools: `read_file`, `list_directory`, `file_search`, `write_file`,
-`edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `web_search`, `task`, `skill`.
+`edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `web_search`, `task`, `skill`,
+`browser_connect`, `browser_navigate`, `browser_evaluate`, `browser_export_session`,
+`browser_close_tab`.
 
 ### Skill
 

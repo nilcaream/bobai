@@ -42,6 +42,11 @@ import type { SkillRegistry } from "./skill/skill";
 import { SubagentStatus } from "./subagent-status";
 import type { SystemPromptDebug, SystemPromptMetadata } from "./system-prompt";
 import { buildSystemPrompt } from "./system-prompt";
+import { browserCloseTabTool } from "./tool/browser-close-tab";
+import { browserConnectTool } from "./tool/browser-connect";
+import { browserEvaluateTool } from "./tool/browser-evaluate";
+import { browserExportSessionTool } from "./tool/browser-export-session";
+import { browserNavigateTool } from "./tool/browser-navigate";
 import { editFileTool } from "./tool/edit-file";
 import { fileSearchTool } from "./tool/file-search";
 import { listDirectoryTool } from "./tool/list-directory";
@@ -293,6 +298,8 @@ export async function handlePrompt(req: PromptRequest) {
 			availableTools: req.availableTools,
 			platformInfo: req.platformInfo,
 			webSearchTool,
+			browserEvaluateTool,
+			browserExportSessionTool,
 		});
 
 		const skillTool = createSkillTool(skills);
@@ -310,6 +317,11 @@ export async function handlePrompt(req: PromptRequest) {
 			webSearchTool,
 			taskTool,
 			skillTool,
+			browserConnectTool,
+			browserNavigateTool,
+			browserEvaluateTool,
+			browserExportSessionTool,
+			browserCloseTabTool,
 		];
 
 		for (const kind of availableTools.shells) {

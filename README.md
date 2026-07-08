@@ -399,8 +399,57 @@ The LLM can use these built-in tools:
 | `bash` | Run shell commands |
 | `sqlite3` | Execute SQL queries against SQLite databases |
 | `web_fetch` | Fetch and extract web content |
+| `web_search` | Search the web via Tavily |
 | `task` | Spawn a subagent for independent work |
 | `skill` | Load a skill dynamically |
+| `browser_connect` | Connect to Chrome via CDP and list open tabs |
+| `browser_navigate` | Open a new tab, navigate to a URL, and return page content |
+| `browser_evaluate` | Execute JavaScript in a browser tab |
+| `browser_export_session` | Export cookies and localStorage for curl/bash downloads |
+| `browser_close_tab` | Close a browser tab by name, URL, or index |
+
+### Browser Tools (Chrome DevTools Protocol)
+
+Bob AI can interact with your real Chrome browser via CDP. This lets you
+log into sites manually (with your password manager, 2FA, etc.) and then
+ask Bob AI to automate everything else — search, paginate, extract data,
+batch download — using your authenticated session.
+
+**Requirements:**
+- Chrome or Chromium-based browser (Edge, Brave, etc.)
+- Chrome must be started with the remote debugging flag
+
+**Setup:**
+
+On macOS:
+```bash
+open -a "Google Chrome" --args --remote-debugging-port=9222
+```
+
+On Linux:
+```bash
+google-chrome --remote-debugging-port=9222
+```
+
+On Windows:
+```cmd
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+```
+
+Once Chrome is running with the flag, tell Bob AI:
+```
+Connect to Chrome at localhost:9222 and use my portal.example.com tab
+to search for "machine learning" and download all PDFs.
+```
+
+**How it works:**
+1. You log into a site manually in Chrome — password manager, 2FA, CAPTCHA all work naturally
+2. You ask Bob AI to take over that tab
+3. Bob AI connects via CDP, evaluates JavaScript in the tab, and extracts data
+4. Bob AI can export cookies to use `curl` for batch downloads
+
+**Security:** The debug endpoint binds to `127.0.0.1` by default — only local
+processes can connect. Bob AI already has `bash` access to your machine.
 
 ## Attribution
 
