@@ -60,7 +60,14 @@ export const browserEvaluateTool: Tool = {
 					expression: {
 						type: "string",
 						description:
-							"JavaScript to execute in the page. Can be multiline. The expression is wrapped in an async IIFE — use await freely. Return values are JSON-serialized automatically.",
+							"JavaScript to execute in the page. Can be multiline. " +
+							"The expression is wrapped in an async IIFE with an implicit return — the " +
+							"expression's value is automatically returned and JSON-serialized. " +
+							"Use await freely for Promises. " +
+							"For throw statements, the error message is returned instead. " +
+							"NOTE: Write the expression directly (e.g. 'document.title' or " +
+							"'document.querySelectorAll(\".foo\").length'). Do NOT wrap your code in " +
+							"'() => {...}' or '(() => {...})()' — the tool already wraps it.",
 					},
 					label: {
 						type: "string",

@@ -443,8 +443,14 @@ export async function evaluateCdp(
 		await waitForLoadEvent(conn, signal);
 	}
 
-	// Execute the user's expression
-	const wrappedExpression = `(async () => { ${expression} })()`;
+	// Execute the user's expression.
+	// Wrap in an async IIFE. For throw statements we use a block body so the
+	// exception propagates naturally. For all other expressions we wrap with
+	// return() so the value is captured — without return, block-body async
+	// functions always resolve to undefined.
+	const trimmedExpr = expression.trim();
+	const isThrow = trimmedExpr.startsWith("throw ");
+	const wrappedExpression = isThrow ? `(async () => { ${expression} })()` : `(async () => { return (${expression}) })()`;
 	const cmdResult = await sendCommand(conn, "Runtime.evaluate", {
 		expression: wrappedExpression,
 		returnByValue: true,

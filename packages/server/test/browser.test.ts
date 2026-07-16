@@ -451,10 +451,79 @@ describe("browserEvaluateTool", () => {
 		restoreGlobals();
 	});
 
-	test("executes expression and returns result with page context", async () => {
+	test("wraps expression with return so values are captured", async () => {
+		// Capture all expressions sent to Runtime.evaluate — there are multiple
+		// calls (user expr, snapshot, isTabAlive ping). We care about the first one
+		// that contains the user expression.
+		const capturedExpressions: string[] = [];
+
+		const responses = standardCdpResponses();
+		responses.set("Runtime.evaluate", (params) => {
+			const expr = (params?.expression as string) ?? "";
+			capturedExpressions.push(expr);
+
+			// Simulate CDP: if the wrapped expression uses return(), the Promise resolves
+			// to a value; if it's a block body {}, the Promise resolves to undefined.
+			const usesReturn = expr.includes("return (");
+			return {
+				result: {
+					value: usesReturn ? "title-value" : undefined,
+				},
+			};
+		});
+
 		mockCdpFetch(9241, [{ id: "tab-1", url: "https://example.com", title: "Example Page" }]);
-		mockCdpWebSocket();
+		mockCdpWebSocket(responses);
 		await browserConnectTool.execute({ endpoint: "localhost:9241" }, {});
+
+		const result = await browserEvaluateTool.execute({ tab: "Example", expression: "document.title" }, {});
+
+		// Find the expression that contains the user's code (not snapshot, not ping)
+		const userEval = capturedExpressions.find((e) => e.includes("document.title"));
+		expect(userEval).toBeDefined();
+
+		// The wrapper must include "return" so the value is captured
+		expect(userEval).toContain("return");
+		// Result should NOT say "(no return value)" — the value IS returned
+		expect(result.llmOutput).not.toContain("(no return value)");
+		expect(result.llmOutput).toContain("title-value");
+	});
+
+	test("does not wrap throw expressions with return", async () => {
+		const capturedExpressions: string[] = [];
+
+		const responses = standardCdpResponses();
+		responses.set("Runtime.evaluate", (params) => {
+			capturedExpressions.push((params?.expression as string) ?? "");
+			return {
+				exceptionDetails: {
+					text: "Uncaught (in promise) Error: boom",
+					exception: { description: "Error: boom" },
+				},
+			};
+		});
+
+		mockCdpFetch(9291, [{ id: "tab-1", url: "https://example.com", title: "Example Page" }]);
+		mockCdpWebSocket(responses);
+		await browserConnectTool.execute({ endpoint: "localhost:9291" }, {});
+
+		const result = await browserEvaluateTool.execute({ tab: "Example", expression: "throw new Error('boom')" }, {});
+
+		// Find the expression that contains the user's code
+		const userEval = capturedExpressions.find((e) => e.includes("throw new Error"));
+		expect(userEval).toBeDefined();
+
+		// throw statements should NOT be wrapped with return() — that would be a syntax error
+		expect(userEval).not.toContain("return (");
+		// Errors should propagate through the exceptionDetails path
+		expect(result.llmOutput).toContain("Error");
+		expect(result.llmOutput).toContain("boom");
+	});
+
+	test("executes expression and returns result with page context", async () => {
+		mockCdpFetch(9292, [{ id: "tab-1", url: "https://example.com", title: "Example Page" }]);
+		mockCdpWebSocket();
+		await browserConnectTool.execute({ endpoint: "localhost:9292" }, {});
 
 		const result = await browserEvaluateTool.execute({ tab: "Example", expression: "document.title" }, {});
 		expect(result.llmOutput).toContain("eval-ok");
