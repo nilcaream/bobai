@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { InstructionFile } from "./instructions";
 import type { Skill } from "./skill/skill";
 
@@ -161,7 +160,7 @@ export function buildSystemPrompt(
 	}
 
 	for (const instruction of instructions) {
-		const sourceAttr = instruction.type === "project-specific" ? ` source="${path.basename(instruction.source)}"` : "";
+		const sourceAttr = instruction.source ? ` source="${instruction.source}"` : "";
 		parts.push(`<instructions type="${instruction.type}"${sourceAttr}>\n${instruction.content}\n</instructions>`);
 	}
 

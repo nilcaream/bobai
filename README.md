@@ -237,6 +237,29 @@ The status bar shows the override: `1000 / 20000 (100000) | 5%` — tokens used,
 
 The limit resets automatically when you switch provider or model.
 
+## Instruction Files
+
+Bob AI automatically loads instruction files to build the system prompt.
+It reads from three layers, each scanned for all three filenames:
+
+| Layer | Directory | Purpose |
+|-------|-----------|---------|
+| Global | `~/.config/bobai/` | Personal preferences for every project |
+| Project | `<project>/.bobai/` | Your own overrides for a specific project |
+| Team | `<project>/` | Shared conventions committed to the repo |
+
+Filenames checked in each layer: `AGENT.md`, `AGENTS.md`, `CLAUDE.md` (ordered).
+
+Within a layer, files combine in order — `AGENT.md` → `AGENTS.md` → `CLAUDE.md` — with
+content joined by a blank line. All files are optional. A layer with no
+matching files is simply skipped.
+
+### Layer purpose
+
+- **Global** — rules you want applied everywhere (e.g. always use TDD, prefer functional style)
+- **Project** — project-specific overrides that are yours alone (e.g. local paths, personal shortcuts). Lives in `.bobai/`, which is gitignored
+- **Team** — conventions the whole team agrees on (e.g. coding standards, commit message format). Lives in the project root so you can version it
+
 ## Skills
 
 Skills are markdown files named `SKILL.md` with YAML frontmatter. They give the LLM specialized instructions, workflows, or project conventions.
@@ -353,8 +376,10 @@ The Compaction view is the key transparency feature. It shows context pressure, 
 | `~/.config/bobai/auth.json` | Stored provider credentials |
 | `~/.config/bobai/bobai.json` | Global config |
 | `~/.config/bobai/models.json` | Unified generated model catalog |
+| `~/.config/bobai/{AGENT,AGENTS,CLAUDE}.md` | Global instruction files |
 | `~/.config/bobai/skills/` | Global skills |
 | `~/.config/bobai/plugins/` | Global plugins |
+| `<project>/.bobai/{AGENT,AGENTS,CLAUDE}.md` | Project instruction files |
 | `<project>/.bobai/` | Project-local Bob AI state |
 | `<project>/.bobai/bobai.json` | Project config |
 | `<project>/.bobai/bobai.db` | Session database |

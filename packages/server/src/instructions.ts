@@ -7,37 +7,62 @@ export interface InstructionFile {
 	content: string;
 }
 
-/**
- * Load optional instruction files from three layers:
- *
- * 1. bobai-global  — ~/.config/bobai/AGENT.md (user preferences, project-agnostic)
- * 2. bobai-project — <project>/.bobai/AGENT.md (user overrides for this project)
- * 3. project-specific — <project>/AGENT.md, AGENTS.md, CLAUDE.md (project conventions)
- *
- * Returns an array of instruction files that exist and have non-empty content.
- * Files are read synchronously per-call so edits are picked up without restart.
- */
-export function loadInstructions(globalConfigDir: string, projectRoot: string): InstructionFile[] {
-	const candidates: { type: InstructionFile["type"]; filePath: string }[] = [
-		// Layer 1 & 2: Bob AI specific instruction files
-		{ type: "bobai-global", filePath: path.join(globalConfigDir, "AGENT.md") },
-		{ type: "bobai-project", filePath: path.join(projectRoot, ".bobai", "AGENT.md") },
-		// Layer 3: Project-root context files (shared team conventions)
-		{ type: "project-specific", filePath: path.join(projectRoot, "AGENT.md") },
-		{ type: "project-specific", filePath: path.join(projectRoot, "AGENTS.md") },
-		{ type: "project-specific", filePath: path.join(projectRoot, "CLAUDE.md") },
-	];
+const INSTRUCTION_FILENAMES = ["AGENT.md", "AGENTS.md", "CLAUDE.md"] as const;
 
-	const results: InstructionFile[] = [];
-	for (const { type, filePath } of candidates) {
+/**
+ * Load instruction files from a single directory (one "layer").
+ * Checks AGENT.md, AGENTS.md, CLAUDE.md in that order, skipping empty or missing files.
+ * Combines all found files into a single InstructionFile with content joined by double newlines.
+ * Returns null when no files are found in that directory.
+ */
+function loadLayer(dir: string, type: InstructionFile["type"]): InstructionFile | null {
+	const contents: string[] = [];
+	const sources: string[] = [];
+
+	for (const filename of INSTRUCTION_FILENAMES) {
+		const filePath = path.join(dir, filename);
 		try {
 			const content = fs.readFileSync(filePath, "utf-8").trim();
 			if (content.length > 0) {
-				results.push({ type, source: filePath, content });
+				contents.push(content);
+				sources.push(filename);
 			}
 		} catch {
 			// File doesn't exist or isn't readable — skip silently
 		}
 	}
+
+	if (contents.length === 0) return null;
+
+	return {
+		type,
+		source: sources.join(", "),
+		content: contents.join("\n\n"),
+	};
+}
+
+/**
+ * Load optional instruction files from three layers:
+ *
+ * 1. bobai-global  — ~/.config/bobai/{AGENT,AGENTS,CLAUDE}.md (user preferences)
+ * 2. bobai-project — <project>/.bobai/{AGENT,AGENTS,CLAUDE}.md (user overrides)
+ * 3. project-specific — <project>/{AGENT,AGENTS,CLAUDE}.md (project conventions)
+ *
+ * Within each layer, files are combined in order: AGENT.md, AGENTS.md, CLAUDE.md.
+ * Returns at most one entry per layer. Files are read synchronously per-call
+ * so edits are picked up without restart.
+ */
+export function loadInstructions(globalConfigDir: string, projectRoot: string): InstructionFile[] {
+	const results: InstructionFile[] = [];
+
+	const globalEntry = loadLayer(globalConfigDir, "bobai-global");
+	if (globalEntry) results.push(globalEntry);
+
+	const projectEntry = loadLayer(path.join(projectRoot, ".bobai"), "bobai-project");
+	if (projectEntry) results.push(projectEntry);
+
+	const rootEntry = loadLayer(projectRoot, "project-specific");
+	if (rootEntry) results.push(rootEntry);
+
 	return results;
 }

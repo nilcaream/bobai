@@ -75,48 +75,40 @@ describe("buildSystemPrompt", () => {
 		expect(result).toContain("skill");
 	});
 
-	test("wraps bobai-global instructions without source attribute", () => {
-		const instructions: InstructionFile[] = [
-			{ type: "bobai-global", source: "/home/user/.config/bobai/AGENT.md", content: "Always use TDD." },
-		];
+	test("wraps bobai-global instructions with source attribute", () => {
+		const instructions: InstructionFile[] = [{ type: "bobai-global", source: "AGENT.md", content: "Always use TDD." }];
 		const result = buildSystemPrompt([], instructions);
-		expect(result).toContain('<instructions type="bobai-global">');
-		expect(result).not.toContain("source=");
+		expect(result).toContain('<instructions type="bobai-global" source="AGENT.md">');
 		expect(result).toContain("Always use TDD.");
 		expect(result).toContain("</instructions>");
 	});
 
-	test("wraps bobai-project instructions without source attribute", () => {
-		const instructions: InstructionFile[] = [
-			{ type: "bobai-project", source: "/project/.bobai/AGENT.md", content: "Project overrides." },
-		];
+	test("wraps bobai-project instructions with source attribute", () => {
+		const instructions: InstructionFile[] = [{ type: "bobai-project", source: "AGENT.md", content: "Project overrides." }];
 		const result = buildSystemPrompt([], instructions);
-		expect(result).toContain('<instructions type="bobai-project">');
-		expect(result).not.toContain("source=");
+		expect(result).toContain('<instructions type="bobai-project" source="AGENT.md">');
 		expect(result).toContain("Project overrides.");
 		expect(result).toContain("</instructions>");
 	});
 
 	test("wraps project-specific instructions with source attribute showing filename", () => {
-		const instructions: InstructionFile[] = [
-			{ type: "project-specific", source: "/project/AGENT.md", content: "Agent conventions." },
-		];
+		const instructions: InstructionFile[] = [{ type: "project-specific", source: "AGENT.md", content: "Agent conventions." }];
 		const result = buildSystemPrompt([], instructions);
 		expect(result).toContain('<instructions type="project-specific" source="AGENT.md">');
 		expect(result).toContain("Agent conventions.");
 		expect(result).toContain("</instructions>");
 	});
 
-	test("multiple project-specific instructions each get their own source attribute", () => {
+	test("multiple instructions each get their own source attribute", () => {
 		const instructions: InstructionFile[] = [
-			{ type: "project-specific", source: "/project/AGENT.md", content: "Agent stuff." },
-			{ type: "project-specific", source: "/project/CLAUDE.md", content: "Claude stuff." },
+			{ type: "bobai-global", source: "AGENT.md", content: "Global stuff." },
+			{ type: "project-specific", source: "AGENT.md, CLAUDE.md", content: "Project stuff." },
 		];
 		const result = buildSystemPrompt([], instructions);
-		expect(result).toContain('<instructions type="project-specific" source="AGENT.md">');
-		expect(result).toContain('<instructions type="project-specific" source="CLAUDE.md">');
-		expect(result).toContain("Agent stuff.");
-		expect(result).toContain("Claude stuff.");
+		expect(result).toContain('<instructions type="bobai-global" source="AGENT.md">');
+		expect(result).toContain('<instructions type="project-specific" source="AGENT.md, CLAUDE.md">');
+		expect(result).toContain("Global stuff.");
+		expect(result).toContain("Project stuff.");
 	});
 
 	test("appends multiple instruction sections in order", () => {
