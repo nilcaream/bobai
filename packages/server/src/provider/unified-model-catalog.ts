@@ -29,7 +29,6 @@ export interface UnifiedModelCatalogRefreshResult {
 	configPath: string;
 	providerCount: number;
 	modelCount: number;
-	multiplierSourceAvailable: boolean;
 }
 
 const MODELS_FILE_NAME = "models.json";
@@ -150,7 +149,6 @@ export async function refreshUnifiedModelCatalog(
 		configPath,
 		providerCount: Object.keys(file.providers).length,
 		modelCount,
-		multiplierSourceAvailable: false,
 	};
 }
 

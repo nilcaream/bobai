@@ -75,9 +75,6 @@ if (cli.command === "refresh") {
 		if (bedrockAuth) {
 			console.log(`Amazon Bedrock: refreshed from live API (${bedrockAuth.region})`);
 		}
-		if (!result.multiplierSourceAvailable) {
-			console.log("Multiplier metadata unavailable from models.dev.");
-		}
 		process.exit(0);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -104,9 +101,6 @@ await ensureModelCatalogAvailable({
 	refreshCatalog: async () => {
 		const result = await refreshUnifiedModelCatalog(globalConfigDir);
 		logger.info("MODEL", `Wrote ${result.modelCount} models to ${result.configPath}`);
-		if (!result.multiplierSourceAvailable) {
-			logger.warn("MODEL", "Multiplier metadata unavailable from models.dev.");
-		}
 	},
 	logger,
 });
