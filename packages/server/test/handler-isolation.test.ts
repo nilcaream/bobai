@@ -29,7 +29,7 @@ async function simulateSession(
 
 function mockConcurrentProvider(): Provider {
 	return {
-		id: "mock",
+		id: "openrouter",
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			yield { type: "text", text: "ok" };
 			if (opts.onMetrics) {

@@ -2,15 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-	type AuthStore,
-	getCopilotAuth,
-	getOpenRouterAuth,
-	loadAuthStore,
-	saveAuthStore,
-	setCopilotAuth,
-	setOpenRouterAuth,
-} from "../src/auth/store";
+import { type AuthStore, getOpenRouterAuth, loadAuthStore, saveAuthStore, setOpenRouterAuth } from "../src/auth/store";
 
 describe("auth store", () => {
 	let tmpDir: string;
@@ -35,11 +27,6 @@ describe("auth store", () => {
 		const store: AuthStore = {
 			version: 1,
 			providers: {
-				"github-copilot": {
-					refresh: "refresh-token",
-					access: "access-token",
-					expires: 123,
-				},
 				openrouter: {
 					apiKey: "or-key",
 				},
@@ -48,12 +35,6 @@ describe("auth store", () => {
 
 		saveAuthStore(tmpDir, store);
 		expect(loadAuthStore(tmpDir)).toEqual(store);
-	});
-
-	test("setCopilotAuth stores copilot credentials under github-copilot", () => {
-		const store: AuthStore = { version: 1, providers: {} };
-		const next = setCopilotAuth(store, { refresh: "r", access: "a", expires: 1 });
-		expect(getCopilotAuth(next)).toEqual({ refresh: "r", access: "a", expires: 1 });
 	});
 
 	test("setOpenRouterAuth stores api key under openrouter", () => {

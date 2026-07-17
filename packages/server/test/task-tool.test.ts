@@ -19,7 +19,7 @@ const emptySkills: SkillRegistry = {
 // Minimal mock provider: yields text, done.
 function textOnlyProvider(text: string): Provider {
 	return {
-		id: "mock",
+		id: "openrouter",
 		async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			yield { type: "text", text };
 			yield { type: "finish", reason: "stop" };
@@ -154,7 +154,7 @@ describe("createTaskTool", () => {
 
 	test("sets error status when agent loop throws", async () => {
 		const failAgentProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "" };
 				throw new Error("agent loop exploded");
@@ -250,7 +250,7 @@ describe("createTaskTool", () => {
 		const stateOps: string[] = [];
 		let savedState: unknown = null;
 		const statefulProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "agent result" };
 				yield { type: "finish", reason: "stop" };
@@ -326,7 +326,7 @@ describe("createTaskTool", () => {
 
 	test("error summary includes a timestamp prefix", async () => {
 		const failProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "" };
 				throw new Error("boom");
@@ -498,7 +498,7 @@ describe("createTaskTool", () => {
 		// Provider that triggers a bash tool call on first request, then responds with text
 		let callCount = 0;
 		const toolCallingProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1 && opts.tools?.length) {

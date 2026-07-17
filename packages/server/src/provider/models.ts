@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { getAssistantMessagesWithTurnMetrics, getDescendantSessionIds } from "../session/repository";
-import { computeTurnCostDollars, formatPremiumRequests } from "./cost-utils";
+import { computeTurnCostDollars } from "./cost-utils";
 import type { ProviderId } from "./providers";
 import { getProviderDescriptor, type ProviderModelConfig, type SortedProviderModelListItem } from "./registry";
 
@@ -71,30 +71,7 @@ export function computeDollarSessionTotal(db: Database, rootSessionId: string, c
 	return `$${total.toFixed(2)}`;
 }
 
-export function computeCopilotSessionTotal(db: Database, sessionId: string, configDir?: string): string {
-	const turns = getAssistantMessagesWithTurnMetrics(db, [sessionId]);
-
-	let total = 0;
-	let unknown = false;
-	for (const turn of turns) {
-		const modelConfig = getProviderModelConfig("github-copilot", turn.turnModel as string, configDir);
-		if (modelConfig?.premiumRequestMultiplier === undefined) {
-			unknown = true;
-			continue;
-		}
-		total += modelConfig.premiumRequestMultiplier;
-	}
-
-	if (unknown) {
-		return "? PR";
-	}
-	return `${formatPremiumRequests(total)} PR`;
-}
-
-export function formatSessionCostDisplay(db: Database, providerId: ProviderId, sessionId: string, configDir?: string): string {
-	if (providerId === "github-copilot") {
-		return computeCopilotSessionTotal(db, sessionId, configDir);
-	}
+export function formatSessionCostDisplay(db: Database, _providerId: ProviderId, sessionId: string, configDir?: string): string {
 	return computeDollarSessionTotal(db, sessionId, configDir);
 }
 

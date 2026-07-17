@@ -27,26 +27,6 @@ function writeModelsConfig(tmpDir: string) {
 				version: 1,
 				generatedAt: "2026-05-05T00:00:00.000Z",
 				providers: {
-					"github-copilot": [
-						{
-							id: "claude-haiku-4.5",
-							name: "Claude Haiku 4.5",
-							contextWindow: 200000,
-							maxOutput: 64000,
-							inputPrice: 0,
-							outputPrice: 0,
-							premiumRequestMultiplier: 0.33,
-						},
-						{
-							id: "gpt-5-mini",
-							name: "GPT-5 Mini",
-							contextWindow: 264000,
-							maxOutput: 64000,
-							inputPrice: 0,
-							outputPrice: 0,
-							premiumRequestMultiplier: 0,
-						},
-					],
 					openrouter: [
 						{
 							id: "anthropic/claude-haiku-4.5",
@@ -115,26 +95,26 @@ function writeModelsConfig(tmpDir: string) {
 describe("provider model facade", () => {
 	test("checks config existence through the provider facade", () => {
 		withTempDir((tmpDir) => {
-			expect(providerModelsConfigExists("github-copilot", tmpDir)).toBe(false);
+			expect(providerModelsConfigExists("openrouter", tmpDir)).toBe(false);
 			writeModelsConfig(tmpDir);
-			expect(providerModelsConfigExists("github-copilot", tmpDir)).toBe(true);
+			expect(providerModelsConfigExists("openrouter", tmpDir)).toBe(true);
 		});
 	});
 
 	test("loads provider model configs through the provider facade", () => {
 		withTempDir((tmpDir) => {
 			writeModelsConfig(tmpDir);
-			const models = loadProviderModelsConfig("github-copilot", tmpDir);
-			expect(models.map((model) => model.id)).toContain("gpt-5-mini");
-			expect(getProviderModelConfig("github-copilot", "gpt-5-mini", tmpDir)?.contextWindow).toBe(264000);
+			const models = loadProviderModelsConfig("openrouter", tmpDir);
+			expect(models.map((model) => model.id)).toContain("anthropic/claude-haiku-4.5");
+			expect(getProviderModelConfig("openrouter", "anthropic/claude-haiku-4.5", tmpDir)?.contextWindow).toBe(128000);
 		});
 	});
 
 	test("formats model display through the provider facade", () => {
 		withTempDir((tmpDir) => {
 			writeModelsConfig(tmpDir);
-			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 12800, tmpDir)).toBe(
-				"github-copilot | gpt-5-mini [0x] | 0 PR | 12800 / 264000 | 5%",
+			expect(formatProviderModelDisplay("openrouter", "anthropic/claude-haiku-4.5", 12800, tmpDir)).toBe(
+				"openrouter | anthropic/claude-haiku-4.5 [$0.50 $5.12] | $0.00 | 12800 / 128000 | 10%",
 			);
 		});
 	});
@@ -142,48 +122,12 @@ describe("provider model facade", () => {
 	test("builds the same sorted model list shape used by UI commands", () => {
 		withTempDir((tmpDir) => {
 			writeModelsConfig(tmpDir);
-			const list = buildSortedProviderModelList("github-copilot", tmpDir);
-			expect(list.find((model) => model.id === "gpt-5-mini")).toEqual({
-				id: "gpt-5-mini",
-				cost: "[0x]",
-				contextWindow: 264000,
+			const list = buildSortedProviderModelList("openrouter", tmpDir);
+			expect(list.find((model) => model.id === "anthropic/claude-haiku-4.5")).toEqual({
+				id: "anthropic/claude-haiku-4.5",
+				cost: "[$0.50 $5.12]",
+				contextWindow: 128000,
 			});
-		});
-	});
-
-	test("shows ?x for Copilot models when multiplier is unavailable", () => {
-		withTempDir((tmpDir) => {
-			fs.writeFileSync(
-				path.join(tmpDir, "models.json"),
-				JSON.stringify({
-					version: 1,
-					generatedAt: "2026-05-05T00:00:00.000Z",
-					providers: {
-						"github-copilot": [
-							{
-								id: "gpt-5-mini",
-								name: "GPT-5 Mini",
-								contextWindow: 264000,
-								maxOutput: 64000,
-								inputPrice: 0,
-								outputPrice: 0,
-							},
-						],
-						openrouter: [],
-						"opencode-go": [],
-						"opencode-zen": [],
-					},
-				}),
-			);
-
-			expect(buildSortedProviderModelList("github-copilot", tmpDir).find((model) => model.id === "gpt-5-mini")).toEqual({
-				id: "gpt-5-mini",
-				cost: "[?x]",
-				contextWindow: 264000,
-			});
-			expect(formatProviderModelDisplay("github-copilot", "gpt-5-mini", 12800, tmpDir)).toBe(
-				"github-copilot | gpt-5-mini [?x] | 0 PR | 12800 / 264000 | 5%",
-			);
 		});
 	});
 

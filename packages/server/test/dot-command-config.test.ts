@@ -6,11 +6,11 @@ import path from "node:path";
 import { handleCommand } from "../src/command";
 import { createSession } from "../src/session/repository";
 import { createTestDb } from "./helpers";
-import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
+import { createTestModels, writeUnifiedModelsConfig } from "./test-models";
 
 function mockProviders(): { index: number; id: string; runtimeSupported: boolean }[] {
 	return [
-		{ index: 1, id: "github-copilot", runtimeSupported: true },
+		{ index: 1, id: "openrouter", runtimeSupported: true },
 		{ index: 2, id: "openrouter", runtimeSupported: true },
 		{ index: 3, id: "opencode-go", runtimeSupported: true },
 	];
@@ -52,14 +52,14 @@ describe("handleCommand configuration", () => {
 		fs.writeFileSync(path.join(bobaiDir, "bobai.json"), JSON.stringify(projectConfig));
 
 		// Set up global config
-		globalConfig = { provider: "github-copilot", maxIterations: 50 };
+		globalConfig = { provider: "openrouter", maxIterations: 50 };
 		fs.writeFileSync(path.join(globalConfigDir, "bobai.json"), JSON.stringify(globalConfig));
 
 		// Set up model catalog
 		writeUnifiedModelsConfig(globalConfigDir, {
-			"github-copilot": createCopilotModels([
-				{ id: "claude-haiku-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
-				{ id: "claude-sonnet-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
+			openrouter: createTestModels([
+				{ id: "claude-haiku-4.5", contextWindow: 0, maxOutput: 64000 },
+				{ id: "claude-sonnet-4.5", contextWindow: 0, maxOutput: 64000 },
 			]),
 		});
 	});
@@ -88,7 +88,7 @@ describe("handleCommand configuration", () => {
 			expect(msg?.kind).toBe("info");
 			expect(msg?.text).toContain("debug = false");
 			expect(msg?.text).toContain("port = 3000");
-			expect(msg?.text).toContain("provider = github-copilot");
+			expect(msg?.text).toContain("provider = openrouter");
 			expect(msg?.text).toContain("maxIterations = 50");
 		}
 	});
@@ -119,7 +119,7 @@ describe("handleCommand configuration", () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.messages?.[0]?.text).toContain("provider = github-copilot");
+			expect(result.messages?.[0]?.text).toContain("provider = openrouter");
 			expect(result.messages?.[0]?.text).toContain("maxIterations = 50");
 			expect(result.messages?.[0]?.text).toContain("debug = (not set)");
 		}
@@ -180,7 +180,7 @@ describe("handleCommand configuration", () => {
 
 		const raw = JSON.parse(fs.readFileSync(path.join(globalConfigDir, "bobai.json"), "utf8"));
 		expect(raw.port).toBe(8080);
-		expect(raw.provider).toBe("github-copilot"); // preserved
+		expect(raw.provider).toBe("openrouter"); // preserved
 	});
 
 	test(".configuration project maxIterations 100 sets maxIterations", () => {

@@ -40,17 +40,6 @@ describe("resolveValidatedDefaultBackend", () => {
 				version: 1,
 				generatedAt: "2026-05-05T00:00:00.000Z",
 				providers: {
-					"github-copilot": [
-						{
-							id: "gpt-5-mini",
-							name: "GPT-5 Mini",
-							contextWindow: 264000,
-							maxOutput: 64000,
-							inputPrice: 0,
-							outputPrice: 0,
-							premiumRequestMultiplier: 0,
-						},
-					],
 					openrouter: [
 						{
 							id: "openrouter/free",
@@ -86,14 +75,13 @@ describe("resolveValidatedDefaultBackend", () => {
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "key" },
 			},
 		});
 		const resolved = resolveValidatedDefaultBackend(
 			{
 				project: { filePath: projectFile, provider: "openrouter", model: "openrouter/free" },
-				global: { filePath: globalFile, provider: "github-copilot", model: "gpt-5-mini" },
+				global: { filePath: globalFile, provider: "opencode-go", model: "deepseek-v4-flash" },
 				configDir,
 			},
 			logger(),
@@ -107,18 +95,18 @@ describe("resolveValidatedDefaultBackend", () => {
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
+				openrouter: { apiKey: "key" },
 			},
 		});
 		const resolved = resolveValidatedDefaultBackend(
 			{
-				project: { filePath: projectFile, provider: "github-copilot" },
-				global: { filePath: globalFile, provider: "github-copilot", model: "gpt-5-mini" },
+				project: { filePath: projectFile, provider: "openrouter" },
+				global: { filePath: globalFile, provider: "openrouter", model: "openrouter/free" },
 				configDir,
 			},
 			logger(),
 		);
-		expect(resolved).toEqual({ provider: "github-copilot", model: "gpt-5-mini" });
+		expect(resolved).toEqual({ provider: "openrouter", model: "openrouter/free" });
 		expect(errors).toContain(`Provider/model defaults in ${projectFile} are incomplete`);
 	});
 
@@ -127,18 +115,18 @@ describe("resolveValidatedDefaultBackend", () => {
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
+				openrouter: { apiKey: "key" },
 			},
 		});
 		const resolved = resolveValidatedDefaultBackend(
 			{
-				project: { filePath: projectFile, provider: "coppilot", model: "gpt-5-mini" },
-				global: { filePath: globalFile, provider: "github-copilot", model: "gpt-5-mini" },
+				project: { filePath: projectFile, provider: "coppilot", model: "openrouter/free" },
+				global: { filePath: globalFile, provider: "openrouter", model: "openrouter/free" },
 				configDir,
 			},
 			logger(),
 		);
-		expect(resolved).toEqual({ provider: "github-copilot", model: "gpt-5-mini" });
+		expect(resolved).toEqual({ provider: "openrouter", model: "openrouter/free" });
 		expect(errors).toContain(`Provider coppilot in ${projectFile} is invalid`);
 	});
 
@@ -147,19 +135,19 @@ describe("resolveValidatedDefaultBackend", () => {
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
+				openrouter: { apiKey: "key" },
 			},
 		});
 		const resolved = resolveValidatedDefaultBackend(
 			{
-				project: { filePath: projectFile, provider: "openrouter", model: "openrouter/free" },
-				global: { filePath: globalFile, provider: "github-copilot", model: "gpt-5-mini" },
+				project: { filePath: projectFile, provider: "opencode-go", model: "deepseek-v4-flash" },
+				global: { filePath: globalFile, provider: "openrouter", model: "openrouter/free" },
 				configDir,
 			},
 			logger(),
 		);
-		expect(resolved).toEqual({ provider: "github-copilot", model: "gpt-5-mini" });
-		expect(errors).toContain("No authentication details for provider openrouter");
+		expect(resolved).toEqual({ provider: "openrouter", model: "openrouter/free" });
+		expect(errors).toContain("No authentication details for provider opencode-go");
 	});
 
 	test("falls back to provider default when model is invalid", () => {
@@ -167,19 +155,19 @@ describe("resolveValidatedDefaultBackend", () => {
 		saveAuthStore(configDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
+				openrouter: { apiKey: "key" },
 			},
 		});
 		const resolved = resolveValidatedDefaultBackend(
 			{
-				project: { filePath: projectFile, provider: "github-copilot", model: "gpt-9.0" },
-				global: { filePath: globalFile, provider: "github-copilot", model: "gpt-10.0" },
+				project: { filePath: projectFile, provider: "openrouter", model: "nonexistent/model" },
+				global: { filePath: globalFile, provider: "openrouter", model: "another/bogus" },
 				configDir,
 			},
 			logger(),
 		);
-		// Project layer: invalid model → falls back to provider default "gpt-5-mini"
-		expect(resolved).toEqual({ provider: "github-copilot", model: "gpt-5-mini" });
-		expect(errors).toContain(`Model gpt-9.0 in ${projectFile} is invalid, falling back to gpt-5-mini`);
+		// Project layer: invalid model → falls back to provider default "openrouter/free"
+		expect(resolved).toEqual({ provider: "openrouter", model: "openrouter/free" });
+		expect(errors).toContain(`Model nonexistent/model in ${projectFile} is invalid, falling back to openrouter/free`);
 	});
 });

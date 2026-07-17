@@ -52,6 +52,6 @@ body:
     attributes:
       label: Provider and model
       description: Which provider and model were you using when the bug occurred?
-      placeholder: e.g. github-copilot / gpt-4.1
+      placeholder: e.g. openrouter / openrouter/auto
     validations:
       required: false

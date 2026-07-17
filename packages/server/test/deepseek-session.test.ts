@@ -22,14 +22,13 @@ describe("DeepSeek session flow", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				deepseek: { apiKey: "ds-key" },
 			},
 		});
 		db = createTestDb();
 		seenProviderIds = [];
 		const runtimeManager = {
-			get: async (providerId: "github-copilot" | "deepseek") => {
+			get: async (providerId: "openrouter" | "deepseek") => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
@@ -61,7 +60,7 @@ describe("DeepSeek session flow", () => {
 			db,
 			configDir: tmpDir,
 			runtimeManager,
-			providerId: "github-copilot",
+			providerId: "openrouter",
 			model: "gpt-5-mini",
 			projectRoot: "/tmp",
 			skills: emptySkills,
@@ -78,7 +77,7 @@ describe("DeepSeek session flow", () => {
 
 	test("provider command switches an empty session to DeepSeek and resets the model", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -86,7 +85,7 @@ describe("DeepSeek session flow", () => {
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: String(2), sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: String(1), sessionId: session.id }),
 		});
 		const body = (await res.json()) as { ok: boolean; provider?: string; model?: string; status?: string };
 
@@ -98,7 +97,7 @@ describe("DeepSeek session flow", () => {
 
 	test("websocket prompt uses the DeepSeek runtime after provider switch", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -106,7 +105,7 @@ describe("DeepSeek session flow", () => {
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: String(2), sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: String(1), sessionId: session.id }),
 		});
 
 		const ws = await openWs(wsUrl);

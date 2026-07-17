@@ -3,50 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const COPILOT_DOC_HTML = `
-<table>
-  <thead>
-    <tr>
-      <th>Model</th>
-      <th>Multiplier for <strong>paid plans</strong></th>
-      <th>Multiplier for <strong>Copilot Free</strong></th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr><th scope="row">Claude Sonnet 4.6</th><td>1</td><td>Not applicable</td></tr>
-    <tr><th scope="row">GPT-5 mini</th><td>0</td><td>1</td></tr>
-  </tbody>
-</table>`;
-
 function createModelsDevResponse() {
 	return {
-		"github-copilot": {
-			id: "github-copilot",
-			name: "GitHub Copilot",
-			models: {
-				"claude-sonnet-4.6": {
-					id: "claude-sonnet-4.6",
-					name: "Claude Sonnet 4.6",
-					tool_call: true,
-					limit: { context: 200000, output: 64000 },
-					cost: { input: 3, output: 15 },
-				},
-				"gpt-5-mini": {
-					id: "gpt-5-mini",
-					name: "GPT-5 mini",
-					tool_call: true,
-					limit: { context: 272000, output: 128000 },
-					cost: { input: 0.25, output: 2 },
-				},
-				"text-only": {
-					id: "text-only",
-					name: "Text Only",
-					tool_call: false,
-					limit: { context: 1000, output: 100 },
-					cost: { input: 1, output: 1 },
-				},
-			},
-		},
 		openrouter: {
 			id: "openrouter",
 			name: "OpenRouter",
@@ -122,9 +80,6 @@ describe("unified model catalog", () => {
 			if (urlStr === "https://models.dev/api.json") {
 				return Promise.resolve(new Response(JSON.stringify(createModelsDevResponse())));
 			}
-			if (urlStr === "https://docs.github.com/en/copilot/concepts/billing/copilot-requests") {
-				return Promise.resolve(new Response(COPILOT_DOC_HTML));
-			}
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		}) as typeof fetch;
 
@@ -138,7 +93,6 @@ describe("unified model catalog", () => {
 		expect(Object.keys(file.providers).sort()).toEqual([
 			"amazon-bedrock",
 			"deepseek",
-			"github-copilot",
 			"opencode-go",
 			"opencode-zen",
 			"openrouter",
@@ -151,9 +105,6 @@ describe("unified model catalog", () => {
 			if (urlStr === "https://models.dev/api.json") {
 				return Promise.resolve(new Response(JSON.stringify(createModelsDevResponse())));
 			}
-			if (urlStr === "https://docs.github.com/en/copilot/concepts/billing/copilot-requests") {
-				return Promise.resolve(new Response(COPILOT_DOC_HTML));
-			}
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		}) as typeof fetch;
 
@@ -161,69 +112,15 @@ describe("unified model catalog", () => {
 		await refreshUnifiedModelCatalog(tmpDir);
 		const file = loadUnifiedModelsFile(tmpDir);
 
-		expect(file.providers["github-copilot"]?.map((model) => model.id)).toEqual(["claude-sonnet-4.6", "gpt-5-mini"]);
 		expect(file.providers.openrouter?.map((model) => model.id)).toEqual(["anthropic/claude-sonnet-4"]);
 		expect(file.providers["opencode-zen"]?.map((model) => model.id)).toEqual(["minimax-m2.5-free"]);
 	});
 
-	test("Copilot token prices are normalized to zero while other providers keep upstream prices", async () => {
-		globalThis.fetch = mock((url: string | URL | Request) => {
-			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-			if (urlStr === "https://models.dev/api.json") {
-				return Promise.resolve(new Response(JSON.stringify(createModelsDevResponse())));
-			}
-			if (urlStr === "https://docs.github.com/en/copilot/concepts/billing/copilot-requests") {
-				return Promise.resolve(new Response(COPILOT_DOC_HTML));
-			}
-			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
-		}) as typeof fetch;
-
-		const { refreshUnifiedModelCatalog, loadUnifiedModelsFile } = await import("../src/provider/unified-model-catalog");
-		await refreshUnifiedModelCatalog(tmpDir);
-		const file = loadUnifiedModelsFile(tmpDir);
-
-		expect(file.providers["github-copilot"]?.find((model) => model.id === "claude-sonnet-4.6")).toMatchObject({
-			inputPrice: 0,
-			outputPrice: 0,
-			premiumRequestMultiplier: 1,
-		});
-		expect(file.providers.openrouter?.find((model) => model.id === "anthropic/claude-sonnet-4")).toMatchObject({
-			inputPrice: 3,
-			outputPrice: 15,
-		});
-	});
-
-	test("refresh still succeeds when Copilot multipliers cannot be fetched", async () => {
-		globalThis.fetch = mock((url: string | URL | Request) => {
-			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-			if (urlStr === "https://models.dev/api.json") {
-				return Promise.resolve(new Response(JSON.stringify(createModelsDevResponse())));
-			}
-			if (urlStr === "https://docs.github.com/en/copilot/concepts/billing/copilot-requests") {
-				return Promise.reject(new Error("docs unavailable"));
-			}
-			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
-		}) as typeof fetch;
-
-		const { refreshUnifiedModelCatalog, loadUnifiedModelsFile } = await import("../src/provider/unified-model-catalog");
-		await refreshUnifiedModelCatalog(tmpDir);
-		const file = loadUnifiedModelsFile(tmpDir);
-
-		expect(file.providers["github-copilot"]?.find((model) => model.id === "claude-sonnet-4.6")).toEqual({
-			id: "claude-sonnet-4.6",
-			name: "Claude Sonnet 4.6",
-			contextWindow: 200000,
-			maxOutput: 64000,
-			inputPrice: 0,
-			outputPrice: 0,
-		});
-	});
-
 	test("populates supportsCaching from models.dev cache costs for all providers", async () => {
 		const modelsDev = createModelsDevResponse();
-		// Add cache costs to sonnet (caching-capable model)
-		modelsDev["github-copilot"].models["claude-sonnet-4.6"] = {
-			...modelsDev["github-copilot"].models["claude-sonnet-4.6"],
+		// Add cache costs to the openrouter sonnet model
+		modelsDev.openrouter.models["anthropic/claude-sonnet-4"] = {
+			...modelsDev.openrouter.models["anthropic/claude-sonnet-4"],
 			cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
 		};
 
@@ -231,9 +128,6 @@ describe("unified model catalog", () => {
 			const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 			if (urlStr === "https://models.dev/api.json") {
 				return Promise.resolve(new Response(JSON.stringify(modelsDev)));
-			}
-			if (urlStr === "https://docs.github.com/en/copilot/concepts/billing/copilot-requests") {
-				return Promise.resolve(new Response(COPILOT_DOC_HTML));
 			}
 			return Promise.reject(new Error(`Unexpected fetch URL: ${urlStr}`));
 		}) as typeof fetch;
@@ -243,11 +137,11 @@ describe("unified model catalog", () => {
 		const file = loadUnifiedModelsFile(tmpDir);
 
 		// Caching-capable model (has cache costs) → supportsCaching should be true
-		const sonnet = file.providers["github-copilot"]?.find((model) => model.id === "claude-sonnet-4.6");
+		const sonnet = file.providers.openrouter?.find((model) => model.id === "anthropic/claude-sonnet-4");
 		expect(sonnet?.supportsCaching).toBe(true);
 
 		// Non-caching model (no cache costs) → supportsCaching should be undefined
-		const gpt = file.providers["github-copilot"]?.find((model) => model.id === "gpt-5-mini");
-		expect(gpt?.supportsCaching).toBeUndefined();
+		const deepseek = file.providers["opencode-go"]?.find((model) => model.id === "deepseek-v4-flash");
+		expect(deepseek?.supportsCaching).toBeUndefined();
 	});
 });

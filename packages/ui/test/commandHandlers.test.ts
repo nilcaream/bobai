@@ -217,7 +217,7 @@ describe("handleViewCommand", () => {
 describe("handleModelCommand", () => {
 	function makeParams(overrides: Partial<Parameters<typeof handleModelCommand>[1]> = {}) {
 		return {
-			currentProvider: "github-copilot",
+			currentProvider: "openrouter",
 			getSessionId: () => "s1",
 			setSessionId: mock(() => {}),
 			setProvider: mock(() => {}),
@@ -261,21 +261,21 @@ describe("handleModelCommand", () => {
 				jsonResponse({
 					ok: true,
 					sessionId: "new-s1",
-					provider: "github-copilot",
+					provider: "openrouter",
 					model: "gpt-4o",
-					status: "github-copilot gpt-4o",
+					status: "openrouter gpt-4o",
 				}),
 			),
 		);
-		const params = makeParams({ currentProvider: "github-copilot" });
+		const params = makeParams({ currentProvider: "openrouter" });
 		handleModelCommand({ args: "1" }, params);
 		await flushPromises();
 		expect(params.setSessionId).toHaveBeenCalledWith("new-s1");
-		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
+		expect(params.setProvider).toHaveBeenCalledWith("openrouter");
 		expect(params.setModel).toHaveBeenCalledWith("gpt-4o");
-		expect(params.setStatus).toHaveBeenCalledWith("github-copilot gpt-4o");
+		expect(params.setStatus).toHaveBeenCalledWith("openrouter gpt-4o");
 		expect(params.setContextLimit).toHaveBeenCalledWith(null);
-		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using github-copilot gpt-4o model", "info");
+		expect(params.addVolatileMessage).toHaveBeenCalledWith("Using openrouter gpt-4o model", "info");
 	});
 
 	test("on success without status, does not call setStatus", async () => {
@@ -311,7 +311,7 @@ describe("handleModelCommand", () => {
 	});
 
 	test("non-numeric args show error and do not post", () => {
-		const params = makeParams({ currentProvider: "github-copilot" });
+		const params = makeParams({ currentProvider: "openrouter" });
 		handleModelCommand({ args: "unknown" }, params);
 		expect(fetchMock).toHaveBeenCalledTimes(0);
 		expect(params.addVolatileMessage).toHaveBeenCalledWith('No model matching "unknown"', "error");
@@ -340,7 +340,7 @@ describe("handleModelCommand", () => {
 describe("handleProviderCommand", () => {
 	function makeParams(overrides: Partial<Parameters<typeof handleProviderCommand>[1]> = {}) {
 		return {
-			currentProvider: "github-copilot",
+			currentProvider: "openrouter",
 			getSessionId: () => "s1",
 			setSessionId: mock(() => {}),
 			setProvider: mock(() => {}),
@@ -359,18 +359,18 @@ describe("handleProviderCommand", () => {
 				jsonResponse({
 					ok: true,
 					sessionId: "new-s1",
-					provider: "github-copilot",
-					status: "github-copilot",
+					provider: "openrouter",
+					status: "openrouter",
 				}),
 			),
 		);
 		const params = makeParams();
 		handleProviderCommand({ args: "1" }, params);
 		await flushPromises();
-		expect(params.setProvider).toHaveBeenCalledWith("github-copilot");
+		expect(params.setProvider).toHaveBeenCalledWith("openrouter");
 		expect(params.setModel).toHaveBeenCalledWith(null);
 		expect(params.setContextLimit).toHaveBeenCalledWith(null);
-		expect(params.setStatus).toHaveBeenCalledWith("github-copilot");
+		expect(params.setStatus).toHaveBeenCalledWith("openrouter");
 	});
 
 	test("non-numeric args show error and do not post", () => {
@@ -381,7 +381,7 @@ describe("handleProviderCommand", () => {
 	});
 
 	test("provider command can be submitted when no provider/model is selected yet", () => {
-		const params = makeParams({ currentProvider: "github-copilot" });
+		const params = makeParams({ currentProvider: "openrouter" });
 		handleProviderCommand({ args: "1" }, params);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});

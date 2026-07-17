@@ -27,16 +27,6 @@ interface ReasoningQuirk {
 }
 
 const QUIRKS: ReasoningQuirk[] = [
-	// Copilot o-series reasoning models (o1, o3, o4).
-	{
-		providerId: "github-copilot",
-		apiFamily: "openai-chat-completions",
-		modelPattern: /^o[134]/,
-		capabilities: {
-			family: "openai-chat-interleaved",
-			supportsReplay: true,
-		},
-	},
 	// OpenRouter normalizes deepseek reasoning — detect from stream.
 	{
 		providerId: "openrouter",
@@ -83,7 +73,7 @@ const QUIRKS: ReasoningQuirk[] = [
 			supportsReplay: true,
 		},
 	},
-	// Gemini models (direct / via Copilot).
+	// Gemini models.
 	{
 		apiFamily: "openai-chat-completions",
 		modelPattern: /(^|\/)gemini-/,

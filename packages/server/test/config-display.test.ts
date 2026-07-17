@@ -7,7 +7,7 @@ describe("formatConfig", () => {
 			id: "abc-123",
 			debug: true,
 			port: 20002,
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4-5",
 			maxIterations: 50,
 		};
@@ -16,7 +16,7 @@ describe("formatConfig", () => {
 
 		expect(result).toContain("debug = true");
 		expect(result).toContain("port = 20002");
-		expect(result).toContain("provider = github-copilot");
+		expect(result).toContain("provider = openrouter");
 		expect(result).toContain("model = claude-sonnet-4-5");
 		expect(result).toContain("maxIterations = 50");
 		expect(result).not.toContain("id =");

@@ -6,7 +6,7 @@ import { handleCommand } from "../src/command";
 import { buildSortedProviderModelList } from "../src/provider/models";
 import { appendMessage, createSession, getSession } from "../src/session/repository";
 import { createTestDb } from "./helpers";
-import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
+import { createTestModels, writeUnifiedModelsConfig } from "./test-models";
 
 function makeTmpDir(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "bobai-provider-command-"));
@@ -18,24 +18,22 @@ describe("provider command", () => {
 		const tmpDir = makeTmpDir();
 		try {
 			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": createCopilotModels([
-					{ id: "gpt-5-mini", contextWindow: 264000, maxOutput: 64000, premiumRequestMultiplier: 0 },
-				]),
+				openrouter: createTestModels([{ id: "openrouter/free", contextWindow: 264000, maxOutput: 64000 }]),
 			});
 			const result = handleCommand(
 				db,
 				{ command: "provider", args: "1" },
 				{
-					defaultProviderId: "github-copilot",
+					defaultProviderId: "openrouter",
 					configDir: tmpDir,
-					listAuthenticatedProviders: () => [{ index: 1, id: "github-copilot", runtimeSupported: true }],
+					listAuthenticatedProviders: () => [{ index: 1, id: "openrouter", runtimeSupported: true }],
 				},
 			);
 			expect(result.ok).toBe(true);
 			if (result.ok) {
 				const session = getSession(db, result.sessionId as string);
-				expect(session?.provider).toBe("github-copilot");
-				expect(session?.model).toBe("gpt-5-mini");
+				expect(session?.provider).toBe("openrouter");
+				expect(session?.model).toBe("openrouter/free");
 				expect(session?.apiFamily).toBe("openai-chat-completions");
 			}
 		} finally {
@@ -88,13 +86,11 @@ describe("provider command", () => {
 		const tmpDir = makeTmpDir();
 		try {
 			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": createCopilotModels([
-					{ id: "gpt-5-mini", contextWindow: 264000, maxOutput: 64000, premiumRequestMultiplier: 0 },
-				]),
+				openrouter: createTestModels([{ id: "openrouter/free", contextWindow: 264000, maxOutput: 64000 }]),
 			});
 			const session = createSession(db, {
-				provider: "github-copilot",
-				model: "gpt-5-mini",
+				provider: "openrouter",
+				model: "openrouter/free",
 				apiFamily: "openai-chat-completions",
 			});
 			appendMessage(db, session.id, "user", "hello");
@@ -102,9 +98,9 @@ describe("provider command", () => {
 				db,
 				{ command: "provider", args: "1", sessionId: session.id },
 				{
-					defaultProviderId: "github-copilot",
+					defaultProviderId: "openrouter",
 					configDir: tmpDir,
-					listAuthenticatedProviders: () => [{ index: 1, id: "github-copilot", runtimeSupported: true }],
+					listAuthenticatedProviders: () => [{ index: 1, id: "openrouter", runtimeSupported: true }],
 				},
 			);
 			expect(result).toEqual({ ok: false, error: expect.stringMatching(/not yet supported/i) });
@@ -119,24 +115,24 @@ describe("provider command", () => {
 		const tmpDir = makeTmpDir();
 		try {
 			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": createCopilotModels([
-					{ id: "claude-haiku-4.5", contextWindow: 128000, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
-					{ id: "gpt-5.2", contextWindow: 264000, maxOutput: 64000, premiumRequestMultiplier: 1 },
+				openrouter: createTestModels([
+					{ id: "claude-haiku-4.5", contextWindow: 128000, maxOutput: 64000 },
+					{ id: "gpt-5.2", contextWindow: 264000, maxOutput: 64000 },
 				]),
 			});
 			const session = createSession(db, {
-				provider: "github-copilot",
+				provider: "openrouter",
 				model: "claude-haiku-4.5",
 				apiFamily: "anthropic-messages",
 			});
 			appendMessage(db, session.id, "user", "hello");
-			const models = buildSortedProviderModelList("github-copilot", tmpDir);
+			const models = buildSortedProviderModelList("openrouter", tmpDir);
 			const gpt52Index = models.findIndex((model) => model.id === "gpt-5.2") + 1;
 			expect(gpt52Index).toBeGreaterThan(0);
 			const result = handleCommand(
 				db,
 				{ command: "model", args: String(gpt52Index), sessionId: session.id },
-				{ defaultProviderId: "github-copilot", configDir: tmpDir },
+				{ defaultProviderId: "openrouter", configDir: tmpDir },
 			);
 			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
 		} finally {
@@ -174,7 +170,7 @@ describe("provider command", () => {
 			const result = handleCommand(
 				db,
 				{ command: "model", args: String(minimaxIndex), sessionId: session.id },
-				{ defaultProviderId: "github-copilot", configDir: tmpDir },
+				{ defaultProviderId: "openrouter", configDir: tmpDir },
 			);
 			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
 		} finally {
@@ -219,7 +215,7 @@ describe("provider command", () => {
 			const result = handleCommand(
 				db,
 				{ command: "model", args: String(qwenIndex), sessionId: session.id },
-				{ defaultProviderId: "github-copilot", configDir: tmpDir },
+				{ defaultProviderId: "openrouter", configDir: tmpDir },
 			);
 			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
 		} finally {
@@ -350,7 +346,7 @@ describe("provider command", () => {
 			const result = handleCommand(
 				db,
 				{ command: "model", args: String(qwenIndex), sessionId: session.id },
-				{ defaultProviderId: "github-copilot", configDir: tmpDir },
+				{ defaultProviderId: "openrouter", configDir: tmpDir },
 			);
 			expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
 		} finally {

@@ -121,10 +121,10 @@ describe("resolveDotTree — children(filter) API", () => {
 	});
 
 	test("text node 'provider' captures value from remaining tokens", () => {
-		const state = resolveDotTree(makeTree(), "project provider github-copilot");
+		const state = resolveDotTree(makeTree(), "project provider openrouter");
 		expect(state.currentNode.kind).toBe("text");
 		expect(state.currentNode.label).toBe("provider");
-		expect(state.value).toBe("github-copilot");
+		expect(state.value).toBe("openrouter");
 		expect(state.path).toEqual(["project", "provider"]);
 	});
 

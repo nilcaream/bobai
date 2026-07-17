@@ -156,7 +156,6 @@ An LLM backend.
 
 Current runtime providers:
 
-- **GitHub Copilot**
 - **OpenRouter**
 - **OpenCode Go**
 - **OpenCode Zen**
@@ -222,7 +221,6 @@ An LLM model available through a provider. Each model has:
 - a context window
 - a max output token limit
 - input and output pricing per 1M tokens
-- for Copilot, an optional **premium request multiplier**
 
 Bob AI stores all provider model metadata in a single generated file:
 
@@ -236,8 +234,6 @@ Important rules:
 - there is **no curated model list** anymore
 - Bob AI includes only supported providers
 - Bob AI includes only models with tool support and complete metadata
-- Copilot token prices are stored as `0`
-- Copilot models may have a missing multiplier, in which case the UI shows `?x`
 - default models are still hardcoded per provider in the registry
 
 ### Model Catalog
@@ -248,7 +244,6 @@ directory.
 It is refreshed from:
 
 - `models.dev` for model metadata
-- GitHub Copilot billing docs for Copilot multipliers
 
 Startup behavior:
 
@@ -384,8 +379,7 @@ by `DotCommandPanel` on every render.
 
 In the status bar and model picker:
 
-- **Copilot** displays a multiplier such as `0x`, `1x`, or `?x`
-- **other providers** display token prices such as `$0.50 | $5.12`
+- providers display token prices such as `$0.50 | $5.12`
 
 In turn summaries:
 

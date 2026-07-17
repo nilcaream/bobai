@@ -24,10 +24,10 @@ describe("loadGlobalConfig", () => {
 	test("reads bobai.json preferences", () => {
 		const filePath = path.join(tmpDir, "bobai.json");
 		fs.mkdirSync(tmpDir, { recursive: true });
-		fs.writeFileSync(filePath, JSON.stringify({ provider: "github-copilot", model: "gpt-5-mini" }));
+		fs.writeFileSync(filePath, JSON.stringify({ provider: "openrouter", model: "openrouter/free" }));
 		const config = loadGlobalConfig(tmpDir);
-		expect(config.preferences.provider).toBe("github-copilot");
-		expect(config.preferences.model).toBe("gpt-5-mini");
+		expect(config.preferences.provider).toBe("openrouter");
+		expect(config.preferences.model).toBe("openrouter/free");
 		expect(config.filePath).toBe(filePath);
 	});
 

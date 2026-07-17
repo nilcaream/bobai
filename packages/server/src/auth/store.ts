@@ -3,13 +3,6 @@ import path from "node:path";
 import { type AuthProviderId, SUPPORTED_AUTH_PROVIDERS } from "../provider/providers";
 
 export type { AuthProviderId };
-
-export interface CopilotAuth {
-	refresh: string;
-	access: string;
-	expires: number;
-}
-
 export interface OpenRouterAuth {
 	apiKey: string;
 }
@@ -38,7 +31,6 @@ export interface TavilyAuth {
 export interface AuthStore {
 	version: 1;
 	providers: {
-		"github-copilot"?: CopilotAuth;
 		openrouter?: OpenRouterAuth;
 		"opencode-go"?: OpenCodeGoAuth;
 		"opencode-zen"?: OpenCodeZenAuth;
@@ -69,10 +61,6 @@ export function loadAuthStore(configDir: string): AuthStore | undefined {
 	}
 }
 
-export function getCopilotAuth(store: AuthStore): CopilotAuth | undefined {
-	return store.providers["github-copilot"];
-}
-
 export function getOpenRouterAuth(store: AuthStore): OpenRouterAuth | undefined {
 	return store.providers.openrouter;
 }
@@ -91,16 +79,6 @@ export function getAmazonBedrockAuth(store: AuthStore): AmazonBedrockAuth | unde
 
 export function getDeepSeekAuth(store: AuthStore): DeepSeekAuth | undefined {
 	return store.providers.deepseek;
-}
-
-export function setCopilotAuth(store: AuthStore, auth: CopilotAuth): AuthStore {
-	return {
-		...store,
-		providers: {
-			...store.providers,
-			"github-copilot": auth,
-		},
-	};
 }
 
 export function setOpenRouterAuth(store: AuthStore, auth: OpenRouterAuth): AuthStore {

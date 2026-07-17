@@ -22,7 +22,6 @@ describe("Amazon Bedrock session flow", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "or-key" },
 				"opencode-go": { apiKey: "go-key" },
 				"opencode-zen": { apiKey: "zen-key" },
@@ -32,7 +31,7 @@ describe("Amazon Bedrock session flow", () => {
 		db = createTestDb();
 		seenProviderIds = [];
 		const runtimeManager = {
-			get: async (providerId: "github-copilot" | "openrouter" | "opencode-go" | "opencode-zen" | "amazon-bedrock") => {
+			get: async (providerId: "openrouter" | "opencode-go" | "opencode-zen" | "amazon-bedrock") => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
@@ -65,7 +64,7 @@ describe("Amazon Bedrock session flow", () => {
 			db,
 			configDir: tmpDir,
 			runtimeManager,
-			providerId: "github-copilot",
+			providerId: "openrouter",
 			model: "gpt-5-mini",
 			projectRoot: "/tmp",
 			skills: emptySkills,
@@ -86,16 +85,16 @@ describe("Amazon Bedrock session flow", () => {
 
 	test("provider command switches an empty session to Amazon Bedrock and defaults to the Anthropic model", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
 
-		// amazon-bedrock is index 5 (copilot=1, openrouter=2, opencode-go=3, opencode-zen=4, amazon-bedrock=5)
+		// amazon-bedrock is index 4 (openrouter=1, opencode-go=2, opencode-zen=3, amazon-bedrock=4)
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "5", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "4", sessionId: session.id }),
 		});
 		const body = (await res.json()) as { ok: boolean; provider?: string; model?: string; status?: string };
 
@@ -107,7 +106,7 @@ describe("Amazon Bedrock session flow", () => {
 
 	test("selecting amazon-bedrock with default Anthropic model resolves to anthropic-messages backend", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -115,7 +114,7 @@ describe("Amazon Bedrock session flow", () => {
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "5", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "4", sessionId: session.id }),
 		});
 
 		const ws = await openWs(wsUrl);
@@ -147,7 +146,7 @@ describe("Amazon Bedrock session flow", () => {
 
 	test("selecting a non-Anthropic model on amazon-bedrock resolves to openai-chat-completions backend", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -156,7 +155,7 @@ describe("Amazon Bedrock session flow", () => {
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "5", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "4", sessionId: session.id }),
 		});
 		// Sorted amazon-bedrock models: anthropic.claude-haiku-4-5(1), anthropic.claude-opus-4-7(2), deepseek.v3-v1:0(3), mistral.devstral-2-123b(4)
 		const deepseekRes = await fetch(`${baseUrl}/bobai/command`, {

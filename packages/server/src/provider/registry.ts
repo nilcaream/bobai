@@ -1,19 +1,17 @@
 import type {
 	AmazonBedrockAuth,
 	AuthStore,
-	CopilotAuth,
 	DeepSeekAuth,
 	OpenCodeGoAuth,
 	OpenCodeZenAuth,
 	OpenRouterAuth,
 } from "../auth/store";
 import type { Logger } from "../log/logger";
-import { computeTurnCostDollars, formatPremiumRequests } from "./cost-utils";
+import { computeTurnCostDollars } from "./cost-utils";
 import type { Provider } from "./provider";
 import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
 
 export const SUPPORTED_RUNTIME_PROVIDER_IDS = [
-	"github-copilot",
 	"openrouter",
 	"opencode-go",
 	"opencode-zen",
@@ -21,7 +19,6 @@ export const SUPPORTED_RUNTIME_PROVIDER_IDS = [
 	"deepseek",
 ] as const;
 export const SUPPORTED_AUTH_PROVIDER_IDS = [
-	"github-copilot",
 	"openrouter",
 	"opencode-go",
 	"opencode-zen",
@@ -29,7 +26,6 @@ export const SUPPORTED_AUTH_PROVIDER_IDS = [
 	"deepseek",
 	"tavily",
 ] as const;
-export const DEFAULT_PROVIDER_ID = "github-copilot" as const;
 
 export type ProviderId = (typeof SUPPORTED_RUNTIME_PROVIDER_IDS)[number];
 export type AuthProviderId = (typeof SUPPORTED_AUTH_PROVIDER_IDS)[number];
@@ -59,7 +55,7 @@ export interface ProviderSummaryParts {
 	modelName: string;
 	pricingLabel?: string;
 	costEstimate?: string;
-	/** 'estimate' for computed dollar costs, 'exact' for Copilot PR costs. */
+	/** 'estimate' for computed dollar costs, 'exact' for premium request costs. */
 	costLabelType?: "estimate" | "exact";
 }
 
@@ -101,8 +97,6 @@ export interface ProviderDescriptor {
 		logger?: Logger;
 		store?: AuthStore;
 		fetch?: typeof fetch;
-		authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
-		createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 		createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch) => Provider;
@@ -120,12 +114,9 @@ function formatPrice(value: number | undefined): string {
 	return `$${(value ?? 0).toFixed(2)}`;
 }
 
-function formatProviderCostLabel(providerId: ProviderId, modelConfig: ProviderModelConfig | undefined): string {
+function formatProviderCostLabel(_providerId: ProviderId, modelConfig: ProviderModelConfig | undefined): string {
 	if (!modelConfig) {
-		return providerId === "github-copilot" ? "[?x]" : `[${formatPrice(0)} ${formatPrice(0)}]`;
-	}
-	if (providerId === "github-copilot") {
-		return modelConfig.premiumRequestMultiplier !== undefined ? `[${modelConfig.premiumRequestMultiplier}x]` : "[?x]";
+		return `[${formatPrice(0)} ${formatPrice(0)}]`;
 	}
 	return `[${formatPrice(modelConfig.inputPrice)} ${formatPrice(modelConfig.outputPrice)}]`;
 }
@@ -150,7 +141,7 @@ function formatGenericProviderModelDisplay(
 	sessionCostDisplay?: string,
 ): string {
 	const costLabel = formatProviderCostLabel(providerId, modelConfig);
-	const defaultZeroCost = providerId === "github-copilot" ? "0 PR" : "$0.00";
+	const defaultZeroCost = "$0.00";
 	const costTotal = sessionCostDisplay ?? defaultZeroCost;
 	const defaultContextWindow = modelConfig?.contextWindow ?? 0;
 	const effectiveLimit = contextLimit && contextLimit > 0 ? contextLimit : defaultContextWindow;
@@ -175,7 +166,7 @@ function loadProviderModelsFromUnifiedCatalog(providerId: ProviderId, configDir?
 }
 
 interface ApiKeyProviderDescriptorOptions<Auth> {
-	id: Exclude<ProviderId, "github-copilot">;
+	id: ProviderId;
 	defaultModel: string;
 	auth: ProviderAuthMetadata;
 	getApiFamily(modelId: string): ApiFamily;
@@ -295,81 +286,6 @@ function createApiKeyProviderDescriptor<Auth>(options: ApiKeyProviderDescriptorO
 	};
 }
 
-const githubCopilotDescriptor: ProviderDescriptor = {
-	id: "github-copilot",
-	authSupported: true,
-	runtimeSupported: true,
-	defaultModel: "gpt-5-mini",
-	auth: {
-		cliCommand: "bobai auth github-copilot",
-		missingAuthMessage: "No auth found. Run `bobai auth github-copilot` first.",
-		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth github-copilot` to re-authenticate.",
-	},
-	getApiFamily(modelId: string): ApiFamily {
-		if (/^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId)) return "anthropic-messages";
-		const match = /^gpt-(\d+)/.exec(modelId);
-		if (match && Number(match[1]) >= 5 && !modelId.startsWith("gpt-5-mini")) return "openai-responses";
-		return "openai-chat-completions";
-	},
-	modelsConfigExists(configDir?: string): boolean {
-		return unifiedModelsConfigExists(configDir);
-	},
-	loadModels(configDir?: string): ProviderModelConfig[] {
-		return loadProviderModelsFromUnifiedCatalog("github-copilot", configDir);
-	},
-	buildSortedModels(configDir?: string): SortedProviderModelListItem[] {
-		return loadProviderModelsFromUnifiedCatalog("github-copilot", configDir)
-			.map((model) => ({
-				id: model.id,
-				cost: formatProviderCostLabel("github-copilot", model),
-				contextWindow: model.contextWindow,
-			}))
-			.sort((a, b) => a.id.localeCompare(b.id));
-	},
-	formatModelDisplay(
-		modelId: string,
-		promptTokens: number,
-		configDir?: string,
-		contextLimit?: number | null,
-		sessionCostDisplay?: string,
-	): string {
-		return formatGenericProviderModelDisplay(
-			"github-copilot",
-			modelId,
-			loadProviderModelsFromUnifiedCatalog("github-copilot", configDir).find((model) => model.id === modelId),
-			promptTokens,
-			contextLimit,
-			sessionCostDisplay,
-		);
-	},
-	buildTurnSummaryParts(options): ProviderSummaryParts {
-		const totalPremium = options.premiumRequests ?? 0;
-		if (totalPremium > 0) {
-			return {
-				modelName: options.modelId,
-				costEstimate: `${formatPremiumRequests(totalPremium)} PR`,
-				costLabelType: "exact",
-			};
-		}
-		const modelConfig = this.loadModels(options.configDir).find((model) => model.id === options.modelId);
-		return {
-			modelName: options.modelId,
-			pricingLabel: formatProviderCostLabel("github-copilot", modelConfig),
-		};
-	},
-	async createConfiguredProvider(options): Promise<Provider> {
-		let auth = options.store?.providers["github-copilot"];
-		if (!auth) {
-			const authorizeModule = await import("../auth/authorize");
-			const authorizeCopilot = options.authorizeCopilot ?? authorizeModule.authorizeCopilot;
-			auth = await authorizeCopilot(options.configDir);
-		}
-		const copilotModule = await import("./copilot");
-		const createCopilotProvider = options.createCopilotProvider ?? copilotModule.createCopilotProvider;
-		return createCopilotProvider(auth, options.configDir, options.logger, undefined, options.fetch);
-	},
-};
-
 const openRouterDescriptor = createApiKeyProviderDescriptor<OpenRouterAuth>({
 	id: "openrouter",
 	defaultModel: "openrouter/free",
@@ -486,7 +402,6 @@ const deepseekDescriptor = createApiKeyProviderDescriptor<DeepSeekAuth>({
 });
 
 const PROVIDER_DESCRIPTORS: Record<ProviderId, ProviderDescriptor> = {
-	"github-copilot": githubCopilotDescriptor,
 	openrouter: openRouterDescriptor,
 	"opencode-go": openCodeGoDescriptor,
 	"opencode-zen": openCodeZenDescriptor,

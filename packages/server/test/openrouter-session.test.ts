@@ -22,14 +22,13 @@ describe("OpenRouter session flow", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "or-key" },
 			},
 		});
 		db = createTestDb();
 		seenProviderIds = [];
 		const runtimeManager = {
-			get: async (providerId: "github-copilot" | "openrouter") => {
+			get: async (providerId: "openrouter") => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
@@ -61,8 +60,8 @@ describe("OpenRouter session flow", () => {
 			db,
 			configDir: tmpDir,
 			runtimeManager,
-			providerId: "github-copilot",
-			model: "gpt-5-mini",
+			providerId: "openrouter",
+			model: "openrouter/free",
 			projectRoot: "/tmp",
 			skills: emptySkills,
 		});
@@ -78,15 +77,15 @@ describe("OpenRouter session flow", () => {
 
 	test("provider command switches an empty session to OpenRouter and resets the model", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "2", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "1", sessionId: session.id }),
 		});
 		const body = (await res.json()) as { ok: boolean; provider?: string; model?: string; status?: string };
 
@@ -98,15 +97,15 @@ describe("OpenRouter session flow", () => {
 
 	test("websocket prompt uses the OpenRouter runtime after provider switch", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "2", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "1", sessionId: session.id }),
 		});
 
 		const ws = await openWs(wsUrl);

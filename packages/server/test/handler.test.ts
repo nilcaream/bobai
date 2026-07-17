@@ -10,7 +10,7 @@ import type { ProviderRuntimeManager } from "../src/provider/runtime-manager";
 import { createSession, getMessages, updateSessionPromptTokens } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
-import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
+import { createTestModels, writeUnifiedModelsConfig } from "./test-models";
 
 const emptySkills: SkillRegistry = { get: () => undefined, list: () => [] };
 
@@ -28,7 +28,7 @@ function mockWs() {
 
 function mockProvider(tokens: string[]): Provider {
 	return {
-		id: "github-copilot",
+		id: "openrouter",
 		async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			for (const t of tokens) yield { type: "text", text: t };
 			yield { type: "finish", reason: "stop" };
@@ -40,7 +40,7 @@ function mockProvider(tokens: string[]): Provider {
 function capturingProvider(tokens: string[]): Provider & { captured: ProviderOptions[] } {
 	const captured: ProviderOptions[] = [];
 	return {
-		id: "github-copilot",
+		id: "openrouter",
 		captured,
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			captured.push(opts);
@@ -52,7 +52,7 @@ function capturingProvider(tokens: string[]): Provider & { captured: ProviderOpt
 
 function failingProvider(status: number, body: string): Provider {
 	return {
-		id: "github-copilot",
+		id: "openrouter",
 		stream() {
 			async function* gen(): AsyncGenerator<StreamEvent> {
 				yield* [];
@@ -126,7 +126,7 @@ function authFailingProvider(status: number, body: string, permanent: boolean, p
 /** Provider that yields some tokens then throws a ProviderError */
 function partialFailingProvider(tokens: string[], status: number, body: string): Provider {
 	return {
-		id: "github-copilot",
+		id: "openrouter",
 		stream() {
 			async function* gen(): AsyncGenerator<StreamEvent> {
 				for (const t of tokens) yield { type: "text", text: t };
@@ -158,7 +158,7 @@ describe("handlePrompt", () => {
 			ws,
 			db,
 			runtimeManager,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "hi",
 			projectRoot: "/tmp",
@@ -174,7 +174,7 @@ describe("handlePrompt", () => {
 	test("uses runtime manager to resolve the active provider for the session", async () => {
 		const ws = mockWs();
 		const fallbackProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			stream() {
 				throw new Error("fallback provider should not be used");
 			},
@@ -188,8 +188,8 @@ describe("handlePrompt", () => {
 			},
 		};
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 
@@ -198,7 +198,7 @@ describe("handlePrompt", () => {
 			db,
 			provider: fallbackProvider,
 			runtimeManager,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "hi",
 			sessionId: session.id,
@@ -207,7 +207,7 @@ describe("handlePrompt", () => {
 			skills: emptySkills,
 		});
 
-		expect(requestedProviderId).toBe("github-copilot");
+		expect(requestedProviderId).toBe("openrouter");
 		const msgs = ws.messages();
 		expect(msgs.find((m: { type: string; text?: string }) => m.type === "token" && m.text === "managed provider")).toBeTruthy();
 	});
@@ -222,7 +222,7 @@ describe("handlePrompt", () => {
 			ws,
 			db,
 			runtimeManager,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "hi",
 			projectRoot: "/tmp",
@@ -249,13 +249,12 @@ describe("handlePrompt", () => {
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-"));
 		try {
 			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": createCopilotModels([
+				openrouter: createTestModels([
 					{
-						id: "gpt-5-mini",
+						id: "openrouter/free",
 						name: "GPT-5 Mini",
 						contextWindow: 264000,
 						maxOutput: 64000,
-						premiumRequestMultiplier: 0,
 					},
 				]),
 			});
@@ -264,8 +263,8 @@ describe("handlePrompt", () => {
 				ws,
 				db,
 				runtimeManager,
-				defaultProviderId: "github-copilot",
-				model: "gpt-5-mini",
+				defaultProviderId: "openrouter",
+				model: "openrouter/free",
 				text: "hi",
 				projectRoot: "/tmp",
 				configDir: tmpDir,
@@ -290,7 +289,7 @@ describe("handlePrompt", () => {
 			ws,
 			db,
 			runtimeManager,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "my question",
 			projectRoot: "/tmp",
@@ -311,7 +310,7 @@ describe("handlePrompt", () => {
 	test("persists assistant reasoning metadata through the real handlePrompt path", async () => {
 		const ws = mockWs();
 		const provider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield {
 					type: "reasoning_start",
@@ -332,7 +331,7 @@ describe("handlePrompt", () => {
 			ws,
 			db,
 			runtimeManager,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "my question",
 			projectRoot: "/tmp",
@@ -350,53 +349,6 @@ describe("handlePrompt", () => {
 			{ kind: "interleaved-chat", field: "reasoning_content", text: "thinking harder" },
 			{ kind: "text-summary", text: "done" },
 		]);
-	});
-
-	test("formats github-copilot message summaries with the model label", async () => {
-		const ws = mockWs();
-		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-summary-"));
-		try {
-			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": [
-					{
-						id: "claude-haiku-4.5",
-						name: "Claude Haiku 4.5",
-						contextWindow: 128000,
-						maxOutput: 64000,
-						inputPrice: 0,
-						outputPrice: 0,
-						premiumRequestMultiplier: 0.33,
-					},
-				],
-			});
-			const session = createSession(db, {
-				provider: "github-copilot",
-				model: "claude-haiku-4.5",
-				apiFamily: "anthropic-messages",
-			});
-			updateSessionPromptTokens(db, session.id, 3760, 0);
-			await handlePrompt({
-				ws,
-				db,
-				provider: metricsProvider("github-copilot", "claude-haiku-4.5", 7473, 3123),
-				defaultProviderId: "github-copilot",
-				sessionId: session.id,
-				model: "claude-haiku-4.5",
-				text: "hello",
-				projectRoot: "/tmp",
-				configDir: tmpDir,
-				skills: emptySkills,
-			});
-
-			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| \+3713 \| \d+\.\d{2}s$/);
-			const stored = getMessages(db, session.id);
-			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 7473 \| out: 3123 \| \+3713 \| \d+\.\d{2}s$/,
-			);
-		} finally {
-			fs.rmSync(tmpDir, { recursive: true, force: true });
-		}
 	});
 
 	test("formats openrouter message summaries with estimated cost", async () => {
@@ -491,92 +443,12 @@ describe("handlePrompt", () => {
 		}
 	});
 
-	test("persists non-zero output tokens for Copilot responses models", async () => {
-		const ws = mockWs();
-		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-copilot-responses-"));
-		try {
-			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": [
-					{
-						id: "gpt-5.4",
-						name: "GPT-5.4",
-						contextWindow: 400000,
-						maxOutput: 128000,
-						inputPrice: 0,
-						outputPrice: 0,
-						premiumRequestMultiplier: 1,
-					},
-				],
-			});
-			await handlePrompt({
-				ws,
-				db,
-				provider: metricsProvider("github-copilot", "gpt-5.4", 27478, 3123),
-				defaultProviderId: "github-copilot",
-				model: "gpt-5.4",
-				text: "hello",
-				projectRoot: "/tmp",
-				configDir: tmpDir,
-				skills: emptySkills,
-			});
-
-			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| \+27478 \| \d+\.\d{2}s$/);
-			const stored = getMessages(db, done?.sessionId as string);
-			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| gpt-5\.4 \| \[1x\] \| in: 27478 \| out: 3123 \| \+27478 \| \d+\.\d{2}s$/,
-			);
-		} finally {
-			fs.rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	test("persists non-zero output tokens for Copilot anthropic models", async () => {
-		const ws = mockWs();
-		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-copilot-anthropic-"));
-		try {
-			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": [
-					{
-						id: "claude-haiku-4.5",
-						name: "Claude Haiku 4.5",
-						contextWindow: 128000,
-						maxOutput: 64000,
-						inputPrice: 0,
-						outputPrice: 0,
-						premiumRequestMultiplier: 0.33,
-					},
-				],
-			});
-			await handlePrompt({
-				ws,
-				db,
-				provider: metricsProvider("github-copilot", "claude-haiku-4.5", 5948, 731),
-				defaultProviderId: "github-copilot",
-				model: "claude-haiku-4.5",
-				text: "hello",
-				projectRoot: "/tmp",
-				configDir: tmpDir,
-				skills: emptySkills,
-			});
-
-			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| \+5948 \| \d+\.\d{2}s$/);
-			const stored = getMessages(db, done?.sessionId as string);
-			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 5948 \| out: 731 \| \+5948 \| \d+\.\d{2}s$/,
-			);
-		} finally {
-			fs.rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
 	test("persists total turn metrics in summary and structured metadata without schema changes", async () => {
 		const ws = mockWs();
 		const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-handler-turn-metrics-"));
 		try {
 			writeUnifiedModelsConfig(tmpDir, {
-				"github-copilot": [
+				openrouter: [
 					{
 						id: "claude-haiku-4.5",
 						name: "Claude Haiku 4.5",
@@ -584,18 +456,17 @@ describe("handlePrompt", () => {
 						maxOutput: 64000,
 						inputPrice: 0,
 						outputPrice: 0,
-						premiumRequestMultiplier: 0.33,
 					},
 				],
 			});
 			await handlePrompt({
 				ws,
 				db,
-				provider: multiMetricsProvider("github-copilot", "claude-haiku-4.5", [
+				provider: multiMetricsProvider("openrouter", "claude-haiku-4.5", [
 					{ promptTokens: 5000, outputTokens: 400, promptChars: 700 },
 					{ promptTokens: 5948, outputTokens: 731, promptChars: 900 },
 				]),
-				defaultProviderId: "github-copilot",
+				defaultProviderId: "openrouter",
 				model: "claude-haiku-4.5",
 				text: "hello",
 				projectRoot: "/tmp",
@@ -604,10 +475,10 @@ describe("handlePrompt", () => {
 			});
 
 			const done = ws.messages().find((m: { type: string; summary?: string }) => m.type === "done");
-			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| \+5948 \| \d+\.\d{2}s$/);
+			expect(done?.summary).toMatch(/^ \| claude-haiku-4\.5 \| in: 10948 \| out: 1131 \| free \| \+5948 \| \d+\.\d{2}s$/);
 			const stored = getMessages(db, done?.sessionId as string);
 			expect(stored.at(-1)?.metadata?.summary).toMatch(
-				/^ \| claude-haiku-4\.5 \| \[0\.33x\] \| in: 10948 \| out: 1131 \| \+5948 \| \d+\.\d{2}s$/,
+				/^ \| claude-haiku-4\.5 \| in: 10948 \| out: 1131 \| free \| \+5948 \| \d+\.\d{2}s$/,
 			);
 			expect(stored.at(-1)?.metadata?.turn_metrics).toEqual({
 				input_tokens_total: 10948,
@@ -633,7 +504,7 @@ describe("handlePrompt", () => {
 			ws: ws1,
 			db,
 			runtimeManager: runtimeManager1,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "first",
 			projectRoot: "/tmp",
@@ -651,7 +522,7 @@ describe("handlePrompt", () => {
 			ws: ws2,
 			db,
 			runtimeManager: runtimeManager2,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "second",
 			sessionId,
@@ -686,7 +557,7 @@ describe("handlePrompt", () => {
 			ws,
 			db,
 			runtimeManager,
-			defaultProviderId: "github-copilot",
+			defaultProviderId: "openrouter",
 			model: "test-model",
 			text: "hi",
 			sessionId: "nonexistent",
@@ -753,7 +624,7 @@ describe("handlePrompt", () => {
 	test("stores whitespace-only assistant content as empty for tool-call turns", async () => {
 		let callCount = 0;
 		const toolProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -791,7 +662,7 @@ describe("handlePrompt", () => {
 		// Provider that requests a tool call then responds with text
 		let callCount = 0;
 		const toolProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -870,7 +741,7 @@ describe("handlePrompt", () => {
 	test("persists partial messages and error on mid-stream failure", async () => {
 		let callCount = 0;
 		const provider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -911,7 +782,7 @@ describe("handlePrompt", () => {
 		// Provider that requests the "task" tool call
 		let callCount = 0;
 		const taskProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -972,7 +843,7 @@ describe("handlePrompt", () => {
 		// First prompt: provider errors after tool call
 		let callCount = 0;
 		const failProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -1136,7 +1007,7 @@ describe("handlePrompt", () => {
 
 		// Provider that yields a tool call, during which the abort fires
 		const slowProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "tool_call_start", index: 0, id: "call_1", name: "list_directory" };
 				yield { type: "tool_call_delta", index: 0, arguments: '{"path":"."}' };
@@ -1180,7 +1051,7 @@ describe("handlePrompt", () => {
 
 	test("sends actionable auth error for permanent AuthError (401)", async () => {
 		const ws = mockWs();
-		const provider = authFailingProvider(401, "Unauthorized", true, "github-copilot");
+		const provider = authFailingProvider(401, "Unauthorized", true, "openrouter");
 		await handlePrompt({
 			ws,
 			db,
@@ -1195,7 +1066,7 @@ describe("handlePrompt", () => {
 		const msgs = ws.messages();
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
 		expect(errors).toHaveLength(1);
-		expect(errors[0].message).toContain("bobai auth github-copilot");
+		expect(errors[0].message).toContain("bobai auth openrouter");
 	});
 
 	test("uses the active provider id in permanent auth error guidance", async () => {
@@ -1216,12 +1087,12 @@ describe("handlePrompt", () => {
 		const errors = msgs.filter((m: { type: string }) => m.type === "error");
 		expect(errors).toHaveLength(1);
 		expect(errors[0].message).toContain("bobai auth opencode-go");
-		expect(errors[0].message).not.toContain("bobai auth github-copilot");
+		expect(errors[0].message).not.toContain("bobai auth openrouter");
 	});
 
 	test("sends network error message for transient AuthError", async () => {
 		const ws = mockWs();
-		const provider = authFailingProvider(0, "Token exchange network error: Unable to connect", false, "github-copilot");
+		const provider = authFailingProvider(0, "Token exchange network error: Unable to connect", false, "openrouter");
 		await handlePrompt({
 			ws,
 			db,
@@ -1262,7 +1133,7 @@ describe("handlePrompt", () => {
 		);
 		expect(errorMsg).toBeTruthy();
 		expect(errorMsg?.content).toContain("bobai auth opencode-go");
-		expect(errorMsg?.content).not.toContain("bobai auth github-copilot");
+		expect(errorMsg?.content).not.toContain("bobai auth openrouter");
 	});
 
 	test("staged skill llmContent includes base directory hint when skill is in registry", async () => {

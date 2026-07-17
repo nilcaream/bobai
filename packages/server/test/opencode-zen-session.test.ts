@@ -22,7 +22,6 @@ describe("OpenCode Zen session flow", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "or-key" },
 				"opencode-go": { apiKey: "go-key" },
 				"opencode-zen": { apiKey: "zen-key" },
@@ -31,7 +30,7 @@ describe("OpenCode Zen session flow", () => {
 		db = createTestDb();
 		seenProviderIds = [];
 		const runtimeManager = {
-			get: async (providerId: "github-copilot" | "openrouter" | "opencode-go" | "opencode-zen") => {
+			get: async (providerId: "openrouter" | "opencode-go" | "opencode-zen") => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
@@ -64,7 +63,7 @@ describe("OpenCode Zen session flow", () => {
 			db,
 			configDir: tmpDir,
 			runtimeManager,
-			providerId: "github-copilot",
+			providerId: "openrouter",
 			model: "gpt-5-mini",
 			projectRoot: "/tmp",
 			skills: emptySkills,
@@ -81,7 +80,7 @@ describe("OpenCode Zen session flow", () => {
 
 	test("provider command switches an empty session to OpenCode Zen and resets the model", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -89,7 +88,7 @@ describe("OpenCode Zen session flow", () => {
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "4", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "3", sessionId: session.id }),
 		});
 		const body = (await res.json()) as { ok: boolean; provider?: string; model?: string; status?: string };
 
@@ -101,7 +100,7 @@ describe("OpenCode Zen session flow", () => {
 
 	test("websocket prompt uses the OpenCode Zen runtime after provider switch to a GPT responses model", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -109,7 +108,7 @@ describe("OpenCode Zen session flow", () => {
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "4", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "3", sessionId: session.id }),
 		});
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",

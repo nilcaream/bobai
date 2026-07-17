@@ -3,10 +3,10 @@ import type { Provider } from "../src/provider/provider";
 import { createProviderRuntimeManager } from "../src/provider/runtime-manager";
 
 describe("provider runtime manager", () => {
-	test("caches github-copilot runtime instance", async () => {
+	test("caches openrouter runtime instance", async () => {
 		let calls = 0;
 		const fakeProvider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream() {
 				yield { type: "finish" as const, reason: "stop" as const };
 			},
@@ -21,8 +21,8 @@ describe("provider runtime manager", () => {
 			},
 		);
 
-		const a = await manager.get("github-copilot");
-		const b = await manager.get("github-copilot");
+		const a = await manager.get("openrouter");
+		const b = await manager.get("openrouter");
 		expect(a).toBe(b);
 		expect(calls).toBe(1);
 	});

@@ -2,9 +2,7 @@
 
 This document is the starting point for adding the next provider.
 
-It assumes the current provider architecture in `packages/server` and applies to
-**non-Copilot providers**. GitHub Copilot is still a special case and should stay
-in maintenance mode unless a real bug forces changes.
+It assumes the current provider architecture in `packages/server`.
 
 ## Goal
 
@@ -51,19 +49,6 @@ Shared auth plumbing:
 
 - `src/auth/authorize.ts`
 - `src/auth/store.ts`
-
-## Freeze policy for Copilot
-
-Do not use Copilot as the template for new provider work.
-
-Copilot must keep working, but it is no longer the shape for future providers.
-Use the generic transports and the API-key provider pattern instead.
-
-Touch Copilot only if:
-
-1. a bug affects current behavior
-2. an upstream change breaks it
-3. or a tiny extraction gives immediate value elsewhere
 
 ## Integration strategy
 
@@ -133,7 +118,7 @@ Bob AI no longer uses provider-specific curated model files.
 
 ## Files to add or update
 
-A typical non-Copilot provider touches these files.
+A typical provider touches these files.
 
 ### New files
 
@@ -209,7 +194,6 @@ This is the source of truth for:
 - turn-summary behavior
 
 For API-key providers, use the existing lightweight descriptor pattern.
-Do not try to force Copilot into that path.
 
 ### 4. Unified catalog integration
 
@@ -388,13 +372,12 @@ Do **not** refactor because an abstraction looks nicer on paper.
 
 ## Rule of thumb
 
-When adding the next non-Copilot provider, aim for this shape:
+When adding the next provider, aim for this shape:
 
 - thin auth file
 - thin runtime composition file
 - one registry entry
 - one unified-catalog mapping
 - strong tests
-- zero Copilot cleanup unless forced
 
 That is the current happy path.

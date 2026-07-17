@@ -10,7 +10,6 @@ A browser-first coding agent that runs as a local server and exposes a chat UI w
 
 Bob AI supports multiple providers:
 
-- GitHub Copilot
 - OpenRouter
 - OpenCode Go
 - OpenCode Zen
@@ -81,14 +80,6 @@ The installer builds the server and UI, then places everything under the platfor
 ## Getting Started
 
 ### 1. Authenticate a provider
-
-For GitHub Copilot:
-
-```bash
-bobai auth github-copilot
-```
-
-This runs a device-flow login. Bob AI prints a URL and code. Open the URL in a browser, enter the code, and approve access.
 
 For API-key providers:
 
@@ -164,7 +155,6 @@ This catalog is grouped by provider and is the source of truth for:
 - context windows
 - max output tokens
 - input/output token prices
-- Copilot premium multipliers
 
 Catalog generation rules:
 
@@ -172,9 +162,6 @@ Catalog generation rules:
 - only Bob AI supported providers are included
 - only models with tool support are included
 - models with incomplete metadata are skipped
-- Copilot token prices are stored as `0`
-- Copilot multipliers come from GitHub billing docs when available
-- if Copilot multiplier data is unavailable, Bob AI keeps the model and shows `?x`
 
 Startup behavior:
 
@@ -188,7 +175,6 @@ Use `bobai refresh` to rebuild the catalog manually.
 
 Bob AI supports these runtime providers:
 
-- `github-copilot`
 - `openrouter`
 - `opencode-go`
 - `opencode-zen`
@@ -196,10 +182,7 @@ Bob AI supports these runtime providers:
 
 Each provider has a hardcoded default model, but the full selectable model list comes from the generated catalog.
 
-In the UI:
-
-- Copilot models show a premium multiplier such as `0x`, `1x`, or `?x`
-- other providers show input/output pricing such as `$0.50 | $5.12`
+In the UI, providers show input/output pricing such as `$0.50 | $5.12`.
 
 Use `.model` in chat to switch models for the current session.
 
@@ -312,8 +295,8 @@ Project settings override global settings.
 
 ```json
 {
-  "provider": "github-copilot",
-  "model": "gpt-5-mini",
+  "provider": "openrouter",
+  "model": "openrouter/auto",
   "debug": false,
   "maxIterations": 64
 }

@@ -159,7 +159,7 @@ export async function* parseResponsesSSE(
 				const cachedInputTokens = usage?.input_tokens_details?.cached_tokens;
 				options.onCompletedUsage?.({ inputTokens, outputTokens, totalTokens, cachedInputTokens });
 
-				const providerId = options.providerId ?? "github-copilot";
+				const providerId = options.providerId;
 				const contextWindow =
 					options.tokenLimit ?? getProviderModelConfig(providerId as never, model, configDir)?.contextWindow ?? 0;
 				const display =

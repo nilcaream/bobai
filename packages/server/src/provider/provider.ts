@@ -108,9 +108,9 @@ export interface StreamMetrics {
 	cachedInputTokens?: number;
 	/** Tokens written to the cache (billed at cacheWritePrice). Anthropic-specific. */
 	cacheCreationInputTokens?: number;
-	/** Premium request multiplier for this LLM call. Copilot-only. */
+	/** Premium request multiplier for this LLM call. */
 	premiumRequests?: number;
-	/** Tokens consumed by the reasoner model. Copilot Chat Completions only. */
+	/** Tokens consumed by the reasoner model. */
 	reasoningTokens?: number;
 }
 

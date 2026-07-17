@@ -230,7 +230,7 @@ Enable with `--debug` flag or `"debug": true` in config.
 
 **HTTP dumps** (`debug-YYYYMMDD-HHMMSSmmm-SCOPE-http.txt`):
 ```
->>> POST https://api.business.githubcopilot.com/v1/messages
+>>> POST https://api.openrouter.ai/api/v1/chat/completions
 (headers)
 
 (request body)

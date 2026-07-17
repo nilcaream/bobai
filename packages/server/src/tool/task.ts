@@ -16,7 +16,7 @@ import { getProjectInfo } from "../project-info";
 import { getApiFamilyForModel } from "../provider/backend-policy";
 import { getProviderModelConfig } from "../provider/models";
 import type { AssistantMessage, Message, Provider } from "../provider/provider";
-import { isSupportedProvider, type ProviderId } from "../provider/providers";
+import type { ProviderId } from "../provider/providers";
 import { DEFAULT_REASONING_DEFAULTS } from "../provider/reasoning-defaults";
 import {
 	appendMessage,
@@ -188,7 +188,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				childSessionId = taskId;
 			} else {
 				// Create child session with description as title
-				const inheritedProviderId: ProviderId = isSupportedProvider(activeProvider.id) ? activeProvider.id : "github-copilot";
+				const inheritedProviderId = activeProvider.id as ProviderId;
 				const inheritedApiFamily = getApiFamilyForModel(inheritedProviderId, model);
 				const child = createSubagentSession(db, parentSessionId, description, model, inheritedProviderId, inheritedApiFamily);
 				childSessionId = child.id;
@@ -291,7 +291,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 			// New sessions have no tool messages yet, so this is a no-op.
 			const childSession = getSession(db, childSessionId);
 			const childPromptTokens = childSession?.promptTokens ?? 0;
-			const providerId: ProviderId = isSupportedProvider(provider.id) ? provider.id : "github-copilot";
+			const providerId = provider.id as ProviderId;
 			const childModelConfig = getProviderModelConfig(providerId, model, undefined);
 			const childContextWindow = childModelConfig?.contextWindow ?? 0;
 			if (childContextWindow <= 0) {

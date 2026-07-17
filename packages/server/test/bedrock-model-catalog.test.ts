@@ -364,14 +364,11 @@ describe("refreshBedrockModelsFromFoundation", () => {
 	});
 
 	test("preserves other provider sections when models.json already exists", async () => {
-		// Pre-populate with some copilot models
+		// Pre-populate with some provider models
 		const existing = {
 			version: 1,
 			generatedAt: "2026-01-01T00:00:00.000Z",
 			providers: {
-				"github-copilot": [
-					{ id: "gpt-5-mini", name: "GPT-5 Mini", contextWindow: 264000, maxOutput: 64000, inputPrice: 0, outputPrice: 0 },
-				],
 				openrouter: [],
 				"opencode-go": [],
 				"opencode-zen": [],
@@ -385,9 +382,8 @@ describe("refreshBedrockModelsFromFoundation", () => {
 		});
 
 		const written = JSON.parse(fs.readFileSync(path.join(tmpDir, "models.json"), "utf8"));
-		// Copilot section intact
-		expect(written.providers["github-copilot"]).toHaveLength(1);
-		expect(written.providers["github-copilot"][0].id).toBe("gpt-5-mini");
+		// OpenRouter section intact
+		expect(written.providers["openrouter"]).toBeDefined();
 		// Bedrock section updated
 		expect(written.providers["amazon-bedrock"]).toHaveLength(1);
 	});

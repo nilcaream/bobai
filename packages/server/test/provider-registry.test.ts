@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-	DEFAULT_PROVIDER_ID,
 	getDefaultModelForProvider,
 	isSupportedAuthProvider,
 	isSupportedProvider,
@@ -10,13 +9,8 @@ import {
 import { getProviderDescriptor } from "../src/provider/registry";
 
 describe("provider registry", () => {
-	test("exposes github-copilot as the default runtime provider", () => {
-		expect(DEFAULT_PROVIDER_ID).toBe("github-copilot");
-	});
-
 	test("lists supported auth providers separately from runtime providers", () => {
 		expect(SUPPORTED_AUTH_PROVIDERS).toEqual([
-			"github-copilot",
 			"openrouter",
 			"opencode-go",
 			"opencode-zen",
@@ -24,22 +18,10 @@ describe("provider registry", () => {
 			"deepseek",
 			"tavily",
 		]);
-		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual([
-			"github-copilot",
-			"openrouter",
-			"opencode-go",
-			"opencode-zen",
-			"amazon-bedrock",
-			"deepseek",
-		]);
-	});
-
-	test("returns the default model for github-copilot", () => {
-		expect(getDefaultModelForProvider("github-copilot")).toBe("gpt-5-mini");
+		expect(SUPPORTED_RUNTIME_PROVIDERS).toEqual(["openrouter", "opencode-go", "opencode-zen", "amazon-bedrock", "deepseek"]);
 	});
 
 	test("recognizes supported runtime provider ids", () => {
-		expect(isSupportedProvider("github-copilot")).toBe(true);
 		expect(isSupportedProvider("openrouter")).toBe(true);
 		expect(isSupportedProvider("opencode-go")).toBe(true);
 		expect(isSupportedProvider("opencode-zen")).toBe(true);
@@ -49,7 +31,6 @@ describe("provider registry", () => {
 	});
 
 	test("recognizes supported auth provider ids", () => {
-		expect(isSupportedAuthProvider("github-copilot")).toBe(true);
 		expect(isSupportedAuthProvider("openrouter")).toBe(true);
 		expect(isSupportedAuthProvider("opencode-go")).toBe(true);
 		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
@@ -89,8 +70,6 @@ describe("provider registry", () => {
 	});
 
 	test("exposes provider descriptor metadata through the registry", () => {
-		expect(getProviderDescriptor("github-copilot")?.defaultModel).toBe("gpt-5-mini");
-		expect(getProviderDescriptor("github-copilot")?.getApiFamily("claude-haiku-4.5")).toBe("anthropic-messages");
 		expect(getProviderDescriptor("openrouter")?.defaultModel).toBe("openrouter/free");
 		expect(getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-go")?.defaultModel).toBe("deepseek-v4-flash");

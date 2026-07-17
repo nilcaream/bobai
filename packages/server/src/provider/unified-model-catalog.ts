@@ -33,43 +33,13 @@ export interface UnifiedModelCatalogRefreshResult {
 }
 
 const MODELS_FILE_NAME = "models.json";
-const COPILOT_REQUESTS_URL = "https://docs.github.com/en/copilot/concepts/billing/copilot-requests";
 
 const PROVIDER_SOURCE_MAP: Record<ProviderId, string> = {
-	"github-copilot": "github-copilot",
 	openrouter: "openrouter",
 	"opencode-go": "opencode-go",
 	"opencode-zen": "opencode",
 	"amazon-bedrock": "amazon-bedrock",
 	deepseek: "deepseek",
-};
-
-const COPILOT_MULTIPLIER_MODEL_ID_MAP: Record<string, string> = {
-	"claude haiku 4.5": "claude-haiku-4.5",
-	"claude opus 4.5": "claude-opus-4.5",
-	"claude opus 4.6": "claude-opus-4.6",
-	"claude opus 4.6 (fast mode)": "claude-opus-4.6-fast",
-	"claude opus 4.7": "claude-opus-4.7",
-	"claude sonnet 4": "claude-sonnet-4",
-	"claude sonnet 4.5": "claude-sonnet-4.5",
-	"claude sonnet 4.6": "claude-sonnet-4.6",
-	"gemini 2.5 pro": "gemini-2.5-pro",
-	"gemini 3 flash": "gemini-3-flash-preview",
-	"gemini 3.1 pro": "gemini-3.1-pro-preview",
-	"gpt-4.1": "gpt-4.1",
-	"gpt-4o": "gpt-4o",
-	"gpt-5 mini": "gpt-5-mini",
-	"gpt-5": "gpt-5",
-	"gpt-5.2": "gpt-5.2",
-	"gpt-5.2-codex": "gpt-5.2-codex",
-	"gpt-5.3-codex": "gpt-5.3-codex",
-	"gpt-5.4": "gpt-5.4",
-	"gpt-5.4 mini": "gpt-5.4-mini",
-	"gpt-5.4 nano": "gpt-5.4-nano",
-	"gpt-5.5": "gpt-5.5",
-	"grok code fast 1": "grok-code-fast-1",
-	"raptor mini": "raptor-mini",
-	goldeneye: "goldeneye",
 };
 
 function defaultConfigDir(): string {
@@ -90,45 +60,6 @@ export function loadUnifiedModelsFile(configDir?: string): UnifiedModelsFile {
 	return JSON.parse(raw) as UnifiedModelsFile;
 }
 
-async function fetchCopilotMultiplierMap(): Promise<Map<string, number>> {
-	let response: Response;
-	try {
-		response = await fetch(COPILOT_REQUESTS_URL);
-	} catch {
-		return new Map();
-	}
-	if (!response.ok) {
-		return new Map();
-	}
-	const html = await response.text();
-	const rows = [...html.matchAll(/<tr><th[^>]*scope="row"[^>]*>(.*?)<\/th><td>(.*?)<\/td><td>/g)];
-	const multipliers = new Map<string, number>();
-	for (const row of rows) {
-		const modelName = normalizeCopilotDocModelName(stripHtml(row[1] ?? ""));
-		const multiplierText = stripHtml(row[2] ?? "").trim();
-		const modelId = COPILOT_MULTIPLIER_MODEL_ID_MAP[modelName];
-		const multiplier = Number.parseFloat(multiplierText);
-		if (!modelId || Number.isNaN(multiplier)) continue;
-		multipliers.set(modelId, multiplier);
-	}
-	return multipliers;
-}
-
-function stripHtml(value: string): string {
-	return value
-		.replace(/<[^>]+>/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function normalizeCopilotDocModelName(value: string): string {
-	return value
-		.toLowerCase()
-		.replace(/\(preview\)/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
 function hasStrictMetadata(model: ModelsDevModel): model is ModelsDevModel & {
 	limit: { context: number; output: number };
 	cost: { input: number; output: number };
@@ -142,11 +73,7 @@ function hasStrictMetadata(model: ModelsDevModel): model is ModelsDevModel & {
 	);
 }
 
-function normalizeProviderModels(
-	providerId: ProviderId,
-	catalog: ModelsDevCatalog,
-	copilotMultipliers: Map<string, number>,
-): UnifiedProviderModel[] {
+function normalizeProviderModels(providerId: ProviderId, catalog: ModelsDevCatalog): UnifiedProviderModel[] {
 	const sourceId = PROVIDER_SOURCE_MAP[providerId];
 	const source = catalog[sourceId];
 	if (!source) return [];
@@ -158,28 +85,18 @@ function normalizeProviderModels(
 				name: model.name,
 				contextWindow: model.limit.context,
 				maxOutput: model.limit.output,
-				inputPrice: providerId === "github-copilot" ? 0 : model.cost.input,
-				outputPrice: providerId === "github-copilot" ? 0 : model.cost.output,
+				inputPrice: model.cost.input,
+				outputPrice: model.cost.output,
 			};
-			if (providerId !== "github-copilot") {
-				if (typeof model.cost.cache_read === "number") {
-					base.cacheReadPrice = model.cost.cache_read;
-				}
-				if (typeof model.cost.cache_write === "number") {
-					base.cacheWritePrice = model.cost.cache_write;
-				}
+			if (typeof model.cost.cache_read === "number") {
+				base.cacheReadPrice = model.cost.cache_read;
+			}
+			if (typeof model.cost.cache_write === "number") {
+				base.cacheWritePrice = model.cost.cache_write;
 			}
 			// supportsCaching is a capability flag derived from models.dev cache costs.
-			// It is populated for all providers (including Copilot) because it drives
-			// API parameter inclusion (cache_control), not billing.
 			if (typeof model.cost.cache_read === "number" || typeof model.cost.cache_write === "number") {
 				base.supportsCaching = true;
-			}
-			if (providerId === "github-copilot") {
-				const multiplier = copilotMultipliers.get(model.id);
-				if (multiplier !== undefined) {
-					base.premiumRequestMultiplier = multiplier;
-				}
 			}
 			return base;
 		})
@@ -193,7 +110,6 @@ export async function refreshUnifiedModelCatalog(
 	const resolvedConfigDir = configDir ?? defaultConfigDir();
 	const fetchFn = deps.fetch ?? fetch;
 	const catalog = await fetchModelsDevCatalog(fetchFn);
-	const copilotMultipliers = await fetchCopilotMultiplierMap();
 
 	// Use live Bedrock foundation-models data if auth is available, so refresh
 	// preserves the region-specific callable IDs written during `bobai auth amazon-bedrock`.
@@ -209,21 +125,20 @@ export async function refreshUnifiedModelCatalog(
 		} catch {
 			// Auth present but request failed (expired token, network issue, etc.) —
 			// fall back to models.dev so refresh still completes.
-			bedrockModels = normalizeProviderModels("amazon-bedrock", catalog, copilotMultipliers);
+			bedrockModels = normalizeProviderModels("amazon-bedrock", catalog);
 		}
 	} else {
-		bedrockModels = normalizeProviderModels("amazon-bedrock", catalog, copilotMultipliers);
+		bedrockModels = normalizeProviderModels("amazon-bedrock", catalog);
 	}
 
 	const file: UnifiedModelsFile = {
 		version: 1,
 		generatedAt: new Date().toISOString(),
 		providers: {
-			"github-copilot": normalizeProviderModels("github-copilot", catalog, copilotMultipliers),
-			openrouter: normalizeProviderModels("openrouter", catalog, copilotMultipliers),
-			"opencode-go": normalizeProviderModels("opencode-go", catalog, copilotMultipliers),
-			"opencode-zen": normalizeProviderModels("opencode-zen", catalog, copilotMultipliers),
-			deepseek: normalizeProviderModels("deepseek", catalog, copilotMultipliers),
+			openrouter: normalizeProviderModels("openrouter", catalog),
+			"opencode-go": normalizeProviderModels("opencode-go", catalog),
+			"opencode-zen": normalizeProviderModels("opencode-zen", catalog),
+			deepseek: normalizeProviderModels("deepseek", catalog),
 			"amazon-bedrock": bedrockModels,
 		},
 	};
@@ -235,7 +150,7 @@ export async function refreshUnifiedModelCatalog(
 		configPath,
 		providerCount: Object.keys(file.providers).length,
 		modelCount,
-		multiplierSourceAvailable: copilotMultipliers.size > 0,
+		multiplierSourceAvailable: false,
 	};
 }
 
@@ -361,7 +276,6 @@ export async function refreshBedrockModelsFromFoundation(
 			version: 1,
 			generatedAt: new Date().toISOString(),
 			providers: {
-				"github-copilot": [],
 				openrouter: [],
 				"opencode-go": [],
 				"opencode-zen": [],

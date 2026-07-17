@@ -25,7 +25,7 @@ import { createProviderModelsTempDir } from "./test-provider-models";
 
 function textProvider(tokens: string[]): Provider {
 	return {
-		id: "mock",
+		id: "openrouter",
 		async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			for (const t of tokens) yield { type: "text", text: t };
 			yield { type: "finish", reason: "stop" };
@@ -37,7 +37,7 @@ function textProvider(tokens: string[]): Provider {
 function toolThenTextProvider(toolCallId: string, toolName: string, toolArgs: string, secondResponse: string[]): Provider {
 	let callCount = 0;
 	return {
-		id: "mock",
+		id: "openrouter",
 		async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			callCount++;
 			if (callCount === 1) {
@@ -105,7 +105,7 @@ describe("provider reasoning types", () => {
 			text: " continued",
 		};
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield {
 					type: "reasoning_start",
@@ -133,7 +133,7 @@ describe("provider reasoning types", () => {
 		const events: AgentEvent[] = [];
 		const messages = await runAgentLoop({
 			provider: {
-				id: "mock",
+				id: "openrouter",
 				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 					yield {
 						type: "reasoning_start",
@@ -186,7 +186,7 @@ describe("provider reasoning types", () => {
 		const seenMessages: Message[] = [];
 		let callCount = 0;
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -268,7 +268,7 @@ describe("provider reasoning types", () => {
 	test("runAgentLoop merges same-kind final reasoning and orders multiple indexes stably", async () => {
 		const messages = await runAgentLoop({
 			provider: {
-				id: "mock",
+				id: "openrouter",
 				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 					yield {
 						type: "reasoning_start",
@@ -322,7 +322,7 @@ describe("provider reasoning types", () => {
 	test("final fallback call preserves accumulated reasoning after maxIterations is reached", async () => {
 		let callCount = 0;
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -371,7 +371,7 @@ describe("provider reasoning types", () => {
 
 		await runAgentLoop({
 			provider: {
-				id: "mock",
+				id: "openrouter",
 				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 					yield {
 						type: "reasoning_start",
@@ -422,7 +422,7 @@ describe("provider reasoning types", () => {
 		const seenMessages: Message[] = [];
 
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -483,7 +483,7 @@ describe("provider reasoning types", () => {
 		let callCount = 0;
 
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				// Every call returns reasoning with no content
@@ -594,7 +594,7 @@ describe("runAgentLoop", () => {
 
 		let callCount = 0;
 		const adaptiveProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -651,7 +651,7 @@ describe("runAgentLoop", () => {
 		const registry = createToolRegistry([throwingTool]);
 		let callCount = 0;
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -692,7 +692,7 @@ describe("runAgentLoop", () => {
 		let lastCallHadTools = true;
 
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				lastCallHadTools = opts.tools !== undefined;
@@ -739,7 +739,7 @@ describe("runAgentLoop", () => {
 	test("handles multi-tool workflow (read then edit)", async () => {
 		let callCount = 0;
 		const multiProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -812,7 +812,7 @@ describe("runAgentLoop", () => {
 
 		// Create a provider that yields a usage event
 		const usageProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "Hello" };
 				yield { type: "usage", tokenCount: 932, tokenLimit: 64000, display: "932 / 64000 | 1%" };
@@ -844,7 +844,7 @@ describe("runAgentLoop", () => {
 		const captured: ProviderOptions[] = [];
 		const controller = new AbortController();
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				captured.push(opts);
 				yield { type: "text", text: "ok" };
@@ -909,7 +909,7 @@ describe("runAgentLoop", () => {
 	test("signal defaults to undefined when not provided", async () => {
 		const captured: ProviderOptions[] = [];
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				captured.push(opts);
 				yield { type: "text", text: "ok" };
@@ -987,7 +987,7 @@ describe("runAgentLoop", () => {
 
 		// Provider returns two tool calls in one response
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				yield { type: "tool_call_start", index: 0, id: "call_1", name: "aborter" };
 				yield { type: "tool_call_delta", index: 0, arguments: '{"text":"a"}' };
@@ -1093,7 +1093,7 @@ describe("parallel task execution", () => {
 	function multiTaskProvider(tasks: { id: string; description: string; prompt: string }[]): Provider {
 		let callCount = 0;
 		return {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {
@@ -1284,7 +1284,7 @@ describe("parallel task execution", () => {
 		// Provider that yields: echo("first"), task-A, task-B, echo("last")
 		let callCount = 0;
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				callCount++;
 				if (callCount === 1) {

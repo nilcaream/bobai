@@ -32,7 +32,7 @@ describe("writeDump", () => {
 			tmpDir,
 			{
 				method: "POST",
-				url: "https://api.githubcopilot.com/chat/completions",
+				url: "https://api.openrouter.ai/api/v1/chat/completions",
 				headers: { "Content-Type": "application/json" },
 				body: '{"model":"gpt-4o"}',
 			},
@@ -46,7 +46,7 @@ describe("writeDump", () => {
 		);
 
 		const content = fs.readFileSync(path.join(tmpDir, filename), "utf8");
-		expect(content).toContain(">>> POST https://api.githubcopilot.com/chat/completions");
+		expect(content).toContain(">>> POST https://api.openrouter.ai/api/v1/chat/completions");
 		expect(content).toContain("Content-Type: application/json");
 		expect(content).toContain('{"model":"gpt-4o"}');
 		expect(content).toContain("<<< 200 OK (450ms)");
@@ -76,9 +76,9 @@ describe("maskAuthHeader", () => {
 
 	test("masks session token tid but keeps exp and proxy-ep visible", () => {
 		const masked = maskAuthHeader({
-			Authorization: "Bearer tid=abc123def456;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com",
+			Authorization: "Bearer sk-or-abc123def456",
 		});
-		expect(masked.Authorization).toBe("Bearer tid=abc***456;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com");
+		expect(masked.Authorization).toBe("Bearer sk-o***f456");
 	});
 
 	test("fully masks short session token tid", () => {

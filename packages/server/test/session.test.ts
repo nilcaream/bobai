@@ -32,7 +32,7 @@ describe("prompt session", () => {
 	beforeAll(() => {
 		const db = createTestDb();
 		const provider: Provider = {
-			id: "github-copilot",
+			id: "openrouter",
 			async *stream(): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "test " };
 				yield { type: "text", text: "response" };

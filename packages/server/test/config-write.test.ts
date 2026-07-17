@@ -84,11 +84,11 @@ describe("updateGlobalConfig", () => {
 	});
 
 	test("merges update with existing config preserving other fields", () => {
-		fs.writeFileSync(configPath, JSON.stringify({ provider: "github-copilot", port: 8080 }));
+		fs.writeFileSync(configPath, JSON.stringify({ provider: "openrouter", port: 8080 }));
 
 		const result = updateGlobalConfig(configDir, { debug: false });
 
-		expect(result.provider).toBe("github-copilot");
+		expect(result.provider).toBe("openrouter");
 		expect(result.port).toBe(8080);
 		expect(result.debug).toBe(false);
 	});

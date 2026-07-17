@@ -7,7 +7,7 @@ function mockProvider(): Provider {
 	let turnModel = "";
 	let turnCalls = 0;
 	return {
-		id: "mock",
+		id: "openrouter",
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			yield { type: "text", text: "hello" };
 			yield { type: "usage", tokenCount: 500, tokenLimit: 8000, display: "mock-model" };
@@ -49,7 +49,7 @@ function mockProvider(): Provider {
 
 function accumulatingMockProvider(): Provider {
 	return {
-		id: "mock",
+		id: "openrouter",
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			yield { type: "text", text: "tool roundtrip" };
 			opts.onMetrics?.({
@@ -89,7 +89,7 @@ describe("createIsolatedTurnProvider", () => {
 	test("preserves the original provider's id", () => {
 		const original = mockProvider();
 		const isolated = createIsolatedTurnProvider(original);
-		expect(isolated.id).toBe("mock");
+		expect(isolated.id).toBe("openrouter");
 	});
 
 	test("beginTurn on isolated provider does not affect the original", () => {

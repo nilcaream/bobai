@@ -7,20 +7,6 @@ import {
 } from "../src/provider/backend-policy";
 
 describe("backend policy", () => {
-	test("resolves github-copilot default backend", () => {
-		expect(getDefaultSessionBackend("github-copilot")).toEqual({
-			provider: "github-copilot",
-			model: "gpt-5-mini",
-			apiFamily: "openai-chat-completions",
-		});
-	});
-
-	test("maps copilot models to API families", () => {
-		expect(getApiFamilyForModel("github-copilot", "claude-haiku-4.5")).toBe("anthropic-messages");
-		expect(getApiFamilyForModel("github-copilot", "gpt-5.2")).toBe("openai-responses");
-		expect(getApiFamilyForModel("github-copilot", "gpt-5-mini")).toBe("openai-chat-completions");
-	});
-
 	test("maps opencode-go chat-completions models to the chat completions family", () => {
 		expect(getApiFamilyForModel("opencode-go", "kimi-k2.6")).toBe("openai-chat-completions");
 	});
@@ -38,20 +24,20 @@ describe("backend policy", () => {
 	test("allows provider switch on empty session when runtime is supported", () => {
 		const result = validateProviderSwitch({
 			hasMessages: false,
-			current: getDefaultSessionBackend("github-copilot"),
-			nextProvider: "github-copilot",
+			current: getDefaultSessionBackend("openrouter"),
+			nextProvider: "openrouter",
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.next).toEqual(getDefaultSessionBackend("github-copilot"));
+			expect(result.next).toEqual(getDefaultSessionBackend("openrouter"));
 		}
 	});
 
 	test("rejects provider switch on non-empty session", () => {
 		const result = validateProviderSwitch({
 			hasMessages: true,
-			current: getDefaultSessionBackend("github-copilot"),
-			nextProvider: "github-copilot",
+			current: getDefaultSessionBackend("openrouter"),
+			nextProvider: "openrouter",
 		});
 		expect(result).toEqual({ ok: false, error: expect.stringMatching(/not yet supported/i) });
 	});
@@ -60,11 +46,11 @@ describe("backend policy", () => {
 		const result = validateModelSwitch({
 			hasMessages: true,
 			current: {
-				provider: "github-copilot",
-				model: "claude-haiku-4.5",
+				provider: "openrouter",
+				model: "anthropic/claude-haiku-4.5",
 				apiFamily: "anthropic-messages",
 			},
-			nextModel: "gpt-5.2",
+			nextModel: "openrouter/free",
 		});
 		expect(result).toEqual({ ok: false, error: expect.stringMatching(/API|not yet supported/i) });
 	});

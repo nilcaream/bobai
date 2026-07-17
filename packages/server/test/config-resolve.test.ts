@@ -4,17 +4,17 @@ import { resolveConfig } from "../src/config/resolve";
 describe("resolveConfig", () => {
 	test("prefers project provider/model when both are configured", () => {
 		const config = resolveConfig(
-			{ provider: "github-copilot", model: "claude-sonnet-4" },
+			{ provider: "openrouter", model: "claude-sonnet-4" },
 			{ provider: "openrouter", model: "openrouter/free" },
 		);
-		expect(config.provider).toBe("github-copilot");
+		expect(config.provider).toBe("openrouter");
 		expect(config.model).toBe("claude-sonnet-4");
 	});
 
 	test("falls back to global provider/model when project does not configure both", () => {
-		const config = resolveConfig({ model: "gpt-4o" }, { provider: "github-copilot", model: "gpt-5-mini" });
-		expect(config.provider).toBe("github-copilot");
-		expect(config.model).toBe("gpt-5-mini");
+		const config = resolveConfig({ model: "gpt-4o" }, { provider: "openrouter", model: "openrouter/free" });
+		expect(config.provider).toBe("openrouter");
+		expect(config.model).toBe("openrouter/free");
 	});
 
 	test("returns null provider/model when neither project nor global config provides both", () => {

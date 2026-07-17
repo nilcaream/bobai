@@ -111,7 +111,7 @@ describe("WebSocket server", () => {
 		let streamAborted = false;
 
 		const slowProvider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				streamStarted = true;
 				yield { type: "text", text: "Starting..." };

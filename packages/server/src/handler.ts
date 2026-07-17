@@ -344,7 +344,7 @@ export async function handlePrompt(req: PromptRequest) {
 		// Uses the session's last known prompt token count and the model's context window.
 		const currentSession = getSession(db, currentSessionId);
 		const sessionPromptTokens = currentSession?.promptTokens ?? 0;
-		const providerId: ProviderId = isSupportedProvider(activeProvider.id) ? activeProvider.id : "github-copilot";
+		const providerId = activeProvider.id as ProviderId;
 		const modelConfig = getProviderModelConfig(providerId, effectiveModel, configDir);
 		const contextWindow = currentSession?.contextLimit ?? modelConfig?.contextWindow ?? 0;
 		if (contextWindow <= 0) {
@@ -462,7 +462,7 @@ export async function handlePrompt(req: PromptRequest) {
 		turnProvider.beginTurn?.(sessionPromptTokens);
 
 		// Compute prior session total so streaming status shows the completed total
-		const costProviderId = (effectiveProviderId ?? (activeProvider?.id as ProviderId) ?? "github-copilot") as ProviderId;
+		const costProviderId = (effectiveProviderId ?? activeProvider?.id) as ProviderId;
 		const priorSessionCost = currentSessionId
 			? formatSessionCostDisplay(db, costProviderId, currentSessionId, configDir)
 			: undefined;
@@ -577,7 +577,7 @@ export async function handlePrompt(req: PromptRequest) {
 		}
 		// Recompute and broadcast the final session total after persistence
 		if (currentSessionId && effectiveModel) {
-			const finalCostProviderId = (effectiveProviderId ?? (activeProvider?.id as ProviderId) ?? "github-copilot") as ProviderId;
+			const finalCostProviderId = (effectiveProviderId ?? activeProvider?.id) as ProviderId;
 			const finalSessionCost = formatSessionCostDisplay(db, finalCostProviderId, currentSessionId, configDir);
 			const finalStatus = formatProviderModelDisplay(
 				finalCostProviderId,
@@ -610,8 +610,7 @@ export async function handlePrompt(req: PromptRequest) {
 			const authProviderId = activeProvider?.id ?? effectiveProviderId;
 			const authMetadata = getProviderAuthMetadata(authProviderId);
 			const permanentAuthMessage =
-				authMetadata?.permanentAuthErrorMessage ??
-				"Authentication expired. Run `bobai auth github-copilot` to re-authenticate.";
+				authMetadata?.permanentAuthErrorMessage ?? "Authentication expired. Run `bobai auth <provider>` to re-authenticate.";
 			// Persist error as assistant message so agent can resume with context
 			if (currentSessionId) {
 				let errorText: string;
@@ -664,7 +663,7 @@ export async function handlePrompt(req: PromptRequest) {
 			}
 			// Recompute and broadcast the final session total after error persistence
 			if (effectiveModel && currentSessionId) {
-				const errCostProviderId = (effectiveProviderId ?? (activeProvider?.id as ProviderId) ?? "github-copilot") as ProviderId;
+				const errCostProviderId = (effectiveProviderId ?? activeProvider?.id) as ProviderId;
 				const errSession = getSession(db, currentSessionId);
 				const errSessionCost = formatSessionCostDisplay(db, errCostProviderId, currentSessionId, configDir);
 				const errStatus = formatProviderModelDisplay(

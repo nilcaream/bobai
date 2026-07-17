@@ -30,7 +30,7 @@ function createBlockingProvider() {
 	const resolvers: Array<() => void> = [];
 
 	const provider: Provider = {
-		id: "github-copilot",
+		id: "openrouter",
 		async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 			active++;
 			peakActive = Math.max(peakActive, active);

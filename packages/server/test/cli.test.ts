@@ -20,12 +20,6 @@ describe("parseCLI", () => {
 		expect(result.provider).toBeUndefined();
 	});
 
-	test("auth github-copilot", () => {
-		const result = parseCLI(["auth", "github-copilot"]);
-		expect(result.command).toBe("auth");
-		expect(result.provider).toBe("github-copilot");
-	});
-
 	test("auth openrouter", () => {
 		const result = parseCLI(["auth", "openrouter"]);
 		expect(result.command).toBe("auth");

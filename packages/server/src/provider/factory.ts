@@ -1,8 +1,6 @@
-import { authorizeCopilot as defaultAuthorizeCopilot } from "../auth/authorize";
 import {
 	type AmazonBedrockAuth,
 	type AuthStore,
-	type CopilotAuth,
 	type DeepSeekAuth,
 	loadAuthStore as defaultLoadAuthStore,
 	type OpenCodeGoAuth,
@@ -11,7 +9,6 @@ import {
 } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { createAmazonBedrockProvider as defaultCreateAmazonBedrockProvider } from "./amazon-bedrock";
-import { createCopilotProvider as defaultCreateCopilotProvider } from "./copilot";
 import { createDeepSeekProvider as defaultCreateDeepSeekProvider } from "./deepseek";
 import { providerModelsConfigExists as defaultProviderModelsConfigExists } from "./models";
 import { createOpenCodeGoProvider as defaultCreateOpenCodeGoProvider } from "./opencode-go";
@@ -31,8 +28,6 @@ export interface CreateProviderOptions {
 export interface CreateProviderDeps {
 	providerModelsConfigExists?: (providerId: ProviderId, configDir?: string) => boolean;
 	loadAuthStore?: (configDir: string) => AuthStore | undefined;
-	authorizeCopilot?: (configDir: string) => Promise<CopilotAuth>;
-	createCopilotProvider?: (auth: CopilotAuth, configDir?: string, logger?: Logger, fetchFn?: typeof fetch) => Provider;
 	createOpenRouterProvider?: (auth: OpenRouterAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	createOpenCodeGoProvider?: (auth: OpenCodeGoAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
 	createOpenCodeZenProvider?: (auth: OpenCodeZenAuth, logger?: Logger, fetchFn?: typeof fetch, configDir?: string) => Provider;
@@ -65,8 +60,6 @@ export async function createConfiguredProvider(
 		logger: options.logger,
 		store: loadAuthStore(options.configDir),
 		fetch: options.fetch,
-		authorizeCopilot: deps.authorizeCopilot ?? defaultAuthorizeCopilot,
-		createCopilotProvider: deps.createCopilotProvider ?? defaultCreateCopilotProvider,
 		createOpenRouterProvider: deps.createOpenRouterProvider ?? defaultCreateOpenRouterProvider,
 		createOpenCodeGoProvider: deps.createOpenCodeGoProvider ?? defaultCreateOpenCodeGoProvider,
 		createOpenCodeZenProvider: deps.createOpenCodeZenProvider ?? defaultCreateOpenCodeZenProvider,

@@ -1,19 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
+import { writeUnifiedModelsConfig } from "./test-models";
 
 export function createProviderModelsTempDir(): string {
 	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-provider-models-shared-"));
 	writeUnifiedModelsConfig(tmpDir, {
-		"github-copilot": createCopilotModels([
-			{ id: "claude-haiku-4.5", contextWindow: 128000, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
-			{ id: "gpt-4o", contextWindow: 64000, maxOutput: 4096 },
-			{ id: "gpt-5-mini", contextWindow: 264000, maxOutput: 64000, premiumRequestMultiplier: 0 },
-			{ id: "gpt-5.2", contextWindow: 264000, maxOutput: 64000, premiumRequestMultiplier: 1 },
-			{ id: "gpt-5.4", contextWindow: 272000, maxOutput: 64000, premiumRequestMultiplier: 1 },
-			{ id: "gemini-3-flash-preview", contextWindow: 1000000, maxOutput: 64000 },
-		]),
 		openrouter: [
 			{
 				id: "openrouter/free",

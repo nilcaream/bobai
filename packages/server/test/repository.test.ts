@@ -38,11 +38,11 @@ describe("session repository", () => {
 
 	test("createSession stores provider and apiFamily when provided", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
-		expect(session.provider).toBe("github-copilot");
+		expect(session.provider).toBe("openrouter");
 		expect(session.model).toBe("gpt-5-mini");
 		expect(session.apiFamily).toBe("openai-chat-completions");
 	});
@@ -81,12 +81,12 @@ describe("session repository", () => {
 	test("updateSessionBackend updates provider, model, and apiFamily together", () => {
 		const session = createSession(db);
 		updateSessionBackend(db, session.id, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-haiku-4.5",
 			apiFamily: "anthropic-messages",
 		});
 		const updated = getSession(db, session.id);
-		expect(updated?.provider).toBe("github-copilot");
+		expect(updated?.provider).toBe("openrouter");
 		expect(updated?.model).toBe("claude-haiku-4.5");
 		expect(updated?.apiFamily).toBe("anthropic-messages");
 	});
@@ -161,7 +161,7 @@ describe("session repository", () => {
 
 	test("createSubagentSession creates a session with parent_id", () => {
 		const parent = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -170,13 +170,13 @@ describe("session repository", () => {
 			parent.id,
 			"Exploring codebase",
 			"gpt-5-mini",
-			"github-copilot",
+			"openrouter",
 			"openai-chat-completions",
 		);
 		expect(child.id).toBeTruthy();
 		expect(child.title).toBe("Exploring codebase");
 		expect(child.parentId).toBe(parent.id);
-		expect(child.provider).toBe("github-copilot");
+		expect(child.provider).toBe("openrouter");
 		expect(child.apiFamily).toBe("openai-chat-completions");
 
 		const messages = getMessages(db, child.id);

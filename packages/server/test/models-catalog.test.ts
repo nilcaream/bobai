@@ -13,9 +13,9 @@ describe("fetchCatalog", () => {
 			Promise.resolve(
 				new Response(
 					JSON.stringify({
-						"github-copilot": {
-							id: "github-copilot",
-							name: "GitHub Copilot",
+						openrouter: {
+							id: "openrouter",
+							name: "OpenRouter",
 							models: {
 								"gpt-4o": {
 									id: "gpt-4o",
@@ -34,7 +34,7 @@ describe("fetchCatalog", () => {
 			),
 		);
 
-		const models = await fetchCatalog("github-copilot");
+		const models = await fetchCatalog("openrouter");
 		expect(models).toHaveLength(2);
 		expect(models[0]).toEqual({
 			id: "gpt-4o",
@@ -53,11 +53,11 @@ describe("fetchCatalog", () => {
 
 	test("throws on non-OK HTTP response", async () => {
 		globalThis.fetch = mock(() => Promise.resolve(new Response(null, { status: 500 })));
-		expect(fetchCatalog("github-copilot")).rejects.toThrow("models.dev returned HTTP 500");
+		expect(fetchCatalog("openrouter")).rejects.toThrow("models.dev returned HTTP 500");
 	});
 
 	test("throws on network error", async () => {
 		globalThis.fetch = mock(() => Promise.reject(new Error("network error")));
-		expect(fetchCatalog("github-copilot")).rejects.toThrow("network error");
+		expect(fetchCatalog("openrouter")).rejects.toThrow("network error");
 	});
 });

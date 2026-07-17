@@ -1,8 +1,6 @@
-import { exchangeToken } from "../provider/copilot";
 import { refreshBedrockModelsFromFoundation } from "../provider/unified-model-catalog";
 import { AMAZON_BEDROCK_DEFAULT_REGION, fetchBedrockFoundationModels } from "./amazon-bedrock";
 import { validateDeepSeekKey } from "./deepseek";
-import { pollForToken, requestDeviceCode } from "./device-flow";
 import { validateOpenCodeGoKey } from "./opencode-go";
 import { validateOpenCodeZenKey } from "./opencode-zen";
 import { validateOpenRouterKey } from "./openrouter";
@@ -11,11 +9,9 @@ import { promptText } from "./prompt-text";
 import {
 	type AuthProviderId,
 	type AuthStore,
-	type CopilotAuth,
 	loadAuthStore,
 	saveAuthStore,
 	setAmazonBedrockAuth,
-	setCopilotAuth,
 	setDeepSeekAuth,
 	setOpenCodeGoAuth,
 	setOpenCodeZenAuth,
@@ -23,33 +19,6 @@ import {
 	setTavilyAuth,
 } from "./store";
 import { validateTavilyKey } from "./tavily";
-
-export async function authorizeCopilot(configDir: string): Promise<CopilotAuth> {
-	console.log("Authenticating with GitHub Copilot");
-
-	const deviceCode = await requestDeviceCode();
-
-	console.log(`- Open: ${deviceCode.verification_uri}`);
-	console.log(`- Enter code: ${deviceCode.user_code}`);
-
-	console.log("");
-	console.log("Waiting for authorization");
-
-	const githubToken = await pollForToken(deviceCode.device_code, deviceCode.interval);
-	console.log("- GitHub OAuth complete");
-
-	console.log("");
-	console.log("Exchanging token for Copilot session");
-	const session = await exchangeToken(githubToken);
-	console.log("- Session obtained");
-	console.log("");
-
-	const auth: CopilotAuth = { refresh: githubToken, access: session.access, expires: session.expires };
-	const store: AuthStore = loadAuthStore(configDir) ?? { version: 1, providers: {} };
-	saveAuthStore(configDir, setCopilotAuth(store, auth));
-
-	return auth;
-}
 
 async function authorizeApiKeyProvider(
 	configDir: string,
@@ -189,13 +158,6 @@ export interface AuthProviderEntry {
 
 const AUTH_PROVIDERS: AuthProviderEntry[] = [
 	{
-		id: "github-copilot",
-		category: "model-provider",
-		authorize: async (configDir: string) => {
-			await authorizeCopilot(configDir);
-		},
-	},
-	{
 		id: "openrouter",
 		category: "model-provider",
 		authorize: async (configDir: string) => {
@@ -246,5 +208,3 @@ export function listSupportedAuthProviders(): AuthProviderEntry[] {
 export function getAuthProvider(providerId: AuthProviderId): AuthProviderEntry | undefined {
 	return AUTH_PROVIDERS.find((provider) => provider.id === providerId);
 }
-
-export const authorize = authorizeCopilot;

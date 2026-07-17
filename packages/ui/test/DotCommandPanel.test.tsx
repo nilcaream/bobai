@@ -153,12 +153,12 @@ describe("DotCommandPanel", () => {
 	test("provider panel lists authenticated providers with runtime support note", () => {
 		const parsed = dot({ command: "provider", args: "" });
 		const providers = [
-			{ index: 1, id: "github-copilot", runtimeSupported: true },
+			{ index: 1, id: "openrouter", runtimeSupported: true },
 			{ index: 2, id: "openrouter", runtimeSupported: false },
 		];
 		const { container } = render(<DotCommandPanel {...defaultProps} parsed={parsed} providerList={providers} />);
 		const text = container.textContent ?? "";
-		expect(text).toContain("1: github-copilot");
+		expect(text).toContain("1: openrouter");
 		expect(text).toContain("2: openrouter");
 		expect(text).toContain("runtime not supported yet");
 	});

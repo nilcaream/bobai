@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { authorizeCopilot, getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
+import { getAuthProvider, listSupportedAuthProviders } from "./auth/authorize";
 import { loadAuthStore } from "./auth/store";
 import { parseCLI } from "./cli";
 import { resolveValidatedDefaultBackend } from "./config/default-backend";
@@ -50,10 +50,6 @@ if (cli.command === "auth") {
 	}
 
 	logger.info("AUTH", `Starting authentication flow for ${cli.provider}`);
-	if (cli.provider === "github-copilot") {
-		await authorizeCopilot(globalConfigDir);
-		process.exit(0);
-	}
 
 	const authProvider = getAuthProvider(cli.provider);
 	if (!authProvider) {
@@ -80,7 +76,7 @@ if (cli.command === "refresh") {
 			console.log(`Amazon Bedrock: refreshed from live API (${bedrockAuth.region})`);
 		}
 		if (!result.multiplierSourceAvailable) {
-			console.log("Copilot multiplier metadata unavailable; Copilot models were written with ?x fallback.");
+			console.log("Multiplier metadata unavailable from models.dev.");
 		}
 		process.exit(0);
 	} catch (error) {
@@ -109,7 +105,7 @@ await ensureModelCatalogAvailable({
 		const result = await refreshUnifiedModelCatalog(globalConfigDir);
 		logger.info("MODEL", `Wrote ${result.modelCount} models to ${result.configPath}`);
 		if (!result.multiplierSourceAvailable) {
-			logger.error("MODEL", "Copilot multiplier metadata unavailable; Copilot models were written with ?x fallback.");
+			logger.warn("MODEL", "Multiplier metadata unavailable from models.dev.");
 		}
 	},
 	logger,

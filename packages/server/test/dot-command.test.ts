@@ -19,7 +19,7 @@ import {
 } from "../src/session/repository";
 import type { SkillRegistry } from "../src/skill/skill";
 import { createTestDb } from "./helpers";
-import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
+import { createTestModels, writeUnifiedModelsConfig } from "./test-models";
 
 describe("session model field", () => {
 	let db: Database;
@@ -74,27 +74,28 @@ describe("session title update", () => {
 describe("handleCommand", () => {
 	let db: Database;
 	let tmpDir: string;
-	const providerId: ProviderId = "github-copilot";
+	const providerId: ProviderId = "openrouter";
 
 	beforeAll(() => {
 		db = createTestDb();
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
 		writeUnifiedModelsConfig(tmpDir, {
-			"github-copilot": createCopilotModels([
-				{ id: "claude-haiku-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
-				{ id: "claude-sonnet-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
-				{ id: "gpt-5-mini", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0 },
-				{ id: "gpt-5.2", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
-				{ id: "gpt-5.4", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
-			]),
 			openrouter: [
 				{
-					id: "anthropic/claude-haiku-4.5",
-					name: "Anthropic Claude Haiku 4.5",
+					id: "claude-haiku-4.5",
+					name: "Claude Haiku 4.5",
 					contextWindow: 128000,
 					maxOutput: 64000,
 					inputPrice: 0.5,
 					outputPrice: 5.12,
+				},
+				{
+					id: "claude-sonnet-4.5",
+					name: "Claude Sonnet 4.5",
+					contextWindow: 200000,
+					maxOutput: 64000,
+					inputPrice: 3,
+					outputPrice: 15,
 				},
 				{
 					id: "openrouter/free",
@@ -103,6 +104,30 @@ describe("handleCommand", () => {
 					maxOutput: 16384,
 					inputPrice: 0,
 					outputPrice: 0,
+				},
+				{
+					id: "gpt-5.2",
+					name: "GPT-5.2",
+					contextWindow: 264000,
+					maxOutput: 64000,
+					inputPrice: 1,
+					outputPrice: 4,
+				},
+				{
+					id: "gpt-5.4",
+					name: "GPT-5.4",
+					contextWindow: 264000,
+					maxOutput: 64000,
+					inputPrice: 1,
+					outputPrice: 4,
+				},
+				{
+					id: "anthropic/claude-haiku-4.5",
+					name: "Anthropic Claude Haiku 4.5",
+					contextWindow: 128000,
+					maxOutput: 64000,
+					inputPrice: 0.5,
+					outputPrice: 5.12,
 				},
 			],
 			"opencode-go": [
@@ -136,8 +161,8 @@ describe("handleCommand", () => {
 
 	test("model command updates session model using id-sorted order and returns status", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		const result = handleCommand(
@@ -147,25 +172,25 @@ describe("handleCommand", () => {
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.status).toBe("github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 0 / 0 | 0%");
+			expect(result.status).toBe("openrouter | anthropic/claude-haiku-4.5 [$0.50 $5.12] | $0.00 | 0 / 128000 | 0%");
 			expect(result.sessionId).toBe(session.id);
-			expect(result.provider).toBe("github-copilot");
-			expect(result.model).toBe("claude-haiku-4.5");
+			expect(result.provider).toBe("openrouter");
+			expect(result.model).toBe("anthropic/claude-haiku-4.5");
 		}
 		const updated = getSession(db, session.id);
-		expect(updated?.model).toBe("claude-haiku-4.5");
+		expect(updated?.model).toBe("anthropic/claude-haiku-4.5");
 	});
 
 	test("model command rejects invalid index", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		const result = handleCommand(
 			db,
 			{ command: "model", args: "99", sessionId: session.id },
-			{ defaultProviderId: providerId, defaultModel: "gpt-5-mini", configDir: tmpDir },
+			{ defaultProviderId: providerId, defaultModel: "openrouter/free", configDir: tmpDir },
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error).toContain("Invalid model index");
@@ -185,17 +210,17 @@ describe("handleCommand", () => {
 		const result = handleCommand(
 			db,
 			{ command: "model", args: "1" },
-			{ defaultProviderId: providerId, defaultModel: "gpt-5-mini", configDir: tmpDir },
+			{ defaultProviderId: providerId, defaultModel: "openrouter/free", configDir: tmpDir },
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.sessionId).toBeDefined();
-			expect(result.status).toBe("github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 0 / 0 | 0%");
-			expect(result.provider).toBe("github-copilot");
-			expect(result.model).toBe("claude-haiku-4.5");
+			expect(result.status).toBe("openrouter | anthropic/claude-haiku-4.5 [$0.50 $5.12] | $0.00 | 0 / 128000 | 0%");
+			expect(result.provider).toBe("openrouter");
+			expect(result.model).toBe("anthropic/claude-haiku-4.5");
 			const session = getSession(db, result.sessionId ?? "");
-			expect(session?.provider).toBe("github-copilot");
-			expect(session?.model).toBe("claude-haiku-4.5");
+			expect(session?.provider).toBe("openrouter");
+			expect(session?.model).toBe("anthropic/claude-haiku-4.5");
 		}
 	});
 
@@ -203,12 +228,12 @@ describe("handleCommand", () => {
 		const result = handleCommand(
 			db,
 			{ command: "title", args: "Configured" },
-			{ defaultProviderId: "github-copilot", defaultModel: "gpt-5.4", configDir: tmpDir },
+			{ defaultProviderId: "openrouter", defaultModel: "gpt-5.4", configDir: tmpDir },
 		);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			const session = getSession(db, result.sessionId ?? "");
-			expect(session?.provider).toBe("github-copilot");
+			expect(session?.provider).toBe("openrouter");
 			expect(session?.model).toBe("gpt-5.4");
 		}
 	});
@@ -219,33 +244,14 @@ describe("handleCommand", () => {
 			{ id: "claude-sonnet-4.5", contextWindow: 500000 },
 		];
 		writeUnifiedModelsConfig(tmpDir, {
-			"github-copilot": createCopilotModels(
+			openrouter: createTestModels(
 				configModels.map((m) => ({
 					id: m.id,
 					name: m.id,
 					contextWindow: m.contextWindow,
 					maxOutput: 64000,
-					premiumRequestMultiplier: 1,
 				})),
 			),
-			openrouter: [
-				{
-					id: "anthropic/claude-haiku-4.5",
-					name: "Anthropic Claude Haiku 4.5",
-					contextWindow: 128000,
-					maxOutput: 64000,
-					inputPrice: 0.5,
-					outputPrice: 5.12,
-				},
-				{
-					id: "openrouter/free",
-					name: "OpenRouter Free Router",
-					contextWindow: 200000,
-					maxOutput: 16384,
-					inputPrice: 0,
-					outputPrice: 0,
-				},
-			],
 			"opencode-go": [
 				{
 					id: "deepseek-v4-flash",
@@ -269,8 +275,8 @@ describe("handleCommand", () => {
 			],
 		});
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		const result = handleCommand(
@@ -319,7 +325,7 @@ describe("handleCommand", () => {
 
 	test("limit command sets context limit on session", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4.5",
 			apiFamily: "anthropic-messages",
 		});
@@ -338,7 +344,7 @@ describe("handleCommand", () => {
 
 	test("limit command supports k suffix", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4.5",
 			apiFamily: "anthropic-messages",
 		});
@@ -354,7 +360,7 @@ describe("handleCommand", () => {
 
 	test("limit command with no args clears the limit", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4.5",
 			apiFamily: "anthropic-messages",
 		});
@@ -378,7 +384,7 @@ describe("handleCommand", () => {
 
 	test("limit command rejects invalid input", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4.5",
 			apiFamily: "anthropic-messages",
 		});
@@ -392,7 +398,7 @@ describe("handleCommand", () => {
 
 	test("limit is cleared when provider/model changes", () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4.5",
 			apiFamily: "anthropic-messages",
 		});
@@ -415,7 +421,7 @@ describe("handleCommand", () => {
 	test("limit command status shows overridden format", () => {
 		const freshDb = createTestDb();
 		const session = createSession(freshDb, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "claude-sonnet-4.5",
 			apiFamily: "anthropic-messages",
 		});
@@ -447,21 +453,22 @@ describe("HTTP endpoints", () => {
 		db = createTestDb();
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-test-"));
 		writeUnifiedModelsConfig(tmpDir, {
-			"github-copilot": createCopilotModels([
-				{ id: "claude-haiku-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0.33 },
-				{ id: "claude-sonnet-4.5", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
-				{ id: "gpt-5-mini", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 0 },
-				{ id: "gpt-5.2", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
-				{ id: "gpt-5.4", contextWindow: 0, maxOutput: 64000, premiumRequestMultiplier: 1 },
-			]),
 			openrouter: [
 				{
-					id: "anthropic/claude-haiku-4.5",
-					name: "Anthropic Claude Haiku 4.5",
+					id: "claude-haiku-4.5",
+					name: "Claude Haiku 4.5",
 					contextWindow: 128000,
 					maxOutput: 64000,
 					inputPrice: 0.5,
 					outputPrice: 5.12,
+				},
+				{
+					id: "claude-sonnet-4.5",
+					name: "Claude Sonnet 4.5",
+					contextWindow: 200000,
+					maxOutput: 64000,
+					inputPrice: 3,
+					outputPrice: 15,
 				},
 				{
 					id: "openrouter/free",
@@ -470,6 +477,30 @@ describe("HTTP endpoints", () => {
 					maxOutput: 16384,
 					inputPrice: 0,
 					outputPrice: 0,
+				},
+				{
+					id: "gpt-5.2",
+					name: "GPT-5.2",
+					contextWindow: 264000,
+					maxOutput: 64000,
+					inputPrice: 1,
+					outputPrice: 4,
+				},
+				{
+					id: "gpt-5.4",
+					name: "GPT-5.4",
+					contextWindow: 264000,
+					maxOutput: 64000,
+					inputPrice: 1,
+					outputPrice: 4,
+				},
+				{
+					id: "anthropic/claude-haiku-4.5",
+					name: "Anthropic Claude Haiku 4.5",
+					contextWindow: 128000,
+					maxOutput: 64000,
+					inputPrice: 0.5,
+					outputPrice: 5.12,
 				},
 			],
 			"opencode-go": [
@@ -494,7 +525,7 @@ describe("HTTP endpoints", () => {
 				{ id: "gpt-5.4", name: "GPT-5.4", contextWindow: 272000, maxOutput: 64000, inputPrice: 1, outputPrice: 4 },
 			],
 		});
-		server = createServer({ port: 0, db, configDir: tmpDir, providerId: "github-copilot" });
+		server = createServer({ port: 0, db, configDir: tmpDir, providerId: "openrouter" });
 		baseUrl = `http://localhost:${server.port}`;
 	});
 
@@ -505,7 +536,7 @@ describe("HTTP endpoints", () => {
 	});
 
 	test("GET /bobai/models returns id-sorted model list with cost, context, defaultModel and defaultStatus for the configured provider", async () => {
-		const res = await fetch(`${baseUrl}/bobai/models?provider=github-copilot`);
+		const res = await fetch(`${baseUrl}/bobai/models?provider=openrouter`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
 			providerId: string;
@@ -513,17 +544,22 @@ describe("HTTP endpoints", () => {
 			defaultModel: string;
 			defaultStatus: string;
 		};
-		expect(body.providerId).toBe("github-copilot");
-		expect(body.models.length).toBe(5);
-		expect(body.models[0]).toEqual({ index: 1, id: "claude-haiku-4.5", cost: "[0.33x]", contextWindow: 0 });
+		expect(body.providerId).toBe("openrouter");
+		expect(body.models.length).toBe(6);
+		expect(body.models[0]).toEqual({
+			index: 1,
+			id: "anthropic/claude-haiku-4.5",
+			cost: "[$0.50 $5.12]",
+			contextWindow: 128000,
+		});
 		expect(body.models.findIndex((model) => model.id === "claude-haiku-4.5")).toBeLessThan(
 			body.models.findIndex((model) => model.id === "gpt-5.2"),
 		);
 		expect(body.models.findIndex((model) => model.id === "gpt-5.2")).toBeLessThan(
 			body.models.findIndex((model) => model.id === "gpt-5.4"),
 		);
-		expect(body.defaultModel).toBe("gpt-5-mini");
-		expect(body.defaultStatus).toBe("github-copilot | gpt-5-mini [0x] | 0 PR | 0 / 0 | 0%");
+		expect(body.defaultModel).toBe("openrouter/free");
+		expect(body.defaultStatus).toBe("openrouter | openrouter/free [$0.00 $0.00] | $0.00 | 0 / 200000 | 0%");
 	});
 
 	test("GET /bobai/models returns curated openrouter rows", async () => {
@@ -614,11 +650,11 @@ describe("HTTP endpoints", () => {
 
 	test("POST /bobai/command executes model command using the same canonical order as /bobai/models", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
-		const modelsRes = await fetch(`${baseUrl}/bobai/models?provider=github-copilot`);
+		const modelsRes = await fetch(`${baseUrl}/bobai/models?provider=openrouter`);
 		const modelsBody = (await modelsRes.json()) as { models: { index: number; id: string }[] };
 		const firstVisible = modelsBody.models[0];
 		const res = await fetch(`${baseUrl}/bobai/command`, {
@@ -629,16 +665,16 @@ describe("HTTP endpoints", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { ok: boolean; status?: string };
 		expect(body.ok).toBe(true);
-		expect(firstVisible?.id).toBe("claude-haiku-4.5");
-		expect(body.status).toBe("github-copilot | claude-haiku-4.5 [0.33x] | 0 PR | 0 / 0 | 0%");
+		expect(firstVisible?.id).toBe("anthropic/claude-haiku-4.5");
+		expect(body.status).toBe("openrouter | anthropic/claude-haiku-4.5 [$0.50 $5.12] | $0.00 | 0 / 128000 | 0%");
 		const updated = getSession(db, session.id);
 		expect(updated?.model).toBe(firstVisible?.id);
 	});
 
 	test("POST /bobai/command returns error for bad command", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		const res = await fetch(`${baseUrl}/bobai/command`, {
@@ -654,7 +690,7 @@ describe("HTTP endpoints", () => {
 
 	test("GET /bobai/subagents returns recent subagent sessions", async () => {
 		const parent = createSession(db);
-		createSubagentSession(db, parent.id, "HTTP Task A", "gpt-5-mini");
+		createSubagentSession(db, parent.id, "HTTP Task A", "openrouter/free");
 
 		const res = await fetch(`${baseUrl}/bobai/subagents?parentId=${parent.id}`);
 		expect(res.status).toBe(200);
@@ -689,13 +725,13 @@ describe("HTTP endpoints", () => {
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
 		createSession(freshDb, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		const s2 = createSession(freshDb, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		updateSessionTitle(freshDb, s2.id, "Latest");
@@ -709,7 +745,7 @@ describe("HTTP endpoints", () => {
 		} | null;
 		expect(body).not.toBeNull();
 		expect(body?.id).toBe(s2.id);
-		expect(body?.provider).toBe("github-copilot");
+		expect(body?.provider).toBe("openrouter");
 		s.stop(true);
 		freshDb.close();
 	});
@@ -731,8 +767,8 @@ describe("HTTP endpoints", () => {
 		const s = createServer({ port: 0, db: freshDb });
 		const base = `http://localhost:${s.port}`;
 		const session = createSession(freshDb, {
-			provider: "github-copilot",
-			model: "gpt-5-mini",
+			provider: "openrouter",
+			model: "openrouter/free",
 			apiFamily: "openai-chat-completions",
 		});
 		updateSessionTitle(freshDb, session.id, "Test Session");
@@ -746,7 +782,7 @@ describe("HTTP endpoints", () => {
 		};
 		expect(body.session.id).toBe(session.id);
 		expect(body.session.title).toBe("Test Session");
-		expect(body.session.provider).toBe("github-copilot");
+		expect(body.session.provider).toBe("openrouter");
 		expect(body.messages.length).toBe(2); // user + assistant
 		s.stop(true);
 		freshDb.close();
@@ -803,7 +839,7 @@ describe("handlePrompt respects session model", () => {
 
 		const captured: ProviderOptions[] = [];
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				captured.push(opts);
 				yield { type: "text", text: "ok" };
@@ -822,8 +858,8 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
-			defaultProviderId: "github-copilot",
-			model: "gpt-5-mini",
+			defaultProviderId: "openrouter",
+			model: "openrouter/free",
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
@@ -839,7 +875,7 @@ describe("handlePrompt respects session model", () => {
 
 		const captured: ProviderOptions[] = [];
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
 				captured.push(opts);
 				yield { type: "text", text: "ok" };
@@ -858,8 +894,8 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
-			defaultProviderId: "github-copilot",
-			model: "gpt-5-mini",
+			defaultProviderId: "openrouter",
+			model: "openrouter/free",
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
@@ -867,7 +903,7 @@ describe("handlePrompt respects session model", () => {
 			skills: emptySkills,
 		});
 
-		expect(captured[0].model).toBe("gpt-5-mini");
+		expect(captured[0].model).toBe("openrouter/free");
 	});
 
 	test("done message includes session model when set", async () => {
@@ -875,7 +911,7 @@ describe("handlePrompt respects session model", () => {
 		updateSessionModel(db, session.id, "claude-opus-4.6");
 
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "ok" };
 				yield { type: "finish", reason: "stop" };
@@ -893,8 +929,8 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
-			defaultProviderId: "github-copilot",
-			model: "gpt-5-mini",
+			defaultProviderId: "openrouter",
+			model: "openrouter/free",
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",
@@ -912,7 +948,7 @@ describe("handlePrompt respects session model", () => {
 		updateSessionTitle(db, session.id, "Test Title");
 
 		const provider: Provider = {
-			id: "mock",
+			id: "openrouter",
 			async *stream(): AsyncGenerator<StreamEvent> {
 				yield { type: "text", text: "ok" };
 				yield { type: "finish", reason: "stop" };
@@ -930,8 +966,8 @@ describe("handlePrompt respects session model", () => {
 			ws,
 			db,
 			provider,
-			defaultProviderId: "github-copilot",
-			model: "gpt-5-mini",
+			defaultProviderId: "openrouter",
+			model: "openrouter/free",
 			text: "hello",
 			sessionId: session.id,
 			projectRoot: "/tmp",

@@ -146,7 +146,7 @@ describe("server DB disconnect handling", () => {
 				model: "test-model",
 				dbGuard: guard,
 				provider: {
-					id: "slow",
+					id: "openrouter",
 					async *stream(opts) {
 						yield { type: "text", text: "working" };
 						await new Promise<void>((resolve) => {

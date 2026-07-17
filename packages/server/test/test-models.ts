@@ -4,7 +4,6 @@ import path from "node:path";
 export function writeUnifiedModelsConfig(
 	configDir: string,
 	providers: {
-		"github-copilot"?: unknown[];
 		openrouter?: unknown[];
 		"opencode-go"?: unknown[];
 		"opencode-zen"?: unknown[];
@@ -20,7 +19,6 @@ export function writeUnifiedModelsConfig(
 				version: 1,
 				generatedAt: "2026-05-05T00:00:00.000Z",
 				providers: {
-					"github-copilot": providers["github-copilot"] ?? [],
 					openrouter: providers.openrouter ?? [],
 					"opencode-go": providers["opencode-go"] ?? [],
 					"opencode-zen": providers["opencode-zen"] ?? [],
@@ -34,7 +32,7 @@ export function writeUnifiedModelsConfig(
 	);
 }
 
-export function createCopilotModels(
+export function createTestModels(
 	models: Array<{
 		id: string;
 		name?: string;

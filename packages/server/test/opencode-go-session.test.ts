@@ -22,7 +22,6 @@ describe("OpenCode Go session flow", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "or-key" },
 				"opencode-go": { apiKey: "go-key" },
 			},
@@ -30,7 +29,7 @@ describe("OpenCode Go session flow", () => {
 		db = createTestDb();
 		seenProviderIds = [];
 		const runtimeManager = {
-			get: async (providerId: "github-copilot" | "openrouter" | "opencode-go") => {
+			get: async (providerId: "openrouter" | "opencode-go") => {
 				seenProviderIds.push(providerId);
 				return {
 					id: providerId,
@@ -63,7 +62,7 @@ describe("OpenCode Go session flow", () => {
 			db,
 			configDir: tmpDir,
 			runtimeManager,
-			providerId: "github-copilot",
+			providerId: "openrouter",
 			model: "gpt-5-mini",
 			projectRoot: "/tmp",
 			skills: emptySkills,
@@ -80,7 +79,7 @@ describe("OpenCode Go session flow", () => {
 
 	test("provider command switches an empty session to OpenCode Go and resets the model", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -88,7 +87,7 @@ describe("OpenCode Go session flow", () => {
 		const res = await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "3", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "2", sessionId: session.id }),
 		});
 		const body = (await res.json()) as { ok: boolean; provider?: string; model?: string; status?: string };
 
@@ -100,7 +99,7 @@ describe("OpenCode Go session flow", () => {
 
 	test("websocket prompt uses the OpenCode Go runtime after provider switch", async () => {
 		const session = createSession(db, {
-			provider: "github-copilot",
+			provider: "openrouter",
 			model: "gpt-5-mini",
 			apiFamily: "openai-chat-completions",
 		});
@@ -108,7 +107,7 @@ describe("OpenCode Go session flow", () => {
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "provider", args: "3", sessionId: session.id }),
+			body: JSON.stringify({ command: "provider", args: "2", sessionId: session.id }),
 		});
 
 		const ws = await openWs(wsUrl);

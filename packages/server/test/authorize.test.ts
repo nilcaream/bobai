@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AMAZON_BEDROCK_DEFAULT_REGION } from "../src/auth/amazon-bedrock";
 import {
 	authorizeAmazonBedrock,
-	authorizeCopilot,
 	authorizeDeepSeek,
 	authorizeOpenCodeGo,
 	authorizeOpenCodeZen,
@@ -15,57 +14,7 @@ import {
 } from "../src/auth/authorize";
 import { type AuthStore, getAmazonBedrockAuth, listAuthenticatedProviders, setAmazonBedrockAuth } from "../src/auth/store";
 
-const SESSION_TOKEN = "tid=session;proxy-ep=proxy.individual.githubcopilot.com";
-const SESSION_EXPIRES_AT = Math.floor(Date.now() / 1000) + 3600;
-
-function createMockFetch() {
-	let pollCount = 0;
-	return mock(async (url: string | URL | Request, _init?: RequestInit) => {
-		const u = url.toString();
-
-		// 1. Device code request
-		if (u.includes("/login/device/code")) {
-			return new Response(
-				JSON.stringify({
-					device_code: "dc_test",
-					user_code: "TEST-CODE",
-					verification_uri: "https://github.com/login/device",
-					interval: 0,
-					expires_in: 900,
-				}),
-				{ status: 200, headers: { "Content-Type": "application/json" } },
-			);
-		}
-
-		// 2. Token polling (OAuth access_token)
-		if (u.includes("/login/oauth/access_token")) {
-			pollCount++;
-			if (pollCount === 1) {
-				return new Response(JSON.stringify({ error: "authorization_pending" }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				});
-			}
-			return new Response(JSON.stringify({ access_token: "gho_final", token_type: "bearer" }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			});
-		}
-
-		// 3. Token exchange (Copilot session)
-		if (u.includes("copilot_internal/v2/token")) {
-			return new Response(JSON.stringify({ token: SESSION_TOKEN, expires_at: SESSION_EXPIRES_AT }), {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			});
-		}
-
-		return new Response("Not found", { status: 404 });
-	}) as typeof fetch;
-}
-
-describe("authorizeCopilot", () => {
-	const originalFetch = globalThis.fetch;
+describe("authorize", () => {
 	let tmpDir: string;
 
 	beforeEach(() => {
@@ -73,28 +22,7 @@ describe("authorizeCopilot", () => {
 	});
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch;
 		fs.rmSync(tmpDir, { recursive: true, force: true });
-	});
-
-	test("runs device flow, exchanges, persists auth, and does not write models.json", async () => {
-		globalThis.fetch = createMockFetch();
-
-		const result = await authorizeCopilot(tmpDir);
-
-		expect(typeof result).toBe("object");
-		expect(result.refresh).toBe("gho_final");
-		expect(result.access).toBe(SESSION_TOKEN);
-		expect(typeof result.expires).toBe("number");
-
-		const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, "auth.json"), "utf8")) as AuthStore;
-		expect(raw.version).toBe(1);
-		expect(raw.providers["github-copilot"]?.refresh).toBe("gho_final");
-		expect(raw.providers["github-copilot"]?.access).toBe(SESSION_TOKEN);
-		expect(typeof raw.providers["github-copilot"]?.expires).toBe("number");
-		expect(fs.existsSync(path.join(tmpDir, "models.json"))).toBe(false);
-
-		expect(result).toEqual(raw.providers["github-copilot"]);
 	});
 
 	test("saves validated OpenRouter key into auth store", async () => {
@@ -297,14 +225,6 @@ describe("listSupportedAuthProviders / getAuthProvider", () => {
 
 	test("listSupportedAuthProviders returns providers in stable canonical order", () => {
 		const ids = listSupportedAuthProviders().map((p) => p.id);
-		expect(ids).toEqual([
-			"github-copilot",
-			"openrouter",
-			"opencode-go",
-			"opencode-zen",
-			"amazon-bedrock",
-			"deepseek",
-			"tavily",
-		]);
+		expect(ids).toEqual(["openrouter", "opencode-go", "opencode-zen", "amazon-bedrock", "deepseek", "tavily"]);
 	});
 });

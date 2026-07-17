@@ -1,13 +1,11 @@
 import {
 	type AuthProviderId,
-	DEFAULT_PROVIDER_ID,
 	getProviderDescriptor,
 	type ProviderId,
 	SUPPORTED_AUTH_PROVIDER_IDS,
 	SUPPORTED_RUNTIME_PROVIDER_IDS,
 } from "./registry";
 
-export { DEFAULT_PROVIDER_ID };
 export type { ProviderId, AuthProviderId };
 
 export const SUPPORTED_RUNTIME_PROVIDERS = SUPPORTED_RUNTIME_PROVIDER_IDS;

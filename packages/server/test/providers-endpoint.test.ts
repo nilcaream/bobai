@@ -16,13 +16,12 @@ describe("GET /bobai/providers", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
 				openrouter: { apiKey: "key" },
 				"opencode-go": { apiKey: "go-key" },
 				"opencode-zen": { apiKey: "zen-key" },
 			},
 		});
-		server = createServer({ port: 0, configDir: tmpDir, providerId: "github-copilot" });
+		server = createServer({ port: 0, configDir: tmpDir, providerId: "openrouter" });
 		baseUrl = `http://localhost:${server.port}`;
 	});
 
@@ -39,12 +38,11 @@ describe("GET /bobai/providers", () => {
 			defaultProvider: string;
 		};
 		expect(body.providers).toEqual([
-			{ index: 1, id: "github-copilot", runtimeSupported: true },
-			{ index: 2, id: "openrouter", runtimeSupported: true },
-			{ index: 3, id: "opencode-go", runtimeSupported: true },
-			{ index: 4, id: "opencode-zen", runtimeSupported: true },
+			{ index: 1, id: "openrouter", runtimeSupported: true },
+			{ index: 2, id: "opencode-go", runtimeSupported: true },
+			{ index: 3, id: "opencode-zen", runtimeSupported: true },
 		]);
-		expect(body.defaultProvider).toBe("github-copilot");
+		expect(body.defaultProvider).toBe("openrouter");
 	});
 });
 
@@ -58,11 +56,11 @@ describe("GET /bobai/providers with amazon-bedrock auth", () => {
 		saveAuthStore(tmpDir, {
 			version: 1,
 			providers: {
-				"github-copilot": { refresh: "r", access: "a", expires: Date.now() + 60_000 },
+				openrouter: { apiKey: "key" },
 				"amazon-bedrock": { apiKey: "bedrock-key", region: "us-east-1" },
 			},
 		});
-		server = createServer({ port: 0, configDir: tmpDir, providerId: "github-copilot" });
+		server = createServer({ port: 0, configDir: tmpDir, providerId: "openrouter" });
 		baseUrl = `http://localhost:${server.port}`;
 	});
 
@@ -88,12 +86,12 @@ describe("GET /bobai/providers with amazon-bedrock auth", () => {
 		const body = (await res.json()) as {
 			providers: { index: number; id: string; runtimeSupported: boolean }[];
 		};
-		// amazon-bedrock should appear after github-copilot (canonical SUPPORTED_RUNTIME_PROVIDER_IDS order)
+		// amazon-bedrock should appear after openrouter (canonical SUPPORTED_RUNTIME_PROVIDER_IDS order)
 		const ids = body.providers.map((p) => p.id);
-		const copilotIdx = ids.indexOf("github-copilot");
+		const openrouterIdx = ids.indexOf("openrouter");
 		const bedrockIdx = ids.indexOf("amazon-bedrock");
-		expect(copilotIdx).toBeGreaterThanOrEqual(0);
-		expect(bedrockIdx).toBeGreaterThan(copilotIdx);
+		expect(openrouterIdx).toBeGreaterThanOrEqual(0);
+		expect(bedrockIdx).toBeGreaterThan(openrouterIdx);
 		// Indices assigned sequentially starting from 1
 		for (const [i, provider] of body.providers.entries()) {
 			expect(provider.index).toBe(i + 1);

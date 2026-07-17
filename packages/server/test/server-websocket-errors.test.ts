@@ -84,10 +84,10 @@ describe("server WebSocket error branches", () => {
 			startTestServer({
 				port: 0,
 				db,
-				providerId: "github-copilot",
+				providerId: "openrouter",
 				model: "test-model",
 				provider: {
-					id: "slow",
+					id: "openrouter",
 					async *stream(opts) {
 						yield { type: "text", text: "working" };
 						await new Promise<void>((resolve) => {

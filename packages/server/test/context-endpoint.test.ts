@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { appendMessage, createSession, updateSessionModel, updateSessionPromptTokens } from "../src/session/repository";
 import { createTestDb, startTestServer } from "./helpers";
-import { createCopilotModels, writeUnifiedModelsConfig } from "./test-models";
+import { createTestModels, writeUnifiedModelsConfig } from "./test-models";
 
 const tempDirs: string[] = [];
 
@@ -19,7 +19,7 @@ function writeModelsConfig(
 	models: Array<{ id: string; name: string; contextWindow: number; maxOutput: number }>,
 ): void {
 	writeUnifiedModelsConfig(configDir, {
-		"github-copilot": createCopilotModels(models),
+		openrouter: createTestModels(models),
 	});
 }
 
@@ -128,7 +128,7 @@ describe("context endpoint", () => {
 			db,
 			projectRoot: import.meta.dir,
 			configDir,
-			providerId: "github-copilot",
+			providerId: "openrouter",
 			model: "test-model",
 		});
 		try {
