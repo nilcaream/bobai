@@ -1,10 +1,7 @@
-import path from "node:path";
 import type { ToolDefinition } from "../provider/provider";
 
 export interface ToolContext {
 	projectRoot: string;
-	/** Additional directories the read-only tools (read_file, grep_search, list_directory, file_search) may access. */
-	accessibleDirectories?: string[];
 	/** Session identifier for FileTime tracking. */
 	sessionId: string;
 	/** The provider-assigned tool_call ID for this invocation (used by the task tool to link subagent sessions). */
@@ -13,19 +10,6 @@ export interface ToolContext {
 	provider?: import("../provider/provider").Provider;
 	/** Abort signal that fires when the user stops the session (.stop or session close). */
 	signal?: AbortSignal;
-}
-
-/** Check whether a resolved absolute path falls within the project root or any accessible directory. */
-export function isPathAccessible(resolved: string, ctx: ToolContext): boolean {
-	if (resolved === ctx.projectRoot || resolved.startsWith(ctx.projectRoot + path.sep)) {
-		return true;
-	}
-	for (const dir of ctx.accessibleDirectories ?? []) {
-		if (resolved === dir || resolved.startsWith(dir + path.sep)) {
-			return true;
-		}
-	}
-	return false;
 }
 
 /** Escape characters that have special meaning in Markdown so they render as literal text. */

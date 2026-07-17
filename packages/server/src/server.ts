@@ -61,7 +61,6 @@ export interface ServerOptions {
 	projectConfig?: { debug?: boolean; port?: number; provider?: string; model?: string; maxIterations?: number };
 	globalConfig?: { debug?: boolean; port?: number; provider?: string; model?: string; maxIterations?: number };
 	skills?: SkillRegistry;
-	skillDirectories?: string[];
 	logger?: Logger;
 	logDir?: string;
 	debug?: boolean;
@@ -736,7 +735,6 @@ export function createServer(options: ServerOptions) {
 								projectRoot: options.projectRoot ?? process.cwd(),
 								configDir: options.configDir ?? "",
 								skills: options.skills ?? { get: () => undefined, list: () => [] },
-								skillDirectories: options.skillDirectories,
 								stagedSkills: msg.stagedSkills,
 								maxIterations: options.maxIterations,
 								logger: options.logger,

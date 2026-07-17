@@ -102,7 +102,6 @@ export interface AgentLoopOptions {
 	messages: Message[];
 	tools: ToolRegistry;
 	projectRoot: string;
-	accessibleDirectories?: string[];
 	sessionId: string;
 	maxIterations?: number;
 	signal?: AbortSignal;
@@ -348,18 +347,7 @@ function consumeAccumulatedReasoning(accumulator: ReasoningAccumulator): Reasoni
 }
 
 export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]> {
-	const {
-		provider,
-		model,
-		tools,
-		projectRoot,
-		accessibleDirectories,
-		sessionId,
-		onEvent,
-		onMessage,
-		signal,
-		reasoningDefaults,
-	} = options;
+	const { provider, model, tools, projectRoot, sessionId, onEvent, onMessage, signal, reasoningDefaults } = options;
 	const configDir = provider.configDir;
 	const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 	if (!Number.isInteger(maxIterations) || maxIterations < 1) {
@@ -513,7 +501,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 							const isolated = createIsolatedTurnProvider(provider, configDir);
 							const execResult = await tool.execute(args, {
 								projectRoot,
-								accessibleDirectories,
 								sessionId,
 								toolCallId: tc.id,
 								provider: isolated,
@@ -586,7 +573,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 						try {
 							const result = await tool.execute(args, {
 								projectRoot,
-								accessibleDirectories,
 								sessionId,
 								toolCallId: tc.id,
 								provider,

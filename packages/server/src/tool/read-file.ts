@@ -3,7 +3,7 @@ import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import { FileTime } from "../file/time";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { escapeMarkdown, isPathAccessible } from "./tool";
+import { escapeMarkdown } from "./tool";
 
 const DEFAULT_LINE_LIMIT = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -76,14 +76,6 @@ export const readFileTool: Tool = {
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, filePath);
-		if (!isPathAccessible(resolved, ctx)) {
-			return {
-				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
-				uiOutput: `Error: path '${filePath}' resolves outside the project root`,
-
-				mergeable: true,
-			};
-		}
 
 		let rawContent: string;
 		try {

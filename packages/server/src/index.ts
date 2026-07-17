@@ -132,8 +132,7 @@ const defaultBackend = resolveValidatedDefaultBackend(
 	logger,
 );
 
-const skillDirectories = [platform.skillsDir, path.join(process.cwd(), ".bobai", "skills")];
-const skills = discoverSkills(skillDirectories, { debug, builtinSkills });
+const skills = discoverSkills([platform.skillsDir, path.join(process.cwd(), ".bobai", "skills")], { debug, builtinSkills });
 logger.info("SKILL", `Discovered ${skills.list().length} skill(s)`);
 for (const skill of skills.list()) {
 	logger.info("SKILL", `${skill.name}: ${skill.filePath}`);
@@ -190,7 +189,6 @@ const server = createServer({
 	},
 	globalConfig: globalConfig.preferences,
 	skills,
-	skillDirectories,
 	logger,
 	logDir,
 	debug,

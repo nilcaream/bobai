@@ -61,7 +61,6 @@ export interface TaskToolDeps {
 	model: string;
 	parentSessionId: string;
 	projectRoot: string;
-	accessibleDirectories?: string[];
 	skills: SkillRegistry;
 	instructions: InstructionFile[];
 	maxIterations?: number;
@@ -89,7 +88,6 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 		model,
 		parentSessionId,
 		projectRoot,
-		accessibleDirectories,
 		skills,
 		instructions,
 		signal,
@@ -351,7 +349,6 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 						messages,
 						tools: childTools,
 						projectRoot,
-						accessibleDirectories,
 						sessionId: childSessionId,
 						maxIterations: deps.maxIterations,
 						signal,

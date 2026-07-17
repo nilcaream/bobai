@@ -58,11 +58,6 @@ describe("writeFileTool", () => {
 		expect(result.mergeable).toBe(true);
 	});
 
-	test("returns error for path traversal attempt", async () => {
-		const result = await writeFileTool.execute({ path: "../../etc/evil", content: "bad" }, ctx);
-		expect(result.llmOutput).toContain("outside");
-	});
-
 	test("returns error when path is missing", async () => {
 		const result = await writeFileTool.execute({ content: "hello" }, ctx);
 		expect(result.llmOutput).toContain("path");

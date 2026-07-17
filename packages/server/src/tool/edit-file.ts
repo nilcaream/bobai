@@ -105,14 +105,6 @@ export const editFileTool: Tool = {
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, filePath);
-		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
-			return {
-				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
-				uiOutput: `▸ Editing ${escapeMarkdown(filePath)} — outside project root`,
-
-				mergeable: false,
-			};
-		}
 
 		try {
 			FileTime.assert(ctx.sessionId, resolved);

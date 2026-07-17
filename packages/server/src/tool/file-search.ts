@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { escapeMarkdown, isPathAccessible } from "./tool";
+import { escapeMarkdown } from "./tool";
 
 const MAX_RESULTS = 1000;
 
@@ -68,14 +68,6 @@ export const fileSearchTool: Tool = {
 
 		const dirPath = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
 		const resolved = path.resolve(ctx.projectRoot, dirPath);
-
-		if (!isPathAccessible(resolved, ctx)) {
-			return {
-				llmOutput: `Error: path '${dirPath}' resolves outside the project root`,
-				uiOutput: `▸ Searching ${escapeMarkdown(pattern)} in ${escapeMarkdown(dirPath)} — outside project root`,
-				mergeable: true,
-			};
-		}
 
 		// Validate the directory exists and is actually a directory
 		try {

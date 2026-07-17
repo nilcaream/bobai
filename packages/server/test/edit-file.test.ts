@@ -71,11 +71,6 @@ describe("editFileTool", () => {
 		expect(result.llmOutput).toContain("not found");
 	});
 
-	test("returns error for path traversal attempt", async () => {
-		const result = await editFileTool.execute({ path: "../../etc/passwd", old_string: "root", new_string: "hacked" }, ctx);
-		expect(result.llmOutput).toContain("outside");
-	});
-
 	test("returns error when required args are missing", async () => {
 		const r1 = await editFileTool.execute({ old_string: "x", new_string: "y" }, ctx);
 		expect(r1.llmOutput).toContain("path");

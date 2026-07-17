@@ -1,8 +1,7 @@
 import { Database } from "bun:sqlite";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
-import type { Tool } from "./tool";
-import { isPathAccessible, type ToolContext, type ToolResult } from "./tool";
+import type { Tool, ToolContext, ToolResult } from "./tool";
 
 const MAX_OUTPUT_BYTES = 32_000;
 
@@ -70,7 +69,7 @@ export const sqlite3Tool: Tool = {
 		function: {
 			name: "sqlite3",
 			description:
-				"Execute a SQL query against a SQLite database in the project directory. Returns query results as a formatted table for SELECT/PRAGMA/EXPLAIN/WITH queries, or a summary of changes for write operations (INSERT, UPDATE, DELETE, CREATE, etc.). The database file is created automatically if it does not exist.",
+				"Execute a SQL query against a SQLite database. Returns query results as a formatted table for SELECT/PRAGMA/EXPLAIN/WITH queries, or a summary of changes for write operations (INSERT, UPDATE, DELETE, CREATE, etc.). The database file is created automatically if it does not exist.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -136,13 +135,6 @@ export const sqlite3Tool: Tool = {
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, database);
-		if (!isPathAccessible(resolved, ctx)) {
-			return {
-				llmOutput: `Error: path "${database}" is outside the project root`,
-				uiOutput: `Error: path "${database}" is outside the project root`,
-				mergeable: false,
-			};
-		}
 
 		let db: Database | undefined;
 		const startTime = performance.now();

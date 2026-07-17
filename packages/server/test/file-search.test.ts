@@ -130,12 +130,6 @@ describe("fileSearchTool", () => {
 		expect(result.mergeable).toBe(true);
 	});
 
-	test("returns error for path traversal outside project root", async () => {
-		const result = await fileSearchTool.execute({ pattern: "*.ts", path: "../../" }, ctx);
-		expect(result.llmOutput).toContain("outside");
-		expect(result.mergeable).toBe(true);
-	});
-
 	test("returns error when path does not exist", async () => {
 		const result = await fileSearchTool.execute({ pattern: "*.ts", path: "nonexistent" }, ctx);
 		expect(result.llmOutput).toContain("not found");
@@ -165,29 +159,6 @@ describe("fileSearchTool", () => {
 		expect(fileLines.length).toBe(1000);
 
 		fs.rmSync(bigDir, { recursive: true, force: true });
-	});
-
-	test("allows searching in accessibleDirectories", async () => {
-		const extraDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-extra-"));
-		fs.writeFileSync(path.join(extraDir, "extra.ts"), "e");
-		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir], sessionId: "test-session" };
-
-		const result = await fileSearchTool.execute({ pattern: "*.ts", path: extraDir }, ctxWithExtra);
-		const lines = result.llmOutput.split("\n").filter(Boolean);
-		expect(lines).toContain("extra.ts");
-
-		fs.rmSync(extraDir, { recursive: true, force: true });
-	});
-
-	test("rejects searching directories outside both projectRoot and accessibleDirectories", async () => {
-		const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-file-search-outside-"));
-		fs.writeFileSync(path.join(outsideDir, "secret.ts"), "s");
-		const ctxWithEmpty: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [], sessionId: "test-session" };
-
-		const result = await fileSearchTool.execute({ pattern: "*.ts", path: outsideDir }, ctxWithEmpty);
-		expect(result.llmOutput).toContain("outside");
-
-		fs.rmSync(outsideDir, { recursive: true, force: true });
 	});
 
 	test("finds files inside a symlinked directory", async () => {

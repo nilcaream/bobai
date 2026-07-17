@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
-import { escapeMarkdown, isPathAccessible } from "./tool";
+import { escapeMarkdown } from "./tool";
 
 const MAX_RESULTS = 100;
 const MAX_LINE_LENGTH = 500;
@@ -74,14 +74,6 @@ export const grepSearchTool: Tool = {
 
 		const searchPath = typeof args.path === "string" && args.path.length > 0 ? args.path : ".";
 		const resolved = path.resolve(ctx.projectRoot, searchPath);
-		if (!isPathAccessible(resolved, ctx)) {
-			return {
-				llmOutput: `Error: path '${searchPath}' resolves outside the project root`,
-				uiOutput: `Error: path '${searchPath}' resolves outside the project root`,
-
-				mergeable: true,
-			};
-		}
 
 		let stat: fs.Stats | undefined;
 		try {

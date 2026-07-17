@@ -112,12 +112,6 @@ describe("sqlite3Tool", () => {
 		expect(result.llmOutput).toContain("query");
 	});
 
-	test("rejects paths outside project root", async () => {
-		const result = await sqlite3Tool.execute({ database: "../../../etc/passwd", query: "SELECT 1" }, ctx);
-		expect(result.llmOutput).toContain("Error");
-		expect(result.llmOutput).toContain("outside the project root");
-	});
-
 	test("handles SQL syntax errors gracefully", async () => {
 		const result = await sqlite3Tool.execute({ database: "test.db", query: "SELECTT * FORM users" }, ctx);
 		expect(result.llmOutput).toContain("Error");

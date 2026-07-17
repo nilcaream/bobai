@@ -49,29 +49,6 @@ describe("grepSearchTool", () => {
 		expect(result.llmOutput).toContain("No matches");
 	});
 
-	test("returns error for path traversal attempt", async () => {
-		const result = await grepSearchTool.execute({ pattern: "test", path: "../../" }, ctx);
-		expect(result.llmOutput).toContain("outside");
-	});
-
-	test("allows searching in accessibleDirectories", async () => {
-		const extraDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-grep-extra-"));
-		fs.writeFileSync(path.join(extraDir, "data.ts"), 'const target = "found me";\n');
-		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [extraDir], sessionId: "test-session" };
-		const result = await grepSearchTool.execute({ pattern: "found me", path: extraDir }, ctxWithExtra);
-		expect(result.llmOutput).toContain("data.ts");
-		fs.rmSync(extraDir, { recursive: true, force: true });
-	});
-
-	test("rejects search path outside both projectRoot and accessibleDirectories", async () => {
-		const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "bobai-grep-outside-"));
-		fs.writeFileSync(path.join(outsideDir, "secret.ts"), "secret");
-		const ctxWithExtra: ToolContext = { projectRoot: tmpDir, accessibleDirectories: [], sessionId: "test-session" };
-		const result = await grepSearchTool.execute({ pattern: "secret", path: outsideDir }, ctxWithExtra);
-		expect(result.llmOutput).toContain("outside");
-		fs.rmSync(outsideDir, { recursive: true, force: true });
-	});
-
 	test("returns error when pattern is missing", async () => {
 		const result = await grepSearchTool.execute({}, ctx);
 		expect(result.llmOutput).toContain("pattern");

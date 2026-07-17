@@ -76,7 +76,6 @@ export interface PromptRequest {
 	projectRoot: string;
 	configDir: string;
 	skills: SkillRegistry;
-	skillDirectories?: string[];
 	stagedSkills?: StagedSkill[];
 	maxIterations?: number;
 	logger?: Logger;
@@ -125,20 +124,7 @@ function routeEventToWs(ws: { send: (msg: string) => void }, event: AgentEvent &
 }
 
 export async function handlePrompt(req: PromptRequest) {
-	const {
-		ws,
-		db,
-		provider,
-		runtimeManager,
-		model,
-		text,
-		sessionId,
-		projectRoot,
-		configDir,
-		skills,
-		skillDirectories,
-		stagedSkills,
-	} = req;
+	const { ws, db, provider, runtimeManager, model, text, sessionId, projectRoot, configDir, skills, stagedSkills } = req;
 
 	const instructions = loadInstructions(configDir, projectRoot);
 	const defaultProviderId = req.defaultProviderId ?? null;
@@ -282,7 +268,6 @@ export async function handlePrompt(req: PromptRequest) {
 			model: effectiveModel,
 			parentSessionId: currentSessionId,
 			projectRoot,
-			accessibleDirectories: skillDirectories,
 			skills,
 			instructions,
 			maxIterations: req.maxIterations,
@@ -501,7 +486,6 @@ export async function handlePrompt(req: PromptRequest) {
 				messages,
 				tools,
 				projectRoot,
-				accessibleDirectories: skillDirectories,
 				sessionId: currentSessionId as string,
 				maxIterations: req.maxIterations,
 				contextWindow,

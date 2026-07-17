@@ -69,14 +69,6 @@ export const writeFileTool: Tool = {
 		}
 
 		const resolved = path.resolve(ctx.projectRoot, filePath);
-		if (!resolved.startsWith(ctx.projectRoot + path.sep) && resolved !== ctx.projectRoot) {
-			return {
-				llmOutput: `Error: path '${filePath}' resolves outside the project root`,
-				uiOutput: `▸ Writing ${escapeMarkdown(filePath)} — outside project root`,
-
-				mergeable: true,
-			};
-		}
 
 		// Only assert if the file already exists (overwrite)
 		if (fs.existsSync(resolved)) {
