@@ -60,14 +60,16 @@ export const browserEvaluateTool: Tool = {
 					expression: {
 						type: "string",
 						description:
-							"JavaScript to execute in the page. Can be multiline. " +
-							"The expression is wrapped in an async IIFE with an implicit return — the " +
-							"expression's value is automatically returned and JSON-serialized. " +
-							"Use await freely for Promises. " +
-							"For throw statements, the error message is returned instead. " +
-							"NOTE: Write the expression directly (e.g. 'document.title' or " +
-							"'document.querySelectorAll(\".foo\").length'). Do NOT wrap your code in " +
-							"'() => {...}' or '(() => {...})()' — the tool already wraps it.",
+							"JavaScript to execute in the page. Any valid JavaScript works — " +
+							"single expressions, multi-statement code (semicolons), try/catch, " +
+							"loops, etc. Runs in an async context; use await for Promises. " +
+							"The completion value is automatically returned — for multi-statement " +
+							"code, this is the value of the last expression. Examples:\n" +
+							"- `document.title` — returns the page title\n" +
+							"- `document.querySelectorAll('.foo').length` — returns element count\n" +
+							"- `el.value = 'test'; el.dispatchEvent(new Event('input')); 'done'` — fills input, triggers event, returns 'done'\n" +
+							"- `document.body.style.backgroundColor = 'yellow'` — sets bg (assignment returns the value)\n" +
+							"Do NOT wrap in '() => {...}' or '(() => {...})()' — the tool already wraps it.",
 					},
 					label: {
 						type: "string",

@@ -451,7 +451,7 @@ describe("browserEvaluateTool", () => {
 		restoreGlobals();
 	});
 
-	test("wraps expression with return so values are captured", async () => {
+	test("wraps expression with eval so all JavaScript works and values are captured", async () => {
 		// Capture all expressions sent to Runtime.evaluate — there are multiple
 		// calls (user expr, snapshot, isTabAlive ping). We care about the first one
 		// that contains the user expression.
@@ -462,9 +462,10 @@ describe("browserEvaluateTool", () => {
 			const expr = (params?.expression as string) ?? "";
 			capturedExpressions.push(expr);
 
-			// Simulate CDP: if the wrapped expression uses return(), the Promise resolves
-			// to a value; if it's a block body {}, the Promise resolves to undefined.
-			const usesReturn = expr.includes("return (");
+			// Simulate CDP: the wrapping is return eval(...). If the expression
+			// contains that pattern, return a value. Snapshot/ping expressions
+			// won't match and return undefined.
+			const usesReturn = expr.includes("return eval");
 			return {
 				result: {
 					value: usesReturn ? "title-value" : undefined,
@@ -482,14 +483,14 @@ describe("browserEvaluateTool", () => {
 		const userEval = capturedExpressions.find((e) => e.includes("document.title"));
 		expect(userEval).toBeDefined();
 
-		// The wrapper must include "return" so the value is captured
-		expect(userEval).toContain("return");
+		// The wrapper must use return eval() so the value is captured
+		expect(userEval).toContain("return eval");
 		// Result should NOT say "(no return value)" — the value IS returned
 		expect(result.llmOutput).not.toContain("(no return value)");
 		expect(result.llmOutput).toContain("title-value");
 	});
 
-	test("does not wrap throw expressions with return", async () => {
+	test("throw expressions propagate through eval as script errors", async () => {
 		const capturedExpressions: string[] = [];
 
 		const responses = standardCdpResponses();
@@ -513,8 +514,9 @@ describe("browserEvaluateTool", () => {
 		const userEval = capturedExpressions.find((e) => e.includes("throw new Error"));
 		expect(userEval).toBeDefined();
 
-		// throw statements should NOT be wrapped with return() — that would be a syntax error
-		expect(userEval).not.toContain("return (");
+		// The expression goes through return eval() — throw inside eval propagates
+		// through the async IIFE rejection and is caught by CDP's exceptionDetails
+		expect(userEval).toContain("return eval");
 		// Errors should propagate through the exceptionDetails path
 		expect(result.llmOutput).toContain("Error");
 		expect(result.llmOutput).toContain("boom");
