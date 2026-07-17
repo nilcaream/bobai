@@ -1,3 +1,4 @@
+import { stripANSI } from "bun";
 import { COMPACTION_MARKER } from "../compaction/default-strategy";
 import type { Tool, ToolContext, ToolResult } from "./tool";
 
@@ -81,8 +82,13 @@ export const bashTool: Tool = {
 			if (result === "timeout") {
 				proc.kill();
 				const elapsed = (performance.now() - startTime) / 1000;
-				const partialRead = (stream: ReadableStream<Uint8Array>) =>
-					Promise.race([new Response(stream).text(), new Promise<string>((r) => setTimeout(() => r(""), 2000))]);
+				const partialRead = async (stream: ReadableStream<Uint8Array>) => {
+					const text = await Promise.race([
+						new Response(stream).text(),
+						new Promise<string>((r) => setTimeout(() => r(""), 2000)),
+					]);
+					return stripANSI(text);
+				};
 				const stdout = await partialRead(proc.stdout);
 				const stderr = await partialRead(proc.stderr);
 				const output = truncate(`${stdout}${stderr}`.trim());
@@ -98,8 +104,8 @@ export const bashTool: Tool = {
 
 			if (timerId !== undefined) clearTimeout(timerId);
 			const elapsed = (performance.now() - startTime) / 1000;
-			const stdout = await new Response(proc.stdout).text();
-			const stderr = await new Response(proc.stderr).text();
+			const stdout = stripANSI(await new Response(proc.stdout).text());
+			const stderr = stripANSI(await new Response(proc.stderr).text());
 			const combined = `${stdout}${stderr}`.trim();
 			const truncated = truncate(combined);
 			const displayOutput = truncated || "(no output)";

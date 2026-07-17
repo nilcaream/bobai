@@ -108,6 +108,30 @@ describe("bashTool", () => {
 		});
 	});
 
+	describe("ANSI stripping", () => {
+		const ansiPattern = new RegExp(`${String.fromCharCode(0x1b)}\\[`);
+
+		test("strips ANSI escape codes from llmOutput", async () => {
+			// Generate output with ANSI color codes: green "OK" and red "FAIL"
+			const result = await bashTool.execute({ command: "printf '\\033[32mOK\\033[0m\\n\\033[31mFAIL\\033[0m\\n'" }, ctx);
+			expect(result.llmOutput).not.toMatch(ansiPattern);
+			expect(result.llmOutput).toContain("OK");
+			expect(result.llmOutput).toContain("FAIL");
+		});
+
+		test("strips ANSI escape codes from uiOutput", async () => {
+			const result = await bashTool.execute({ command: "printf '\\033[1mBOLD\\033[0m\\n'" }, ctx);
+			expect(result.uiOutput).not.toMatch(ansiPattern);
+			expect(result.uiOutput).toContain("BOLD");
+		});
+
+		test("preserves non-ANSI output intact", async () => {
+			const result = await bashTool.execute({ command: "echo 'plain text without any codes'" }, ctx);
+			expect(result.llmOutput).toContain("plain text without any codes");
+			expect(result.llmOutput).toContain("exit code: 0");
+		});
+	});
+
 	describe("summary (panel status bar)", () => {
 		test("contains timestamp, exit code, and duration", async () => {
 			const result = await bashTool.execute({ command: "echo hello" }, ctx);
