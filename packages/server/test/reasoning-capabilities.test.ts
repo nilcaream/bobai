@@ -19,10 +19,9 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-responses");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBeUndefined();
 	});
 
-	test("interleaved chat model resolves family = openai-chat-interleaved and field = reasoning_content", async () => {
+	test("interleaved chat model resolves family = openai-chat-interleaved", async () => {
 		const capabilities = await getCapabilities({
 			providerId: "opencode-go",
 			modelId: "deepseek-v4-flash",
@@ -31,11 +30,10 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning_content");
 	});
 
-	test("openrouter deepseek chat model resolves reasoning field = reasoning", async () => {
-		// OpenRouter normalizes deepseek reasoning to "reasoning" field, not "reasoning_content".
+	test("openrouter deepseek chat model resolves to interleaved family", async () => {
+		// OpenRouter normalizes deepseek reasoning — field is auto-detected from stream.
 		const capabilities = await getCapabilities({
 			providerId: "openrouter",
 			modelId: "openrouter/deepseek-r1",
@@ -44,10 +42,9 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning");
 	});
 
-	test("kimi chat model resolves interleaved reasoning field = reasoning", async () => {
+	test("kimi chat model resolves to interleaved family", async () => {
 		const capabilities = await getCapabilities({
 			providerId: "opencode-go",
 			modelId: "kimi-k2.6",
@@ -56,10 +53,9 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning");
 	});
 
-	test("qwen chat model resolves interleaved reasoning field = reasoning_details", async () => {
+	test("qwen chat model resolves to interleaved family", async () => {
 		const capabilities = await getCapabilities({
 			providerId: "opencode-zen",
 			modelId: "qwen3.6-plus",
@@ -68,7 +64,6 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning_details");
 	});
 
 	test("anthropic model resolves family = anthropic-thinking with replay disabled", async () => {
@@ -80,7 +75,6 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("anthropic-thinking");
 		expect(capabilities.supportsReplay).toBe(false);
-		expect(capabilities.assistantField).toBeUndefined();
 	});
 
 	test("unknown chat-completions model resolves family = none with replay disabled", async () => {
@@ -92,10 +86,9 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("none");
 		expect(capabilities.supportsReplay).toBe(false);
-		expect(capabilities.assistantField).toBeUndefined();
 	});
 
-	test("copilot o-series chat model resolves reasoning field = reasoning", async () => {
+	test("copilot o-series chat model resolves to interleaved family", async () => {
 		const capabilities = await getCapabilities({
 			providerId: "github-copilot",
 			modelId: "o4-mini",
@@ -104,10 +97,9 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning");
 	});
 
-	test("copilot o1 chat model resolves reasoning field = reasoning", async () => {
+	test("copilot o1 chat model resolves to interleaved family", async () => {
 		const capabilities = await getCapabilities({
 			providerId: "github-copilot",
 			modelId: "o1",
@@ -116,7 +108,6 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning");
 	});
 
 	test("copilot gpt-4o chat model resolves family = none", async () => {
@@ -128,10 +119,9 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("none");
 		expect(capabilities.supportsReplay).toBe(false);
-		expect(capabilities.assistantField).toBeUndefined();
 	});
 
-	test("gemini chat model resolves reasoning field = reasoning_text", async () => {
+	test("gemini chat model resolves to interleaved family", async () => {
 		const capabilities = await getCapabilities({
 			providerId: "github-copilot",
 			modelId: "gemini-2.5-pro",
@@ -140,11 +130,10 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning_text");
 	});
 
-	test("openrouter-proxied gemini resolves reasoning field = reasoning", async () => {
-		// OpenRouter normalizes gemini reasoning to the "reasoning" field.
+	test("openrouter-proxied gemini resolves to interleaved family", async () => {
+		// OpenRouter normalizes gemini reasoning — field is auto-detected from stream.
 		const capabilities = await getCapabilities({
 			providerId: "openrouter",
 			modelId: "openrouter/gemini-2.5-pro",
@@ -153,6 +142,5 @@ describe("reasoning capabilities", () => {
 
 		expect(capabilities.family).toBe("openai-chat-interleaved");
 		expect(capabilities.supportsReplay).toBe(true);
-		expect(capabilities.assistantField).toBe("reasoning");
 	});
 });

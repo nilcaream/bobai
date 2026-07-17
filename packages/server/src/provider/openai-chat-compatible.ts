@@ -3,6 +3,7 @@ import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
 import type {
 	AssistantMessage,
 	InterleavedChatReasoningField,
+	InterleavedChatReasoningState,
 	Message,
 	Provider,
 	ProviderOptions,
@@ -36,18 +37,6 @@ export interface OpenAIChatCompatibleProviderOptions {
 
 type OpenAIChatMessage = Message | (AssistantMessage & Partial<Record<InterleavedChatReasoningField, unknown>>);
 
-function getInterleavedReasoningValue(
-	reasoning: ReasoningState[] | undefined,
-	field: InterleavedChatReasoningField,
-): string | unknown | undefined {
-	for (const item of reasoning ?? []) {
-		if (item.kind !== "interleaved-chat" || item.field !== field) continue;
-		if (field === "reasoning_details") return item.details;
-		return item.text;
-	}
-	return undefined;
-}
-
 export function appendReasoningText(
 	current: ReasoningState | undefined,
 	field: InterleavedChatReasoningField,
@@ -72,18 +61,18 @@ export function setReasoningDetails(
 
 function shouldReplayInterleavedReasoning(
 	capabilities: ReasoningCapabilities | undefined,
-): capabilities is ReasoningCapabilities & {
-	family: "openai-chat-interleaved";
-	assistantField: InterleavedChatReasoningField;
-} {
-	return (
-		capabilities?.family === "openai-chat-interleaved" &&
-		capabilities.supportsReplay &&
-		capabilities.assistantField !== undefined
-	);
+): capabilities is ReasoningCapabilities & { family: "openai-chat-interleaved" } {
+	return capabilities?.family === "openai-chat-interleaved" && capabilities.supportsReplay;
 }
 
 export function convertMessagesToOpenAIChat(messages: Message[], capabilities?: ReasoningCapabilities): OpenAIChatMessage[] {
+	// Pre-scan: find the reasoning field name from any assistant message that has
+	// interleaved-chat reasoning. Used as a fallback for messages without reasoning
+	// when the provider requires empty reasoning fields.
+	const knownField = messages
+		.flatMap((m) => (m.role === "assistant" ? (m.reasoning ?? []) : []))
+		.find((e): e is InterleavedChatReasoningState => e.kind === "interleaved-chat")?.field;
+
 	return messages
 		.filter((message) => {
 			// Filter out assistant messages with empty content and no tool_calls
@@ -102,14 +91,24 @@ export function convertMessagesToOpenAIChat(messages: Message[], capabilities?: 
 				return assistantMessage;
 			}
 
-			const value = getInterleavedReasoningValue(message.reasoning, capabilities.assistantField);
+			// Derive the field name from this message's own reasoning, or fall back
+			// to the first known field from any message in the conversation.
+			const chatEntries = (message.reasoning ?? []).filter(
+				(e): e is InterleavedChatReasoningState => e.kind === "interleaved-chat",
+			);
+			const field = chatEntries[0]?.field ?? knownField;
+
+			if (!field) return assistantMessage;
+
+			const value = field === "reasoning_details" ? chatEntries[0]?.details : chatEntries[0]?.text;
+
 			const shouldIncludeField =
 				value !== undefined || (capabilities.requiresEmptyAssistantReasoningFields === true && message.reasoning !== undefined);
 			if (!shouldIncludeField) return assistantMessage;
 
 			return {
 				...assistantMessage,
-				[capabilities.assistantField]: value ?? "",
+				[field]: value ?? "",
 			};
 		});
 }
@@ -174,9 +173,8 @@ export function createOpenAIChatCompatibleProvider(
 			let sawFinish = false;
 			let sawAnyToolCalls = false;
 			let hasReceivedContent = false;
-			const reasoningField = shouldReplayInterleavedReasoning(reasoningCapabilities)
-				? reasoningCapabilities.assistantField
-				: undefined;
+			const canReason = reasoningCapabilities.family === "openai-chat-interleaved" && reasoningCapabilities.supportsReplay;
+			let reasoningField: InterleavedChatReasoningField | undefined;
 			let activeReasoning: ReasoningState | undefined;
 			let reasoningStarted = false;
 
@@ -185,9 +183,9 @@ export function createOpenAIChatCompatibleProvider(
 					choices?: {
 						delta?: {
 							content?: string;
-							reasoning?: string;
-							reasoning_content?: string;
-							reasoning_text?: string;
+							reasoning?: string | null;
+							reasoning_content?: string | null;
+							reasoning_text?: string | null;
 							reasoning_details?: unknown;
 							tool_calls?: {
 								index: number;
@@ -225,31 +223,51 @@ export function createOpenAIChatCompatibleProvider(
 				const choice = data.choices?.[0];
 				const delta = choice?.delta;
 
-				if (reasoningField) {
-					if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
-						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_content);
-					} else if (delta?.reasoning != null && reasoningField === "reasoning") {
-						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning);
-					} else if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
-						activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_text);
-					} else if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
-						activeReasoning = setReasoningDetails(activeReasoning, reasoningField, delta.reasoning_details);
+				// ── Reasoning auto-detection ──────────────────────────
+				// Check all known reasoning fields unconditionally. The field name is
+				// auto-detected from the first chunk that carries reasoning data and
+				// locked in for the remainder of the stream.
+				if (canReason) {
+					const rc = delta?.reasoning_content;
+					const r = delta?.reasoning;
+					const rt = delta?.reasoning_text;
+					const rd = delta?.reasoning_details;
+
+					// Detect field on first reasoning chunk.
+					if (!reasoningField) {
+						if (rc != null) reasoningField = "reasoning_content";
+						else if (r != null) reasoningField = "reasoning";
+						else if (rt != null) reasoningField = "reasoning_text";
+						else if (rd != null) reasoningField = "reasoning_details";
 					}
-					if (activeReasoning && !reasoningStarted) {
-						yield { type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: reasoningField } };
-						reasoningStarted = true;
-					}
-					if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
-						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_content } };
-					}
-					if (delta?.reasoning != null && reasoningField === "reasoning") {
-						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning } };
-					}
-					if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
-						yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_text } };
-					}
-					if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
-						yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: delta.reasoning_details } };
+
+					if (reasoningField) {
+						if (rd != null) {
+							activeReasoning = setReasoningDetails(activeReasoning, reasoningField, rd);
+						} else {
+							const text = rc ?? r ?? rt;
+							if (text != null) {
+								activeReasoning = appendReasoningText(activeReasoning, reasoningField, text);
+							}
+						}
+
+						if (activeReasoning && !reasoningStarted) {
+							yield {
+								type: "reasoning_start",
+								index: 0,
+								reasoning: { kind: "interleaved-chat", field: reasoningField },
+							};
+							reasoningStarted = true;
+						}
+
+						if (rd != null) {
+							yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: rd } };
+						} else {
+							const text = rc ?? r ?? rt;
+							if (text != null) {
+								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text } };
+							}
+						}
 					}
 				}
 

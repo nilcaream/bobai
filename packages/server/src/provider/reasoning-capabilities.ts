@@ -4,12 +4,12 @@ import type { ProviderId } from "./providers";
 
 export type ReasoningCapabilityFamily = "none" | "openai-responses" | "openai-chat-interleaved" | "anthropic-thinking";
 
+/** @deprecated Field name is now auto-detected from the stream. */
 export type ReasoningAssistantField = InterleavedChatReasoningField;
 
 export interface ReasoningCapabilities {
 	family: ReasoningCapabilityFamily;
 	supportsReplay: boolean;
-	assistantField?: ReasoningAssistantField;
 	requiresEmptyAssistantReasoningFields?: boolean;
 }
 
@@ -27,7 +27,7 @@ interface ReasoningQuirk {
 }
 
 const QUIRKS: ReasoningQuirk[] = [
-	// Copilot o-series reasoning models (o1, o3, o4) use the "reasoning" field.
+	// Copilot o-series reasoning models (o1, o3, o4).
 	{
 		providerId: "github-copilot",
 		apiFamily: "openai-chat-completions",
@@ -35,11 +35,9 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning",
 		},
 	},
-	// OpenRouter normalizes deepseek reasoning to "reasoning" field (not "reasoning_content").
-	// Place this BEFORE the general deepseek- quirk so it matches first for openrouter provider.
+	// OpenRouter normalizes deepseek reasoning — detect from stream.
 	{
 		providerId: "openrouter",
 		apiFamily: "openai-chat-completions",
@@ -47,7 +45,6 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning",
 		},
 	},
 	{
@@ -56,7 +53,6 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning_content",
 		},
 	},
 	{
@@ -66,7 +62,6 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning",
 		},
 	},
 	{
@@ -76,11 +71,9 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning_details",
 		},
 	},
-	// OpenRouter normalizes gemini reasoning to the "reasoning" field (not "reasoning_text").
-	// Place this BEFORE the general gemini quirk so it matches first for openrouter provider.
+	// OpenRouter normalizes gemini reasoning — detect from stream.
 	{
 		providerId: "openrouter",
 		apiFamily: "openai-chat-completions",
@@ -88,17 +81,15 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning",
 		},
 	},
-	// Gemini models (direct / via Copilot) expose reasoning through the "reasoning_text" delta field.
+	// Gemini models (direct / via Copilot).
 	{
 		apiFamily: "openai-chat-completions",
 		modelPattern: /(^|\/)gemini-/,
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning_text",
 		},
 	},
 	// OpenRouter-proxied models — no providerId constraint so they match
@@ -109,7 +100,6 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning",
 		},
 	},
 	{
@@ -118,7 +108,6 @@ const QUIRKS: ReasoningQuirk[] = [
 		capabilities: {
 			family: "openai-chat-interleaved",
 			supportsReplay: true,
-			assistantField: "reasoning_details",
 		},
 	},
 ];

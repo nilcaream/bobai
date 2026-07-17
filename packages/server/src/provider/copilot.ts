@@ -7,7 +7,7 @@ import { getAnthropicReasoningOptions } from "./anthropic-compatible";
 import { convertMessagesToAnthropic, convertToolsToAnthropic } from "./anthropic-convert";
 import { parseAnthropicStream } from "./anthropic-stream";
 import { formatProviderModelDisplay, getProviderModelConfig } from "./models";
-import type { Message, Provider, ProviderOptions, StreamEvent } from "./provider";
+import type { InterleavedChatReasoningField, Message, Provider, ProviderOptions, StreamEvent } from "./provider";
 
 interface CopilotProviderOptions extends ProviderOptions {
 	initiator?: "user" | "agent";
@@ -879,10 +879,9 @@ export function createCopilotProvider(
 				try {
 					let sawAnyToolCalls = false;
 
-					// Determine whether this model supports interleaved reasoning and which field to read.
-					const isInterleaved =
-						reasoningCapabilities.family === "openai-chat-interleaved" && reasoningCapabilities.assistantField !== undefined;
-					const reasoningField = isInterleaved ? reasoningCapabilities.assistantField : undefined;
+					// Auto-detect reasoning field from stream.
+					const canReason = reasoningCapabilities.family === "openai-chat-interleaved" && reasoningCapabilities.supportsReplay;
+					let reasoningField: InterleavedChatReasoningField | undefined;
 					let activeReasoning: ReasoningState | undefined;
 					let reasoningStarted = false;
 
@@ -918,32 +917,47 @@ export function createCopilotProvider(
 						const choice = data.choices?.[0];
 						const delta = choice?.delta;
 
-						// ── Reasoning extraction ──────────────────────────
-						if (reasoningField) {
-							if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
-								activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_content);
-							} else if (delta?.reasoning != null && reasoningField === "reasoning") {
-								activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning);
-							} else if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
-								activeReasoning = appendReasoningText(activeReasoning, reasoningField, delta.reasoning_text);
-							} else if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
-								activeReasoning = setReasoningDetails(activeReasoning, reasoningField, delta.reasoning_details);
+						// ── Reasoning auto-detection ──────────────────────────
+						if (canReason) {
+							const rc = delta?.reasoning_content;
+							const r = delta?.reasoning;
+							const rt = delta?.reasoning_text;
+							const rd = delta?.reasoning_details;
+
+							if (!reasoningField) {
+								if (rc != null) reasoningField = "reasoning_content";
+								else if (r != null) reasoningField = "reasoning";
+								else if (rt != null) reasoningField = "reasoning_text";
+								else if (rd != null) reasoningField = "reasoning_details";
 							}
-							if (activeReasoning && !reasoningStarted) {
-								yield { type: "reasoning_start", index: 0, reasoning: { kind: "interleaved-chat", field: reasoningField } };
-								reasoningStarted = true;
-							}
-							if (delta?.reasoning_content != null && reasoningField === "reasoning_content") {
-								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_content } };
-							}
-							if (delta?.reasoning != null && reasoningField === "reasoning") {
-								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning } };
-							}
-							if (delta?.reasoning_text != null && reasoningField === "reasoning_text") {
-								yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: delta.reasoning_text } };
-							}
-							if (delta?.reasoning_details != null && reasoningField === "reasoning_details") {
-								yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: delta.reasoning_details } };
+
+							if (reasoningField) {
+								if (rd != null) {
+									activeReasoning = setReasoningDetails(activeReasoning, reasoningField, rd);
+								} else {
+									const text = rc ?? r ?? rt;
+									if (text != null) {
+										activeReasoning = appendReasoningText(activeReasoning, reasoningField, text);
+									}
+								}
+
+								if (activeReasoning && !reasoningStarted) {
+									yield {
+										type: "reasoning_start",
+										index: 0,
+										reasoning: { kind: "interleaved-chat", field: reasoningField },
+									};
+									reasoningStarted = true;
+								}
+
+								if (rd != null) {
+									yield { type: "reasoning_delta", index: 0, delta: { kind: "details", details: rd } };
+								} else {
+									const text = rc ?? r ?? rt;
+									if (text != null) {
+										yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text } };
+									}
+								}
 							}
 						}
 
