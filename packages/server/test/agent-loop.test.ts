@@ -415,6 +415,113 @@ describe("provider reasoning types", () => {
 
 		db.close();
 	});
+
+	test("reasoning-only response triggers a retry with a nudge to get the final answer", async () => {
+		let callCount = 0;
+		const events: AgentEvent[] = [];
+		const seenMessages: Message[] = [];
+
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					// First call: reasoning only, no text content
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "deep analysis" },
+					};
+					yield {
+						type: "reasoning_delta",
+						index: 0,
+						delta: { kind: "text", text: " continues" },
+					};
+					yield { type: "reasoning_end", index: 0 };
+					yield { type: "finish", reason: "stop" };
+				} else {
+					// Second call: actual answer
+					yield { type: "text", text: "Here is the final answer." };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+
+		const messages = await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [{ role: "user", content: "complex question" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(event) {
+				events.push(event);
+			},
+			onMessage(msg) {
+				seenMessages.push(msg);
+			},
+		});
+
+		// Provider should have been called twice
+		expect(callCount).toBe(2);
+
+		// Messages should be: reasoning-only assistant + nudge user + final assistant
+		expect(seenMessages).toHaveLength(3);
+		expect(seenMessages[0].role).toBe("assistant");
+		expect((seenMessages[0] as AssistantMessage).content).toBe("");
+		expect((seenMessages[0] as AssistantMessage).reasoning).toBeDefined();
+		expect(seenMessages[1].role).toBe("user");
+		expect((seenMessages[1] as { content: string }).content).toContain("reasoning was captured");
+		expect(seenMessages[2].role).toBe("assistant");
+		expect((seenMessages[2] as AssistantMessage).content).toBe("Here is the final answer.");
+
+		// Return value should match
+		expect(messages).toEqual(seenMessages);
+	});
+
+	test("reasoning-only response only retries once", async () => {
+		let callCount = 0;
+
+		const provider: Provider = {
+			id: "mock",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				// Every call returns reasoning with no content
+				yield {
+					type: "reasoning_start",
+					index: 0,
+					reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: `thinking-${callCount}` },
+				};
+				yield { type: "reasoning_end", index: 0 };
+				yield { type: "finish", reason: "stop" };
+			},
+		};
+
+		const messages = await runAgentLoop({
+			provider,
+			model: "test",
+			messages: [{ role: "user", content: "question" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent() {},
+			onMessage() {},
+		});
+
+		// Should retry exactly once, then give up with the second empty response.
+		// Total calls: first response (retry triggered) + nudge retry + final call.
+		// Wait — on the second call, we get reasoning-only again, but retriedReasoningOnly
+		// is already true, so it falls through to the normal return path.
+		expect(callCount).toBe(2);
+
+		// Messages: reasoning-only assistant + nudge user + reasoning-only assistant
+		expect(messages).toHaveLength(3);
+		expect(messages[0].role).toBe("assistant");
+		expect((messages[0] as AssistantMessage).content).toBe("");
+		expect(messages[1].role).toBe("user");
+		expect(messages[2].role).toBe("assistant");
+		expect((messages[2] as AssistantMessage).content).toBe("");
+	});
 });
 
 describe("runAgentLoop", () => {

@@ -358,6 +358,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	const conversation = [...options.messages];
 	// New messages produced by this loop (what we return)
 	const newMessages: Message[] = [];
+	// Guard against infinite retry when the model produces reasoning but no content
+	let retriedReasoningOnly = false;
 
 	function computeMaxOutputTokensForConversation(messages: Message[]): number {
 		const ABSOLUTE_FALLBACK = 16384;
@@ -400,6 +402,39 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 		);
 
 		if (finishReason === "stop" || toolCalls.size === 0) {
+			// When the model produces reasoning but no text content (e.g. thinking models
+			// that never transition from reasoning to the final answer), retry once with a
+			// nudge to get the actual response.
+			const hasReasoning = reasoning && reasoning.length > 0;
+			const hasContent = textContent.trim().length > 0;
+
+			if (!hasContent && hasReasoning && !retriedReasoningOnly) {
+				retriedReasoningOnly = true;
+
+				// Save the reasoning-only message so the thinking trace is visible
+				const reasoningMsg: AssistantMessage = {
+					role: "assistant",
+					content: textContent,
+					reasoning,
+				};
+				conversation.push(reasoningMsg);
+				newMessages.push(reasoningMsg);
+				onMessage(reasoningMsg);
+
+				// Nudge the model to produce the final answer.
+				// Keep the suffix so the model doesn't switch languages when the user
+				// was conversing in a non-English language.
+				const nudge: Message = {
+					role: "user",
+					content:
+						"Your reasoning was captured. Please provide your final answer based on that analysis. Respond in the same language and style you were using before.",
+				};
+				conversation.push(nudge);
+				newMessages.push(nudge);
+				onMessage(nudge);
+				continue;
+			}
+
 			// Normal text response — done
 			const assistantMsg: AssistantMessage = {
 				role: "assistant",
