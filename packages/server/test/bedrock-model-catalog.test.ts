@@ -383,7 +383,7 @@ describe("refreshBedrockModelsFromFoundation", () => {
 
 		const written = JSON.parse(fs.readFileSync(path.join(tmpDir, "models.json"), "utf8"));
 		// OpenRouter section intact
-		expect(written.providers["openrouter"]).toBeDefined();
+		expect(written.providers.openrouter).toBeDefined();
 		// Bedrock section updated
 		expect(written.providers["amazon-bedrock"]).toHaveLength(1);
 	});
