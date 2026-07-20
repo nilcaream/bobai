@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.10](https://github.com/nilcaream/bobai/compare/bobai-v0.2.9...bobai-v0.2.10) (2026-07-08)
+
+### Features
+
+- browser: add Chrome DevTools Protocol browser tools ([a8c98af](https://github.com/nilcaream/bobai/commit/a8c98afb24a327d2eb7b92dc358192d688f7e0ab))
+- add web_search tool with Tavily integration ([d125070](https://github.com/nilcaream/bobai/commit/d125070f098a2e21c9fb13f4eaab42f411a422c7))
+### Bug Fixes
+
+- provider: capture cache tokens from trailing SSE chunks in OpenAI-compatible streams ([4e4eb31](https://github.com/nilcaream/bobai/commit/4e4eb31420b76bc53e42808ed6adc688573da397))
+- ui: panel status line lost when empty reasoning panel steals isLast ([ccf8cff](https://github.com/nilcaream/bobai/commit/ccf8cff3d79158535003c6b5535d7d18cac39b57))
+### Refactoring
+
+- ui: unify dot command resolution through tree framework ([1f68e33](https://github.com/nilcaream/bobai/commit/1f68e33385532e54c1d2e93aa93cd4a47a726d73))
+
 ## [0.2.9](https://github.com/nilcaream/bobai/compare/bobai-v0.2.8...bobai-v0.2.9) (2026-05-31)
 
 ### Features
