@@ -410,6 +410,7 @@ The LLM can use these built-in tools:
 | `web_search` | Search the web via Tavily |
 | `task` | Spawn a subagent for independent work |
 | `skill` | Load a skill dynamically |
+| `memory` | Save and retrieve project memories that persist across sessions |
 | `browser_connect` | Connect to Chrome via CDP and list open tabs |
 | `browser_navigate` | Open a new tab, navigate to a URL, and return page content |
 | `browser_evaluate` | Execute JavaScript in a browser tab |
