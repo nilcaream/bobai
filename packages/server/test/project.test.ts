@@ -69,6 +69,14 @@ describe("initProject", () => {
 		expect(indexes).toHaveLength(1);
 	});
 
+	test("creates memories table with type index", async () => {
+		const project = await initProject(tmpDir);
+		const tables = project.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'").all();
+		expect(tables).toHaveLength(1);
+		const indexes = project.db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_memories_type'").all();
+		expect(indexes).toHaveLength(1);
+	});
+
 	test("migrates existing sessions table by adding provider and api_family columns", async () => {
 		fs.mkdirSync(path.join(tmpDir, ".bobai"), { recursive: true });
 		const dbFile = path.join(tmpDir, ".bobai", "bobai.db");

@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { ensureMemoriesSchema } from "../src/memory/repository";
 import type { ServerMessage } from "../src/protocol";
 import { createServer, type ServerOptions } from "../src/server";
 
@@ -33,6 +34,7 @@ export function createTestDb(): Database {
 		)
 	`);
 	db.exec("CREATE INDEX idx_messages_session ON messages(session_id, sort_order)");
+	ensureMemoriesSchema(db);
 	return db;
 }
 

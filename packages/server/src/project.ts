@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { createDbGuard, type DbGuard } from "./db-guard";
+import { ensureMemoriesSchema } from "./memory/repository";
 
 export interface BobaiConfig {
 	id?: string;
@@ -118,6 +119,9 @@ export async function initProject(projectRoot: string): Promise<Project> {
 	if (!sessionColumns.some((c) => c.name === "last_compaction")) {
 		db.exec("ALTER TABLE sessions ADD COLUMN last_compaction TEXT");
 	}
+
+	// Project memory table (feature added later than the core schema)
+	ensureMemoriesSchema(db);
 
 	return {
 		id,
