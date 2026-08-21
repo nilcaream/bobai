@@ -7,7 +7,8 @@ description: >-
   Triggers on "debug session", "inspect session", "check logs",
   "what happened in session", "session issue", "debug bobai",
   "log file", "bobai database", "bobai.db", "session history",
-  "message history", "tool call history", "subagent session".
+  "message history", "tool call history", "subagent session",
+  "project memory", "saved memories", "memory table".
   PROACTIVE: Use when investigating any Bob AI runtime behavior,
   session anomaly, or application error.
 ---
@@ -64,6 +65,21 @@ Use the built-in **sqlite3 tool** for all database queries — no need for bash 
 | `metadata` | TEXT | Nullable; JSON blob (see below) |
 
 **Index:** `idx_messages_session` on `(session_id, sort_order)`.
+
+**`memories` table:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | UUIDv4 |
+| `type` | TEXT | `user`, `feedback`, `project`, or `reference` |
+| `title` | TEXT | Short label |
+| `description` | TEXT | Nullable; one-line summary |
+| `content` | TEXT | Full memory body |
+| `session_id` | TEXT | Nullable; session that wrote it |
+| `created_at` | TEXT | UTC ISO 8601 |
+| `updated_at` | TEXT | UTC ISO 8601; updated on every change |
+
+**Index:** `idx_memories_type` on `type`.
 
 **PRAGMAs:** WAL journal mode, foreign keys enabled.
 
@@ -174,6 +190,21 @@ Find sessions by title keyword:
 SELECT id, title, model, updated_at
 FROM sessions
 WHERE title LIKE '%keyword%'
+ORDER BY updated_at DESC;
+```
+
+List saved memories:
+```sql
+SELECT id, type, title, description, created_at, updated_at
+FROM memories
+ORDER BY updated_at DESC;
+```
+
+Find memories by keyword:
+```sql
+SELECT id, type, title, substr(content, 1, 120) AS preview
+FROM memories
+WHERE title LIKE '%keyword%' OR description LIKE '%keyword%' OR content LIKE '%keyword%'
 ORDER BY updated_at DESC;
 ```
 
