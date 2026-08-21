@@ -69,6 +69,7 @@ describe("opencode-go provider (messages)", () => {
 		expect(headers["x-api-key"]).toBe("go-key");
 		expect(headers["anthropic-version"]).toBe("2023-06-01");
 		expect(headers["Content-Type"]).toBe("application/json");
+		expect(headers["User-Agent"]).toBe("BobAI/1.0");
 		expect(headers["x-opencode-session"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("minimax-m2.7");

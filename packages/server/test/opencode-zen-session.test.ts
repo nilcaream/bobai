@@ -94,8 +94,8 @@ describe("OpenCode Zen session flow", () => {
 
 		expect(body.ok).toBe(true);
 		expect(body.provider).toBe("opencode-zen");
-		expect(body.model).toBe("minimax-m2.5-free");
-		expect(body.status).toBe("opencode-zen | minimax-m2.5-free [$0.00 $0.00] | $0.00 | 0 / 131072 | 0%");
+		expect(body.model).toBe("deepseek-v4-flash");
+		expect(body.status).toBe("opencode-zen | deepseek-v4-flash [$0.14 $0.28] | $0.00 | 0 / 1000000 | 0%");
 	});
 
 	test("websocket prompt uses the OpenCode Zen runtime after provider switch to a GPT responses model", async () => {
@@ -113,7 +113,7 @@ describe("OpenCode Zen session flow", () => {
 		await fetch(`${baseUrl}/bobai/command`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ command: "model", args: "2", sessionId: session.id }),
+			body: JSON.stringify({ command: "model", args: "3", sessionId: session.id }),
 		});
 
 		const ws = await openWs(wsUrl);

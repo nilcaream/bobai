@@ -76,30 +76,36 @@ function normalizeProviderModels(providerId: ProviderId, catalog: ModelsDevCatal
 	const sourceId = PROVIDER_SOURCE_MAP[providerId];
 	const source = catalog[sourceId];
 	if (!source) return [];
-	return Object.values(source.models)
-		.filter(hasStrictMetadata)
-		.map((model) => {
-			const base: UnifiedProviderModel = {
-				id: model.id,
-				name: model.name,
-				contextWindow: model.limit.context,
-				maxOutput: model.limit.output,
-				inputPrice: model.cost.input,
-				outputPrice: model.cost.output,
-			};
-			if (typeof model.cost.cache_read === "number") {
-				base.cacheReadPrice = model.cost.cache_read;
-			}
-			if (typeof model.cost.cache_write === "number") {
-				base.cacheWritePrice = model.cost.cache_write;
-			}
-			// supportsCaching is a capability flag derived from models.dev cache costs.
-			if (typeof model.cost.cache_read === "number" || typeof model.cost.cache_write === "number") {
-				base.supportsCaching = true;
-			}
-			return base;
-		})
-		.sort((a, b) => a.id.localeCompare(b.id));
+	return (
+		Object.values(source.models)
+			.filter(hasStrictMetadata)
+			// Gemini models are served on the Gemini API (`/v1/models/<id>`, `@ai-sdk/google`),
+			// which Bob AI does not support. Exclude them so they don't show up as
+			// selectable-but-broken models. Revisit if a Google-family adapter is added.
+			.filter((model) => model.provider?.npm !== "@ai-sdk/google")
+			.map((model) => {
+				const base: UnifiedProviderModel = {
+					id: model.id,
+					name: model.name,
+					contextWindow: model.limit.context,
+					maxOutput: model.limit.output,
+					inputPrice: model.cost.input,
+					outputPrice: model.cost.output,
+				};
+				if (typeof model.cost.cache_read === "number") {
+					base.cacheReadPrice = model.cost.cache_read;
+				}
+				if (typeof model.cost.cache_write === "number") {
+					base.cacheWritePrice = model.cost.cache_write;
+				}
+				// supportsCaching is a capability flag derived from models.dev cache costs.
+				if (typeof model.cost.cache_read === "number" || typeof model.cost.cache_write === "number") {
+					base.supportsCaching = true;
+				}
+				return base;
+			})
+			.sort((a, b) => a.id.localeCompare(b.id))
+	);
 }
 
 export async function refreshUnifiedModelCatalog(

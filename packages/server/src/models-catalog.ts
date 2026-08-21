@@ -13,6 +13,8 @@ export interface ModelsDevModel {
 	tool_call?: boolean;
 	limit?: { context?: number; output?: number };
 	cost?: { input?: number; output?: number; cache_read?: number; cache_write?: number };
+	/** The AI SDK package the reference client uses for this model; indicates the API family. */
+	provider?: { npm?: string };
 }
 
 export interface ModelsDevProvider {

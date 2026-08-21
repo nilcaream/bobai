@@ -142,6 +142,14 @@ describe("handleCommand", () => {
 			],
 			"opencode-zen": [
 				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 1000000,
+					maxOutput: 384000,
+					inputPrice: 0.14,
+					outputPrice: 0.28,
+				},
+				{
 					id: "minimax-m2.5-free",
 					name: "MiniMax M2.5 Free",
 					contextWindow: 131072,
@@ -263,6 +271,14 @@ describe("handleCommand", () => {
 				},
 			],
 			"opencode-zen": [
+				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 1000000,
+					maxOutput: 384000,
+					inputPrice: 0.14,
+					outputPrice: 0.28,
+				},
 				{
 					id: "minimax-m2.5-free",
 					name: "MiniMax M2.5 Free",
@@ -515,6 +531,14 @@ describe("HTTP endpoints", () => {
 			],
 			"opencode-zen": [
 				{
+					id: "deepseek-v4-flash",
+					name: "DeepSeek V4 Flash",
+					contextWindow: 1000000,
+					maxOutput: 384000,
+					inputPrice: 0.14,
+					outputPrice: 0.28,
+				},
+				{
 					id: "minimax-m2.5-free",
 					name: "MiniMax M2.5 Free",
 					contextWindow: 131072,
@@ -624,8 +648,8 @@ describe("HTTP endpoints", () => {
 			cost: "[$1.00 $4.00]",
 			contextWindow: 272000,
 		});
-		expect(body.defaultModel).toBe("minimax-m2.5-free");
-		expect(body.defaultStatus).toBe("opencode-zen | minimax-m2.5-free [$0.00 $0.00] | $0.00 | 0 / 131072 | 0%");
+		expect(body.defaultModel).toBe("deepseek-v4-flash");
+		expect(body.defaultStatus).toBe("opencode-zen | deepseek-v4-flash [$0.14 $0.28] | $0.00 | 0 / 1000000 | 0%");
 	});
 
 	test("GET /bobai/models without a configured default backend returns select-provider status", async () => {

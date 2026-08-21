@@ -55,7 +55,7 @@ describe("provider registry", () => {
 	test("recognizes opencode-zen as a runtime provider", () => {
 		expect(isSupportedAuthProvider("opencode-zen")).toBe(true);
 		expect(isSupportedProvider("opencode-zen")).toBe(true);
-		expect(getDefaultModelForProvider("opencode-zen")).toBe("minimax-m2.5-free");
+		expect(getDefaultModelForProvider("opencode-zen")).toBe("deepseek-v4-flash");
 	});
 
 	test("recognizes amazon-bedrock as a runtime and auth provider", () => {
@@ -74,9 +74,11 @@ describe("provider registry", () => {
 		expect(getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-go")?.defaultModel).toBe("deepseek-v4-flash");
 		expect(getProviderDescriptor("opencode-go")?.getApiFamily("deepseek-v4-flash")).toBe("openai-chat-completions");
-		expect(getProviderDescriptor("opencode-zen")?.defaultModel).toBe("minimax-m2.5-free");
+		expect(getProviderDescriptor("opencode-go")?.getApiFamily("grok-4.5")).toBe("openai-responses");
+		expect(getProviderDescriptor("opencode-zen")?.defaultModel).toBe("deepseek-v4-flash");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("minimax-m2.5-free")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
+		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("grok-4.5")).toBe("openai-responses");
 		expect(getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
 		expect(getProviderDescriptor("deepseek")?.defaultModel).toBe("deepseek-v4-flash");
 		expect(getProviderDescriptor("deepseek")?.getApiFamily("deepseek-v4-flash")).toBe("openai-chat-completions");

@@ -8,6 +8,7 @@ import type {
 } from "../auth/store";
 import type { Logger } from "../log/logger";
 import { computeTurnCostDollars } from "./cost-utils";
+import { getOpenCodeGoApiFamily, getOpenCodeZenApiFamily } from "./opencode-routing";
 import type { Provider } from "./provider";
 import { loadUnifiedModelsFile, unifiedModelsConfigExists } from "./unified-model-catalog";
 
@@ -342,7 +343,7 @@ const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth opencode-go` to re-authenticate.",
 	},
 	getApiFamily(modelId: string): ApiFamily {
-		return modelId.startsWith("minimax-") ? "anthropic-messages" : "openai-chat-completions";
+		return getOpenCodeGoApiFamily(modelId);
 	},
 	getAuth(store) {
 		return store?.providers["opencode-go"];
@@ -357,16 +358,14 @@ const openCodeGoDescriptor = createApiKeyProviderDescriptor<OpenCodeGoAuth>({
 
 const openCodeZenDescriptor = createApiKeyProviderDescriptor<OpenCodeZenAuth>({
 	id: "opencode-zen",
-	defaultModel: "minimax-m2.5-free",
+	defaultModel: "deepseek-v4-flash",
 	auth: {
 		cliCommand: "bobai auth opencode-zen",
 		missingAuthMessage: "OpenCode Zen authentication not found. Please run: bobai auth opencode-zen",
 		permanentAuthErrorMessage: "Authentication expired. Run `bobai auth opencode-zen` to re-authenticate.",
 	},
 	getApiFamily(modelId: string): ApiFamily {
-		if (modelId.startsWith("claude-")) return "anthropic-messages";
-		if (modelId.startsWith("gpt-")) return "openai-responses";
-		return "openai-chat-completions";
+		return getOpenCodeZenApiFamily(modelId);
 	},
 	getAuth(store) {
 		return store?.providers["opencode-zen"];

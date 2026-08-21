@@ -53,6 +53,7 @@ export async function* parseResponsesSSE(
 	let hasReceivedContent = false;
 	const outputIndexToToolIndex = new Map<number, number>();
 	const outputIndexToReasoningIndex = new Map<number, number>();
+	const toolIndicesWithDeltaArgs = new Set<number>();
 
 	for await (const chunk of stream) {
 		buffer += decoder.decode(chunk, { stream: true });
@@ -112,6 +113,7 @@ export async function* parseResponsesSSE(
 					const outputIdx = getOutputIndex(parsed, 0);
 					const mappedIdx = outputIndexToToolIndex.get(outputIdx);
 					if (mappedIdx === undefined) continue;
+					toolIndicesWithDeltaArgs.add(mappedIdx);
 					yield {
 						type: "tool_call_delta",
 						index: mappedIdx,
@@ -142,6 +144,20 @@ export async function* parseResponsesSSE(
 						reasoning: summarizeReasoningItem(item),
 					};
 					outputIndexToReasoningIndex.delete(outputIdx);
+				} else if (item?.type === "function_call") {
+					// Some Responses backends (notably OpenCode Go) deliver the complete
+					// tool-call arguments only on `output_item.done` rather than as
+					// `function_call_arguments.delta` chunks. Emit the full arguments when
+					// no deltas were received, so tool calls don't come back empty.
+					const outputIdx = getOutputIndex(parsed, 0);
+					const mappedIdx = outputIndexToToolIndex.get(outputIdx);
+					if (mappedIdx === undefined) continue;
+					if (!toolIndicesWithDeltaArgs.has(mappedIdx)) {
+						const args = typeof item.arguments === "string" ? item.arguments : "";
+						if (args) {
+							yield { type: "tool_call_delta", index: mappedIdx, arguments: args };
+						}
+					}
 				}
 			} else if (type === "response.completed") {
 				const response = parsed.response as Record<string, unknown> | undefined;

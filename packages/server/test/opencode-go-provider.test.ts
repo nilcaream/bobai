@@ -71,12 +71,48 @@ describe("opencode-go provider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer go-key");
 		expect(headers["Content-Type"]).toBe("application/json");
+		expect(headers["User-Agent"]).toBe("BobAI/1.0");
 		expect(headers["x-opencode-session"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("kimi-k2.6");
 		expect(body.stream).toBe(true);
 		expect(body.stream_options).toEqual({ include_usage: true });
 		expect(body.max_tokens).toBeGreaterThan(0);
+	});
+
+	test("routes Grok 4.5 to the OpenCode Go responses API", async () => {
+		let capturedUrl = "";
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+			capturedUrl = url.toString();
+			capturedInit = init;
+			return new Response(
+				sseStream([
+					{ type: "response.output_text.delta", delta: "hi" },
+					{ type: "response.completed", response: { usage: { input_tokens: 12, output_tokens: 3, total_tokens: 15 } } },
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeGoProvider({ apiKey: "go-key" }, undefined, globalThis.fetch, configDir);
+		await collect(
+			provider.stream({
+				model: "grok-4.5",
+				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
+			}),
+		);
+
+		expect(capturedUrl).toBe("https://opencode.ai/zen/go/v1/responses");
+		expect(capturedInit?.method).toBe("POST");
+		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers.Authorization).toBe("Bearer go-key");
+		expect(headers["x-opencode-session"]).toBe("12345678");
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.model).toBe("grok-4.5");
+		expect(body.store).toBe(false);
 	});
 
 	test("yields text, tool-call, usage and finish events from OpenCode Go SSE stream", async () => {

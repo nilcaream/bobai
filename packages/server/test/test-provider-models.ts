@@ -56,6 +56,14 @@ export function createProviderModelsTempDir(): string {
 		],
 		"opencode-zen": [
 			{
+				id: "deepseek-v4-flash",
+				name: "DeepSeek V4 Flash",
+				contextWindow: 1000000,
+				maxOutput: 384000,
+				inputPrice: 0.14,
+				outputPrice: 0.28,
+			},
+			{
 				id: "minimax-m2.5-free",
 				name: "MiniMax M2.5 Free",
 				contextWindow: 131072,

@@ -20,7 +20,7 @@ describe("provider descriptor registry", () => {
 		]);
 		expect(registry.getProviderDescriptor("openrouter")?.defaultModel).toBe("openrouter/free");
 		expect(registry.getProviderDescriptor("opencode-go")?.defaultModel).toBe("deepseek-v4-flash");
-		expect(registry.getProviderDescriptor("opencode-zen")?.defaultModel).toBe("minimax-m2.5-free");
+		expect(registry.getProviderDescriptor("opencode-zen")?.defaultModel).toBe("deepseek-v4-flash");
 		expect(registry.getProviderDescriptor("amazon-bedrock")?.defaultModel).toBe("anthropic.claude-opus-4-7");
 		expect(registry.getProviderDescriptor("deepseek")?.defaultModel).toBe("deepseek-v4-flash");
 	});
@@ -31,8 +31,10 @@ describe("provider descriptor registry", () => {
 		expect(registry.getProviderDescriptor("openrouter")?.getApiFamily("openrouter/free")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("kimi-k2.6")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("minimax-m2.7")).toBe("anthropic-messages");
+		expect(registry.getProviderDescriptor("opencode-go")?.getApiFamily("grok-4.5")).toBe("openai-responses");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("claude-sonnet-4-6")).toBe("anthropic-messages");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("gpt-5.4")).toBe("openai-responses");
+		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("grok-4.5")).toBe("openai-responses");
 		expect(registry.getProviderDescriptor("opencode-zen")?.getApiFamily("qwen3.6-plus")).toBe("openai-chat-completions");
 		expect(registry.getProviderDescriptor("amazon-bedrock")?.getApiFamily("anthropic.claude-opus-4-7")).toBe(
 			"anthropic-messages",

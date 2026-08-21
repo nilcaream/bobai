@@ -15,9 +15,15 @@ describe("backend policy", () => {
 		expect(getApiFamilyForModel("opencode-go", "minimax-m2.7")).toBe("anthropic-messages");
 	});
 
+	test("maps opencode-go grok/gpt models to the responses family", () => {
+		expect(getApiFamilyForModel("opencode-go", "grok-4.5")).toBe("openai-responses");
+		expect(getApiFamilyForModel("opencode-go", "gpt-5.6-luna")).toBe("openai-responses");
+	});
+
 	test("maps opencode-zen claude models to anthropic messages, gpt models to responses, and qwen models to chat completions", () => {
 		expect(getApiFamilyForModel("opencode-zen", "claude-sonnet-4-6")).toBe("anthropic-messages");
 		expect(getApiFamilyForModel("opencode-zen", "gpt-5.4")).toBe("openai-responses");
+		expect(getApiFamilyForModel("opencode-zen", "grok-4.5")).toBe("openai-responses");
 		expect(getApiFamilyForModel("opencode-zen", "qwen3.6-plus")).toBe("openai-chat-completions");
 	});
 

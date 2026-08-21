@@ -134,6 +134,7 @@ export function createOpenAIChatCompatibleProvider(
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
+					"User-Agent": "BobAI/1.0",
 					Authorization: `Bearer ${config.apiKey}`,
 					...(options.sessionId
 						? {

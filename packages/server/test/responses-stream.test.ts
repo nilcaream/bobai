@@ -108,6 +108,75 @@ describe("parseResponsesSSE", () => {
 		expect(events[4]).toEqual({ type: "finish", reason: "tool_calls" });
 	});
 
+	test("tool-call arguments delivered on output_item.done (no deltas) are emitted in full", async () => {
+		const gen = await parse([
+			{
+				event: "response.output_item.added",
+				data: {
+					type: "response.output_item.added",
+					output_index: 0,
+					item: { type: "function_call", call_id: "call_1", name: "bash" },
+				},
+			},
+			{
+				event: "response.output_item.done",
+				data: {
+					type: "response.output_item.done",
+					output_index: 0,
+					item: { type: "function_call", call_id: "call_1", name: "bash", arguments: '{"cmd":"ls"}' },
+				},
+			},
+			{
+				event: "response.completed",
+				data: {
+					type: "response.completed",
+					response: { id: "resp_x", status: "completed", usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 } },
+				},
+			},
+		]);
+
+		const events = await collect(gen);
+		expect(events[0]).toEqual({ type: "tool_call_start", index: 0, id: "call_1", name: "bash" });
+		expect(events[1]).toEqual({ type: "tool_call_delta", index: 0, arguments: '{"cmd":"ls"}' });
+		expect(events.at(-1)).toEqual({ type: "finish", reason: "tool_calls" });
+	});
+
+	test("output_item.done does not duplicate arguments already received via deltas", async () => {
+		const gen = await parse([
+			{
+				event: "response.output_item.added",
+				data: {
+					type: "response.output_item.added",
+					output_index: 0,
+					item: { type: "function_call", call_id: "call_1", name: "bash" },
+				},
+			},
+			{
+				event: "response.function_call_arguments.delta",
+				data: { type: "response.function_call_arguments.delta", output_index: 0, delta: '{"cmd":"ls"}' },
+			},
+			{
+				event: "response.output_item.done",
+				data: {
+					type: "response.output_item.done",
+					output_index: 0,
+					item: { type: "function_call", call_id: "call_1", name: "bash", arguments: '{"cmd":"ls"}' },
+				},
+			},
+			{
+				event: "response.completed",
+				data: {
+					type: "response.completed",
+					response: { id: "resp_y", status: "completed", usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 } },
+				},
+			},
+		]);
+
+		const events = await collect(gen);
+		const deltas = events.filter((e) => e.type === "tool_call_delta");
+		expect(deltas).toEqual([{ type: "tool_call_delta", index: 0, arguments: '{"cmd":"ls"}' }]);
+	});
+
 	test("mixed text and function_call → finish is tool_calls", async () => {
 		const gen = await parse([
 			{

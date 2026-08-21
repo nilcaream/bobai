@@ -99,6 +99,7 @@ export function createAnthropicCompatibleProvider(
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
+					"User-Agent": "BobAI/1.0",
 					[apiKeyHeader]: apiKeyHeader === "Authorization" ? `Bearer ${config.apiKey}` : config.apiKey,
 					...(config.anthropicVersion ? { "anthropic-version": config.anthropicVersion } : {}),
 					...(options.sessionId

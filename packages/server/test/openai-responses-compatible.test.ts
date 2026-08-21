@@ -89,6 +89,7 @@ describe("openai responses compatible provider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer zen-key");
 		expect(headers["x-opencode-session"]).toBe("12345678");
+		expect(headers["User-Agent"]).toBe("BobAI/1.0");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("gpt-5.4");
 		expect(body.stream).toBe(true);
@@ -96,6 +97,7 @@ describe("openai responses compatible provider", () => {
 		expect(body.max_output_tokens).toBeGreaterThan(0);
 		expect(body.reasoning).toEqual({ effort: "medium", summary: "auto" });
 		expect(body.include).toEqual(["reasoning.encrypted_content"]);
+		expect(body.store).toBe(false);
 		expect(body.tools).toEqual([
 			{
 				type: "function",

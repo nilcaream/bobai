@@ -2,18 +2,11 @@ import type { Logger } from "../log/logger";
 import { createAnthropicCompatibleProvider } from "./anthropic-compatible";
 import { createOpenAIChatCompatibleProvider } from "./openai-chat-compatible";
 import { createOpenAIResponsesCompatibleProvider } from "./openai-responses-compatible";
+import { getOpenCodeZenApiFamily } from "./opencode-routing";
 import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 
 export interface OpenCodeZenAuth {
 	apiKey: string;
-}
-
-function isOpenCodeZenClaudeModel(modelId: string): boolean {
-	return modelId.startsWith("claude-");
-}
-
-function isOpenCodeZenResponsesModel(modelId: string): boolean {
-	return modelId.startsWith("gpt-");
 }
 
 export function createOpenCodeZenProvider(
@@ -57,11 +50,9 @@ export function createOpenCodeZenProvider(
 	return {
 		id: "opencode-zen",
 		async *stream(options: ProviderOptions): AsyncGenerator<StreamEvent> {
-			const provider = isOpenCodeZenClaudeModel(options.model)
-				? messagesProvider
-				: isOpenCodeZenResponsesModel(options.model)
-					? responsesProvider
-					: chatProvider;
+			const family = getOpenCodeZenApiFamily(options.model);
+			const provider =
+				family === "anthropic-messages" ? messagesProvider : family === "openai-responses" ? responsesProvider : chatProvider;
 			yield* provider.stream(options);
 		},
 	};

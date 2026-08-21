@@ -59,6 +59,7 @@ export function createOpenAIResponsesCompatibleProvider(
 				headers: {
 					Authorization: `Bearer ${config.apiKey}`,
 					"Content-Type": "application/json",
+					"User-Agent": "BobAI/1.0",
 					...(config.headers ?? {}),
 					...(options.sessionId
 						? {
@@ -72,6 +73,10 @@ export function createOpenAIResponsesCompatibleProvider(
 					input,
 					max_output_tokens: options.maxOutputTokens,
 					stream: true,
+					// Stateless mode: OpenCode Go serves Responses-API models (e.g. Grok 4.5)
+					// under zero data retention, which disables the stateful Responses API.
+					// Re-send the full input each turn and never store the response server-side.
+					store: false,
 					reasoning: { effort: "medium", summary: "auto" },
 					include: ["reasoning.encrypted_content"],
 					...(tools ? { tools } : {}),

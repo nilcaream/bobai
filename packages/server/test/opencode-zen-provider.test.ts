@@ -157,6 +157,41 @@ describe("opencode-zen provider", () => {
 		expect(body.messages).toBeUndefined();
 	});
 
+	test("routes Grok models to the OpenCode Zen responses API", async () => {
+		let capturedUrl = "";
+		let capturedInit: RequestInit | undefined;
+		globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+			capturedUrl = url.toString();
+			capturedInit = init;
+			return new Response(
+				sseStream([
+					{ type: "response.output_text.delta", delta: "hi" },
+					{ type: "response.completed", response: { usage: { input_tokens: 12, output_tokens: 3, total_tokens: 15 } } },
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenCodeZenProvider({ apiKey: "zen-key" });
+		await collect(
+			provider.stream({
+				model: "grok-4.5",
+				messages: [{ role: "user", content: "hello" }],
+				sessionId: "12345678-1234-1234-1234-123456789abc",
+				maxOutputTokens: 16384,
+			}),
+		);
+
+		expect(capturedUrl).toBe("https://opencode.ai/zen/v1/responses");
+		expect(capturedInit?.method).toBe("POST");
+		const headers = capturedInit?.headers as Record<string, string>;
+		expect(headers.Authorization).toBe("Bearer zen-key");
+		expect(headers["x-opencode-session"]).toBe("12345678");
+		const body = JSON.parse(capturedInit?.body as string);
+		expect(body.model).toBe("grok-4.5");
+		expect(body.store).toBe(false);
+	});
+
 	test("emits reasoning events for interleaved reasoning_details deltas", async () => {
 		globalThis.fetch = mock(async () => {
 			return new Response(
