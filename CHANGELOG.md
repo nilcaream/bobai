@@ -1,10 +1,6 @@
 # Changelog
 
-## [0.3.0](https://github.com/nilcaream/bobai/compare/bobai-v0.2.11...bobai-v0.3.0) (2026-08-21)
-
-
-
-## [0.2.11](https://github.com/nilcaream/bobai/compare/bobai-v0.2.10...bobai-v0.2.11) (2026-08-21)
+## [0.3.0](https://github.com/nilcaream/bobai/compare/bobai-v0.2.10...bobai-v0.3.0) (2026-08-21)
 
 ### Features
 
