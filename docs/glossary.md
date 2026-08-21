@@ -137,7 +137,7 @@ Each tool has:
 
 Built-in tools: `read_file`, `list_directory`, `file_search`, `write_file`,
 `edit_file`, `grep_search`, `bash`, `sqlite3`, `web_fetch`, `web_search`, `task`, `skill`,
-`browser_connect`, `browser_navigate`, `browser_evaluate`, `browser_export_session`,
+`memory`, `browser_connect`, `browser_navigate`, `browser_evaluate`, `browser_export_session`,
 `browser_close_tab`.
 
 ### Skill
@@ -149,6 +149,31 @@ Skills can be:
 - **staged by the user** via `/skillname` before sending a prompt
 
 Skills are discovered from `SKILL.md` files in configured directories.
+
+### Memory
+
+Durable project notes the agent saves with the `memory` tool and re-reads in
+later sessions. Stored in a `memories` table in the project database
+(`.bobai/bobai.db`).
+
+Every memory has a **type** from a closed taxonomy:
+
+| Type | Purpose |
+|------|---------|
+| `user` | Who the user is — role, expertise, preferences |
+| `feedback` | Corrections and confirmed approaches |
+| `project` | Decisions and context not derivable from the code |
+| `reference` | Pointers to external systems |
+
+Each turn, a bounded **memory index** — the most recent entries, capped at 32
+entries and a byte limit — is injected into the system prompt as a `<memories>`
+block. The agent reads full entries on demand with `memory get` or
+`memory search`. Memories older than a day carry a freshness caveat when read,
+reminding the agent to verify claims against the current code. `memory save`
+upserts by title to avoid near-duplicates.
+
+Subagents get a **read-only** `memory` tool and are instructed to report
+candidate memories to the main agent, which decides what to save.
 
 ### Provider
 
