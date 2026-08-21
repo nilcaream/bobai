@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { handlePrompt } from "../src/handler";
+import { createMemory } from "../src/memory/repository";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
 import { AuthError, ProviderError } from "../src/provider/provider";
 import type { ProviderRuntimeManager } from "../src/provider/runtime-manager";
@@ -1249,5 +1250,69 @@ describe("handlePrompt", () => {
 		const msgs = ws2.messages();
 		const sessionCreated = msgs.find((m: { type: string }) => m.type === "session_created");
 		expect(sessionCreated).toBeUndefined();
+	});
+
+	// --- Project memory index injection ---
+
+	test("injects memory index into system prompt when memories exist", async () => {
+		const memoryDb = createTestDb();
+		try {
+			createMemory(memoryDb, {
+				type: "project",
+				title: "Q1 merge freeze",
+				description: "Starts March 5",
+				content: "No merges after March 5.",
+			});
+
+			const provider = capturingProvider(["ok"]);
+			const ws = mockWs();
+			await handlePrompt({
+				ws,
+				db: memoryDb,
+				provider,
+				model: "test-model",
+				text: "hi",
+				projectRoot: "/tmp",
+				configDir: "/tmp",
+				skills: emptySkills,
+			});
+
+			const systemPrompt = provider.captured[0].messages[0].content as string;
+			expect(systemPrompt).toContain("<memories>");
+			expect(systemPrompt).toContain("Q1 merge freeze");
+			expect(systemPrompt).toContain("Starts March 5");
+
+			// The parent agent gets the full (write-capable) memory tool.
+			const memoryToolDef = provider.captured[0].tools?.find((t) => t.function.name === "memory");
+			expect(memoryToolDef).toBeTruthy();
+			const commandEnum = (memoryToolDef?.function.parameters as { properties?: { command?: { enum?: string[] } } })?.properties
+				?.command?.enum;
+			expect(commandEnum).toEqual(["list", "search", "get", "save", "update", "delete"]);
+		} finally {
+			memoryDb.close();
+		}
+	});
+
+	test("omits memories block when no memories exist", async () => {
+		const memoryDb = createTestDb();
+		try {
+			const provider = capturingProvider(["ok"]);
+			const ws = mockWs();
+			await handlePrompt({
+				ws,
+				db: memoryDb,
+				provider,
+				model: "test-model",
+				text: "hi",
+				projectRoot: "/tmp",
+				configDir: "/tmp",
+				skills: emptySkills,
+			});
+
+			const systemPrompt = provider.captured[0].messages[0].content as string;
+			expect(systemPrompt).not.toContain("<memories>");
+		} finally {
+			memoryDb.close();
+		}
 	});
 });

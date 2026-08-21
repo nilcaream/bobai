@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { AgentEvent } from "../src/agent-loop";
+import { createMemory, deleteMemory } from "../src/memory/repository";
 import type { ServerMessage } from "../src/protocol";
 import { createIsolatedTurnProvider } from "../src/provider/isolated-turn";
 import type { Provider, ProviderOptions, StreamEvent } from "../src/provider/provider";
@@ -594,5 +595,64 @@ describe("createTaskTool", () => {
 		const echoIdx = wsMsgs.findIndex((m) => m.type === "prompt_echo");
 		const startIdx = wsMsgs.findIndex((m) => m.type === "subagent_start");
 		expect(echoIdx).toBeLessThan(startIdx);
+	});
+
+	test("subagent receives memory index and read-only memory tool", async () => {
+		const memory = createMemory(db, {
+			type: "project",
+			title: "Q1 merge freeze",
+			description: "Starts March 5",
+			content: "No merges after March 5.",
+		});
+
+		try {
+			const captured: ProviderOptions[] = [];
+			const provider: Provider = {
+				id: "openrouter",
+				async *stream(opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					captured.push(opts);
+					yield { type: "text", text: "result" };
+					yield { type: "finish", reason: "stop" };
+				},
+				beginTurn() {},
+				getTurnSummary() {
+					return " | test-model | agent: 1 | 0.01s";
+				},
+				saveTurnState() {
+					return {};
+				},
+				restoreTurnState() {},
+			};
+
+			const tool = createTaskTool({
+				db,
+				provider,
+				model: "test-model",
+				parentSessionId,
+				projectRoot: "/tmp",
+				skills: emptySkills,
+				instructions: [],
+				onEvent: () => {},
+				subagentStatus: new SubagentStatus(),
+			});
+
+			await tool.execute({ description: "Test", prompt: "do it" }, { projectRoot: "/tmp" });
+
+			const opts = captured[0];
+			const systemPrompt = opts.messages[0].content as string;
+			// The subagent sees the same project memory index…
+			expect(systemPrompt).toContain("Q1 merge freeze");
+			// …and the read-only instruction.
+			expect(systemPrompt).toContain("read-only");
+
+			// The subagent's memory tool is restricted to read commands.
+			const memoryToolDef = opts.tools?.find((t) => t.function.name === "memory");
+			expect(memoryToolDef).toBeTruthy();
+			const commandEnum = (memoryToolDef?.function.parameters as { properties?: { command?: { enum?: string[] } } })?.properties
+				?.command?.enum;
+			expect(commandEnum).toEqual(["list", "search", "get"]);
+		} finally {
+			deleteMemory(db, memory.id);
+		}
 	});
 });
