@@ -375,4 +375,56 @@ describe("buildSystemPrompt", () => {
 		expect(result).toContain("- Bob AI parent session ID: sub-abc");
 		expect(result).toContain("</debug>");
 	});
+
+	// --- Project memory ---
+
+	test("parent prompt lists the memory tool", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).toContain("- memory:");
+	});
+
+	test("parent prompt includes project memory guidance", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).toContain("Project Memory:");
+		expect(result).toContain("persist across sessions");
+		expect(result).toContain("Do NOT save");
+		expect(result).toContain("Prefer updating an existing memory");
+		expect(result).toContain("point-in-time observations");
+	});
+
+	test("parent memory guidance mentions the explicit user trigger", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).toContain('"remember X"');
+	});
+
+	test("subagent prompt lists the memory tool", () => {
+		const result = buildSystemPrompt([], [], { subagent: true });
+		expect(result).toContain("- memory:");
+	});
+
+	test("subagent prompt includes read-only memory note", () => {
+		const result = buildSystemPrompt([], [], { subagent: true });
+		expect(result).toContain("read-only");
+		expect(result).toContain("report it in your final response");
+	});
+
+	test("memories block is included when memories provided", () => {
+		const result = buildSystemPrompt([], [], { memories: "## Project Memory\n\n- an entry" });
+		expect(result).toContain("<memories>\n## Project Memory");
+		expect(result).toContain("</memories>");
+	});
+
+	test("memories block is omitted when not provided", () => {
+		const result = buildSystemPrompt([]);
+		expect(result).not.toContain("<memories>");
+	});
+
+	test("memories block appears after instructions", () => {
+		const instructions: InstructionFile[] = [{ type: "bobai-global", source: "AGENT.md", content: "Be helpful." }];
+		const result = buildSystemPrompt([], instructions, { memories: "## Project Memory\n\n- entry" });
+		const instructionIdx = result.indexOf("<instructions");
+		const memoriesIdx = result.indexOf("<memories>");
+		expect(instructionIdx).toBeGreaterThan(-1);
+		expect(memoriesIdx).toBeGreaterThan(instructionIdx);
+	});
 });

@@ -21,6 +21,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 	task: "Launch a subagent to handle complex, multi-step tasks autonomously. Each subagent runs independently with its own tool access (except task). Use for tasks that can run in isolation — exploring code, researching patterns, or implementing discrete features. For exploratory/read-only tasks, instruct the subagent to avoid edit_file and write_file.",
 	skill:
 		"Load a skill by name to get specialized instructions and workflows. Use when a task matches an available skill's description.",
+	memory:
+		"Store and retrieve project memories that persist across sessions. Use when you learn something worth remembering about this project — user preferences, corrections, non-obvious decisions, gotchas, or external references.",
 };
 
 const PARENT_SHARED_TOOLS = [
@@ -33,6 +35,7 @@ const PARENT_SHARED_TOOLS = [
 	"web_search",
 	"task",
 	"skill",
+	"memory",
 ];
 const SUBAGENT_SHARED_TOOLS = [
 	"read_file",
@@ -43,6 +46,7 @@ const SUBAGENT_SHARED_TOOLS = [
 	"web_fetch",
 	"web_search",
 	"skill",
+	"memory",
 ];
 
 const SUBAGENT_NOTE = `
@@ -85,6 +89,18 @@ function buildBasePrompt(options?: { subagent?: boolean; toolNames?: string[]; p
 		? `- Commands run in the project root directory — you never need to cd ${options.projectDir}.`
 		: "";
 
+	const memoryGuidance = isSubagent
+		? `Project Memory:
+- Project memories are available read-only via the \`memory\` tool (list, search, get). You cannot save or modify memories.
+- If you learn something worth remembering for future sessions, report it in your final response so the main agent can decide whether to save it.`
+		: `Project Memory:
+- You have a \`memory\` tool for durable notes about this project that persist across sessions.
+- Save what is NOT derivable from the code, git history, or the instruction files already in your context: user preferences, corrections and confirmed approaches, non-obvious decisions, gotchas (e.g. flaky tests or endpoints), and pointers to external systems.
+- Do NOT save: anything readable from the code or git log, debugging fixes already documented in commit messages, or ephemeral in-progress task state.
+- Prefer updating an existing memory over creating a near-duplicate.
+- Treat memories as point-in-time observations. Before asserting a claim from memory about code behavior, verify it against the current codebase.
+- When the user asks you to remember something ("remember X", "save this"), use the memory tool.`;
+
 	return `You are Bob AI, a coding assistant.
 
 You help developers write, understand, debug, and improve code. You give clear, direct answers. When a question is ambiguous, you ask for clarification rather than guess.
@@ -99,6 +115,8 @@ When working with code:${searchGuidance ? `\n${searchGuidance}` : ""}${cwdGuidan
 - After making changes, run relevant tests or builds to verify correctness.${taskGuidance}
 - Projects often contain context files (AGENT.md, CLAUDE.md, README.md, etc.) that describe conventions, architecture, and workflows. Context files found in the project root directory (AGENT.md, AGENTS.md, CLAUDE.md) are automatically included in this system prompt as <instructions type="project-specific"> blocks — do not re-read them. In monorepos, subdirectories may contain their own context files; read those when working in a specific subdirectory.
 - README.md is not auto-injected. Read it when you need to understand a project's purpose, setup, or structure.
+
+${memoryGuidance}
 
 Context Compaction:
 - Some tool outputs in this conversation may have been compacted to manage context size. Compacted outputs are marked with "# COMPACTED" followed by a short description of what was removed. If you need the full output, you can re-invoke the tool. The original data is not lost — it has been summarized for efficiency.
@@ -124,6 +142,8 @@ export interface SystemPromptOptions {
 	debug?: SystemPromptDebug;
 	/** Platform-specific tool names to include in the prompt (e.g. ["bash", "grep_search"] or ["cmd", "powershell", "findstr"]). */
 	toolNames?: string[];
+	/** Pre-formatted memory index content to inject as a <memories> block. */
+	memories?: string;
 }
 
 export function buildSystemPrompt(
@@ -162,6 +182,10 @@ export function buildSystemPrompt(
 	for (const instruction of instructions) {
 		const sourceAttr = instruction.source ? ` source="${instruction.source}"` : "";
 		parts.push(`<instructions type="${instruction.type}"${sourceAttr}>\n${instruction.content}\n</instructions>`);
+	}
+
+	if (options?.memories) {
+		parts.push(`<memories>\n${options.memories}\n</memories>`);
 	}
 
 	return parts.join("\n\n");
