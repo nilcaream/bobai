@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.2.11](https://github.com/nilcaream/bobai/compare/bobai-v0.2.10...bobai-v0.2.11) (2026-08-21)
+
+### Features
+
+- memory: register memory tool in handler and subagents ([10af5a2](https://github.com/nilcaream/bobai/commit/10af5a20d6cac423d0fab1358bde9b5a7e5eccb7))
+- memory: inject memory index and guidance into system prompt ([f49a6ee](https://github.com/nilcaream/bobai/commit/f49a6eeea3d04d8df703b51b8fd95e4a299da391))
+- memory: add memory tool with read-only subagent mode ([3ac1222](https://github.com/nilcaream/bobai/commit/3ac1222fe6eb808f89a6de4be5e733a3f5f8394f))
+- memory: add bounded memory index builder ([48f24de](https://github.com/nilcaream/bobai/commit/48f24de8af7acf0df157b80326c6cb80e14a30b9))
+- memory: add memories table and repository ([f8262bc](https://github.com/nilcaream/bobai/commit/f8262bcb5a1ad59bc2123d733917905b5724d1f8))
+- bash: strip ANSI escape codes from command output ([a17adf4](https://github.com/nilcaream/bobai/commit/a17adf465b50b28c450d73fc8f51d2da46d4e293))
+- support AGENTS.md and CLAUDE.md in all instruction file layers ([227a322](https://github.com/nilcaream/bobai/commit/227a32295eb3d31351144d0a6fafd013ba2121a8))
+### Bug Fixes
+
+- agent-loop: retry when model produces reasoning but no content ([437442f](https://github.com/nilcaream/bobai/commit/437442f68ea68c3f7bac575e87595d0778e730b0))
+- browser-evaluate: use eval() wrapping to handle multi-statement expressions ([399531d](https://github.com/nilcaream/bobai/commit/399531d254b7dd18abef84c2839bf8fb612e0cb7))
+- browser: browser_evaluate now returns expression values via implicit return ([552c572](https://github.com/nilcaream/bobai/commit/552c572750b28c39ec4d137daa57a142799ddcd8))
+### Documentation
+
+- document memory concept in glossary ([a0c7da8](https://github.com/nilcaream/bobai/commit/a0c7da8a0aefbc69ce8d9d65f812ec628d5ad47a))
+- document memory tool in README ([078b5a9](https://github.com/nilcaream/bobai/commit/078b5a9163b44f7628676d3d1eb5215e0611219e))
+### Refactoring
+
+- provider: auto-detect reasoning field from SSE delta ([02411c1](https://github.com/nilcaream/bobai/commit/02411c102bbcdacb62626f87a108a7bb0daa92d2))
+- remove project-root file access restrictions from tools ([955cb73](https://github.com/nilcaream/bobai/commit/955cb7331eae5e1126af61f2c38fb51b27f45271))
+### Miscellaneous
+
+- skill: document memories table in debugging skill ([fb2180d](https://github.com/nilcaream/bobai/commit/fb2180d19373ac269dd3ba0b032f0e380fc7a503))
+- remove multiplierSourceAvailable — dead copilot concept ([baabc8e](https://github.com/nilcaream/bobai/commit/baabc8edbcaec627ed8177f31ca76a740ff82e92))
+### Other Changes
+
+- memory: verify index injection and read-only subagent wiring ([d6a3ea0](https://github.com/nilcaream/bobai/commit/d6a3ea08cce03302835bfb9614d2ed0665049185))
+- use dot notation for openrouter key in test ([e6e2153](https://github.com/nilcaream/bobai/commit/e6e21531f89fe11a1be0f26e7d934819902091ce))
+- drop GitHub Copilot provider support ([80d6363](https://github.com/nilcaream/bobai/commit/80d6363d0b9a50131098deb3edcdc5584aff4e63))
+
 ## [0.2.10](https://github.com/nilcaream/bobai/compare/bobai-v0.2.9...bobai-v0.2.10) (2026-07-08)
 
 ### Features
