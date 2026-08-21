@@ -14,6 +14,8 @@ import { loadInstructions } from "./instructions";
 import type { Logger } from "./log/logger";
 import { runWithScope } from "./log/logger";
 import { sessionScope } from "./log/session-tag";
+import { buildMemoryIndex } from "./memory/index";
+import { listMemories } from "./memory/repository";
 import { repairMessageOrdering } from "./message-repair";
 import type { AvailableTools, PlatformInfo } from "./platform";
 import { getProjectInfo } from "./project-info";
@@ -50,6 +52,7 @@ import { browserNavigateTool } from "./tool/browser-navigate";
 import { editFileTool } from "./tool/edit-file";
 import { fileSearchTool } from "./tool/file-search";
 import { listDirectoryTool } from "./tool/list-directory";
+import { createMemoryTool } from "./tool/memory";
 import { readFileTool } from "./tool/read-file";
 import { getGrepTool, getShellTool } from "./tool/registry-helpers";
 import { createSkillTool } from "./tool/skill";
@@ -289,6 +292,8 @@ export async function handlePrompt(req: PromptRequest) {
 
 		const skillTool = createSkillTool(skills);
 
+		const memoryTool = createMemoryTool(db);
+
 		// Build the tool registry dynamically based on platform-available tools.
 		const availableTools = req.availableTools ?? { shells: [], grepTools: [], git: false };
 		const dynamicTools = [
@@ -302,6 +307,7 @@ export async function handlePrompt(req: PromptRequest) {
 			webSearchTool,
 			taskTool,
 			skillTool,
+			memoryTool,
 			browserConnectTool,
 			browserNavigateTool,
 			browserEvaluateTool,
@@ -331,10 +337,12 @@ export async function handlePrompt(req: PromptRequest) {
 		const debugInfo: SystemPromptDebug | undefined =
 			req.debug && currentSessionId ? { sessionId: currentSessionId } : undefined;
 		const platformToolNames = [...availableTools.shells, ...availableTools.grepTools];
+		const memoryIndex = buildMemoryIndex(listMemories(db));
 		const systemPrompt = buildSystemPrompt(skills.list(), instructions, {
 			metadata,
 			debug: debugInfo,
 			toolNames: platformToolNames,
+			memories: memoryIndex,
 		});
 
 		// Prepend the dynamic system prompt (always fresh, reflects current skills/config)

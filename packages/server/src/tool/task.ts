@@ -12,6 +12,8 @@ import type { InstructionFile } from "../instructions";
 import type { Logger } from "../log/logger";
 import { runWithScope } from "../log/logger";
 import { subagentScope } from "../log/session-tag";
+import { buildMemoryIndex } from "../memory/index";
+import { listMemories } from "../memory/repository";
 import { getProjectInfo } from "../project-info";
 import { getApiFamilyForModel } from "../provider/backend-policy";
 import { getProviderModelConfig } from "../provider/models";
@@ -33,6 +35,7 @@ import { buildSystemPrompt } from "../system-prompt";
 import { editFileTool } from "./edit-file";
 import { fileSearchTool } from "./file-search";
 import { listDirectoryTool } from "./list-directory";
+import { createMemoryTool } from "./memory";
 import { readFileTool } from "./read-file";
 import { getGrepTool, getShellTool } from "./registry-helpers";
 import { createSkillTool } from "./skill";
@@ -242,6 +245,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 
 			// Build tool registry without the task tool itself (no recursion)
 			const skillTool = createSkillTool(skills);
+			const memoryTool = createMemoryTool(db, { readOnly: true });
 			const avail = availableTools ?? { shells: [], grepTools: [], git: false };
 			const childDynamicTools = [
 				readFileTool,
@@ -252,6 +256,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				sqlite3Tool,
 				webFetchTool,
 				skillTool,
+				memoryTool,
 			];
 			if (webSearchTool) childDynamicTools.push(webSearchTool);
 			if (browserEvaluateTool) childDynamicTools.push(browserEvaluateTool);
@@ -284,6 +289,7 @@ export function createTaskTool(deps: TaskToolDeps): Tool {
 				metadata,
 				debug: debugInfo,
 				toolNames: platformToolNames,
+				memories: buildMemoryIndex(listMemories(db)),
 			});
 			messages.unshift({ role: "system", content: subagentPrompt });
 
