@@ -37,20 +37,31 @@ interface AnthropicThinkingOptions {
 	};
 }
 
+interface AnthropicEffortOptions {
+	output_config: {
+		effort: "low" | "medium" | "high" | "xhigh" | "max";
+	};
+}
+
+type AnthropicReasoningOptions = AnthropicThinkingOptions | AnthropicEffortOptions;
+
 export interface AnthropicReasoningDefaults {
 	budgetTokens?: number;
 	display?: "summarized" | "omitted";
+	effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 const DEFAULT_ANTHROPIC_REASONING_DEFAULTS: Required<AnthropicReasoningDefaults> = {
-	budgetTokens: 1024,
+	budgetTokens: 16384,
 	display: "summarized",
+	effort: "high",
 };
 
 export function getAnthropicReasoningOptions(
 	capabilities: ReasoningCapabilities,
 	defaults: AnthropicReasoningDefaults = DEFAULT_ANTHROPIC_REASONING_DEFAULTS,
-): AnthropicThinkingOptions | undefined {
+	modelId?: string,
+): AnthropicReasoningOptions | undefined {
 	if (capabilities.family !== "anthropic-thinking") {
 		return undefined;
 	}
@@ -59,6 +70,14 @@ export function getAnthropicReasoningOptions(
 		...DEFAULT_ANTHROPIC_REASONING_DEFAULTS,
 		...defaults,
 	};
+
+	// Claude 4.5+ models take an `output_config.effort` level (the recommended
+	// control for adaptive-thinking depth) instead of a thinking token budget.
+	// Pin it explicitly to the documented "high" normal level rather than
+	// relying on the provider default.
+	if (modelId?.startsWith("claude-")) {
+		return { output_config: { effort: resolvedDefaults.effort } };
+	}
 
 	return {
 		thinking: {
@@ -91,6 +110,7 @@ export function createAnthropicCompatibleProvider(
 			const anthropicReasoningOptions = getAnthropicReasoningOptions(
 				reasoningCapabilities,
 				options.reasoningDefaults?.anthropic,
+				options.model,
 			);
 
 			const modelConfig = getProviderModelConfig(config.providerId, options.model, configDir);

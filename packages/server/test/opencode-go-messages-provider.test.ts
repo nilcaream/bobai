@@ -77,7 +77,7 @@ describe("opencode-go provider (messages)", () => {
 		expect(body.max_tokens).toBe(16384);
 		expect(body.thinking).toEqual({
 			type: "enabled",
-			budget_tokens: 1024,
+			budget_tokens: 16384,
 			display: "summarized",
 		});
 	});

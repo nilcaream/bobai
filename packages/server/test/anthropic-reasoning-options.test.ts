@@ -6,7 +6,7 @@ async function getModule() {
 }
 
 describe("anthropic reasoning options", () => {
-	test("returns conservative default thinking controls for anthropic-thinking capabilities", async () => {
+	test("claude models use output_config.effort instead of a thinking budget", async () => {
 		const capabilities = getReasoningCapabilities({
 			providerId: "opencode-zen",
 			modelId: "claude-sonnet-4-6",
@@ -14,29 +14,55 @@ describe("anthropic reasoning options", () => {
 		});
 		const { getAnthropicReasoningOptions } = await getModule();
 
-		expect(getAnthropicReasoningOptions(capabilities)).toEqual({
+		expect(getAnthropicReasoningOptions(capabilities, undefined, "claude-sonnet-4-6")).toEqual({
+			output_config: { effort: "high" },
+		});
+	});
+
+	test("budget-based models use a 16384-token thinking budget by default", async () => {
+		const capabilities = getReasoningCapabilities({
+			providerId: "opencode-go",
+			modelId: "minimax-m2.7",
+			apiFamily: "anthropic-messages",
+		});
+		const { getAnthropicReasoningOptions } = await getModule();
+
+		expect(getAnthropicReasoningOptions(capabilities, undefined, "minimax-m2.7")).toEqual({
 			thinking: {
 				type: "enabled",
-				budget_tokens: 1024,
+				budget_tokens: 16384,
 				display: "summarized",
 			},
 		});
 	});
 
-	test("derives anthropic thinking controls from passed defaults", async () => {
+	test("derives budget-based thinking controls from passed defaults", async () => {
 		const capabilities = getReasoningCapabilities({
-			providerId: "opencode-zen",
-			modelId: "claude-sonnet-4-6",
+			providerId: "opencode-go",
+			modelId: "minimax-m2.7",
 			apiFamily: "anthropic-messages",
 		});
 		const { getAnthropicReasoningOptions } = await getModule();
 
-		expect(getAnthropicReasoningOptions(capabilities, { budgetTokens: 2048, display: "summarized" })).toEqual({
+		expect(getAnthropicReasoningOptions(capabilities, { budgetTokens: 2048, display: "summarized" }, "minimax-m2.7")).toEqual({
 			thinking: {
 				type: "enabled",
 				budget_tokens: 2048,
 				display: "summarized",
 			},
+		});
+	});
+
+	test("derives claude effort from passed defaults", async () => {
+		const capabilities = getReasoningCapabilities({
+			providerId: "opencode-zen",
+			modelId: "claude-opus-4-7",
+			apiFamily: "anthropic-messages",
+		});
+		const { getAnthropicReasoningOptions } = await getModule();
+
+		expect(getAnthropicReasoningOptions(capabilities, { effort: "medium" }, "claude-opus-4-7")).toEqual({
+			output_config: { effort: "medium" },
 		});
 	});
 
@@ -48,6 +74,6 @@ describe("anthropic reasoning options", () => {
 		});
 		const { getAnthropicReasoningOptions } = await getModule();
 
-		expect(getAnthropicReasoningOptions(capabilities)).toBeUndefined();
+		expect(getAnthropicReasoningOptions(capabilities, undefined, "qwen3.6-plus")).toBeUndefined();
 	});
 });
