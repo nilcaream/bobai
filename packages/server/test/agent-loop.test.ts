@@ -513,12 +513,12 @@ describe("provider reasoning types", () => {
 			}),
 		).rejects.toThrow("kept producing reasoning without an answer");
 
-		// 1 initial call + 3 retries, then an explicit error instead of a silent
+		// 1 initial call + 2 retries, then an explicit error instead of a silent
 		// empty assistant message.
-		expect(callCount).toBe(4);
+		expect(callCount).toBe(3);
 
 		// Each retry persisted a reasoning-only assistant message + a nudge.
-		expect(seenMessages).toHaveLength(6);
+		expect(seenMessages).toHaveLength(4);
 		expect(seenMessages[0].role).toBe("assistant");
 		expect((seenMessages[0] as AssistantMessage).content).toBe("");
 		expect(seenMessages[1].role).toBe("user");
@@ -600,7 +600,7 @@ describe("provider reasoning types", () => {
 			}),
 		).rejects.toThrow("kept getting interrupted mid-response");
 
-		expect(callCount).toBe(4);
+		expect(callCount).toBe(3);
 	});
 });
 

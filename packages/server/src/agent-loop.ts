@@ -361,7 +361,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	const newMessages: Message[] = [];
 	// Guard against infinite retry when the model produces reasoning but no content,
 	// or when the provider stream is interrupted mid-response.
-	const REASONING_RETRY_LIMIT = 3;
+	// Kept small: a sustained provider outage drops every attempt, so extra retries
+	// only burn tokens/latency — the user is better off switching models.
+	const REASONING_RETRY_LIMIT = 2;
 	let reasoningRetries = 0;
 
 	function computeMaxOutputTokensForConversation(messages: Message[]): number {
@@ -433,14 +435,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				newMessages.push(reasoningMsg);
 				onMessage(reasoningMsg);
 
-				// Nudge the model to produce the final answer.
-				// Keep the suffix so the model doesn't switch languages when the user
-				// was conversing in a non-English language.
+				// Nudge the model to continue. Deliberately minimal — asking for "the
+				// final answer" re-triggers the long generation that just got dropped.
+				// The `[system: …]` marker makes clear this is an automated note, not the
+				// user speaking, and the suffix keeps the model from switching languages.
 				const nudge: Message = {
 					role: "user",
 					content: interrupted
-						? "Your previous response was interrupted. Please continue from where you left off and provide your final answer. Respond in the same language and style you were using before."
-						: "Your reasoning was captured. Please provide your final answer based on that analysis. Respond in the same language and style you were using before.",
+						? "[system: previous response was interrupted mid-stream. Continue in the same language and style as before.]"
+						: "[system: reasoning was captured. Continue with the answer in the same language and style as before.]",
 				};
 				conversation.push(nudge);
 				newMessages.push(nudge);
