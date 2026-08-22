@@ -74,6 +74,9 @@ describe("deepseek provider", () => {
 		expect(body.model).toBe("deepseek-v4-flash");
 		expect(body.stream).toBe(true);
 		expect(body.stream_options).toEqual({ include_usage: true });
+		// Reasoning effort is pinned explicitly so DeepSeek does not auto-bump
+		// agent traffic to `max` (unbounded chain-of-thought).
+		expect(body.reasoning_effort).toBe("high");
 	});
 
 	test("yields text and usage events from SSE stream", async () => {

@@ -119,6 +119,37 @@ export function getReasoningCapabilities(options: ReasoningCapabilityResolverOpt
 	return getDefaultReasoningCapabilities(options.apiFamily);
 }
 
+/**
+ * The `reasoning_effort` value to send for the OpenAI chat-completions wire
+ * format, or undefined when the model has no explicit effort control.
+ *
+ * We deliberately never rely on the provider's implicit default: DeepSeek V4
+ * auto-bumps agent traffic to `max` effort when the field is omitted, which
+ * produces unbounded chain-of-thought (see DeepSeek Thinking Mode docs). We pin
+ * reasoning models to their documented "normal" level and add entries here as
+ * we verify each provider's native values, rather than guessing.
+ */
+export function getChatReasoningEffort(providerId: ProviderId, modelId: string): string | undefined {
+	const quirk = CHAT_REASONING_EFFORT.find(
+		(candidate) =>
+			(candidate.providerId === undefined || candidate.providerId === providerId) && candidate.modelPattern.test(modelId),
+	);
+	return quirk?.effort;
+}
+
+interface ChatReasoningEffortQuirk {
+	providerId?: ProviderId;
+	modelPattern: RegExp;
+	/** Value for the top-level `reasoning_effort` field. */
+	effort: string;
+}
+
+const CHAT_REASONING_EFFORT: ChatReasoningEffortQuirk[] = [
+	// DeepSeek V4 in thinking mode supports `high` and `max` (low/medium map to
+	// high, xhigh maps to max). Agent requests default to `max`, so pin to `high`.
+	{ modelPattern: /deepseek/i, effort: "high" },
+];
+
 function getDefaultReasoningCapabilities(apiFamily: ApiFamily): ReasoningCapabilities {
 	switch (apiFamily) {
 		case "openai-responses":

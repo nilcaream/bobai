@@ -12,7 +12,7 @@ import type {
 } from "./provider";
 import { ProviderError } from "./provider";
 import type { ProviderId } from "./providers";
-import { getReasoningCapabilities, type ReasoningCapabilities } from "./reasoning-capabilities";
+import { getChatReasoningEffort, getReasoningCapabilities, type ReasoningCapabilities } from "./reasoning-capabilities";
 import { parseSSE, SSE_DONE } from "./sse";
 
 function estimatePromptChars(messages: ProviderOptions["messages"]): number {
@@ -128,6 +128,7 @@ export function createOpenAIChatCompatibleProvider(
 				modelId: options.model,
 				apiFamily: "openai-chat-completions",
 			});
+			const reasoningEffort = getChatReasoningEffort(config.providerId, options.model);
 			const requestMessages = convertMessagesToOpenAIChat(options.messages, reasoningCapabilities);
 			const modelConfig = getProviderModelConfig(config.providerId, options.model, configDir);
 			const response = await fetchFn(config.baseUrl, {
@@ -150,6 +151,7 @@ export function createOpenAIChatCompatibleProvider(
 					stream: true,
 					stream_options: { include_usage: true },
 					...(options.tools?.length ? { tools: options.tools } : {}),
+					...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
 					...(config.providerId === "openrouter" && modelConfig?.supportsCaching && options.sessionId
 						? { prompt_cache_key: options.sessionId }
 						: {}),

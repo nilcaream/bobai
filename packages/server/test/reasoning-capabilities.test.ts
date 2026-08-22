@@ -78,3 +78,27 @@ describe("reasoning capabilities", () => {
 		expect(capabilities.supportsReplay).toBe(true);
 	});
 });
+
+describe("chat reasoning effort", () => {
+	async function getEffort(providerId: "openrouter" | "opencode-go" | "opencode-zen" | "deepseek", modelId: string) {
+		const module = await import("../src/provider/reasoning-capabilities");
+		return module.getChatReasoningEffort(providerId, modelId);
+	}
+
+	test("deepseek models pin reasoning effort to high", async () => {
+		expect(await getEffort("opencode-go", "deepseek-v4-pro")).toBe("high");
+		expect(await getEffort("opencode-go", "deepseek-v4-flash")).toBe("high");
+		expect(await getEffort("deepseek", "deepseek-chat")).toBe("high");
+	});
+
+	test("openrouter deepseek models pin reasoning effort to high", async () => {
+		expect(await getEffort("openrouter", "openrouter/deepseek-r1")).toBe("high");
+		expect(await getEffort("openrouter", "deepseek/deepseek-chat")).toBe("high");
+	});
+
+	test("non-deepseek models have no chat reasoning effort override", async () => {
+		expect(await getEffort("opencode-go", "kimi-k2.6")).toBeUndefined();
+		expect(await getEffort("opencode-zen", "qwen3.6-plus")).toBeUndefined();
+		expect(await getEffort("openrouter", "openrouter/free")).toBeUndefined();
+	});
+});
