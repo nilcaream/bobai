@@ -479,7 +479,7 @@ describe("provider reasoning types", () => {
 		expect(messages).toEqual(seenMessages);
 	});
 
-	test("reasoning-only response only retries once", async () => {
+	test("reasoning-only response retries up to the limit, then surfaces an error", async () => {
 		let callCount = 0;
 
 		const provider: Provider = {
@@ -497,6 +497,57 @@ describe("provider reasoning types", () => {
 			},
 		};
 
+		const seenMessages: Message[] = [];
+		await expect(
+			runAgentLoop({
+				provider,
+				model: "test",
+				messages: [{ role: "user", content: "question" }],
+				tools: createToolRegistry([]),
+				projectRoot: "/tmp",
+				sessionId: "test-session",
+				onEvent() {},
+				onMessage(msg) {
+					seenMessages.push(msg);
+				},
+			}),
+		).rejects.toThrow("kept producing reasoning without an answer");
+
+		// 1 initial call + 3 retries, then an explicit error instead of a silent
+		// empty assistant message.
+		expect(callCount).toBe(4);
+
+		// Each retry persisted a reasoning-only assistant message + a nudge.
+		expect(seenMessages).toHaveLength(6);
+		expect(seenMessages[0].role).toBe("assistant");
+		expect((seenMessages[0] as AssistantMessage).content).toBe("");
+		expect(seenMessages[1].role).toBe("user");
+		expect(seenMessages.at(-1)?.role).toBe("user");
+	});
+
+	test("interrupted stream retries and recovers on the next call", async () => {
+		let callCount = 0;
+		const events: AgentEvent[] = [];
+
+		const provider: Provider = {
+			id: "opencode-go",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				if (callCount === 1) {
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: "thinking" },
+					};
+					yield { type: "reasoning_delta", index: 0, delta: { kind: "text", text: " ..." } };
+					yield { type: "finish", reason: "interrupted" };
+				} else {
+					yield { type: "text", text: "Recovered answer" };
+					yield { type: "finish", reason: "stop" };
+				}
+			},
+		};
+
 		const messages = await runAgentLoop({
 			provider,
 			model: "test",
@@ -504,23 +555,52 @@ describe("provider reasoning types", () => {
 			tools: createToolRegistry([]),
 			projectRoot: "/tmp",
 			sessionId: "test-session",
-			onEvent() {},
+			onEvent(event) {
+				events.push(event);
+			},
 			onMessage() {},
 		});
 
-		// Should retry exactly once, then give up with the second empty response.
-		// Total calls: first response (retry triggered) + nudge retry + final call.
-		// Wait — on the second call, we get reasoning-only again, but retriedReasoningOnly
-		// is already true, so it falls through to the normal return path.
 		expect(callCount).toBe(2);
 
-		// Messages: reasoning-only assistant + nudge user + reasoning-only assistant
-		expect(messages).toHaveLength(3);
-		expect(messages[0].role).toBe("assistant");
-		expect((messages[0] as AssistantMessage).content).toBe("");
-		expect(messages[1].role).toBe("user");
-		expect(messages[2].role).toBe("assistant");
-		expect((messages[2] as AssistantMessage).content).toBe("");
+		// A visible status was emitted so the UI shows the retry instead of a dead spinner.
+		expect(events.some((e) => e.type === "status" && e.text.includes("interrupted"))).toBe(true);
+
+		// Final message is the recovered answer.
+		expect(messages.at(-1)).toMatchObject({ role: "assistant", content: "Recovered answer" });
+	});
+
+	test("interrupted stream that never recovers surfaces an error", async () => {
+		let callCount = 0;
+
+		const provider: Provider = {
+			id: "opencode-go",
+			async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+				callCount++;
+				yield {
+					type: "reasoning_start",
+					index: 0,
+					reasoning: { kind: "interleaved-chat", field: "reasoning_content", text: `thinking-${callCount}` },
+				};
+				yield { type: "reasoning_end", index: 0 };
+				yield { type: "finish", reason: "interrupted" };
+			},
+		};
+
+		await expect(
+			runAgentLoop({
+				provider,
+				model: "test",
+				messages: [{ role: "user", content: "question" }],
+				tools: createToolRegistry([]),
+				projectRoot: "/tmp",
+				sessionId: "test-session",
+				onEvent() {},
+				onMessage() {},
+			}),
+		).rejects.toThrow("kept getting interrupted mid-response");
+
+		expect(callCount).toBe(4);
 	});
 });
 

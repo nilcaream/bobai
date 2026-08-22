@@ -5,7 +5,7 @@ import type { Provider, ProviderOptions, StreamEvent } from "./provider";
 import { ProviderError } from "./provider";
 import type { ProviderId } from "./providers";
 import { getReasoningCapabilities, type ReasoningCapabilities } from "./reasoning-capabilities";
-import { parseSSE } from "./sse";
+import { parseSSE, SSE_DONE } from "./sse";
 
 function estimatePromptChars(messages: ProviderOptions["messages"]): number {
 	return messages.reduce((sum, message) => {
@@ -142,6 +142,9 @@ export function createAnthropicCompatibleProvider(
 			const thinkingBlockIndices = new Set<number>();
 
 			for await (const event of parseSSE(response.body)) {
+				// Anthropic's Messages API terminates with `message_stop`, never `[DONE]`,
+				// but the shared SSE parser still surfaces the sentinel if it appears.
+				if (event === SSE_DONE) break;
 				const raw = event as {
 					type?: string;
 					index?: number;
@@ -267,7 +270,7 @@ export function createAnthropicCompatibleProvider(
 						"Stream ended unexpectedly without receiving any content. This may be due to a network interruption.",
 					);
 				}
-				yield { type: "finish", reason: stopReason === "tool_use" ? "tool_calls" : "stop" };
+				yield { type: "finish", reason: "interrupted" };
 			}
 		},
 	};

@@ -127,7 +127,7 @@ describe("Provider stream error handling", () => {
 			).rejects.toThrow();
 		});
 
-		test("allows partial content without finish_reason (graceful degradation)", async () => {
+		test("marks partial content without finish_reason as interrupted", async () => {
 			const mockFetch = () =>
 				Promise.resolve({
 					ok: true,
@@ -165,6 +165,47 @@ describe("Provider stream error handling", () => {
 			expect(textEvents.length).toBe(1);
 			expect(textEvents[0]).toEqual({ type: "text", text: "Partial response" });
 			expect(finishEvents.length).toBe(1);
+			expect(finishEvents[0]).toEqual({ type: "finish", reason: "interrupted" });
+		});
+
+		test("marks reasoning-only truncation as interrupted", async () => {
+			const mockFetch = () =>
+				Promise.resolve({
+					ok: true,
+					status: 200,
+					body: new ReadableStream<Uint8Array>({
+						start(controller) {
+							controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":"first"}}]}\n\n'));
+							controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":" second"}}]}\n\n'));
+							controller.close();
+						},
+					}),
+				}) as unknown as typeof fetch;
+
+			const provider = createOpenAIChatCompatibleProvider(
+				{
+					providerId: "opencode-go",
+					baseUrl: "https://example.invalid/chat/completions",
+					apiKey: "test-key",
+				},
+				undefined,
+				mockFetch,
+				"/tmp/test-config",
+			);
+
+			const events: StreamEvent[] = [];
+			for await (const event of provider.stream({
+				model: "deepseek-v4-pro",
+				messages: [{ role: "user", content: "Hello" }],
+			})) {
+				events.push(event);
+			}
+
+			const finishEvents = events.filter((e) => e.type === "finish");
+			expect(finishEvents).toHaveLength(1);
+			expect(finishEvents[0]).toEqual({ type: "finish", reason: "interrupted" });
+			// Reasoning deltas were still emitted before the truncation was detected.
+			expect(events.some((e) => e.type === "reasoning_start")).toBe(true);
 		});
 	});
 

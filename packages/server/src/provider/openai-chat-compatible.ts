@@ -13,7 +13,7 @@ import type {
 import { ProviderError } from "./provider";
 import type { ProviderId } from "./providers";
 import { getReasoningCapabilities, type ReasoningCapabilities } from "./reasoning-capabilities";
-import { parseSSE } from "./sse";
+import { parseSSE, SSE_DONE } from "./sse";
 
 function estimatePromptChars(messages: ProviderOptions["messages"]): number {
 	return messages.reduce((sum, message) => {
@@ -172,6 +172,7 @@ export function createOpenAIChatCompatibleProvider(
 			let cacheWriteTokens: number | undefined;
 			let finishReason: "stop" | "tool_calls" = "stop";
 			let sawFinish = false;
+			let sawDone = false;
 			let sawAnyToolCalls = false;
 			let hasReceivedContent = false;
 			const canReason = reasoningCapabilities.family === "openai-chat-interleaved" && reasoningCapabilities.supportsReplay;
@@ -180,6 +181,10 @@ export function createOpenAIChatCompatibleProvider(
 			let reasoningStarted = false;
 
 			for await (const event of parseSSE(response.body)) {
+				if (event === SSE_DONE) {
+					sawDone = true;
+					break;
+				}
 				const data = event as {
 					choices?: {
 						delta?: {
@@ -350,8 +355,9 @@ export function createOpenAIChatCompatibleProvider(
 			});
 
 			if (!sawFinish) {
-				// Stream ended without a proper finish_reason - this indicates a network
-				// interruption or incomplete response from the server
+				// No finish_reason chunk was seen. This is either a truncated response
+				// (network interruption / dropped upstream stream) or an unusual but
+				// clean stop signalled only by `[DONE]` — disambiguated below.
 				if (!hasReceivedContent && !sawAnyToolCalls && !reasoningStarted) {
 					throw new ProviderError(
 						0,
@@ -361,7 +367,11 @@ export function createOpenAIChatCompatibleProvider(
 				if (reasoningStarted) {
 					yield { type: "reasoning_end", index: 0, reasoning: activeReasoning };
 				}
-				yield { type: "finish", reason: finishReason };
+				// Distinguish a truncated stream from a clean stop so the agent loop can
+				// retry instead of silently accepting an empty or partial answer. A stream
+				// that ended with `[DONE]` but no finish_reason is a clean (if unusual)
+				// stop; a stream that ended without `[DONE]` was truncated mid-response.
+				yield { type: "finish", reason: sawDone ? "stop" : "interrupted" };
 			}
 		},
 	};

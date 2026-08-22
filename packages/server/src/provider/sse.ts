@@ -1,4 +1,6 @@
-export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
+export const SSE_DONE = Symbol("sse-done");
+
+export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenerator<unknown | typeof SSE_DONE> {
 	const decoder = new TextDecoder();
 	let buffer = "";
 
@@ -19,7 +21,10 @@ export async function* parseSSE(stream: ReadableStream<Uint8Array>): AsyncGenera
 			if (dataLines.length === 0) continue;
 
 			const data = dataLines.join("\n");
-			if (data === "[DONE]") return;
+			if (data === "[DONE]") {
+				yield SSE_DONE;
+				return;
+			}
 
 			yield JSON.parse(data);
 		}

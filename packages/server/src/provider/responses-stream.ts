@@ -225,5 +225,5 @@ export async function* parseResponsesSSE(
 	if (!hasReceivedContent && !hasToolCalls) {
 		throw new Error("Stream ended unexpectedly without receiving any content. This may be due to a network interruption.");
 	}
-	yield { type: "finish", reason: hasToolCalls ? "tool_calls" : "stop" };
+	yield { type: "finish", reason: "interrupted" };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseSSE } from "../src/provider/sse";
+import { parseSSE, SSE_DONE } from "../src/provider/sse";
 
 function toStream(text: string): ReadableStream<Uint8Array> {
 	return new ReadableStream({
@@ -31,13 +31,13 @@ describe("parseSSE", () => {
 		expect(chunks).toHaveLength(2);
 	});
 
-	test("stops on [DONE] sentinel", async () => {
+	test("yields SSE_DONE sentinel on [DONE]", async () => {
 		const stream = toStream('data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: [DONE]\n\n');
 		const chunks: unknown[] = [];
 		for await (const chunk of parseSSE(stream)) {
 			chunks.push(chunk);
 		}
-		expect(chunks).toHaveLength(1);
+		expect(chunks).toEqual([{ choices: [{ delta: { content: "x" } }] }, SSE_DONE]);
 	});
 
 	test("skips empty lines and non-data lines", async () => {

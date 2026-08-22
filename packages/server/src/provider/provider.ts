@@ -94,7 +94,7 @@ export type StreamEvent =
 			cachedInputTokens?: number;
 			cacheCreationInputTokens?: number;
 	  }
-	| { type: "finish"; reason: "stop" | "tool_calls" };
+	| { type: "finish"; reason: "stop" | "tool_calls" | "interrupted" };
 
 // --- Provider interface ---
 

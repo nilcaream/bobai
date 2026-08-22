@@ -8,14 +8,15 @@ import { getScope } from "./log/logger";
 import { createIsolatedTurnProvider } from "./provider/isolated-turn";
 import { getProviderModelConfig } from "./provider/models";
 import { computeSafeMaxOutputTokens, estimateMessageChars } from "./provider/output-budget";
-import type {
-	AssistantMessage,
-	Message,
-	Provider,
-	ReasoningDelta,
-	ReasoningState,
-	ToolCallContent,
-	ToolMessage,
+import {
+	type AssistantMessage,
+	type Message,
+	type Provider,
+	ProviderError,
+	type ReasoningDelta,
+	type ReasoningState,
+	type ToolCallContent,
+	type ToolMessage,
 } from "./provider/provider";
 import type { ToolRegistry } from "./tool/tool";
 
@@ -207,12 +208,12 @@ async function consumeProviderStream(
 	textContent: string;
 	toolCalls: Map<number, AccumulatedToolCall>;
 	reasoning: ReasoningState[] | undefined;
-	finishReason: "stop" | "tool_calls";
+	finishReason: "stop" | "tool_calls" | "interrupted";
 }> {
 	let textContent = "";
 	const toolCalls = new Map<number, AccumulatedToolCall>();
 	const reasoningAccumulator = createReasoningAccumulator();
-	let finishReason: "stop" | "tool_calls" = "stop";
+	let finishReason: "stop" | "tool_calls" | "interrupted" = "stop";
 
 	for await (const event of stream) {
 		switch (event.type) {
@@ -358,8 +359,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 	const conversation = [...options.messages];
 	// New messages produced by this loop (what we return)
 	const newMessages: Message[] = [];
-	// Guard against infinite retry when the model produces reasoning but no content
-	let retriedReasoningOnly = false;
+	// Guard against infinite retry when the model produces reasoning but no content,
+	// or when the provider stream is interrupted mid-response.
+	const REASONING_RETRY_LIMIT = 3;
+	let reasoningRetries = 0;
 
 	function computeMaxOutputTokensForConversation(messages: Message[]): number {
 		const ABSOLUTE_FALLBACK = 16384;
@@ -401,17 +404,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 			onEvent,
 		);
 
-		if (finishReason === "stop" || toolCalls.size === 0) {
-			// When the model produces reasoning but no text content (e.g. thinking models
-			// that never transition from reasoning to the final answer), retry once with a
-			// nudge to get the actual response.
+		if (finishReason === "stop" || finishReason === "interrupted" || toolCalls.size === 0) {
+			// The model can produce reasoning without ever transitioning to the final
+			// answer (thinking models), or the provider stream can be dropped
+			// mid-response (no finish_reason / [DONE]). Both are retried with a nudge
+			// so the user isn't left with a silent dead end.
 			const hasReasoning = reasoning && reasoning.length > 0;
 			const hasContent = textContent.trim().length > 0;
+			const interrupted = finishReason === "interrupted";
+			const needsRetry = interrupted || (!hasContent && hasReasoning);
 
-			if (!hasContent && hasReasoning && !retriedReasoningOnly) {
-				retriedReasoningOnly = true;
+			if (needsRetry && reasoningRetries < REASONING_RETRY_LIMIT) {
+				reasoningRetries++;
+				onEvent({
+					type: "status",
+					text: interrupted
+						? `Response interrupted mid-stream — retrying (attempt ${reasoningRetries}/${REASONING_RETRY_LIMIT})`
+						: `Model produced reasoning but no answer — retrying (attempt ${reasoningRetries}/${REASONING_RETRY_LIMIT})`,
+				});
 
-				// Save the reasoning-only message so the thinking trace is visible
+				// Save the partial/reasoning-only message so the thinking trace is visible
 				const reasoningMsg: AssistantMessage = {
 					role: "assistant",
 					content: textContent,
@@ -426,13 +438,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<Message[]
 				// was conversing in a non-English language.
 				const nudge: Message = {
 					role: "user",
-					content:
-						"Your reasoning was captured. Please provide your final answer based on that analysis. Respond in the same language and style you were using before.",
+					content: interrupted
+						? "Your previous response was interrupted. Please continue from where you left off and provide your final answer. Respond in the same language and style you were using before."
+						: "Your reasoning was captured. Please provide your final answer based on that analysis. Respond in the same language and style you were using before.",
 				};
 				conversation.push(nudge);
 				newMessages.push(nudge);
 				onMessage(nudge);
 				continue;
+			}
+
+			// Retries exhausted (or not applicable) with no usable content — surface an
+			// explicit error instead of silently returning an empty assistant message.
+			if (needsRetry) {
+				throw new ProviderError(
+					0,
+					`Model "${model}" ${interrupted ? "kept getting interrupted mid-response" : "kept producing reasoning without an answer"} after ${REASONING_RETRY_LIMIT} retries. The provider may be experiencing degraded performance — try again or switch to a different model.`,
+				);
 			}
 
 			// Normal text response — done

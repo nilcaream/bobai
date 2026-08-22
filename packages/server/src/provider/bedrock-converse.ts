@@ -229,7 +229,7 @@ export function createBedrockConverseProvider(
 						"Stream ended unexpectedly without receiving any content. This may be due to a network interruption.",
 					);
 				}
-				yield { type: "finish", reason: stopReason === "tool_use" ? "tool_calls" : "stop" };
+				yield { type: "finish", reason: "interrupted" };
 			}
 		},
 	};
