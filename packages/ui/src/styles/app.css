@@ -169,6 +169,34 @@ body,
 	border-left-color: var(--md-bold);
 }
 
+/* Reasoning panel — clips text to 10 lines and hides overflow. With the
+   app's line-height: 1, 1em = 1 line. ReasoningPanel auto-scrolls the .md
+   to its tail as content streams in (see ReasoningPanel.tsx). */
+.panel--reasoning > .md {
+	max-height: 10em;
+	overflow-y: hidden;
+}
+
+/* Collapsed / expanded affordance — mirrors tool panels (dotted = collapsed
+   and can expand, dashed = expanded). Double-click toggles. Scoped to
+   .panel--reasoning so it never affects .panel--tool. */
+.panel--reasoning.panel--collapsed {
+	border-left-style: dotted;
+	cursor: pointer;
+}
+
+.panel--reasoning.panel--expanded {
+	border-left-style: dashed;
+	cursor: pointer;
+}
+
+/* Expanded reasoning panel — lift the 10-line cap so the full text joins the
+   normal message flow (whole-window scroll covers it). */
+.panel--reasoning.panel--expanded > .md {
+	max-height: none;
+	overflow-y: visible;
+}
+
 .panel--tool {
 	color: var(--text-primary);
 	border-left-color: var(--accent-tool-success);
