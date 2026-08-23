@@ -12,6 +12,10 @@ export async function validateOpenRouterKey(
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
 			"Content-Type": "application/json",
+			// OpenRouter app attribution — see https://openrouter.ai/docs/app-attribution
+			"HTTP-Referer": "https://github.com/nilcaream/bobai",
+			"X-OpenRouter-Title": "Bob AI",
+			"X-OpenRouter-Categories": "cli-agent",
 		},
 		body: JSON.stringify({
 			model: OPENROUTER_SMOKE_TEST_MODEL,

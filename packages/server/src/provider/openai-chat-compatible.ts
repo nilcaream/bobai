@@ -137,6 +137,16 @@ export function createOpenAIChatCompatibleProvider(
 					"Content-Type": "application/json",
 					"User-Agent": "BobAI/1.0",
 					Authorization: `Bearer ${config.apiKey}`,
+					// OpenRouter app attribution — required for Bob AI to appear in
+					// OpenRouter rankings/analytics ("Top Apps"). See:
+					// https://openrouter.ai/docs/app-attribution
+					...(config.providerId === "openrouter"
+						? {
+								"HTTP-Referer": "https://github.com/nilcaream/bobai",
+								"X-OpenRouter-Title": "Bob AI",
+								"X-OpenRouter-Categories": "cli-agent",
+							}
+						: {}),
 					...(options.sessionId
 						? {
 								[config.providerId.startsWith("opencode") ? "x-opencode-session" : "x-session-affinity"]:

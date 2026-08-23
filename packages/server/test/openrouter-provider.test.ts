@@ -70,6 +70,9 @@ describe("openrouter provider", () => {
 		const headers = capturedInit?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe("Bearer or-key");
 		expect(headers["Content-Type"]).toBe("application/json");
+		expect(headers["HTTP-Referer"]).toBe("https://github.com/nilcaream/bobai");
+		expect(headers["X-OpenRouter-Title"]).toBe("Bob AI");
+		expect(headers["X-OpenRouter-Categories"]).toBe("cli-agent");
 		expect(headers["x-session-affinity"]).toBe("12345678");
 		const body = JSON.parse(capturedInit?.body as string);
 		expect(body.model).toBe("openrouter/free");
