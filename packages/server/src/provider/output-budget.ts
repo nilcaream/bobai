@@ -34,6 +34,15 @@ export function estimateMessageChars(messages: Message[]): number {
 			for (const r of message.reasoning) {
 				if (r.text) total += r.text.length;
 				if (r.summary) total += r.summary.length;
+				if (Array.isArray(r.details)) {
+					for (const item of r.details) {
+						if (item && typeof item === "object") {
+							const it = item as { text?: unknown; summary?: unknown };
+							if (typeof it.text === "string") total += it.text.length;
+							if (typeof it.summary === "string") total += it.summary.length;
+						}
+					}
+				}
 			}
 		}
 	}

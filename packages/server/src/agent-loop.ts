@@ -11,6 +11,7 @@ import { computeSafeMaxOutputTokens, estimateMessageChars } from "./provider/out
 import {
 	type AssistantMessage,
 	type Message,
+	mergeReasoningDetailArrays,
 	type Provider,
 	ProviderError,
 	type ReasoningDelta,
@@ -159,6 +160,9 @@ function applyReasoningDelta(reasoning: ReasoningState, delta: ReasoningDelta): 
 			return reasoning;
 		case "details":
 			if (reasoning.kind === "interleaved-chat") {
+				if (Array.isArray(reasoning.details) || Array.isArray(delta.details)) {
+					return { ...reasoning, details: mergeReasoningDetailArrays(reasoning.details, delta.details) };
+				}
 				return { ...reasoning, details: delta.details };
 			}
 			return reasoning;

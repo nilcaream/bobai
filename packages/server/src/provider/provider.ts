@@ -37,6 +37,53 @@ export interface TextSummaryReasoningState {
 	text: string;
 }
 
+/** A single item inside a `reasoning_details` array. */
+export interface ReasoningDetailItem {
+	type?: string;
+	text?: string;
+	summary?: string;
+	[key: string]: unknown;
+}
+
+/**
+ * Merge an incremental `reasoning_details` array chunk into the accumulated
+ * array.
+ *
+ * OpenRouter streams a logical reasoning block as many small deltas that all
+ * carry the same `index` (frequently `index: 0`), so reassembly is driven by
+ * the item `type` transition, not by `index`. Consecutive `reasoning.text` and
+ * `reasoning.summary` items are incremental fragments and are concatenated into
+ * the running entry; all other types (e.g. `reasoning.encrypted`) open a new
+ * entry. If either side is not an array (e.g. OpenCode Zen sends a cumulative
+ * object snapshot), the incoming chunk is authoritative — replace.
+ */
+export function mergeReasoningDetailArrays(accumulated: unknown, chunk: unknown): unknown {
+	if (!Array.isArray(accumulated) || !Array.isArray(chunk)) return chunk;
+	const out: unknown[] = [...accumulated];
+	for (const item of chunk) {
+		if (typeof item !== "object" || item === null) {
+			out.push(item);
+			continue;
+		}
+		const type = (item as ReasoningDetailItem).type;
+		if (type === "reasoning.text" || type === "reasoning.summary") {
+			const last = out.at(-1);
+			if (last !== undefined && typeof last === "object" && last !== null && (last as ReasoningDetailItem).type === type) {
+				const key = type === "reasoning.text" ? "text" : "summary";
+				const prev = (last as ReasoningDetailItem)[key];
+				const next = (item as ReasoningDetailItem)[key];
+				out[out.length - 1] = {
+					...last,
+					[key]: (typeof prev === "string" ? prev : "") + (typeof next === "string" ? next : ""),
+				};
+				continue;
+			}
+		}
+		out.push(item);
+	}
+	return out;
+}
+
 export type ReasoningState = ResponsesItemReasoningState | InterleavedChatReasoningState | TextSummaryReasoningState;
 
 export interface AssistantMessage {

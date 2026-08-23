@@ -413,4 +413,199 @@ describe("openrouter provider", () => {
 		expect(usageEvent?.cachedInputTokens).toBe(8);
 		expect(usageEvent?.cacheCreationInputTokens).toBe(2);
 	});
+
+	test("accumulates incremental reasoning_details array fragments across chunks", async () => {
+		// OpenRouter normalizes deepseek/gemini reasoning into an incremental
+		// reasoning_details array where every chunk carries the next fragment and
+		// `index` stays 0. The final accumulated details array must contain the
+		// FULL concatenated text, not just the last fragment.
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{
+						choices: [
+							{
+								delta: {
+									reasoning: "The",
+									reasoning_details: [{ type: "reasoning.text", text: "The", format: "unknown", index: 0 }],
+								},
+							},
+						],
+					},
+					{
+						choices: [
+							{
+								delta: {
+									reasoning: " auth",
+									reasoning_details: [{ type: "reasoning.text", text: " auth", format: "unknown", index: 0 }],
+								},
+							},
+						],
+					},
+					{
+						choices: [
+							{
+								delta: {
+									reasoning: " is",
+									reasoning_details: [{ type: "reasoning.text", text: " is", format: "unknown", index: 0 }],
+								},
+							},
+						],
+					},
+					{
+						choices: [
+							{
+								delta: {
+									reasoning: " hard.",
+									reasoning_details: [{ type: "reasoning.text", text: " hard.", format: "unknown", index: 0 }],
+								},
+							},
+						],
+					},
+					{ choices: [{ delta: { content: "Answer" } }] },
+					{ choices: [{ finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "deepseek/deepseek-v4-flash-0731",
+				messages: [{ role: "user", content: "hi" }],
+			}),
+		);
+
+		const endEvent = events.find((e) => e.type === "reasoning_end");
+		expect(endEvent).toEqual({
+			type: "reasoning_end",
+			index: 0,
+			reasoning: {
+				kind: "interleaved-chat",
+				field: "reasoning_details",
+				details: [{ type: "reasoning.text", text: "The auth is hard.", format: "unknown", index: 0 }],
+			},
+		});
+	});
+
+	test("merges consecutive reasoning.summary fragments but opens new entry on type change", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{
+						choices: [
+							{
+								delta: {
+									reasoning_details: [{ type: "reasoning.text", text: "Step 1. ", format: "openai-responses-v1", index: 0 }],
+								},
+							},
+						],
+					},
+					{
+						choices: [
+							{
+								delta: {
+									reasoning_details: [{ type: "reasoning.text", text: "Step 2.", format: "openai-responses-v1", index: 0 }],
+								},
+							},
+						],
+					},
+					{
+						choices: [
+							{
+								delta: {
+									reasoning_details: [
+										{ type: "reasoning.summary", summary: " Summary here", format: "openai-responses-v1", index: 0 },
+									],
+								},
+							},
+						],
+					},
+					{ choices: [{ delta: { content: "Answer" } }] },
+					{ choices: [{ finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "qwen/qwen3.6-plus",
+				messages: [{ role: "user", content: "hi" }],
+			}),
+		);
+
+		const endEvent = events.find((e) => e.type === "reasoning_end");
+		// reasoning.text fragments concatenate into one entry; the reasoning.summary
+		// fragment (a different type) opens a new entry.
+		expect(endEvent).toEqual({
+			type: "reasoning_end",
+			index: 0,
+			reasoning: {
+				kind: "interleaved-chat",
+				field: "reasoning_details",
+				details: [
+					{ type: "reasoning.text", text: "Step 1. Step 2.", format: "openai-responses-v1", index: 0 },
+					{ type: "reasoning.summary", summary: " Summary here", format: "openai-responses-v1", index: 0 },
+				],
+			},
+		});
+	});
+
+	test("keeps encrypted reasoning_details entries as discrete items (not merged)", async () => {
+		globalThis.fetch = mock(async () => {
+			return new Response(
+				sseStream([
+					{
+						choices: [
+							{
+								delta: {
+									reasoning_details: [{ type: "reasoning.encrypted", data: "AY90...", format: "google-gemini-v1", index: 0 }],
+								},
+							},
+						],
+					},
+					{
+						choices: [
+							{
+								delta: {
+									reasoning_details: [{ type: "reasoning.encrypted", data: "AY91...", format: "google-gemini-v1", index: 0 }],
+								},
+							},
+						],
+					},
+					{ choices: [{ delta: { content: "Answer" } }] },
+					{ choices: [{ finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } },
+					"[DONE]",
+				]),
+				{ status: 200, headers: { "Content-Type": "text/event-stream" } },
+			);
+		}) as typeof fetch;
+
+		const provider = createOpenRouterProvider({ apiKey: "or-key" }, undefined, globalThis.fetch, configDir);
+		const events = await collect(
+			provider.stream({
+				model: "google/gemini-2.5-pro",
+				messages: [{ role: "user", content: "hi" }],
+			}),
+		);
+
+		const endEvent = events.find((e) => e.type === "reasoning_end");
+		expect(endEvent).toEqual({
+			type: "reasoning_end",
+			index: 0,
+			reasoning: {
+				kind: "interleaved-chat",
+				field: "reasoning_details",
+				details: [
+					{ type: "reasoning.encrypted", data: "AY90...", format: "google-gemini-v1", index: 0 },
+					{ type: "reasoning.encrypted", data: "AY91...", format: "google-gemini-v1", index: 0 },
+				],
+			},
+		});
+	});
 });

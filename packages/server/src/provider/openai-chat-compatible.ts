@@ -10,7 +10,7 @@ import type {
 	ReasoningState,
 	StreamEvent,
 } from "./provider";
-import { ProviderError } from "./provider";
+import { mergeReasoningDetailArrays, ProviderError } from "./provider";
 import type { ProviderId } from "./providers";
 import { getChatReasoningEffort, getReasoningCapabilities, type ReasoningCapabilities } from "./reasoning-capabilities";
 import { parseSSE, SSE_DONE } from "./sse";
@@ -23,6 +23,15 @@ function estimatePromptChars(messages: ProviderOptions["messages"]): number {
 			for (const r of message.reasoning) {
 				if (r.text) s += r.text.length;
 				if (r.summary) s += r.summary.length;
+				if (Array.isArray(r.details)) {
+					for (const item of r.details) {
+						if (item && typeof item === "object") {
+							const it = item as { text?: unknown; summary?: unknown };
+							if (typeof it.text === "string") s += it.text.length;
+							if (typeof it.summary === "string") s += it.summary.length;
+						}
+					}
+				}
 			}
 		}
 		return s;
@@ -57,6 +66,14 @@ export function setReasoningDetails(
 		return { ...current, details };
 	}
 	return { kind: "interleaved-chat", field, details };
+}
+
+/** Merge an incremental `reasoning_details` array chunk into the accumulated state. */
+function mergeReasoningDetailsInto(current: ReasoningState | undefined, chunk: unknown[]): ReasoningState {
+	if (current?.kind === "interleaved-chat") {
+		return { ...current, details: mergeReasoningDetailArrays(current.details, chunk) };
+	}
+	return { kind: "interleaved-chat", field: "reasoning_details", details: chunk };
 }
 
 function shouldReplayInterleavedReasoning(
@@ -251,16 +268,23 @@ export function createOpenAIChatCompatibleProvider(
 					const rt = delta?.reasoning_text;
 					const rd = delta?.reasoning_details;
 
-					// Detect field on first reasoning chunk.
+					// Detect field on first reasoning chunk. Array-shaped reasoning_details
+					// is the authoritative normalized form on OpenRouter (the string fields
+					// are a redundant mirror), so it wins when present.
 					if (!reasoningField) {
-						if (rc != null) reasoningField = "reasoning_content";
+						if (Array.isArray(rd)) reasoningField = "reasoning_details";
+						else if (rc != null) reasoningField = "reasoning_content";
 						else if (r != null) reasoningField = "reasoning";
 						else if (rt != null) reasoningField = "reasoning_text";
 						else if (rd != null) reasoningField = "reasoning_details";
 					}
 
 					if (reasoningField) {
-						if (rd != null) {
+						if (reasoningField === "reasoning_details" && Array.isArray(rd)) {
+							// Incremental fragment array — merge into the running array.
+							activeReasoning = mergeReasoningDetailsInto(activeReasoning, rd);
+						} else if (rd != null && reasoningField === "reasoning_details") {
+							// Cumulative object snapshot (e.g. OpenCode Zen) — replace.
 							activeReasoning = setReasoningDetails(activeReasoning, reasoningField, rd);
 						} else {
 							const text = rc ?? r ?? rt;

@@ -59,7 +59,7 @@ function extractReasoningText(reasoning: { kind: string; text?: string; summary?
 					item &&
 					typeof item === "object" &&
 					"type" in item &&
-					(item as Record<string, unknown>).type === "text" &&
+					((item as Record<string, unknown>).type === "text" || (item as Record<string, unknown>).type === "reasoning.text") &&
 					"text" in item &&
 					typeof (item as Record<string, unknown>).text === "string"
 				) {
