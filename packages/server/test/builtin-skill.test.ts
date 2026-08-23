@@ -19,4 +19,12 @@ describe("builtinSkills", () => {
 		const skill = parseSkillFile(entry.raw, entry.relativePath);
 		expect(skill?.mode).toBe("debug");
 	});
+
+	test("openrouter-coding-model has no mode (available outside debug)", () => {
+		const entry = builtinSkills.find((s) => s.relativePath.includes("openrouter-coding-model"));
+		expect(entry).toBeDefined();
+		if (!entry) return;
+		const skill = parseSkillFile(entry.raw, entry.relativePath);
+		expect(skill?.mode).toBeUndefined();
+	});
 });
