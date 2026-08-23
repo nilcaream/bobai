@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createEventRouter } from "./eventRouter";
 import { formatTimestamp } from "./format";
+import { useProgressIndicator } from "./hooks/useProgressIndicator";
 import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useSubagentPeek } from "./hooks/useSubagentPeek";
 import type { Message, ProjectInfo, ServerMessage, StagedSkill, SubagentInfo, VolatileMessage } from "./protocol";
@@ -45,6 +46,7 @@ export function useWebSocket() {
 	const eventRouter = useRef(createEventRouter());
 	const messagesRef = useRef<Message[]>([]);
 	const autoScrollRef = useRef(true);
+	const { progressText, observe: observeProgress, beginWaiting, reset: resetProgress } = useProgressIndicator();
 
 	// Keep refs in sync with state
 	useEffect(() => {
@@ -63,6 +65,12 @@ export function useWebSocket() {
 		peekSubagentFromDb,
 		exitSubagentPeek,
 	} = useSubagentPeek(messagesRef, setMessages, status, setStatus, eventRouter);
+
+	// Restart progress tracking whenever the viewed session changes (peek in/out).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: viewingSubagentId is the intentional trigger to reset progress on view switch; resetProgress is stable
+	useEffect(() => {
+		resetProgress();
+	}, [viewingSubagentId]);
 
 	const fetchProjectInfo = useCallback(() => {
 		fetch("/bobai/project-info")
@@ -132,6 +140,7 @@ export function useWebSocket() {
 				setSubagents((prev) => applySubagentLifecycle(prev, msg));
 				if (msg.type === "subagent_done" && msg.sessionId === viewingSubagentIdRef.current) {
 					setMessages((prev) => stampStreamingCompletion(prev, msg, formatTimestamp()));
+					observeProgress(msg);
 				}
 				return;
 			}
@@ -144,6 +153,7 @@ export function useWebSocket() {
 						setStatus(msg.text);
 					} else {
 						setMessages((prev) => applyStreamingEvent(prev, msg, formatTimestamp()));
+						observeProgress(msg);
 					}
 				}
 				return;
@@ -151,6 +161,11 @@ export function useWebSocket() {
 
 			// result.target === "parent" — handle streaming events, done, error, status
 			const isPeeking = viewingSubagentIdRef.current !== null;
+
+			// Feed the progress indicator only when the parent is the viewed session.
+			if (!isPeeking) {
+				observeProgress(msg);
+			}
 
 			if (
 				msg.type === "token" ||
@@ -209,6 +224,7 @@ export function useWebSocket() {
 		parentStatusRef,
 		addVolatileMessage,
 		clearVolatileMessages,
+		observeProgress,
 	]);
 
 	// Warn user before navigating away during active generation
@@ -239,6 +255,7 @@ export function useWebSocket() {
 			clearVolatileMessages();
 
 			setIsStreaming(true);
+			beginWaiting();
 			// When staged skills are present, the server sends prompt_echo after skill
 			// tool panels so the user message appears in the correct visual order.
 			// Without staged skills, add the user message immediately for instant feedback.
@@ -259,7 +276,7 @@ export function useWebSocket() {
 			fetchProjectInfo();
 			ws.current.send(JSON.stringify(payload));
 		},
-		[isStreaming, fetchProjectInfo, exitSubagentPeek, viewingSubagentIdRef, clearVolatileMessages],
+		[isStreaming, fetchProjectInfo, exitSubagentPeek, viewingSubagentIdRef, clearVolatileMessages, beginWaiting],
 	);
 
 	const sendCancel = useCallback(() => {
@@ -339,6 +356,7 @@ export function useWebSocket() {
 		setTitle,
 		status,
 		setStatus,
+		progressText,
 		contextLimit,
 		setContextLimit,
 		subagents,

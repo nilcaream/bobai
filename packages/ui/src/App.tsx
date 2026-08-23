@@ -39,6 +39,7 @@ export function App() {
 		setTitle,
 		status,
 		setStatus,
+		progressText,
 		contextLimit,
 		setContextLimit,
 		subagents,
@@ -505,6 +506,7 @@ export function App() {
 							) : (
 								title && <span className="status-bar-title"> | {title}</span>
 							)}
+							{progressText && <span className="status-bar-progress"> | {progressText}</span>}
 						</>
 					) : (
 						" connecting..."

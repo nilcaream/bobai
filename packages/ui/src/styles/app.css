@@ -46,6 +46,10 @@ body,
 	color: var(--text-primary);
 }
 
+.status-bar-progress {
+	color: var(--text-status);
+}
+
 /* Dot command panel — sits between messages and prompt */
 .panel--dot {
 	margin: 1em 1em 0;
