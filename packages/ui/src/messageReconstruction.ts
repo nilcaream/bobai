@@ -25,7 +25,7 @@ function extractReasoningTextFromDetails(details: unknown): string | undefined {
 				item &&
 				typeof item === "object" &&
 				"type" in item &&
-				item.type === "text" &&
+				(item.type === "text" || item.type === "reasoning.text") &&
 				"text" in item &&
 				typeof item.text === "string"
 			) {

@@ -181,6 +181,123 @@ describe("provider reasoning types", () => {
 		]);
 	});
 
+	test("extracts text from OpenRouter reasoning_details items with type reasoning.text", async () => {
+		// OpenRouter sends deepseek/gemini reasoning as reasoning_details items
+		// with type "reasoning.text" (not "text"). This must stream as reasoning_token.
+		const events: AgentEvent[] = [];
+		await runAgentLoop({
+			provider: {
+				id: "openrouter",
+				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning" },
+					};
+					yield {
+						type: "reasoning_delta",
+						index: 0,
+						delta: {
+							kind: "details",
+							details: [
+								{ type: "reasoning.text", text: "Analyze", format: "unknown", index: 0 },
+								{ type: "reasoning.text", text: " the request.", format: "unknown", index: 0 },
+							],
+						},
+					};
+					yield { type: "text", text: "Answer" };
+					yield {
+						type: "reasoning_end",
+						index: 0,
+						reasoning: {
+							kind: "interleaved-chat",
+							field: "reasoning",
+							details: [{ type: "reasoning.text", text: "Analyze the request.", format: "unknown", index: 0 }],
+						},
+					};
+					yield { type: "finish", reason: "stop" };
+				},
+			},
+			model: "test",
+			messages: [{ role: "user", content: "hi" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(event) {
+				events.push(event);
+			},
+			onMessage() {},
+		});
+
+		expect(events).toEqual([
+			{ type: "reasoning_start" },
+			{ type: "reasoning_token", text: "Analyze the request." },
+			{ type: "text", text: "Answer" },
+			{ type: "reasoning_end" },
+		]);
+	});
+
+	test("runAgentLoop silently skips encrypted reasoning details", async () => {
+		// AES-encrypted reasoning (Google) has no readable text. Nothing useful
+		// for the user — no reasoning_token should be emitted.
+		const events: AgentEvent[] = [];
+		const messages = await runAgentLoop({
+			provider: {
+				id: "openrouter",
+				async *stream(_opts: ProviderOptions): AsyncGenerator<StreamEvent> {
+					yield {
+						type: "reasoning_start",
+						index: 0,
+						reasoning: { kind: "interleaved-chat", field: "reasoning_details" },
+					};
+					yield {
+						type: "reasoning_delta",
+						index: 0,
+						delta: {
+							kind: "details",
+							details: [{ type: "reasoning.encrypted", data: "AY89...opaque", format: "google-gemini-v1", index: 0 }],
+						},
+					};
+					yield { type: "text", text: "Answer" };
+					yield {
+						type: "reasoning_end",
+						index: 0,
+						reasoning: {
+							kind: "interleaved-chat",
+							field: "reasoning_details",
+							details: [{ type: "reasoning.encrypted", data: "AY89...opaque", format: "google-gemini-v1", index: 0 }],
+						},
+					};
+					yield { type: "finish", reason: "stop" };
+				},
+			},
+			model: "test",
+			messages: [{ role: "user", content: "hi" }],
+			tools: createToolRegistry([]),
+			projectRoot: "/tmp",
+			sessionId: "test-session",
+			onEvent(event) {
+				events.push(event);
+			},
+			onMessage() {},
+		});
+
+		expect(events).toEqual([{ type: "reasoning_start" }, { type: "text", text: "Answer" }, { type: "reasoning_end" }]);
+		expect(messages).toEqual([
+			{
+				role: "assistant",
+				content: "Answer",
+				reasoning: [
+					{
+						kind: "interleaved-chat",
+						field: "reasoning_details",
+						details: [{ type: "reasoning.encrypted", data: "AY89...opaque", format: "google-gemini-v1", index: 0 }],
+					},
+				],
+			},
+		]);
+	});
+
 	test("runAgentLoop attaches accumulated reasoning to assistant tool-call messages", async () => {
 		const events: AgentEvent[] = [];
 		const seenMessages: Message[] = [];

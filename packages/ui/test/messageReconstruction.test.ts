@@ -954,6 +954,104 @@ describe("reconstructMessages", () => {
 		}
 	});
 
+	test("extracts reasoning from OpenRouter reasoning.text details (interleaved-chat)", () => {
+		// Matches the real shape OpenRouter returns for deepseek/gemini models:
+		// reasoning_details items carry type "reasoning.text", not "text".
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "question",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "Answer",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					reasoning: [
+						{
+							kind: "interleaved-chat",
+							field: "reasoning",
+							details: [
+								{ type: "reasoning.text", text: "Analyze the request", format: "unknown", index: 0 },
+								{ type: "reasoning.text", text: " then respond.", format: "unknown", index: 0 },
+							],
+						},
+					],
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[1].role === "assistant") {
+			const reasoning = result[1].parts.find((p) => p.type === "reasoning");
+			expect(reasoning?.content).toBe("Analyze the request then respond.");
+		}
+	});
+
+	test("skips encrypted reasoning details without emitting a reasoning part", () => {
+		// AES-encrypted reasoning (Google) is not renderable. It must be silently
+		// skipped, not shown as a "reasoning unavailable" panel or empty part.
+		const stored = [
+			{
+				id: "1",
+				sessionId: "s",
+				role: "system" as const,
+				content: "sys",
+				createdAt: "2026-03-06T00:00:00Z",
+				sortOrder: 0,
+				metadata: null,
+			},
+			{
+				id: "2",
+				sessionId: "s",
+				role: "user" as const,
+				content: "question",
+				createdAt: "2026-03-06T01:00:00Z",
+				sortOrder: 1,
+				metadata: null,
+			},
+			{
+				id: "3",
+				sessionId: "s",
+				role: "assistant" as const,
+				content: "Answer",
+				createdAt: "2026-03-06T01:00:01Z",
+				sortOrder: 2,
+				metadata: {
+					reasoning: [
+						{
+							kind: "interleaved-chat",
+							field: "reasoning",
+							details: [{ type: "reasoning.encrypted", data: "AY89...opaque", format: "google-gemini-v1", index: 0 }],
+						},
+					],
+				},
+			},
+		];
+		const result = reconstructMessages(stored);
+		if (result[1].role === "assistant") {
+			// Only the text part survives — no reasoning part for opaque encrypted data.
+			expect(result[1].parts.filter((p) => p.type === "reasoning")).toHaveLength(0);
+			expect(result[1].parts.map((p) => p.type)).toEqual(["text"]);
+		}
+	});
+
 	test("handles mixed text and tool calls in sequence", () => {
 		const stored = [
 			{
