@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.1](https://github.com/nilcaream/bobai/compare/bobai-v0.3.0...bobai-v0.3.1) (2026-08-23)
+
+### Features
+
+- provider: route OpenCode Go/Zen models to correct API families ([bc21e14](https://github.com/nilcaream/bobai/commit/bc21e14cad1dea350dad8ea466826694209a43be))
+### Bug Fixes
+
+- agent: minimal marked continue nudge, cap retries at 2 ([330f668](https://github.com/nilcaream/bobai/commit/330f6688360e99cdd519b962be29c1bca15563da))
+- provider: split anthropic reasoning into effort vs budget ([e877802](https://github.com/nilcaream/bobai/commit/e8778023f97475a2f0e99f241379eb7528e19803))
+- provider: pin deepseek reasoning_effort to high ([b5dadf0](https://github.com/nilcaream/bobai/commit/b5dadf0ddd28fce75ab924e219db9c34ece11faa))
+- provider: detect and retry truncated model streams ([9bf9f00](https://github.com/nilcaream/bobai/commit/9bf9f0018d02ad811c929005c455454f1d5730e0))
+### Documentation
+
+- fix 0.3.0 changelog ([cab4b49](https://github.com/nilcaream/bobai/commit/cab4b49bd4b1b04b701fc6afb70eec8fd675e2d5))
+
 ## [0.3.0](https://github.com/nilcaream/bobai/compare/bobai-v0.2.10...bobai-v0.3.0) (2026-08-21)
 
 ### Features
