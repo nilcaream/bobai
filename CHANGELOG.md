@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/nilcaream/bobai/compare/bobai-v0.3.1...bobai-v0.3.2) (2026-08-23)
+
+### Features
+
+- ui: live progress indicator with waiting/working/processing phases ([e011adc](https://github.com/nilcaream/bobai/commit/e011adc391f70c501e8824b7b9bafaf61681408e))
+- ui: cap reasoning panels at 10 lines with double-click expand ([71299d7](https://github.com/nilcaream/bobai/commit/71299d7de6f57d90b4ddf8c1ad041885c0644b20))
+
 ## [0.3.1](https://github.com/nilcaream/bobai/compare/bobai-v0.3.0...bobai-v0.3.1) (2026-08-23)
 
 ### Features
