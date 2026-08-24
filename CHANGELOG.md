@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.3](https://github.com/nilcaream/bobai/compare/bobai-v0.3.2...bobai-v0.3.3) (2026-08-24)
+
+### Features
+
+- openrouter: send app attribution headers so Bob AI appears in rankings ([7ef91e5](https://github.com/nilcaream/bobai/commit/7ef91e58bd2b585706360dc352b0b60529b677af))
+- server: add openrouter-coding-model builtin skill ([e572a6f](https://github.com/nilcaream/bobai/commit/e572a6f2dc9e6b900049fdcbc810e4abc94f8cdc))
+### Bug Fixes
+
+- server: remove runtime package.json read in auth command ([882c1ed](https://github.com/nilcaream/bobai/commit/882c1edd65fc7bba6f18befa66fec7200b279899))
+- provider: accumulate incremental openrouter reasoning_details fragments ([b8f2394](https://github.com/nilcaream/bobai/commit/b8f2394f1320b45753d7303a51f359ebd2137140))
+- ui: render OpenRouter reasoning.text details ([a1cf568](https://github.com/nilcaream/bobai/commit/a1cf568988f81e79eda4239401dbe8f4de0c3e73))
+
 ## [0.3.2](https://github.com/nilcaream/bobai/compare/bobai-v0.3.1...bobai-v0.3.2) (2026-08-23)
 
 ### Features
