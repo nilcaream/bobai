@@ -30,8 +30,6 @@ if (cli.command === "auth") {
 	const logger = createLogger({ level: cli.debug ? "debug" : "info", logDir });
 
 	if (!cli.provider) {
-		const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-		console.log(`Bob AI ${pkg.version}`);
 		const providers = listSupportedAuthProviders();
 		const modelProviders = providers.filter((p) => p.category !== "web-search");
 		const webSearchProviders = providers.filter((p) => p.category === "web-search");
